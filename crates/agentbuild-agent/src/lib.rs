@@ -70,7 +70,7 @@ mod tool;
 
 pub use agent::{
     AGENT, Agent, AgentBuildError, AgentBuilder, AgentError, AgentInput, AgentResult, HOOKS,
-    Limits, MESSAGES, StopReason,
+    Limits, MESSAGES, OnLimit, StopReason,
 };
 pub use approval::{
     APPROVAL_INTERRUPT, Approval, ApprovalRequest, ApprovalRule, Decision, DecisionKind,

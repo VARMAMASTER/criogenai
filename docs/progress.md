@@ -16,8 +16,8 @@ handoff point for whoever continues the work.
    `openai_chat` + `ProviderModel` + presets.
 4. **Done:** agent slices 1–4 (loop, tools, approval, structured output,
    hooks); observability and Langfuse (`agentbuild-telemetry`, 0009).
-   **Next (agent list, in order):** remaining limits (`on_limit=end`,
-   tokens, nesting) → model resilience (`Retry-After`, fallback models) →
+   Limits done too (`OnLimit`, tokens). **Next (agent list, in
+   order):** model resilience (`Retry-After`, fallback models) →
    agents as workflow nodes and as tools → tool features (per-tool
    concurrency, safe retries, result truncation, state updates, app
    context) → `agent.stream()`. Then `anthropic_messages`.
@@ -42,6 +42,16 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-12: agent slice 5: remaining limits (0004 §5)
+
+- `OnLimit::{Error, End}`, `Limits::tokens`, `StopReason::Limit`,
+  `AgentResult::limit`. Budgets checked before each model call; a spent
+  tool-call budget ends the run at the next model call (design table).
+- 4 tests (graceful end with a valid transcript, token budget both ways,
+  spent tool budget, no false positives); the existing per-run tool
+  budget test now also checks the follow-up limit. Four mutation checks:
+  all caught. `nesting` moves to the agents-as-tools task.
 
 ### 2026-10-12: agent slice 4: hooks (0004 §3)
 

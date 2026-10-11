@@ -47,14 +47,14 @@ write our own implementation.
   `review` node, `Agent::resume` with `Decision`s); slice 3: structured
   output (`AgentBuilder::output`, native or `final_output` tool); slice 4:
   hooks (`Hook`: on_start, before_model, wrap_model, after_model,
-  wrap_tool, on_end).
+  wrap_tool, on_end); slice 5: `OnLimit::End`, token budget, spent tool
+  budget ends at the next model call.
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 305 across the four crates, plus the package test.
-- **Next:** remaining agent limits (`on_limit = "end"`, tokens, nesting);
-  then model resilience (`Retry-After`, fallback), agents as nodes and
+- Tests: 309 across the four crates, plus the package test.
+- **Next:** model resilience (`Retry-After`, fallback), agents as nodes and
   tools, tool features, `agent.stream()`; `anthropic_messages`. See `docs/progress.md`. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and

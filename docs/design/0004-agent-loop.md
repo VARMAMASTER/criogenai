@@ -5,8 +5,22 @@ graph of §2, the model node and routing of §4.1–§4.2
 (without hooks and structured output), the tools node of §4.3, the limits
 `model_calls`, `tool_calls`, `tool_calls_per_turn`, `parallel_tool_calls`
 of §5, and the events of §8 that apply), slice 2 (human approval, §7) and
-slice 3 (structured output, §6) and slice 4 (hooks, §3). Not yet:
-`on_limit = "end"`, `nesting`, `tokens`, agents as nodes or tools.
+slice 3 (structured output, §6), slice 4 (hooks, §3) and slice 5 (the
+remaining limits of §5 except `nesting`). Not yet: `nesting` (comes with
+agents as tools), agents as nodes or tools.
+
+Implementation decisions (slice 5, limits):
+
+- `Limits::on_limit(OnLimit::Error | OnLimit::End)` (default `Error`) and
+  `Limits::tokens(n)` (input + output tokens across the run's model calls).
+- All budgets are checked at the start of the model node, in this order:
+  `model_calls`, `tokens`, spent tool budget. The tool-call budget is spent
+  when a call was `skipped` because of it; the **next** model call then
+  applies `on_limit` (the skipped results are committed first).
+- `OnLimit::End` ends with stop reason `limit`, `AgentResult::limit` naming
+  the budget, the last assistant text as output, and a repaired (valid)
+  transcript. `Error` fails with `limit_exceeded`, `details: {limit,
+  value}`.
 
 Implementation decisions (slice 4, hooks):
 

@@ -384,7 +384,11 @@ async fn per_turn_and_per_run_tool_limits_skip_the_excess() {
             .then(FakeReply::text("ok")),
     )
     .tool(weather())
-    .limits(Limits::default().tool_calls(1))
+    .limits(
+        Limits::default()
+            .tool_calls(1)
+            .on_limit(agentbuild_agent::OnLimit::End),
+    )
     .build()
     .unwrap();
     let result = agent.run("x").await.unwrap();
@@ -397,6 +401,10 @@ async fn per_turn_and_per_run_tool_limits_skip_the_excess() {
         skipped.text(),
         "Skipped: the run's tool call limit (1) was reached"
     );
+    // The spent tool budget ends the run at the next model call (0004 §5).
+    assert_eq!(result.stop_reason, Some(StopReason::Limit));
+    assert_eq!(result.limit.as_deref(), Some("tool_calls"));
+    assert_eq!(result.model_calls, 1);
 }
 
 #[tokio::test(start_paused = true)]

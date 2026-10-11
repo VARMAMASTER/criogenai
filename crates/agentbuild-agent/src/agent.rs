@@ -57,6 +57,25 @@ pub struct Limits {
     /// Invalid structured-output answers tolerated before the run fails
     /// with `output_invalid`. Default 2.
     pub output_retries: u32,
+    /// Input plus output tokens across the run's model calls. Checked
+    /// before each model call. Default: none.
+    pub tokens: Option<u64>,
+    /// What happens when a limit is reached. Default [`OnLimit::Error`].
+    pub on_limit: OnLimit,
+}
+
+/// What happens when the model-call, token or tool-call budget runs out
+/// (0004 §5).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum OnLimit {
+    /// Fail with `limit_exceeded`.
+    #[default]
+    Error,
+    /// End normally with stop reason `limit`; the output is the last
+    /// assistant text, and the transcript stays valid.
+    End,
 }
 
 impl Default for Limits {
@@ -68,6 +87,8 @@ impl Default for Limits {
             parallel_tool_calls: 8,
             tool_timeout: Duration::from_secs(60),
             output_retries: 2,
+            tokens: None,
+            on_limit: OnLimit::Error,
         }
     }
 }
@@ -94,6 +115,18 @@ impl Limits {
     /// Sets [`parallel_tool_calls`](Self::parallel_tool_calls).
     pub fn parallel_tool_calls(mut self, n: usize) -> Self {
         self.parallel_tool_calls = n;
+        self
+    }
+
+    /// Sets [`tokens`](Self::tokens).
+    pub fn tokens(mut self, n: u64) -> Self {
+        self.tokens = Some(n);
+        self
+    }
+
+    /// Sets [`on_limit`](Self::on_limit).
+    pub fn on_limit(mut self, on_limit: OnLimit) -> Self {
+        self.on_limit = on_limit;
         self
     }
 
@@ -131,6 +164,9 @@ pub enum StopReason {
     Output,
     /// A hook ended the run.
     HookEnd,
+    /// A limit was reached with [`OnLimit::End`]; see
+    /// [`AgentResult::limit`].
+    Limit,
 }
 
 /// Run bookkeeping, stored under [`AGENT`].
@@ -151,6 +187,13 @@ struct Bookkeeping {
     /// Invalid structured-output answers so far.
     #[serde(skip_serializing_if = "is_zero")]
     output_retries: u32,
+    /// A call was skipped because the run's tool-call budget ran out; the
+    /// next model call applies `on_limit`.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    tool_budget_spent: bool,
+    /// The limit that ended the run (`OnLimit::End`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    limit: Option<String>,
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -632,6 +675,9 @@ pub struct AgentResult {
     pub model_calls: u32,
     /// Tool calls executed.
     pub tool_calls: u32,
+    /// With stop reason `limit`: which limit (`model_calls`, `tokens`,
+    /// `tool_calls`).
+    pub limit: Option<String>,
     /// The underlying workflow result (status, steps, run id).
     pub run: RunOutput,
 }
@@ -648,6 +694,7 @@ impl AgentResult {
             usage: book.usage,
             model_calls: book.model_calls,
             tool_calls: book.tool_calls,
+            limit: book.limit,
             run,
         })
     }
@@ -816,7 +863,7 @@ fn to_json<T: Serialize>(value: &T) -> Value {
     serde_json::to_value(value).expect("agent data serializes")
 }
 
-fn limit_error(limit: &str, value: u32) -> NodeError {
+fn limit_error(limit: &str, value: u64) -> NodeError {
     NodeError::new(format!("the agent reached its {limit} limit ({value})"))
         .with_kind("limit_exceeded")
         .with_details(json!({"limit": limit, "value": value}))
@@ -866,8 +913,39 @@ async fn model_step(
 ) -> Result<NodeOutput, NodeError> {
     let messages = read_messages(&state)?;
     let mut book = read_book(&state)?;
-    if book.model_calls >= inner.limits.model_calls {
-        return Err(limit_error("model_calls", inner.limits.model_calls));
+    // Budgets (0004 §5), checked before the call.
+    let limits = &inner.limits;
+    let used_tokens = book.usage.input_tokens + book.usage.output_tokens;
+    let hit = if book.model_calls >= limits.model_calls {
+        Some(("model_calls", u64::from(limits.model_calls)))
+    } else if let Some(max) = limits.tokens.filter(|max| used_tokens >= *max) {
+        Some(("tokens", max))
+    } else if book.tool_budget_spent {
+        Some(("tool_calls", u64::from(limits.tool_calls)))
+    } else {
+        None
+    };
+    if let Some((limit, value)) = hit {
+        if limits.on_limit == OnLimit::Error {
+            return Err(limit_error(limit, value));
+        }
+        // Graceful end: a valid transcript and the last assistant text.
+        let repaired = transcript::repair(messages);
+        let last_text = repaired
+            .messages
+            .iter()
+            .rev()
+            .find(|m| m.role == Role::Assistant)
+            .map(Message::text)
+            .unwrap_or_default();
+        book.stop_reason = Some(StopReason::Limit);
+        book.output = Some(Value::String(last_text));
+        book.limit = Some(limit.to_string());
+        let mut update = Update::new().set(AGENT, to_json(&book));
+        if !repaired.changes.is_empty() {
+            update = update.set(MESSAGES, json!({"$replace": repaired.messages}));
+        }
+        return Ok(NodeOutput::goto(update, [END]));
     }
 
     let repaired = transcript::repair(messages);
@@ -1388,6 +1466,7 @@ async fn tools_step(
                 ),
             ))
         } else if book.tool_calls + executed + pending.len() as u32 >= limits.tool_calls {
+            book.tool_budget_spent = true;
             Some(skipped_result(
                 call_id,
                 name,
