@@ -344,8 +344,10 @@ fn kind_from_code(code: &str) -> Option<ModelErrorKind> {
         "model_not_found" | "not_found_error" => NotFound,
         "authentication_error" | "invalid_api_key" => Auth,
         "permission_error" => Permission,
-        "api_error" | "server_error" => Server,
         "timeout_error" => Timeout,
+        // Generic codes such as `api_error` or `server_error` say nothing the
+        // status does not: Ollama sends `api_error` with a 404 for an unknown
+        // model, which must not become a (retried) server error.
         _ => return None,
     })
 }
@@ -575,6 +577,17 @@ mod tests {
         assert_eq!(classify(400, azure).kind, ModelErrorKind::ContentFilter);
         // The same text on a 500 does not turn it into a request error.
         assert_eq!(classify(500, anthropic_long).kind, ModelErrorKind::Server);
+    }
+
+    #[test]
+    fn generic_in_band_types_do_not_override_the_status() {
+        // Ollama's OpenAI-compatible endpoint, unknown model.
+        let ollama = r#"{"error":{"message":"model \"llama3.2\" not found, try pulling it first","type":"api_error","param":null,"code":null}}"#;
+        let error = classify(404, ollama);
+        assert_eq!(error.kind, ModelErrorKind::NotFound);
+        assert!(!error.kind.is_transient());
+        let anthropic_500 = r#"{"type": "error", "error": {"type": "api_error", "message": "Internal server error"}}"#;
+        assert_eq!(classify(500, anthropic_500).kind, ModelErrorKind::Server);
     }
 
     #[test]

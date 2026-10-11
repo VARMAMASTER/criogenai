@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::message::{Extras, FinishReason, Message, Usage};
+use crate::stream::Warning;
 use crate::tool::ToolSpec;
 
 /// Everything a model call needs.
@@ -123,6 +124,22 @@ pub struct OutputSpec {
     pub strategy: Option<OutputStrategy>,
 }
 
+impl OutputSpec {
+    /// The answer must match `schema`; the strategy is chosen later.
+    pub fn new(schema: Value) -> Self {
+        Self {
+            schema,
+            strategy: None,
+        }
+    }
+
+    /// Fixes the strategy.
+    pub fn with_strategy(mut self, strategy: OutputStrategy) -> Self {
+        self.strategy = Some(strategy);
+        self
+    }
+}
+
 /// How structured output is obtained (0004 §6).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -204,6 +221,9 @@ pub struct ModelResponse {
     pub usage: Usage,
     /// Why the model stopped.
     pub finish_reason: FinishReason,
+    /// What the adapter dropped or repaired (surfaced as `warning` events).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<Warning>,
 }
 
 impl ModelResponse {
@@ -216,6 +236,7 @@ impl ModelResponse {
             message,
             usage,
             finish_reason,
+            warnings: Vec::new(),
         }
     }
 }

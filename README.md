@@ -41,8 +41,10 @@ The `agentbuild-providers` crate holds the language-neutral data contracts
 for agents (design 0002): messages with ordered content blocks, tool
 definitions, the model request and response, classified model errors (rate
 limits, overload, context overflow, ... from any provider's HTTP error), and
-transcript repair. A `FakeModel` simulates a model for tests. Real provider
-protocols come next.
+transcript repair. It speaks the OpenAI-compatible protocol, which covers
+OpenAI, OpenRouter, Ollama, LM Studio, vLLM and most gateways, with streaming
+and tool calls. A `FakeModel` simulates a model for tests. The Anthropic
+protocol comes later.
 
 The execution semantics are specified in
 [docs/design/0001-execution-model.md](docs/design/0001-execution-model.md).
@@ -58,7 +60,8 @@ cargo run -p agentbuild-core --example approval_workflow -- yes
 cargo run -p agentbuild-core --example llm_workflow -- "remote work"   # simulated LLM calls, 2–3 s each
 cargo run -p agentbuild-core --example retry_workflow                  # retries and timeouts
 cargo run -p agentbuild-core --example recover_workflow                # retry a failed run, no repeats
-bash scripts/test-package.sh                                           # test the packaged crate as a dependency
+bash scripts/test-package.sh                                           # test the packaged crates as dependencies
+cargo run -p agentbuild-providers --example chat -- "hi"               # real model via Ollama (or AGENTBUILD_BASE_URL)
 ```
 
 The example is `Input → Transform → Conditional Branch → Output`:

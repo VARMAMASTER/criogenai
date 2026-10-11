@@ -109,7 +109,6 @@ impl Warning {
 
 /// A `message_delta` event (0002 §8).
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct MessageDelta {
     /// Our id of the message being built.
     pub message_id: String,
@@ -117,16 +116,6 @@ pub struct MessageDelta {
     pub index: u32,
     /// The new content.
     pub delta: BlockDelta,
-}
-
-/// The result of a completed stream.
-#[derive(Debug, Clone, PartialEq)]
-#[non_exhaustive]
-pub struct Assembled {
-    /// The authoritative message (`message_completed`).
-    pub response: ModelResponse,
-    /// Repairs and drops made while assembling.
-    pub warnings: Vec<Warning>,
 }
 
 /// Builds a message from [`StreamItem`]s. Text is concatenated; tool-call
@@ -305,9 +294,10 @@ impl Assembler {
         ));
     }
 
-    /// The stream ended. Returns the authoritative message, or an error if
-    /// the stream ended without a finish reason (0006 §5).
-    pub fn finish(mut self) -> Result<Assembled, ModelError> {
+    /// The stream ended. Returns the authoritative message (with the
+    /// warnings collected), or an error if the stream ended without a finish
+    /// reason (0006 §5).
+    pub fn finish(mut self) -> Result<ModelResponse, ModelError> {
         let Some((reason, raw)) = self.finish.take() else {
             return Err(ModelError::new(
                 ModelErrorKind::Server,
@@ -349,10 +339,9 @@ impl Assembler {
                 .other
                 .insert("provider_message_id".into(), Value::String(id));
         }
-        Ok(Assembled {
-            response: ModelResponse::new(message, self.usage, reason),
-            warnings: self.warnings,
-        })
+        let mut response = ModelResponse::new(message, self.usage, reason);
+        response.warnings = self.warnings;
+        Ok(response)
     }
 
     /// A missing id gets `call_<uuid>`; a repeated id in the same message gets
@@ -464,7 +453,7 @@ mod tests {
         StreamItem::Finish { reason, raw: None }
     }
 
-    fn assemble(items: Vec<StreamItem>) -> Assembled {
+    fn assemble(items: Vec<StreamItem>) -> ModelResponse {
         let mut assembler = Assembler::with_message_id("msg_test");
         for item in items {
             assembler.push(item);
@@ -490,8 +479,8 @@ mod tests {
                 raw: Some("tool_use".into()),
             },
         ]);
-        let response = assembled.response;
-        assert!(assembled.warnings.is_empty());
+        let response = assembled;
+        assert!(response.warnings.is_empty());
         assert_eq!(response.message.id, "msg_test");
         assert_eq!(response.message.text(), "Let me check.");
         let call = response.message.tool_calls().next().unwrap();
@@ -533,7 +522,7 @@ mod tests {
             call(3, Some("d"), Some("t"), ""),
             finish(FinishReason::ToolCalls),
         ]);
-        let blocks = &assembled.response.message.content;
+        let blocks = &assembled.message.content;
         let errors: Vec<String> = blocks
             .iter()
             .filter_map(|b| match b {
@@ -546,7 +535,7 @@ mod tests {
         assert_eq!(errors[1], "arguments must be a JSON object, got an array");
         assert_eq!(errors[2], "the tool call has no name");
         // Empty arguments mean no arguments.
-        let ok = assembled.response.message.tool_calls().next().unwrap();
+        let ok = assembled.message.tool_calls().next().unwrap();
         assert_eq!((ok.id, ok.args.len()), ("d", 0));
     }
 
@@ -558,7 +547,7 @@ mod tests {
             call(1, Some("open"), Some("t"), "{\"long\": \"abc"),
             finish(FinishReason::Length),
         ]);
-        let blocks = &assembled.response.message.content;
+        let blocks = &assembled.message.content;
         assert!(matches!(&blocks[0], ContentBlock::ToolCall { id, .. } if id == "done"));
         assert!(matches!(
             &blocks[1],
@@ -575,12 +564,7 @@ mod tests {
             call(2, Some("same"), Some("t"), "{}"),
             finish(FinishReason::ToolCalls),
         ]);
-        let ids: Vec<&str> = assembled
-            .response
-            .message
-            .tool_calls()
-            .map(|c| c.id)
-            .collect();
+        let ids: Vec<&str> = assembled.message.tool_calls().map(|c| c.id).collect();
         assert!(ids[0].starts_with("call_"));
         assert_eq!(ids[1], "same");
         assert!(ids[2].starts_with("call_") && ids[2] != "same");
@@ -614,7 +598,7 @@ mod tests {
             text(2, "answer"),
             finish(FinishReason::Stop),
         ]);
-        let blocks = &assembled.response.message.content;
+        let blocks = &assembled.message.content;
         assert!(matches!(
             &blocks[0],
             ContentBlock::Reasoning { text: Some(t), signature: Some(s), .. } if t == "think" && s == "sig=="
@@ -630,7 +614,7 @@ mod tests {
             call(0, Some("c"), Some("t"), "{}"),
             finish(FinishReason::Stop),
         ]);
-        assert_eq!(assembled.response.message.text(), "a");
+        assert_eq!(assembled.message.text(), "a");
         assert_eq!(assembled.warnings[0].code, "delta_type_mismatch");
     }
 
@@ -654,6 +638,6 @@ mod tests {
             finish(FinishReason::Stop),
         ]);
         assert_eq!(assembled.warnings.len(), 1);
-        assert!(assembled.response.message.content.is_empty());
+        assert!(assembled.message.content.is_empty());
     }
 }

@@ -429,6 +429,24 @@ impl ContentBlock {
         }
     }
 
+    /// An audio block.
+    pub fn audio(source: MediaSource, mime_type: Option<String>) -> Self {
+        Self::Audio {
+            source,
+            mime_type,
+            extras: Extras::new(),
+        }
+    }
+
+    /// A file block (e.g. a PDF).
+    pub fn file(source: MediaSource, mime_type: Option<String>) -> Self {
+        Self::File {
+            source,
+            mime_type,
+            extras: Extras::new(),
+        }
+    }
+
     /// A tool call block.
     pub fn tool_call(
         id: impl Into<String>,

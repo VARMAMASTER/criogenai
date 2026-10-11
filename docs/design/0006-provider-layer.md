@@ -3,8 +3,25 @@
 Status: **Approved; foundation in progress.** Built so far in
 `crates/agentbuild-providers`: the 0002 types, `ModelError` and the HTTP
 error classifier (§6), the `Model` trait (§3), a `FakeModel` for tests, the
-incremental SSE parser, the stream assembler (§5) and the HTTP transport.
-Next: `openai_chat` and `ProviderModel`.
+incremental SSE parser, the stream assembler (§5), the HTTP transport, the
+`openai_chat` protocol with endpoint presets (§4) and `ProviderModel`. Next:
+the agent loop (0004) on top of `Model`; then `anthropic_messages`.
+
+`openai_chat` as built: `OpenAiQuirks` (`max_tokens_field`, `stream_usage`,
+`parallel_tool_calls`, `reasoning_effort`, `system_role`, `reasoning_echo`);
+presets `Endpoint::{openai, openrouter, ollama, lmstudio, vllm,
+openai_compatible}`. Invalid tool calls are sent back as calls with their raw
+arguments, so their error results stay paired. Images in tool results move
+to a user message after the tool run. The non-streaming decoder converts the
+response into `StreamItem`s and runs the same `Assembler` as streaming, so id
+repair and argument parsing are identical in both modes. `ModelResponse`
+carries `warnings` (encode drops plus decode repairs). `Model::stream(request,
+on_delta)` has a default (one delta per text block from `invoke`).
+`preview_request` shows the exact body without sending it.
+
+A live check against a local Ollama found that its OpenAI endpoint answers an
+unknown model with 404 and in-band type `api_error`; generic in-band types
+(`api_error`, `server_error`) therefore no longer override the HTTP status.
 
 Transport as built: `Transport` (reqwest 0.13, rustls with the OS trust
 store via the platform verifier, HTTP/2, `HTTP(S)_PROXY`), behind the default

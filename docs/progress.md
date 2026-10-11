@@ -12,10 +12,9 @@ handoff point for whoever continues the work.
    snapshots on failure, events). Package testing in CI.
 3. **Done:** `agentbuild-providers` foundation, part 1: 0002 types, model
    error classification, transcript repair, `Model` trait, `FakeModel`.
-   Part 2 done: SSE parser and stream assembler. Part 3 done: HTTP
-   transport. **Next:** `openai_chat` (0006 §11 step 2) with golden
-   translation tests and recorded streams, and `ProviderModel`; then the
-   agent loop.
+   Parts 2–4 done: SSE parser, stream assembler, HTTP transport,
+   `openai_chat` + `ProviderModel` + presets. **Next:** the agent loop (0004)
+   tested with `FakeModel` (tool-calling graphs), then `anthropic_messages`.
 4. The agent loop (0004) on top of core + providers, tested with `FakeModel`.
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
@@ -38,6 +37,24 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-11: providers part 4: `openai_chat`, endpoints, `ProviderModel`
+
+- Encode (golden tests per mapping row), decode (through the same
+  `Assembler` as streaming), chunk decoder (wire-index or id keyed tool
+  calls, whole calls in one chunk, refusals, reasoning fields, in-band
+  errors), `OpenAiQuirks`, presets, `ProviderModel` (invoke + stream),
+  `Model::stream` with a default, `ModelResponse.warnings`,
+  `preview_request`.
+- Missing public constructors found by the tests: `ContentBlock::{audio,
+  file}`, `OutputSpec::{new, with_strategy}`.
+- 21 tests (`tests/openai_chat.rs`, scripted server now shared in
+  `tests/support/server.rs`). Eight mutation checks: all caught.
+- `examples/chat.rs` (manual, not CI) against the local Ollama:
+  `deepseek-r1:1.5b` streamed an answer with usage. Its first run found a real
+  bug: Ollama's 404 "model not found" carries in-band type `api_error`, which
+  was mapped to `server` (transient, would be retried). Generic in-band types
+  no longer override the status; regression test uses Ollama's exact body.
 
 ### 2026-10-11: providers part 3: HTTP transport; AgentBuild's first user
 

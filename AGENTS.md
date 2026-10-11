@@ -36,15 +36,17 @@ write our own implementation.
   (`Message`, `ContentBlock`, `ToolSpec`, `ModelRequest`/`ModelResponse`,
   `Capabilities`), `ModelError` with `classify_http` (0003 §4), transcript
   check/repair (0002 §6), the `Model` trait, `FakeModel`, the SSE parser,
-  the stream assembler and the HTTP `Transport` (feature `http`, on by
-  default). No wire protocol yet, so no real model can be called.
-- Tests: 200 across both crates, plus the package test.
-- **Next:** `openai_chat` protocol and `ProviderModel` (0006 §11), then the
-  agent loop (0004). See `docs/progress.md`. The user will build their
+  the stream assembler, the HTTP `Transport` (feature `http`, on by
+  default), the `openai_chat` protocol, `Endpoint` presets and
+  `ProviderModel` (OpenAI, OpenRouter, Ollama, LM Studio, vLLM, any
+  OpenAI-compatible server).
+- Tests: 223 across both crates, plus the package test.
+- **Next:** the agent loop (0004) on `Model`, tested with `FakeModel`; then
+  `anthropic_messages`. See `docs/progress.md`. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
-- **Not started:** wire protocols and HTTP transport, gateway, Python SDK,
+- **Not started:** the Anthropic protocol, gateway, Python SDK,
   TypeScript SDK, the agent loop, message-delta events, persistence. Do not
   describe these as existing anywhere.
 
@@ -61,6 +63,8 @@ cargo run -p agentbuild-core --example approval_workflow -- yes
 cargo run -p agentbuild-core --example llm_workflow -- "remote work"
 cargo run -p agentbuild-core --example retry_workflow
 cargo run -p agentbuild-core --example recover_workflow
+# Real model, manual only (needs a server; default: Ollama on localhost):
+AGENTBUILD_MODEL=llama3.2 cargo run -p agentbuild-providers --example chat -- "hi"
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 bash scripts/test-package.sh     # package the crate, use it from a separate project
 ```

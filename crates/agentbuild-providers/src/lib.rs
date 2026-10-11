@@ -36,6 +36,10 @@ mod error;
 mod fake;
 mod message;
 mod model;
+#[cfg(feature = "http")]
+mod openai_chat;
+#[cfg(feature = "http")]
+mod provider;
 mod request;
 mod sse;
 mod stream;
@@ -53,13 +57,17 @@ pub use message::{
     ContentBlock, Extras, FinishReason, MediaSource, Message, MessageIssue, MessageMetadata, Role,
     ToolCall, ToolResultError, ToolStatus, Usage, new_call_id, new_message_id,
 };
-pub use model::{BoxFuture, Model};
+pub use model::{BoxFuture, DeltaSink, Model};
+#[cfg(feature = "http")]
+pub use openai_chat::OpenAiQuirks;
+#[cfg(feature = "http")]
+pub use provider::{Endpoint, Protocol, ProviderModel, preview_request};
 pub use request::{
     Capabilities, ModelRequest, ModelResponse, OutputSpec, OutputStrategy, Reasoning,
     ReasoningEffort, Settings, ToolChoice,
 };
 pub use sse::{SseEvent, SseParser};
-pub use stream::{Assembled, Assembler, BlockDelta, MessageDelta, StreamItem, Warning};
+pub use stream::{Assembler, BlockDelta, MessageDelta, StreamItem, Warning};
 pub use tool::{
     RESERVED_TOOL_NAMES, ToolAnnotations, ToolIssue, ToolKind, ToolSpec, validate_tools,
 };
