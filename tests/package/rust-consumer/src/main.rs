@@ -29,6 +29,7 @@ async fn main() {
     provider_errors_and_transcripts();
     agent_with_tools().await;
     telemetry_never_breaks_a_run().await;
+    approval_before_a_tool_runs().await;
     println!("package smoke test: ok");
 }
 
@@ -345,4 +346,43 @@ async fn telemetry_never_breaks_a_run() {
     exporter.shutdown().await;
     assert!(exporter.stats().failed > 0, "{:?}", exporter.stats());
     println!("  telemetry export (unreachable backend): ok");
+}
+
+/// Human approval: the run suspends before a gated tool runs.
+async fn approval_before_a_tool_runs() {
+    use agentbuild_agent::{Agent, Approval, Decision, ToolError, tool_fn};
+
+    let model = FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
+        .then(FakeReply::tool_call("refund", json!({"amount": 50})))
+        .then(FakeReply::text("Refund handled."));
+    let refunds = Arc::new(AtomicUsize::new(0));
+    let refund = {
+        let refunds = refunds.clone();
+        tool_fn(
+            ToolSpec::new("refund", "Refund", json!({"type": "object", "properties": {"amount": {"type": "number"}}})),
+            move |_, _| {
+                let refunds = refunds.clone();
+                async move {
+                    refunds.fetch_add(1, Ordering::SeqCst);
+                    Ok::<_, ToolError>("refunded")
+                }
+            },
+        )
+    };
+    let agent = Agent::builder(model)
+        .tool(refund)
+        .approval(Approval::new().tool("refund"))
+        .build()
+        .expect("valid agent");
+    let paused = agent.run("refund me").await.expect("run");
+    assert!(paused.is_suspended());
+    assert_eq!(refunds.load(Ordering::SeqCst), 0);
+    let request = &paused.approval_requests()[0];
+    let done = agent
+        .resume(paused.snapshot().unwrap(), [(request.call_id.clone(), Decision::approve())])
+        .await
+        .expect("resume");
+    assert_eq!(done.text(), Some("Refund handled."));
+    assert_eq!(refunds.load(Ordering::SeqCst), 1);
+    println!("  human approval (suspend, decide, resume): ok");
 }

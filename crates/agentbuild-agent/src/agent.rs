@@ -1,7 +1,7 @@
 //! The agent: a model ⇄ tools loop compiled into an ordinary workflow
 //! (design 0004 §2, §4, §5).
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
@@ -19,6 +19,7 @@ use serde_json::{Map, Value, json};
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
+use crate::approval::{APPROVAL_INTERRUPT, Approval, ApprovalRequest, Decision, check_decisions};
 use crate::schema;
 use crate::tool::{Tool, ToolContext, ToolOutput};
 
@@ -30,6 +31,7 @@ pub const AGENT: &str = "agent";
 
 const MODEL_NODE: &str = "model";
 const TOOLS_NODE: &str = "tools";
+const REVIEW_NODE: &str = "review";
 
 /// Bounds on one agent run (0004 §5). Every agent has them; no runaway
 /// loops.
@@ -123,6 +125,10 @@ struct Bookkeeping {
     stop_reason: Option<StopReason>,
     #[serde(skip_serializing_if = "Option::is_none")]
     output: Option<Value>,
+    /// Reviewer decisions for the calls of the last assistant message,
+    /// consumed by the next tools step.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    decisions: BTreeMap<String, Decision>,
 }
 
 /// A problem found when building an agent.
@@ -135,6 +141,9 @@ pub enum AgentBuildError {
     /// A limit is zero.
     #[error("limit `{0}` must be at least 1")]
     ZeroLimit(&'static str),
+    /// The approval settings are invalid.
+    #[error("invalid approval settings: {0}")]
+    Approval(String),
     /// The compiled workflow is invalid (a bug in AgentBuild).
     #[error("internal: {0}")]
     Workflow(BuildError),
@@ -147,6 +156,7 @@ pub struct AgentBuilder {
     tools: Vec<Arc<dyn Tool>>,
     limits: Limits,
     model_retry: RetryPolicy,
+    approval: Option<Approval>,
 }
 
 impl std::fmt::Debug for AgentBuilder {
@@ -199,10 +209,27 @@ impl AgentBuilder {
         self
     }
 
+    /// Requires a person to approve some tool calls before they run
+    /// (design 0004 §7). The run suspends with the requests; continue it
+    /// with [`Agent::resume`].
+    pub fn approval(mut self, approval: Approval) -> Self {
+        self.approval = Some(approval);
+        self
+    }
+
     /// Validates the tools and limits and compiles the agent's workflow.
     pub fn build(self) -> Result<Agent, AgentBuildError> {
         let specs: Vec<ToolSpec> = self.tools.iter().map(|t| t.spec().clone()).collect();
         validate_tools(&specs).map_err(AgentBuildError::Tools)?;
+        if let Some(approval) = &self.approval {
+            let names: Vec<&str> = specs.iter().map(|s| s.name.as_str()).collect();
+            approval.check(&names).map_err(AgentBuildError::Approval)?;
+        }
+        let schemas: HashMap<String, Value> = specs
+            .iter()
+            .map(|s| (s.name.clone(), s.input_schema.clone()))
+            .collect();
+        let approval = self.approval.map(Arc::new);
         let limits = self.limits;
         for (name, value) in [
             ("model_calls", limits.model_calls as usize),
@@ -225,6 +252,7 @@ impl AgentBuilder {
             instructions: self.instructions,
             specs,
             limits: limits.clone(),
+            approval: approval.clone(),
         }));
         let tools_node = ToolsNode(Arc::new(ToolsInner {
             tools,
@@ -236,12 +264,36 @@ impl AgentBuilder {
             .add_node(MODEL_NODE, model_node)
             .add_node(TOOLS_NODE, tools_node)
             .set_entry(MODEL_NODE)
-            .may_goto(MODEL_NODE, [TOOLS_NODE, END])
             .may_goto(TOOLS_NODE, [MODEL_NODE, END])
             .reducer(MESSAGES, Reducer::UpsertById)
             .policy(MODEL_NODE, NodePolicy::new().retry(self.model_retry));
+        // Each loop is model + tools, plus review when approval is on.
+        let max_steps = match &approval {
+            Some(approval) => {
+                builder
+                    .add_node(
+                        REVIEW_NODE,
+                        ReviewNode(Arc::new(ReviewInner {
+                            approval: approval.clone(),
+                            schemas: schemas.clone(),
+                        })),
+                    )
+                    .may_goto(MODEL_NODE, [TOOLS_NODE, REVIEW_NODE, END])
+                    .may_goto(REVIEW_NODE, [TOOLS_NODE]);
+                3 * limits.model_calls as usize + 4
+            }
+            None => {
+                builder.may_goto(MODEL_NODE, [TOOLS_NODE, END]);
+                limits.max_steps()
+            }
+        };
         let workflow = builder.build().map_err(AgentBuildError::Workflow)?;
-        Ok(Agent { workflow, limits })
+        Ok(Agent {
+            workflow,
+            limits,
+            max_steps,
+            schemas,
+        })
     }
 }
 
@@ -255,6 +307,9 @@ impl AgentBuilder {
 pub struct Agent {
     workflow: Workflow,
     limits: Limits,
+    max_steps: usize,
+    /// Tool argument schemas, to check edited calls on resume.
+    schemas: HashMap<String, Value>,
 }
 
 /// What an agent run starts from.
@@ -299,6 +354,7 @@ impl Agent {
             tools: Vec::new(),
             limits: Limits::default(),
             model_retry: RetryPolicy::new(),
+            approval: None,
         }
     }
 
@@ -323,7 +379,7 @@ impl Agent {
 
     /// Run options with the step limit derived from [`Limits`].
     pub fn run_options(&self) -> RunOptions {
-        RunOptions::default().max_steps(self.limits.max_steps())
+        RunOptions::default().max_steps(self.max_steps)
     }
 
     /// Runs the agent on `input` (text, a message or a transcript).
@@ -338,10 +394,54 @@ impl Agent {
         input: impl Into<AgentInput>,
         mut options: RunOptions,
     ) -> Result<AgentResult, AgentError> {
-        options.max_steps = options.max_steps.max(self.limits.max_steps());
+        options.max_steps = options.max_steps.max(self.max_steps);
         let output = self
             .workflow
             .run_with(Self::initial_state(input), options)
+            .await
+            .map_err(AgentError::from_run)?;
+        AgentResult::from_output(output)
+    }
+
+    /// Continues a run suspended for approval, with one decision per
+    /// requested call (keyed by `call_id`). Decisions are checked first
+    /// (one per request, allowed kind, valid edited arguments); invalid
+    /// input fails with `resume_invalid` and leaves the snapshot usable.
+    pub async fn resume<I>(
+        &self,
+        snapshot: &Snapshot,
+        decisions: I,
+    ) -> Result<AgentResult, AgentError>
+    where
+        I: IntoIterator<Item = (String, Decision)>,
+    {
+        self.resume_with(snapshot, decisions, self.run_options())
+            .await
+    }
+
+    /// [`resume`](Self::resume) with options (events, deadline, ...).
+    pub async fn resume_with<I>(
+        &self,
+        snapshot: &Snapshot,
+        decisions: I,
+        mut options: RunOptions,
+    ) -> Result<AgentResult, AgentError>
+    where
+        I: IntoIterator<Item = (String, Decision)>,
+    {
+        let decisions: BTreeMap<String, Decision> = decisions.into_iter().collect();
+        let requests = approval_requests(&snapshot.suspended);
+        if requests.is_empty() {
+            return Err(AgentError::resume_invalid(
+                "the snapshot is not waiting for approval",
+            ));
+        }
+        check_decisions(&requests, &decisions, &self.schemas)
+            .map_err(AgentError::resume_invalid)?;
+        options.max_steps = options.max_steps.max(self.max_steps);
+        let output = self
+            .workflow
+            .resume_with(snapshot, [(REVIEW_NODE, to_json(&decisions))], options)
             .await
             .map_err(AgentError::from_run)?;
         AgentResult::from_output(output)
@@ -399,6 +499,35 @@ impl AgentResult {
     pub fn text(&self) -> Option<&str> {
         self.output.as_ref().and_then(Value::as_str)
     }
+
+    /// `true` if the run is waiting for decisions ([`Agent::resume`]).
+    pub fn is_suspended(&self) -> bool {
+        self.run.is_suspended()
+    }
+
+    /// The calls waiting for approval (empty unless suspended).
+    pub fn approval_requests(&self) -> Vec<ApprovalRequest> {
+        self.run
+            .snapshot()
+            .map(|s| approval_requests(&s.suspended))
+            .unwrap_or_default()
+    }
+
+    /// The snapshot to resume from, if suspended. Plain JSON: store it
+    /// anywhere.
+    pub fn snapshot(&self) -> Option<&Snapshot> {
+        self.run.snapshot()
+    }
+}
+
+/// The approval requests in a snapshot's interrupts.
+fn approval_requests(interrupts: &[agentbuild_core::Interrupt]) -> Vec<ApprovalRequest> {
+    interrupts
+        .iter()
+        .filter(|i| i.node == REVIEW_NODE && i.payload["kind"] == APPROVAL_INTERRUPT)
+        .filter_map(|i| serde_json::from_value(i.payload["requests"].clone()).ok())
+        .flat_map(|requests: Vec<ApprovalRequest>| requests)
+        .collect()
 }
 
 /// A failed agent run.
@@ -424,7 +553,13 @@ impl AgentError {
             RunErrorKind::NodeFailed { source, .. }
                 if matches!(
                     source.kind.as_deref(),
-                    Some("model_failed" | "tool_failed" | "limit_exceeded" | "invalid_state")
+                    Some(
+                        "model_failed"
+                            | "tool_failed"
+                            | "limit_exceeded"
+                            | "invalid_state"
+                            | "resume_invalid"
+                    )
                 ) =>
             {
                 (
@@ -440,6 +575,15 @@ impl AgentError {
             message,
             details,
             run_error: Some(Box::new(error)),
+        }
+    }
+
+    fn resume_invalid(message: impl Into<String>) -> Self {
+        Self {
+            code: "resume_invalid".into(),
+            message: message.into(),
+            details: None,
+            run_error: None,
         }
     }
 
@@ -509,6 +653,7 @@ struct ModelInner {
     instructions: Option<String>,
     specs: Vec<ToolSpec>,
     limits: Limits,
+    approval: Option<Arc<Approval>>,
 }
 
 struct ModelNode(Arc<ModelInner>);
@@ -600,7 +745,13 @@ async fn model_step(
         book.output = Some(Value::String(message.text()));
         END
     } else if message.call_ids().next().is_some() {
-        TOOLS_NODE
+        let gated = inner.approval.as_ref().is_some_and(|approval| {
+            message.tool_calls().any(|call| {
+                inner.specs.iter().any(|s| s.name == call.name)
+                    && approval.rule_for(call.name, call.args).is_some()
+            })
+        });
+        if gated { REVIEW_NODE } else { TOOLS_NODE }
     } else {
         book.stop_reason = Some(StopReason::FinalAnswer);
         book.output = Some(Value::String(message.text()));
@@ -621,6 +772,68 @@ async fn model_step(
             .set(MESSAGES, messages_update)
             .set(AGENT, to_json(&book)),
         [next],
+    ))
+}
+
+// ---------- review node ----------
+
+struct ReviewInner {
+    approval: Arc<Approval>,
+    schemas: HashMap<String, Value>,
+}
+
+struct ReviewNode(Arc<ReviewInner>);
+
+impl Node for ReviewNode {
+    fn run(
+        &self,
+        ctx: NodeContext,
+        state: Arc<State>,
+    ) -> BoxFuture<'static, Result<NodeOutput, NodeError>> {
+        Box::pin(review_step(self.0.clone(), ctx, state))
+    }
+}
+
+/// Suspends with the gated calls of the last assistant message; on resume,
+/// records the decisions for the tools step (0004 §7.2). No side effects.
+async fn review_step(
+    inner: Arc<ReviewInner>,
+    ctx: NodeContext,
+    state: Arc<State>,
+) -> Result<NodeOutput, NodeError> {
+    let messages = read_messages(&state)?;
+    let mut book = read_book(&state)?;
+    let assistant = messages
+        .iter()
+        .rfind(|m| m.role == Role::Assistant)
+        .ok_or_else(|| {
+            NodeError::new("no assistant message to review").with_kind("invalid_state")
+        })?;
+    let requests: Vec<ApprovalRequest> = assistant
+        .tool_calls()
+        .filter(|call| inner.schemas.contains_key(call.name))
+        .filter_map(|call| inner.approval.request(call.id, call.name, call.args))
+        .collect();
+
+    let Some(answer) = ctx.resume() else {
+        if requests.is_empty() {
+            return Ok(NodeOutput::goto(Update::new(), [TOOLS_NODE]));
+        }
+        return Ok(NodeOutput::suspend(
+            Update::new(),
+            json!({"kind": APPROVAL_INTERRUPT, "requests": requests}),
+        ));
+    };
+    let decisions: BTreeMap<String, Decision> =
+        serde_json::from_value(answer.clone()).map_err(|err| {
+            NodeError::new(format!("decisions are not valid: {err}")).with_kind("resume_invalid")
+        })?;
+    check_decisions(&requests, &decisions, &inner.schemas)
+        .map_err(|reason| NodeError::new(reason).with_kind("resume_invalid"))?;
+    book.decisions = decisions;
+    Ok(NodeOutput::goto(
+        Update::new().set(AGENT, to_json(&book)),
+        [TOOLS_NODE],
     ))
 }
 
@@ -650,6 +863,8 @@ struct Pending {
     name: String,
     args: Map<String, Value>,
     tool: Arc<dyn Tool>,
+    /// Tells the model that a reviewer changed the call.
+    notice: Option<String>,
 }
 
 /// A finished call.
@@ -735,6 +950,49 @@ async fn tools_step(
             results.push(None);
             continue;
         }
+        // A reviewer's decision (0004 §7.2) comes before anything else.
+        let mut notice = None;
+        let (name, args) = match book.decisions.get(call_id) {
+            Some(Decision::Reject { message }) => {
+                let text = message.clone().unwrap_or_else(|| {
+                    "The reviewer rejected this call. Do not retry it.".to_string()
+                });
+                results.push(Some(
+                    Message::tool_result(
+                        call_id,
+                        name,
+                        ToolStatus::Rejected,
+                        vec![ContentBlock::text(text)],
+                    )
+                    .with_id(result_id(call_id)),
+                ));
+                continue;
+            }
+            Some(Decision::Respond { message }) => {
+                results.push(Some(
+                    Message::tool_result(
+                        call_id,
+                        name,
+                        ToolStatus::Success,
+                        vec![ContentBlock::text(message.clone())],
+                    )
+                    .with_id(result_id(call_id)),
+                ));
+                continue;
+            }
+            Some(Decision::Edit {
+                name: new_name,
+                args: new_args,
+            }) => {
+                let tool = new_name.as_ref().unwrap_or(name);
+                notice = Some(format!(
+                    "Note: a reviewer changed this call before it ran. It ran as {tool}({}).",
+                    Value::Object(new_args.clone())
+                ));
+                (tool, new_args)
+            }
+            _ => (name, args),
+        };
         // Saved by an earlier attempt of this step: never run twice.
         if let Some(saved) = memo.get(&format!("call:{call_id}"))
             && let Ok(message) = serde_json::from_value::<Message>(saved)
@@ -772,6 +1030,7 @@ async fn tools_step(
                     name: name.clone(),
                     args: args.clone(),
                     tool: tool.clone(),
+                    notice: notice.clone(),
                 });
                 None
             } else {
@@ -864,6 +1123,9 @@ async fn tools_step(
                 }
             };
             let mut message = message;
+            if let Some(notice) = call.notice {
+                message.content.insert(0, ContentBlock::text(notice));
+            }
             message.metadata.duration_ms = Some(started.elapsed().as_millis() as u64);
             // Saved at once, so a failure elsewhere in this step never makes
             // this call run again (0005 §5.1).
@@ -917,6 +1179,7 @@ async fn tools_step(
 
     let results: Vec<Message> = results.into_iter().flatten().collect();
     book.tool_calls += executed;
+    book.decisions.clear();
     let next = if direct_outputs.is_empty() {
         MODEL_NODE
     } else {

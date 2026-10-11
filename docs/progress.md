@@ -14,10 +14,13 @@ handoff point for whoever continues the work.
    error classification, transcript repair, `Model` trait, `FakeModel`.
    Parts 2–4 done: SSE parser, stream assembler, HTTP transport,
    `openai_chat` + `ProviderModel` + presets.
-4. **Done:** agent slice 1 (`agentbuild-agent`); observability and Langfuse
-   (`agentbuild-telemetry`, 0009). **Next:** slice 2, human approval
-   (`review` node, 0004 §7); then structured output, hooks, agents as
-   nodes; `anthropic_messages`.
+4. **Done:** agent slices 1–2 (loop, tools, approval); observability and
+   Langfuse (`agentbuild-telemetry`, 0009). **Next (agent list, in order):**
+   structured output (§6) → hooks (§3) → remaining limits (`on_limit=end`,
+   tokens, nesting) → model resilience (`Retry-After`, fallback models) →
+   agents as workflow nodes and as tools → tool features (per-tool
+   concurrency, safe retries, result truncation, state updates, app
+   context) → `agent.stream()`. Then `anthropic_messages`.
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
    install the built wheel in a clean venv.
@@ -39,6 +42,22 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-11: agent slice 2: human approval (0004 §7)
+
+- `Approval` / `ApprovalRule` (glob patterns, allowed decisions, `when`
+  predicate, `describe`), `Decision` (approve, edit, reject, respond),
+  `ApprovalRequest`; `review` node; `Agent::resume` validates decisions
+  before resuming; `AgentResult::{is_suspended, approval_requests,
+  snapshot}`.
+- A gated call suspends the whole batch before anything runs; edits keep
+  the original call in the transcript and tell the model what ran.
+- 8 approval tests, 3 unit tests; nine mutation checks: all caught (one
+  needed a new assertion that bad decisions are rejected before any run
+  starts).
+- Example `approval_agent` (a doctor approves, edits or rejects a
+  medication order; the snapshot goes through JSON). Package consumer
+  covers approval.
 
 ### 2026-10-11: observability: OpenTelemetry export and Langfuse (0009)
 

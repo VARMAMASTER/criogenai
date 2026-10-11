@@ -15,8 +15,12 @@
 //! - [`Limits`] bound model calls and tool calls; transient model errors are
 //!   retried with backoff.
 //!
-//! **Status:** the loop, tools and limits exist. Human approval, structured
-//! output and hooks are designed (0004 §3, §6, §7) but not built.
+//! - [`Approval`] gates tool calls: the run suspends before any call of that
+//!   turn runs, and [`Agent::resume`] continues with each [`Decision`]
+//!   (approve, edit, reject, respond).
+//!
+//! **Status:** the loop, tools, limits and human approval exist. Structured
+//! output and hooks are designed (0004 §3, §6) but not built.
 //!
 //! ```
 //! use agentbuild_agent::{Agent, ToolError, tool_fn};
@@ -50,12 +54,16 @@
 struct ReadmeDoctests;
 
 mod agent;
+mod approval;
 mod schema;
 mod tool;
 
 pub use agent::{
     AGENT, Agent, AgentBuildError, AgentBuilder, AgentError, AgentInput, AgentResult, Limits,
     MESSAGES, StopReason,
+};
+pub use approval::{
+    APPROVAL_INTERRUPT, Approval, ApprovalRequest, ApprovalRule, Decision, DecisionKind,
 };
 pub use schema::validate as validate_arguments;
 pub use tool::{Tool, ToolContext, ToolError, ToolOutput, tool_fn};

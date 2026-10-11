@@ -92,7 +92,9 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Return direct** | A tool whose successful result ends the run and becomes the output. | `ToolSpec::return_direct` |
 | **Agent result / error** | The transcript, output, usage and counts; or a coded failure (`model_failed`, `tool_failed`, `limit_exceeded`) with a snapshot to retry. | `AgentResult`, `AgentError` |
 | **Hook / middleware** *(planned)* | Code that wraps model calls or tool calls (e.g. summarization, approval). | |
-| **Review / approval** *(planned)* | A human approving, editing or rejecting tool calls before they run. | |
+| **Approval / review** | A person approving tool calls before they run; the `review` node suspends the run with the requests. | `Approval`, `ApprovalRule`, node `review` |
+| **Approval request** | One gated call waiting for a decision: call id, tool, arguments, description, allowed decisions. | `ApprovalRequest`, `AgentResult::approval_requests` |
+| **Decision** | `approve`, `edit` (run changed arguments), `reject` (not run; model told why), `respond` (not run; reviewer's answer is the result). | `Decision`, `DecisionKind`, `Agent::resume` |
 | **Thread** | A persisted conversation that runs continue (with a **checkpointer**, design 0008). |
 | **Gateway** | The HTTP server that exposes the provider layer to other apps (design 0006 §7). |
 

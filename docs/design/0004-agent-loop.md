@@ -1,12 +1,36 @@
 # 0004: Agent loop, hooks, structured output and human-in-the-loop
 
-Status: **Partly implemented** in `crates/agentbuild-agent` (slice 1): the
-graph of §2 without `review`, the model node and routing of §4.1–§4.2
+Status: **Partly implemented** in `crates/agentbuild-agent`: slice 1 (the
+graph of §2, the model node and routing of §4.1–§4.2
 (without hooks and structured output), the tools node of §4.3, the limits
 `model_calls`, `tool_calls`, `tool_calls_per_turn`, `parallel_tool_calls`
-of §5, and the events of §8 that apply. Not yet: hooks (§3), structured
-output (§6), human approval (§7), `on_limit = "end"`, `nesting`, `tokens`,
-agents as nodes or tools.
+of §5, and the events of §8 that apply) and slice 2 (human approval, §7).
+Not yet: hooks (§3), structured output (§6), `on_limit = "end"`,
+`nesting`, `tokens`, agents as nodes or tools.
+
+Implementation decisions (slice 2, approval):
+
+- Rust API: `Approval::new().tool("send_email").rule(ApprovalRule::new(
+  "delete_*").decisions([..]).when(|tool, args| ..).describe(|tool, args|
+  ..))`; the first matching rule applies; `*` matches any text. A rule
+  that matches no tool, or allows no decision, is a build error.
+- The `review` node exists only with approval; the step limit becomes
+  `3 × model_calls + 4`. The model node routes to `review` when any valid
+  call to a known tool is gated; otherwise to `tools`.
+- The interrupt payload is `{"kind": "tool_approval", "requests":
+  [{call_id, tool, args, description?, allowed}]}`; `AgentResult::
+  approval_requests()` reads it.
+- `Agent::resume(snapshot, [(call_id, Decision)])` checks the decisions
+  **before** resuming (one per request, allowed kind, edited arguments valid
+  against the tool's schema, non-empty response, no extra ids): invalid
+  input is `resume_invalid` with no run started, so the snapshot stays
+  usable. The review node checks again for raw `Workflow::resume` callers.
+- Decisions are stored in the `agent` bookkeeping and consumed by the next
+  tools step. `edit` keeps the original call in the transcript and prefixes
+  the result with a notice of what ran; `reject` gives a `rejected` result
+  (default text "The reviewer rejected this call. Do not retry it.");
+  `respond` gives a `success` result with the reviewer's text. Neither
+  runs the tool.
 
 Implementation decisions (slice 1):
 

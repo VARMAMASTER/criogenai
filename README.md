@@ -52,7 +52,9 @@ The `agentbuild-agent` crate runs agents: a model with tools, as a
 `model` ⇄ `tools` loop on the workflow engine. Tool arguments are validated
 against their schemas, calls run concurrently with limits and timeouts, and a
 failed run can be retried without repeating tool calls that already ran.
-Human approval and structured output are next.
+Tool calls can require a person's approval: the run pauses before anything
+runs, and continues with approve, edit, reject or respond. Structured output
+is next.
 
 The `agentbuild-telemetry` crate sends every run to
 [Langfuse](https://langfuse.com) or any OpenTelemetry backend: runs are
@@ -74,6 +76,7 @@ cargo run -p agentbuild-core --example approval_workflow -- yes
 cargo run -p agentbuild-core --example llm_workflow -- "remote work"   # simulated LLM calls, 2–3 s each
 cargo run -p agentbuild-core --example retry_workflow                  # retries and timeouts
 cargo run -p agentbuild-core --example recover_workflow                # retry a failed run, no repeats
+cargo run -p agentbuild-agent --example approval_agent -- edit         # a doctor edits an order before it runs
 bash scripts/test-package.sh                                           # test the packaged crates as dependencies
 cargo run -p agentbuild-providers --example chat -- "hi"               # real model via Ollama (or AGENTBUILD_BASE_URL)
 ```

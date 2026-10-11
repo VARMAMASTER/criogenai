@@ -43,20 +43,21 @@ write our own implementation.
 - **Implemented in `agentbuild-agent` (slice 1):** the agent loop (0004):
   `model` ⇄ `tools` workflow, Rust tools (`tool_fn`), argument validation,
   concurrent calls in call order, timeouts, limits, model retries, events,
-  memo-backed `Agent::retry`.
+  memo-backed `Agent::retry`; slice 2: human approval (`Approval`,
+  `review` node, `Agent::resume` with `Decision`s).
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 272 across the four crates, plus the package test.
-- **Next:** agent slice 2, human approval (0004 §7, the `review` node);
-  then structured output (§6), hooks (§3), agents as workflow nodes;
-  `anthropic_messages`. See `docs/progress.md`. The user will build their
+- Tests: 283 across the four crates, plus the package test.
+- **Next:** agent slice 3, structured output (0004 §6); then hooks (§3),
+  remaining limits, model fallback and `Retry-After`, agents as nodes and
+  tools; `anthropic_messages`. See `docs/progress.md`. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
 - **Not started:** the Anthropic protocol, gateway, Python SDK,
-  TypeScript SDK, agent approval/structured output/hooks, persistence. Do not
+  TypeScript SDK, agent structured output/hooks, persistence. Do not
   describe these as existing anywhere.
 
 ## Commands
@@ -72,6 +73,7 @@ cargo run -p agentbuild-core --example approval_workflow -- yes
 cargo run -p agentbuild-core --example llm_workflow -- "remote work"
 cargo run -p agentbuild-core --example retry_workflow
 cargo run -p agentbuild-core --example recover_workflow
+cargo run -p agentbuild-agent --example approval_agent -- edit   # or approve, reject
 # Langfuse, manual only (needs LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY):
 cargo run -p agentbuild-telemetry --example langfuse
 # Real model, manual only (needs a server; default: Ollama on localhost):

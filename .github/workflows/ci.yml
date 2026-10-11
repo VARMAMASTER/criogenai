@@ -59,3 +59,4 @@ jobs:
           cargo run -p agentbuild-core --example llm_workflow -- "remote work"
           cargo run -p agentbuild-core --example retry_workflow
           cargo run -p agentbuild-core --example recover_workflow
+          cargo run -p agentbuild-agent --example approval_agent -- edit
