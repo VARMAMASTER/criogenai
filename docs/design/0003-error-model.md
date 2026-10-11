@@ -149,6 +149,17 @@ behave identically.
 - **Every attempt is recorded** with an `attempt_failed` event (kind, delay)
   and in `metadata.attempts`.
 
+Status (2026-10-12): **implemented** for agent model calls in
+`agentbuild-agent` (`resilience.rs`): retries of transient kinds with the
+node's `RetryPolicy` backoff, `Retry-After` honored up to
+`max_retry_after` (default 60 s, longer waits fail or fall back at once),
+`not_sent` retried immediately, fallback models (at once on
+`rate_limited`/`overloaded`, after exhausted retries on other transient
+kinds, and on kinds listed in `fallback_on`), provider `extras` of earlier
+models removed, waits that would cross the run deadline fail with
+`deadline_exceeded`, `model_attempt_failed` / `model_fallback` /
+`message_aborted` events. Model attempts are not counted as model calls.
+
 ### 5.3 Composition order (model call)
 
 ```mermaid

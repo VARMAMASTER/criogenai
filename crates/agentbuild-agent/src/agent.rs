@@ -6,14 +6,14 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use agentbuild_core::{
-    BoxFuture, BuildError, END, Node, NodeContext, NodeError, NodeOutput, NodePolicy, Reducer,
-    RetryPolicy, RunError, RunErrorKind, RunOptions, RunOutput, Snapshot, State, Update, Workflow,
+    BoxFuture, BuildError, END, Node, NodeContext, NodeError, NodeOutput, Reducer, RetryPolicy,
+    RunError, RunErrorKind, RunOptions, RunOutput, Snapshot, State, Update, Workflow,
     WorkflowBuilder,
 };
 use agentbuild_providers::{
-    ContentBlock, FinishReason, Message, MessageDelta, Model, ModelError, ModelRequest, OutputSpec,
-    OutputStrategy, Role, ToolIssue, ToolResultError, ToolSpec, ToolStatus, Usage, transcript,
-    validate_tools,
+    ContentBlock, FinishReason, Message, MessageDelta, Model, ModelError, ModelErrorKind,
+    ModelRequest, OutputSpec, OutputStrategy, Role, ToolIssue, ToolResultError, ToolSpec,
+    ToolStatus, Usage, transcript, validate_tools,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -23,6 +23,7 @@ use tokio::task::JoinSet;
 use crate::approval::{APPROVAL_INTERRUPT, Approval, ApprovalRequest, Decision, check_decisions};
 use crate::hooks::{Hook, HookContext, ModelNext, Outcome, ToolCallRequest, ToolNext};
 use crate::output::{FINAL_OUTPUT_TOOL, OutputConfig};
+use crate::resilience::{CallEnv, ModelChain};
 use crate::schema;
 use crate::tool::{Tool, ToolContext, ToolOutput};
 
@@ -234,6 +235,9 @@ pub struct AgentBuilder {
     approval: Option<Approval>,
     output: Option<(Value, Option<OutputStrategy>)>,
     hooks: Vec<Arc<dyn Hook>>,
+    fallbacks: Vec<Arc<dyn Model>>,
+    fallback_on: Vec<ModelErrorKind>,
+    max_retry_after: Duration,
 }
 
 impl std::fmt::Debug for AgentBuilder {
@@ -280,9 +284,39 @@ impl AgentBuilder {
     }
 
     /// Retries for transient model errors (rate limits, overload, network).
-    /// Default: 3 attempts, exponential backoff from 0.5 s with jitter.
+    /// Default: 3 attempts, exponential backoff from 0.5 s with jitter. A
+    /// provider's `Retry-After` replaces the backoff; requests that never
+    /// reached the provider are retried at once.
     pub fn model_retry(mut self, retry: RetryPolicy) -> Self {
         self.model_retry = retry;
+        self
+    }
+
+    /// Adds a fallback model, tried in order when the previous one fails
+    /// with a transient error (after its retries; at once for rate limits
+    /// and overload) or a kind listed in [`fallback_on`](Self::fallback_on).
+    pub fn fallback(self, model: impl Model) -> Self {
+        self.fallback_shared(Arc::new(model))
+    }
+
+    /// [`fallback`](Self::fallback) with a shared model.
+    pub fn fallback_shared(mut self, model: Arc<dyn Model>) -> Self {
+        self.fallbacks.push(model);
+        self
+    }
+
+    /// Non-transient error kinds that also move to the next model, e.g.
+    /// `context_overflow` (a larger model) or `content_filter` (another
+    /// vendor).
+    pub fn fallback_on(mut self, kinds: impl IntoIterator<Item = ModelErrorKind>) -> Self {
+        self.fallback_on = kinds.into_iter().collect();
+        self
+    }
+
+    /// The longest `Retry-After` the agent waits; longer ones fail (or fall
+    /// back) at once instead of hanging. Default 60 s.
+    pub fn max_retry_after(mut self, wait: Duration) -> Self {
+        self.max_retry_after = wait;
         self
     }
 
@@ -367,8 +401,15 @@ impl AgentBuilder {
             .iter()
             .map(|t| (t.spec().name.clone(), t.clone()))
             .collect();
+        let mut models = vec![self.model];
+        models.extend(self.fallbacks);
         let model_node = ModelNode(Arc::new(ModelInner {
-            model: self.model,
+            chain: ModelChain {
+                models,
+                retry: self.model_retry,
+                fallback_on: self.fallback_on,
+                max_retry_after: self.max_retry_after,
+            },
             instructions: self.instructions,
             specs,
             limits: limits.clone(),
@@ -389,8 +430,7 @@ impl AgentBuilder {
             .add_node(TOOLS_NODE, tools_node)
             .set_entry(MODEL_NODE)
             .may_goto(TOOLS_NODE, [MODEL_NODE, END])
-            .reducer(MESSAGES, Reducer::UpsertById)
-            .policy(MODEL_NODE, NodePolicy::new().retry(self.model_retry));
+            .reducer(MESSAGES, Reducer::UpsertById);
         // Each loop is model + tools, plus review when approval is on.
         let max_steps = match &approval {
             Some(approval) => {
@@ -496,6 +536,9 @@ impl Agent {
             approval: None,
             output: None,
             hooks: Vec::new(),
+            fallbacks: Vec::new(),
+            fallback_on: Vec::new(),
+            max_retry_after: Duration::from_secs(60),
         }
     }
 
@@ -765,6 +808,7 @@ impl AgentError {
                             | "resume_invalid"
                             | "output_invalid"
                             | "hook_failed"
+                            | "deadline_exceeded"
                     )
                 ) =>
             {
@@ -884,7 +928,7 @@ fn model_error(error: ModelError) -> NodeError {
 // ---------- model node ----------
 
 struct ModelInner {
-    model: Arc<dyn Model>,
+    chain: ModelChain,
     instructions: Option<String>,
     specs: Vec<ToolSpec>,
     limits: Limits,
@@ -1017,8 +1061,8 @@ async fn model_step(
         events.emit(
             "model_request",
             json!({
-                "provider": inner.model.provider(),
-                "model": inner.model.model(),
+                "provider": inner.chain.models[0].provider(),
+                "model": inner.chain.models[0].model(),
                 "settings": request.settings,
                 "tools": tools,
                 "messages": request.messages,
@@ -1033,20 +1077,31 @@ async fn model_step(
         }
     });
     // wrap_model hooks nest around the call (the first hook outermost).
+    let env = CallEnv {
+        events: events.clone(),
+        deadline: ctx
+            .remaining_time()
+            .map(|left| tokio::time::Instant::now() + left),
+        seed: ctx.task_id(),
+    };
+    let deadline_hit = std::sync::atomic::AtomicBool::new(false);
     let chain = ModelNext {
         hooks: &inner.hooks,
-        model: inner.model.as_ref(),
+        chain: &inner.chain,
+        env: &env,
         on_delta,
+        deadline_hit: &deadline_hit,
     };
     let response = match chain.call(request).await {
         Ok(response) => response,
-        Err(error) => {
-            if error.emitted_deltas {
-                // A retry starts a new message; UIs drop the partial one.
-                events.emit("message_aborted", json!({"reason": error.kind}));
-            }
-            return Err(model_error(error));
+        Err(error) if deadline_hit.load(std::sync::atomic::Ordering::SeqCst) => {
+            return Err(NodeError::new(format!(
+                "the next model retry would pass the run's deadline (last error: {error})"
+            ))
+            .with_kind("deadline_exceeded")
+            .with_details(json!({"model_error": error})));
         }
+        Err(error) => return Err(model_error(error)),
     };
     for warning in &response.warnings {
         events.emit("warning", to_json(warning));
@@ -1087,7 +1142,11 @@ async fn model_step(
             "message": message,
             "finish_reason": response.finish_reason,
             "usage": response.usage,
-            "model": message.metadata.model.as_deref().unwrap_or(inner.model.model()),
+            "model": message
+                .metadata
+                .model
+                .as_deref()
+                .unwrap_or(inner.chain.models[0].model()),
         }),
     );
 

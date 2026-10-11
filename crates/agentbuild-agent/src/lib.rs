@@ -65,6 +65,7 @@ mod agent;
 mod approval;
 mod hooks;
 mod output;
+mod resilience;
 mod schema;
 mod tool;
 

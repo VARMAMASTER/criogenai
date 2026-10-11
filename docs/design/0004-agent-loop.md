@@ -9,6 +9,12 @@ slice 3 (structured output, §6), slice 4 (hooks, §3) and slice 5 (the
 remaining limits of §5 except `nesting`). Not yet: `nesting` (comes with
 agents as tools), agents as nodes or tools.
 
+Implementation decisions (slice 6, model resilience): model retries moved
+from the core node policy into the agent (`resilience.rs`), inside the
+hooks, so `Retry-After`, immediate retries of unsent requests and fallback
+models work as 0003 §5 describes. `AgentBuilder::{model_retry, fallback,
+fallback_on, max_retry_after}`.
+
 Implementation decisions (slice 5, limits):
 
 - `Limits::on_limit(OnLimit::Error | OnLimit::End)` (default `Error`) and

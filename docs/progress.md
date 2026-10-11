@@ -16,8 +16,8 @@ handoff point for whoever continues the work.
    `openai_chat` + `ProviderModel` + presets.
 4. **Done:** agent slices 1–4 (loop, tools, approval, structured output,
    hooks); observability and Langfuse (`agentbuild-telemetry`, 0009).
-   Limits done too (`OnLimit`, tokens). **Next (agent list, in
-   order):** model resilience (`Retry-After`, fallback models) →
+   Limits and model resilience done too. **Next (agent list, in
+   order):**
    agents as workflow nodes and as tools → tool features (per-tool
    concurrency, safe retries, result truncation, state updates, app
    context) → `agent.stream()`. Then `anthropic_messages`.
@@ -42,6 +42,19 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-12: agent slice 6: model resilience (0003 §5)
+
+- Model retries moved from the core node policy into the agent's model
+  call (inside the hooks): `Retry-After` honored (≤ `max_retry_after`,
+  60 s), unsent requests retried at once, fallback models (switch at once
+  on rate limit/overload, after retries on other transient errors, and on
+  `fallback_on` kinds), provider extras dropped for the fallback, waits past
+  the deadline fail with `deadline_exceeded`. Events
+  `model_attempt_failed`, `model_fallback`.
+- `FakeModel::named(provider, model)` to tell fakes apart.
+- 9 tests on the paused clock (exact waits); seven mutation checks, all
+  caught.
 
 ### 2026-10-12: agent slice 5: remaining limits (0004 §5)
 

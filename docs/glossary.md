@@ -88,6 +88,8 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Tool (Rust)** | A function the agent can call; arguments are validated first. | `Tool`, `tool_fn`, `ToolContext` |
 | **Tool output / tool error** | What a tool returns; `ToolError::new` is shown to the model, `ToolError::fatal` fails the run. | `ToolOutput`, `ToolError` |
 | **Limits** | Bounds on model calls, tokens, tool calls (per run and per turn), parallel calls, tool timeout, structured-output retries; `on_limit` = fail (`limit_exceeded`) or end gracefully (stop reason `limit`). | `Limits`, `OnLimit`, `AgentResult::limit` |
+| **Fallback model** | A model tried when the previous one keeps failing (transient errors, or kinds listed in `fallback_on`); rate limits and overload switch at once. | `AgentBuilder::fallback`, `fallback_on`, event `model_fallback` |
+| **Retry-After** | The wait a provider asks for after a rate limit; honored up to `max_retry_after`, longer waits fail or fall back at once. | `ModelError::retry_after`, `AgentBuilder::max_retry_after` |
 | **Stop reason** | Why a run ended normally: `final_answer`, `return_direct`, `content_filter`. | `StopReason` |
 | **Return direct** | A tool whose successful result ends the run and becomes the output. | `ToolSpec::return_direct` |
 | **Structured output** | The run must end with JSON matching a schema: through the model's JSON mode (`native`) or the reserved `final_output` tool (`tool`); invalid answers go back to the model, up to `output_retries`. | `AgentBuilder::output`, `FINAL_OUTPUT_TOOL`, stop reason `output`, error `output_invalid` |

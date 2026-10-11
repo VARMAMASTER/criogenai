@@ -12,12 +12,15 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
+use std::sync::atomic::{AtomicBool, Ordering};
+
 use agentbuild_core::State;
 use agentbuild_providers::{
-    BoxFuture, Message, MessageDelta, Model, ModelError, ModelRequest, ModelResponse,
+    BoxFuture, Message, MessageDelta, ModelError, ModelRequest, ModelResponse,
 };
 use serde_json::{Map, Value};
 
+use crate::resilience::{CallEnv, ChainError, ModelChain};
 use crate::tool::{Tool, ToolContext, ToolError, ToolOutput};
 
 /// What a hook sees: the run, its transcript and the agent's state.
@@ -194,8 +197,11 @@ pub trait Hook: Send + Sync + 'static {
 #[derive(Clone)]
 pub struct ModelNext<'a> {
     pub(crate) hooks: &'a [Arc<dyn Hook>],
-    pub(crate) model: &'a dyn Model,
+    pub(crate) chain: &'a ModelChain,
+    pub(crate) env: &'a CallEnv,
     pub(crate) on_delta: Arc<dyn Fn(MessageDelta) + Send + Sync>,
+    /// Set when the chain stopped because of the run's deadline.
+    pub(crate) deadline_hit: &'a AtomicBool,
 }
 
 impl std::fmt::Debug for ModelNext<'_> {
@@ -213,15 +219,24 @@ impl<'a> ModelNext<'a> {
             Some((hook, rest)) => {
                 let next = ModelNext {
                     hooks: rest,
-                    model: self.model,
+                    chain: self.chain,
+                    env: self.env,
                     on_delta: self.on_delta.clone(),
+                    deadline_hit: self.deadline_hit,
                 };
                 hook.wrap_model(request, next)
             }
+            // The fallback chain and retry loop sit inside the hooks
+            // (0003 §5.3).
             None => Box::pin(async move {
-                let sink = self.on_delta.clone();
-                let mut forward = move |delta: MessageDelta| sink(delta);
-                self.model.stream(&request, &mut forward).await
+                match self.chain.call(&request, self.env, &self.on_delta).await {
+                    Ok(response) => Ok(response),
+                    Err(ChainError::Model(error)) => Err(*error),
+                    Err(ChainError::Deadline(error)) => {
+                        self.deadline_hit.store(true, Ordering::SeqCst);
+                        Err(*error)
+                    }
+                }
             }),
         }
     }

@@ -26,6 +26,8 @@ pub struct FakeModel {
     flaky_calls: usize,
     script: Mutex<VecDeque<FakeReply>>,
     requests: Mutex<Vec<ModelRequest>>,
+    provider: String,
+    model: String,
 }
 
 /// One scripted answer.
@@ -106,7 +108,17 @@ impl FakeModel {
             flaky_calls: 0,
             script: Mutex::new(VecDeque::new()),
             requests: Mutex::new(Vec::new()),
+            provider: "fake".into(),
+            model: "fake".into(),
         }
+    }
+
+    /// Reports this provider and model name (default `fake` / `fake`), e.g.
+    /// to tell a primary model from a fallback in tests.
+    pub fn named(mut self, provider: impl Into<String>, model: impl Into<String>) -> Self {
+        self.provider = provider.into();
+        self.model = model.into();
+        self
     }
 
     /// Prompts containing `marker` fail with `invalid_request` (not
@@ -163,8 +175,9 @@ impl FakeModel {
             .unwrap_or_default();
         tokio::time::sleep(self.delay_for(&prompt)).await;
 
-        let fail =
-            |kind, message: String| Err(ModelError::new(kind, message).for_model("fake", "fake"));
+        let fail = |kind, message: String| {
+            Err(ModelError::new(kind, message).for_model(self.provider.clone(), self.model.clone()))
+        };
         if call <= self.flaky_calls {
             return fail(
                 ModelErrorKind::RateLimited,
@@ -211,8 +224,8 @@ impl FakeModel {
         };
 
         let mut message = Message::with_content(Role::Assistant, content);
-        message.metadata.model = Some("fake".into());
-        message.metadata.provider = Some("fake".into());
+        message.metadata.model = Some(self.model.clone());
+        message.metadata.provider = Some(self.provider.clone());
         let input: usize = request.messages.iter().map(|m| m.text().len()).sum();
         let output = message.text().len();
         let usage = Usage::new(estimate_tokens(input), estimate_tokens(output));
@@ -222,11 +235,11 @@ impl FakeModel {
 
 impl Model for FakeModel {
     fn provider(&self) -> &str {
-        "fake"
+        &self.provider
     }
 
     fn model(&self) -> &str {
-        "fake"
+        &self.model
     }
 
     fn capabilities(&self) -> Capabilities {
