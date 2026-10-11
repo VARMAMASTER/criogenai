@@ -28,6 +28,7 @@ async fn main() {
     model_inside_a_workflow_node().await;
     provider_errors_and_transcripts();
     agent_with_tools().await;
+    telemetry_never_breaks_a_run().await;
     println!("package smoke test: ok");
 }
 
@@ -319,4 +320,29 @@ async fn agent_with_tools() {
         .collect();
     assert_eq!(statuses, [Some(ToolStatus::Success), Some(ToolStatus::Error)]);
     println!("  agent loop with tools and argument validation: ok");
+}
+
+/// The telemetry crate: an exporter whose backend is down must not affect
+/// the run.
+async fn telemetry_never_breaks_a_run() {
+    use agentbuild_telemetry::{Langfuse, OtlpExporter};
+
+    let config = Langfuse::config("pk-lf-x", "sk-lf-x", "http://127.0.0.1:9")
+        .batching(100, Duration::from_millis(10));
+    let exporter = OtlpExporter::start(config).expect("exporter");
+    let mut builder = WorkflowBuilder::new();
+    builder
+        .add_node("a", node_fn(|_| async { Ok(Update::new().set("ok", true)) }))
+        .set_entry("a")
+        .add_edge("a", END);
+    let out = builder
+        .build()
+        .unwrap()
+        .run_with(State::new(), RunOptions::default().observe(exporter.observer()))
+        .await
+        .expect("run unaffected by telemetry");
+    assert_eq!(out.state.get("ok").unwrap(), true);
+    exporter.shutdown().await;
+    assert!(exporter.stats().failed > 0, "{:?}", exporter.stats());
+    println!("  telemetry export (unreachable backend): ok");
 }

@@ -402,7 +402,13 @@ async fn event_numbering_continues_across_suspend_and_resume() {
     let (result, second) = tokio::join!(resume, read);
     result.unwrap();
 
-    assert_eq!(second[0].kind, EventKind::RunStarted { resumed: true });
+    assert_eq!(
+        second[0].kind,
+        EventKind::RunStarted {
+            resumed: true,
+            metadata: None
+        }
+    );
     assert_contiguous(&second, first.len() as u64);
     assert!(second.iter().all(|e| e.run_id == paused.run_id));
 }
@@ -568,4 +574,93 @@ async fn events_serialize_with_type_and_data() {
         run_started.get("node").is_none(),
         "absent fields are omitted"
     );
+}
+
+// ---------- observers (design 0009 §1) ----------
+
+fn two_step() -> Workflow {
+    let mut builder = WorkflowBuilder::new();
+    builder
+        .add_node("a", noop())
+        .add_node(
+            "b",
+            node_with_context(|ctx, _| async move {
+                ctx.events().emit("progress", json!({"pct": 50}));
+                Ok(NodeOutput::from(Update::new().set("done", true)))
+            }),
+        )
+        .set_entry("a")
+        .add_edge("a", "b")
+        .add_edge("b", END);
+    builder.build().unwrap()
+}
+
+fn recorder() -> (
+    Arc<std::sync::Mutex<Vec<Event>>>,
+    impl Fn(&Event) + Send + Sync + 'static,
+) {
+    let seen = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink = seen.clone();
+    (seen, move |event: &Event| {
+        sink.lock().unwrap().push(event.clone())
+    })
+}
+
+#[tokio::test]
+async fn observer_alone_receives_every_event_with_run_metadata() {
+    let (seen, observer) = recorder();
+    let options = RunOptions::default()
+        .observe(observer)
+        .metadata(json!({"user_id": "u1", "session_id": "s1"}));
+    two_step().run_with(State::new(), options).await.unwrap();
+
+    let events = seen.lock().unwrap().clone();
+    let seqs: Vec<u64> = events.iter().map(|e| e.seq).collect();
+    assert_eq!(seqs, (0..events.len() as u64).collect::<Vec<_>>());
+    assert_eq!(
+        events[0].kind,
+        EventKind::RunStarted {
+            resumed: false,
+            metadata: Some(json!({"user_id": "u1", "session_id": "s1"}))
+        }
+    );
+    assert_eq!(events.last().unwrap().type_name(), "run_finished");
+    assert!(
+        events
+            .iter()
+            .any(|e| matches!(&e.kind, EventKind::Custom { name, .. } if name == "progress")),
+        "custom events reach observers"
+    );
+}
+
+#[tokio::test]
+async fn observers_and_the_channel_see_the_same_events() {
+    let (first, a) = recorder();
+    let (second, b) = recorder();
+    let (sender, mut receiver) = event_channel(4);
+    let options = RunOptions::default().events(sender).observe(a).observe(b);
+    let workflow = two_step();
+    let run = workflow.run_with(State::new(), options);
+    let read = async {
+        let mut events = Vec::new();
+        while let Some(event) = receiver.recv().await {
+            events.push(event);
+        }
+        events
+    };
+    let (result, streamed) = tokio::join!(run, read);
+    result.unwrap();
+    assert_eq!(*first.lock().unwrap(), streamed);
+    assert_eq!(*second.lock().unwrap(), streamed);
+}
+
+#[tokio::test]
+async fn observers_keep_receiving_after_the_subscriber_leaves() {
+    let (seen, observer) = recorder();
+    let (sender, receiver) = event_channel(1);
+    drop(receiver);
+    let options = RunOptions::default().events(sender).observe(observer);
+    two_step().run_with(State::new(), options).await.unwrap();
+    let events = seen.lock().unwrap();
+    assert_eq!(events.last().unwrap().type_name(), "run_finished");
 }

@@ -226,6 +226,29 @@ flowchart LR
 
 ---
 
+### `agentbuild-telemetry` (implemented)
+
+Depends on `agentbuild-core`, `reqwest`, `tokio`. Exports runs as
+OpenTelemetry traces over OTLP/HTTP JSON; `Langfuse` is a preset (design
+0009).
+
+```mermaid
+flowchart LR
+    R[run / agent] -- "events (sync, never blocks)" --> O[ExportObserver]
+    O -- "bounded queue (drops when full)" --> T[export task]
+    T -- "SpanBuilder: events → spans" --> B[batch]
+    B -- "OTLP JSON, retries" --> L[(Langfuse / any OTLP backend)]
+```
+
+| Module | Contents |
+|---|---|
+| `exporter.rs` | `OtlpConfig`, `OtlpExporter` (`start`, `observer`, `flush`, `shutdown`, `stats`), background task, HTTP export |
+| `spans.rs` | `SpanBuilder`: run → root span, node → span, model call → generation, tool call → tool span, events → event observations; content policy (capture, mask, truncation) |
+| `otlp.rs` | OTLP JSON encoding |
+| `langfuse.rs` | `Langfuse::from_env` / `config`: endpoint, Basic auth, ingestion-version header |
+
+---
+
 ## 3. How a workflow is built (implemented)
 
 `WorkflowBuilder` methods only record declarations and never fail.

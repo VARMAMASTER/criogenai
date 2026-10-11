@@ -14,9 +14,10 @@ handoff point for whoever continues the work.
    error classification, transcript repair, `Model` trait, `FakeModel`.
    Parts 2–4 done: SSE parser, stream assembler, HTTP transport,
    `openai_chat` + `ProviderModel` + presets.
-4. **Done:** agent slice 1 (`agentbuild-agent`). **Next:** slice 2, human
-   approval (`review` node, 0004 §7); then structured output, hooks, agents
-   as nodes; `anthropic_messages`.
+4. **Done:** agent slice 1 (`agentbuild-agent`); observability and Langfuse
+   (`agentbuild-telemetry`, 0009). **Next:** slice 2, human approval
+   (`review` node, 0004 §7); then structured output, hooks, agents as
+   nodes; `anthropic_messages`.
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
    install the built wheel in a clean venv.
@@ -38,6 +39,35 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-11: observability: OpenTelemetry export and Langfuse (0009)
+
+- User asked for seamless Langfuse support, and to study Langfuse's
+  internals. Langfuse ingests standard OTLP (its own ingestion API is
+  deprecated), so AgentBuild exports OTLP/HTTP JSON and Langfuse is a preset;
+  the same exporter works with any OTel backend. No OpenTelemetry SDK
+  dependency.
+- Source study (`docs/research/langfuse.md`) corrected the first mapping:
+  chat-shaped input/output, Langfuse's usage keys (cached/reasoning tokens
+  excluded from input/output), span events not stored (→ event
+  observations), trace fields needed on every span, ingestion-version 4
+  header.
+- Core: `EventObserver` + `RunOptions::observe` (several observers, plus the
+  channel), `RunOptions::metadata` (in `run_started`). Agent events now carry
+  what a trace needs (`model_request`, full `message_completed`, tool args
+  and results).
+- New crate `agentbuild-telemetry`: non-blocking observer → bounded queue →
+  background task (batching, retries on 429/5xx, no retries on 4xx),
+  `flush`/`shutdown`/`stats`, content capture switch, mask (panic-safe),
+  truncation. `Langfuse::from_env()` (`LANGFUSE_PUBLIC_KEY`,
+  `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` or `LANGFUSE_HOST`).
+- Tests: 8 unit (mapping, usage, chat, content policy, base64, OTLP shape),
+  10 against a fake collector (headers, retries, failures, back-pressure,
+  shutdown, full agent trace, masking, failed node, suspend/resume in one
+  trace), 3 core observer tests. Nine mutation checks: all caught.
+- No live Langfuse check: Docker is not installed here.
+  `cargo run -p agentbuild-telemetry --example langfuse` with real keys does
+  it.
 
 ### 2026-10-11: agent slice 1 (`agentbuild-agent`); glossary
 

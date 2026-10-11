@@ -38,7 +38,9 @@ mod state;
 
 pub use cancel::CancelToken;
 pub use error::{BuildError, NodeError, NotAnObject, RunError, RunErrorKind, ValidationIssue};
-pub use event::{Event, EventKind, EventReceiver, EventSender, EventSink, event_channel};
+pub use event::{
+    Event, EventKind, EventObserver, EventReceiver, EventSender, EventSink, event_channel,
+};
 pub use graph::{Workflow, WorkflowBuilder};
 pub use memo::TaskMemo;
 pub use node::{

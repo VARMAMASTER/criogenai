@@ -389,6 +389,11 @@ Validation failures before anything runs (`resume_invalid`,
   ([research](../research/langchain-core.md)); we must not.
 - A disconnected subscriber (receiver dropped) is removed; the run continues
   (C8).
+- **Observers** (added for [0009](0009-observability.md)):
+  `RunOptions::observe(observer)` passes every event, synchronously and in
+  `seq` order, to any number of `EventObserver`s, alongside the optional
+  channel. Observers must not block or emit; exporters queue and return.
+  `RunOptions::metadata(json)` is reported in `run_started.data.metadata`.
 
 ## 7. Routers: what they see
 

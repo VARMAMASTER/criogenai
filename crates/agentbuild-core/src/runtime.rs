@@ -13,7 +13,8 @@ use tokio::time::Instant;
 use crate::cancel::CancelToken;
 use crate::error::{NodeError, RunError, RunErrorKind};
 use crate::event::{
-    Event, EventKind, EventReceiver, EventSender, EventSink, Hub, Scope, event_channel,
+    Event, EventKind, EventObserver, EventReceiver, EventSender, EventSink, Hub, Scope,
+    event_channel,
 };
 use crate::graph::{Graph, Outgoing, Target, Workflow};
 use crate::memo::TaskMemo;
@@ -45,6 +46,18 @@ pub struct RunOptions {
     pub cancel_grace: Duration,
     pub(crate) events: Option<EventSender>,
     pub(crate) cancel: Option<CancelToken>,
+    pub(crate) observers: Observers,
+    pub(crate) metadata: Option<Value>,
+}
+
+/// The observers attached to a run (shown as a count in `Debug`).
+#[derive(Clone, Default)]
+pub(crate) struct Observers(pub(crate) Vec<Arc<dyn EventObserver>>);
+
+impl std::fmt::Debug for Observers {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} observer(s)", self.0.len())
+    }
 }
 
 impl Default for RunOptions {
@@ -55,6 +68,8 @@ impl Default for RunOptions {
             cancel_grace: Duration::from_secs(5),
             events: None,
             cancel: None,
+            observers: Observers::default(),
+            metadata: None,
         }
     }
 }
@@ -88,6 +103,27 @@ impl RunOptions {
     /// Sends the run's [`Event`]s to `sender` (see [`event_channel`]).
     pub fn events(mut self, sender: EventSender) -> Self {
         self.events = Some(sender);
+        self
+    }
+
+    /// Also passes every event to `observer` (e.g. a telemetry exporter).
+    /// Several observers may be attached. See [`EventObserver`].
+    pub fn observe(mut self, observer: impl EventObserver) -> Self {
+        self.observers.0.push(Arc::new(observer));
+        self
+    }
+
+    /// [`observe`](Self::observe) with a shared observer.
+    pub fn observe_shared(mut self, observer: Arc<dyn EventObserver>) -> Self {
+        self.observers.0.push(observer);
+        self
+    }
+
+    /// Attaches JSON metadata to the run, reported in
+    /// [`EventKind::RunStarted`] (e.g. `{"user_id": "u1", "session_id":
+    /// "s1"}` for tracing tools).
+    pub fn metadata(mut self, metadata: Value) -> Self {
+        self.metadata = Some(metadata);
         self
     }
 }
@@ -611,10 +647,9 @@ impl<'g> Run<'g> {
         options: &RunOptions,
     ) -> Self {
         let run_id: Arc<str> = run_id.into();
-        let hub = options
-            .events
-            .clone()
-            .map(|sender| Hub::new(run_id.clone(), sender, first_seq));
+        let observers = options.observers.0.clone();
+        let hub = (options.events.is_some() || !observers.is_empty())
+            .then(|| Hub::new(run_id.clone(), options.events.clone(), observers, first_seq));
         let deadline = options.deadline.map(|limit| Deadline {
             at: Instant::now() + limit,
             limit_ms: u64::try_from(limit.as_millis()).unwrap_or(u64::MAX),
@@ -711,7 +746,10 @@ impl<'g> Run<'g> {
     ) -> Result<RunOutput, RunError> {
         let mut steps = Vec::new();
         let mut step = first_step;
-        self.emit(None, None, || EventKind::RunStarted { resumed });
+        self.emit(None, None, || EventKind::RunStarted {
+            resumed,
+            metadata: options.metadata.clone(),
+        });
 
         while !frontier.is_empty() {
             // Step boundary: the only place a slow subscriber holds the run back.

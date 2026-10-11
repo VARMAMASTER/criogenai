@@ -16,7 +16,7 @@ cd "$root"
 # In dependency order: each crate is verified against the unpacked packages
 # of the ones before it (they are not on crates.io, so their registry
 # dependencies are patched to those packages).
-crates=(agentbuild-core agentbuild-providers agentbuild-agent)
+crates=(agentbuild-core agentbuild-providers agentbuild-agent agentbuild-telemetry)
 template="$root/tests/package/rust-consumer/Cargo.toml.in"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT

@@ -483,9 +483,11 @@ async fn events_show_the_loop_as_it_happens() {
     assert_eq!(
         names,
         [
+            "model:model_request",
             "model:message_completed",
             "tools:tool_call_started",
             "tools:tool_call_finished",
+            "model:model_request",
             "model:message_delta",
             "model:message_completed",
         ]

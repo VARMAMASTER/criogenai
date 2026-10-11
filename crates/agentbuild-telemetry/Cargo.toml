@@ -1,0 +1,30 @@
+[package]
+name = "agentbuild-telemetry"
+description = "OpenTelemetry and Langfuse export for AgentBuild runs"
+readme = "README.md"
+keywords = ["opentelemetry", "langfuse", "tracing", "llm", "observability"]
+categories = ["development-tools::debugging"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# Not published until the package name is confirmed.
+publish = false
+
+[dependencies]
+agentbuild-core = { path = "../agentbuild-core", version = "0.1.0" }
+serde_json.workspace = true
+thiserror.workspace = true
+# `macros`: the export task's `select!`; `rt`, `sync`, `time`: the task, its
+# queue and the flush interval.
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "http2", "system-proxy"] }
+
+[dev-dependencies]
+agentbuild-agent = { path = "../agentbuild-agent" }
+agentbuild-providers = { path = "../agentbuild-providers" }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net", "io-util", "test-util"] }
+
+[lints]
+workspace = true

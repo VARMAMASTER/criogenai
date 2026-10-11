@@ -96,7 +96,18 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Thread** | A persisted conversation that runs continue (with a **checkpointer**, design 0008). |
 | **Gateway** | The HTTP server that exposes the provider layer to other apps (design 0006 §7). |
 
-## 4. Naming conventions
+## 4. Observability (`agentbuild-telemetry`; design 0009)
+
+| Term | Meaning | In code |
+|---|---|---|
+| **Observer** | Receives every event of a run as it happens, without blocking it. | `EventObserver`, `RunOptions::observe` |
+| **Run metadata** | JSON attached to a run (`user_id`, `session_id`, `tags`, `name`, ...), reported in `run_started`. | `RunOptions::metadata` |
+| **Exporter** | Turns events into spans and sends them in the background. | `OtlpExporter` |
+| **Trace / span** | OpenTelemetry terms: a trace is one run (trace id = run id); spans are its parts (nodes, model calls, tool calls). | |
+| **Observation** | Langfuse's word for a span; types used: `agent`/`chain` (root), `span` (node), `generation` (model call), `tool`, `event`. | |
+| **Content capture / mask** | Whether messages, arguments and results are exported, and a function that rewrites them first. | `OtlpConfig::capture_content`, `OtlpConfig::mask` |
+
+## 5. Naming conventions
 
 ### Code (Rust)
 

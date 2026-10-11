@@ -44,7 +44,11 @@ write our own implementation.
   `model` ⇄ `tools` workflow, Rust tools (`tool_fn`), argument validation,
   concurrent calls in call order, timeouts, limits, model retries, events,
   memo-backed `Agent::retry`.
-- Tests: 247 across the three crates, plus the package test.
+- **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
+  of runs (trace = run, spans, generations, tool observations), Langfuse
+  preset, content capture switch and masks, non-blocking observer
+  (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
+- Tests: 272 across the four crates, plus the package test.
 - **Next:** agent slice 2, human approval (0004 §7, the `review` node);
   then structured output (§6), hooks (§3), agents as workflow nodes;
   `anthropic_messages`. See `docs/progress.md`. The user will build their
@@ -68,6 +72,8 @@ cargo run -p agentbuild-core --example approval_workflow -- yes
 cargo run -p agentbuild-core --example llm_workflow -- "remote work"
 cargo run -p agentbuild-core --example retry_workflow
 cargo run -p agentbuild-core --example recover_workflow
+# Langfuse, manual only (needs LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY):
+cargo run -p agentbuild-telemetry --example langfuse
 # Real model, manual only (needs a server; default: Ollama on localhost):
 AGENTBUILD_MODEL=llama3.2 cargo run -p agentbuild-providers --example chat -- "hi"
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps

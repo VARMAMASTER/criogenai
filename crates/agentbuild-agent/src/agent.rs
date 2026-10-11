@@ -546,6 +546,20 @@ async fn model_step(
     }
     request_messages.extend(repaired.messages.iter().cloned());
     let request = ModelRequest::new(request_messages).with_tools(inner.specs.clone());
+    if events.is_enabled() {
+        // Enough to rebuild the call in a tracing tool (design 0009 §2).
+        let tools: Vec<&str> = inner.specs.iter().map(|t| t.name.as_str()).collect();
+        events.emit(
+            "model_request",
+            json!({
+                "provider": inner.model.provider(),
+                "model": inner.model.model(),
+                "settings": request.settings,
+                "tools": tools,
+                "messages": request.messages,
+            }),
+        );
+    }
 
     let delta_events = events.clone();
     let mut on_delta = move |delta: MessageDelta| {
@@ -571,8 +585,10 @@ async fn model_step(
         "message_completed",
         json!({
             "message_id": message.id,
+            "message": message,
             "finish_reason": response.finish_reason,
             "usage": response.usage,
+            "model": message.metadata.model.as_deref().unwrap_or(inner.model.model()),
         }),
     );
 
@@ -809,7 +825,7 @@ async fn tools_step(
             let _permit = semaphore.acquire_owned().await.expect("semaphore open");
             events.emit(
                 "tool_call_started",
-                json!({"call_id": call.call_id, "tool": call.name}),
+                json!({"call_id": call.call_id, "tool": call.name, "args": call.args}),
             );
             let started = Instant::now();
             let outcome = tokio::time::timeout(timeout, call.tool.call(call.args, tool_ctx)).await;
@@ -859,6 +875,8 @@ async fn tools_step(
                     "tool": call.name,
                     "status": message.status,
                     "duration_ms": message.metadata.duration_ms,
+                    "content": message.content,
+                    "error": message.error,
                 }),
             );
             Ok(Finished {

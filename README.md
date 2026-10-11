@@ -54,6 +54,12 @@ against their schemas, calls run concurrently with limits and timeouts, and a
 failed run can be retried without repeating tool calls that already ran.
 Human approval and structured output are next.
 
+The `agentbuild-telemetry` crate sends every run to
+[Langfuse](https://langfuse.com) or any OpenTelemetry backend: runs are
+traces, model calls are generations with token usage, tool calls are tool
+observations. It never slows or breaks a run, and content capture can be
+turned off or masked for sensitive data.
+
 The execution semantics are specified in
 [docs/design/0001-execution-model.md](docs/design/0001-execution-model.md).
 

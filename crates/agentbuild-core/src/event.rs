@@ -55,6 +55,10 @@ pub enum EventKind {
     RunStarted {
         /// `true` when continuing from a snapshot.
         resumed: bool,
+        /// The run's [`RunOptions::metadata`](crate::RunOptions::metadata),
+        /// if any.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        metadata: Option<Value>,
     },
     /// A step started.
     StepStarted {
@@ -185,6 +189,27 @@ impl EventReceiver {
     }
 }
 
+/// Receives every event of a run as it is emitted, alongside any
+/// [`event_channel`] subscriber. Attach one with
+/// [`RunOptions::observe`](crate::RunOptions::observe).
+///
+/// `on_event` is called synchronously, in `seq` order, while the event is
+/// being emitted, so it **must not block** and must not emit events itself.
+/// Exporters push the event into their own queue and return.
+pub trait EventObserver: Send + Sync + 'static {
+    /// Called once per event.
+    fn on_event(&self, event: &Event);
+}
+
+impl<F> EventObserver for F
+where
+    F: Fn(&Event) + Send + Sync + 'static,
+{
+    fn on_event(&self, event: &Event) {
+        self(event);
+    }
+}
+
 /// Lets node code emit [`EventKind::Custom`] events. Obtained from
 /// [`NodeContext::events`](crate::NodeContext::events).
 #[derive(Debug, Clone, Default)]
@@ -235,11 +260,20 @@ pub(crate) struct Scope {
 /// joins the backlog. `flush` (called by the run loop at step boundaries)
 /// waits until the backlog is delivered. That is the only place the run
 /// experiences backpressure.
-#[derive(Debug)]
 pub(crate) struct Hub {
     run_id: Arc<str>,
     enabled: AtomicBool,
+    observers: Vec<Arc<dyn EventObserver>>,
     inner: Mutex<Inner>,
+}
+
+impl std::fmt::Debug for Hub {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Hub")
+            .field("run_id", &self.run_id)
+            .field("observers", &self.observers.len())
+            .finish_non_exhaustive()
+    }
 }
 
 #[derive(Debug)]
@@ -253,13 +287,19 @@ struct Inner {
 }
 
 impl Hub {
-    pub(crate) fn new(run_id: Arc<str>, sender: EventSender, first_seq: u64) -> Arc<Self> {
+    pub(crate) fn new(
+        run_id: Arc<str>,
+        sender: Option<EventSender>,
+        observers: Vec<Arc<dyn EventObserver>>,
+        first_seq: u64,
+    ) -> Arc<Self> {
         Arc::new(Self {
             run_id,
-            enabled: AtomicBool::new(true),
+            enabled: AtomicBool::new(sender.is_some() || !observers.is_empty()),
+            observers,
             inner: Mutex::new(Inner {
                 next_seq: first_seq,
-                tx: Some(sender.0),
+                tx: sender.map(|s| s.0),
                 backlog: VecDeque::new(),
                 flushing: false,
             }),
@@ -277,9 +317,9 @@ impl Hub {
 
     pub(crate) fn emit(&self, scope: &Scope, origin: &str, kind: EventKind) {
         let mut inner = self.lock();
-        let Some(tx) = inner.tx.clone() else {
+        if inner.tx.is_none() && self.observers.is_empty() {
             return;
-        };
+        }
         let task_id = match (scope.step, &scope.node) {
             (Some(step), Some(node)) => Some(format!("{}:{step}:{node}", self.run_id)),
             _ => None,
@@ -296,6 +336,13 @@ impl Hub {
         };
         inner.next_seq += 1;
 
+        // Observers see every event, in seq order (the lock is held).
+        for observer in &self.observers {
+            observer.on_event(&event);
+        }
+        let Some(tx) = inner.tx.clone() else {
+            return;
+        };
         if inner.flushing || !inner.backlog.is_empty() {
             inner.backlog.push_back(event);
             return;
@@ -331,7 +378,9 @@ impl Hub {
     fn disconnect(&self, inner: &mut Inner) {
         inner.tx = None;
         inner.backlog.clear();
-        self.enabled.store(false, Ordering::Relaxed);
+        // Observers keep receiving events.
+        self.enabled
+            .store(!self.observers.is_empty(), Ordering::Relaxed);
     }
 
     fn lock(&self) -> MutexGuard<'_, Inner> {
@@ -355,7 +404,7 @@ mod tests {
 
     fn hub(capacity: usize) -> (Arc<Hub>, EventReceiver) {
         let (tx, rx) = event_channel(capacity);
-        (Hub::new("run".into(), tx, 0), rx)
+        (Hub::new("run".into(), Some(tx), Vec::new(), 0), rx)
     }
 
     fn custom(n: u64) -> EventKind {
