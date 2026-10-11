@@ -49,6 +49,7 @@ impl State {
         Value::Object(self.0)
     }
 
+    #[cfg(test)]
     pub(crate) fn apply(&mut self, update: Update) {
         self.0.extend(update.0);
     }
@@ -108,6 +109,11 @@ impl Update {
     /// Returns `true` if the update writes no keys.
     pub fn is_empty(&self) -> bool {
         self.0.is_empty()
+    }
+
+    /// Converts into the underlying JSON object.
+    pub fn into_map(self) -> Map<String, Value> {
+        self.0
     }
 }
 

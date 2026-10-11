@@ -20,15 +20,16 @@ write our own implementation.
 
 - **Implemented:** `crates/agentbuild-core`. Superstep engine with static
   edges, async routers, joins, cycles, concurrent nodes, atomic steps, stable
-  error codes. 33 tests. CI is green on Linux, Windows, macOS and MSRV 1.88.
+  error codes. CI is green on Linux, Windows, macOS and MSRV 1.88.
 - **Design approved** (user gave full decision freedom, 2026-10-11):
   `docs/design/0002`–`0008` cover messages and tools, errors, the agent loop,
   core extensions, the provider layer and gateway, the public API, and
   persistence and memory. Research is in `docs/research/`.
-- **In progress:** implementing 0005 §1–§3 in `agentbuild-core`
-  (NodeContext, node outcomes, reducers). Changes to
-  `docs/design/0001-execution-model.md` are listed in 0005 §9; update 0001
-  when each lands.
+- **Implemented in `agentbuild-core`:** the 0001 engine plus 0005 §1–§3:
+  NodeContext, `Update`/`Command`/`Suspend` outcomes, suspend/resume with JSON
+  snapshots, reducers, and the workflow fingerprint. 61 tests.
+- **Next:** 0005 §6 events, §4 policies, §5 saved task writes and memo.
+  Update 0001 as each lands (0005 §9 lists the changes).
 - **Not started:** `agentbuild-providers`, gateway, Python SDK, TypeScript SDK,
   agents/LLM, streaming events, persistence. Do not describe these as existing
   anywhere.
@@ -41,6 +42,7 @@ cargo test                       # unit + integration + doctests
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
 cargo run -p agentbuild-core --example basic_workflow -- "some text"
+cargo run -p agentbuild-core --example approval_workflow -- yes
 ```
 
 On the original Windows dev machine, Rust lives in `~/.cargo/bin`. A shell that

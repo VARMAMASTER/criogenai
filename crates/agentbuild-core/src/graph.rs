@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::END;
 use crate::error::{BuildError, ValidationIssue};
 use crate::node::{Node, Router};
+use crate::reducer::Reducer;
 
 /// Declares a workflow graph. Call [`build`](Self::build) to validate it.
 ///
@@ -16,6 +17,8 @@ pub struct WorkflowBuilder {
     edges: Vec<(String, String)>,
     routers: Vec<RouterDecl>,
     joins: Vec<(Vec<String>, String)>,
+    gotos: Vec<(String, Vec<String>)>,
+    reducers: Vec<(String, Reducer)>,
 }
 
 struct RouterDecl {
@@ -84,6 +87,29 @@ impl WorkflowBuilder {
     {
         self.joins
             .push((sources.into_iter().map(Into::into).collect(), to.into()));
+        self
+    }
+
+    /// Declares the targets `node` may jump to by returning
+    /// [`NodeOutput::Command`](crate::NodeOutput::Command). Targets are node
+    /// names or [`END`]; they are scheduled in addition to static edges.
+    ///
+    /// A node with `may_goto` targets and no static edges or joins must name at
+    /// least one target every time it runs.
+    pub fn may_goto<I, S>(&mut self, node: impl Into<String>, targets: I) -> &mut Self
+    where
+        I: IntoIterator<Item = S>,
+        S: Into<String>,
+    {
+        self.gotos
+            .push((node.into(), targets.into_iter().map(Into::into).collect()));
+        self
+    }
+
+    /// Declares how writes to the state key `key` are combined. Keys without a
+    /// declaration use [`Reducer::Replace`].
+    pub fn reducer(&mut self, key: impl Into<String>, reducer: Reducer) -> &mut Self {
+        self.reducers.push((key.into(), reducer));
         self
     }
 
@@ -191,6 +217,27 @@ impl WorkflowBuilder {
             }
         }
 
+        let mut goto: Vec<Vec<(String, Target)>> = vec![Vec::new(); n];
+        for (from, targets) in &self.gotos {
+            let f = v.node(from, || format!("may_goto of `{from}`"));
+            for to in targets {
+                let t = v.target(to, || format!("may_goto of `{from}`"));
+                if let (Some(f), Some(t)) = (f, t)
+                    && !goto[f].iter().any(|(name, _)| name == to)
+                {
+                    goto[f].push((to.clone(), t));
+                }
+            }
+        }
+
+        let mut reducers = HashMap::new();
+        for (key, reducer) in &self.reducers {
+            if reducers.insert(key.clone(), *reducer).is_some() {
+                v.issues
+                    .push(ValidationIssue::DuplicateReducer(key.clone()));
+            }
+        }
+
         let mut feeds_joins: Vec<Vec<usize>> = vec![Vec::new(); n];
         for (j, join) in joins.iter().enumerate() {
             for &s in &join.sources {
@@ -208,6 +255,7 @@ impl WorkflowBuilder {
             if let Some((_, routes)) = &routed[id] {
                 ts.extend(routes.iter().map(|(_, t)| *t));
             }
+            ts.extend(goto[id].iter().map(|(_, t)| *t));
             ts
         };
         for id in 0..n {
@@ -229,7 +277,14 @@ impl WorkflowBuilder {
             if routed[id].is_some() && has_static_edge[id] {
                 v.issues.push(ValidationIssue::MixedEdges(name.clone()));
             }
-            if routed[id].is_none() && !has_static_edge[id] && feeds_joins[id].is_empty() {
+            if routed[id].is_some() && !goto[id].is_empty() {
+                v.issues.push(ValidationIssue::GotoWithRouter(name.clone()));
+            }
+            if routed[id].is_none()
+                && !has_static_edge[id]
+                && feeds_joins[id].is_empty()
+                && goto[id].is_empty()
+            {
                 v.issues.push(ValidationIssue::DeadEnd(name.clone()));
             }
             if join_inbound[id] > 1 || (join_inbound[id] == 1 && inbound[id] > 0) {
@@ -275,15 +330,20 @@ impl WorkflowBuilder {
             })
             .collect();
 
+        let mut graph = Graph {
+            names: self.nodes.iter().map(|(name, _)| name.clone()).collect(),
+            nodes: self.nodes.iter().map(|(_, node)| node.clone()).collect(),
+            entry: entry.expect("entry is validated"),
+            outgoing,
+            goto,
+            joins,
+            feeds_joins,
+            reducers,
+            fingerprint: String::new(),
+        };
+        graph.fingerprint = fingerprint(&graph);
         Ok(Workflow {
-            graph: Arc::new(Graph {
-                names: self.nodes.iter().map(|(name, _)| name.clone()).collect(),
-                nodes: self.nodes.iter().map(|(_, node)| node.clone()).collect(),
-                entry: entry.expect("entry is validated"),
-                outgoing,
-                joins,
-                feeds_joins,
-            }),
+            graph: Arc::new(graph),
         })
     }
 }
@@ -328,6 +388,65 @@ impl Workflow {
     pub fn node_names(&self) -> impl Iterator<Item = &str> {
         self.graph.names.iter().map(String::as_str)
     }
+
+    /// A stable hash of the workflow's structure: nodes, edges, routes,
+    /// `may_goto` targets, joins and reducers. Node *implementations* are not
+    /// included. Snapshots record it so a run is only resumed on the same graph.
+    pub fn fingerprint(&self) -> &str {
+        &self.graph.fingerprint
+    }
+}
+
+/// FNV-1a over a canonical text form. Not cryptographic; used only to detect
+/// structural changes. `DefaultHasher` is avoided because its output may change
+/// between Rust releases, and fingerprints are persisted.
+fn fingerprint(g: &Graph) -> String {
+    use std::fmt::Write;
+    let name = |t: &Target| match t {
+        Target::Node(id) => g.names[*id].as_str(),
+        Target::End => END,
+    };
+    let mut text = String::new();
+    let _ = write!(text, "v1;entry={};", g.names[g.entry]);
+    for (id, node) in g.names.iter().enumerate() {
+        let _ = write!(text, "node={node}[");
+        match &g.outgoing[id] {
+            Outgoing::Static(ts) => {
+                let mut ts: Vec<&str> = ts.iter().map(name).collect();
+                ts.sort_unstable();
+                let _ = write!(text, "edges={}", ts.join(","));
+            }
+            Outgoing::Routed { routes, .. } => {
+                let routes: Vec<String> = routes
+                    .iter()
+                    .map(|(l, t)| format!("{l}>{}", name(t)))
+                    .collect();
+                let _ = write!(text, "routes={}", routes.join(","));
+            }
+        }
+        let mut gotos: Vec<&str> = g.goto[id].iter().map(|(n, _)| n.as_str()).collect();
+        gotos.sort_unstable();
+        let _ = write!(text, ";goto={}];", gotos.join(","));
+    }
+    for join in &g.joins {
+        let mut sources: Vec<&str> = join.sources.iter().map(|&s| g.names[s].as_str()).collect();
+        sources.sort_unstable();
+        let _ = write!(text, "join={}>{};", sources.join(","), g.names[join.target]);
+    }
+    let mut reducers: Vec<String> = g
+        .reducers
+        .iter()
+        .map(|(k, r)| format!("{k}:{r:?}"))
+        .collect();
+    reducers.sort_unstable();
+    let _ = write!(text, "reducers={}", reducers.join(","));
+
+    let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+    for byte in text.bytes() {
+        hash ^= u64::from(byte);
+        hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    format!("fnv1a64:{hash:016x}")
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -354,7 +473,17 @@ pub(crate) struct Graph {
     pub nodes: Vec<Arc<dyn Node>>,
     pub entry: usize,
     pub outgoing: Vec<Outgoing>,
+    /// For each node, the declared `may_goto` targets by name.
+    pub goto: Vec<Vec<(String, Target)>>,
     pub joins: Vec<Join>,
     /// For each node, the joins it is a source of.
     pub feeds_joins: Vec<Vec<usize>>,
+    pub reducers: HashMap<String, Reducer>,
+    pub fingerprint: String,
+}
+
+impl Graph {
+    pub fn index_of(&self, name: &str) -> Option<usize> {
+        self.names.iter().position(|n| n == name)
+    }
 }

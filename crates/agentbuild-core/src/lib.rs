@@ -28,13 +28,19 @@
 mod error;
 mod graph;
 mod node;
+mod reducer;
 mod runtime;
 mod state;
 
 pub use error::{BuildError, NodeError, NotAnObject, RunError, RunErrorKind, ValidationIssue};
 pub use graph::{Workflow, WorkflowBuilder};
-pub use node::{BoxFuture, Node, Router, node_fn, router_fn};
-pub use runtime::{RunOptions, RunOutput, StepRecord};
+pub use node::{
+    BoxFuture, Node, NodeContext, NodeOutput, Router, node_fn, node_with_context, router_fn,
+};
+pub use reducer::Reducer;
+pub use runtime::{
+    Interrupt, RunOptions, RunOutput, RunStatus, SNAPSHOT_FORMAT, Snapshot, StepRecord,
+};
 pub use state::{State, Update};
 
 /// Target name that terminates a path through the workflow.

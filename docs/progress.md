@@ -7,8 +7,9 @@ handoff point for whoever continues the work.
 ## Next steps
 
 1. ~~Design review~~ Approved (see log, 2026-10-11 night).
-2. **In progress:** implement 0005 in order: NodeContext → node outcomes → reducers → events →
-   policies → snapshots/resume. Each is small and separately tested.
+2. **Done:** 0005 §1–§3 (NodeContext, node outcomes with suspend/resume and
+   JSON snapshots, reducers). **Next:** events (§6) → policies (§4) → saved task
+   writes and the task memo (§5) → snapshots on failure.
 3. Phase 2 (Python SDK via PyO3/maturin) can start after 0005 §1–§3. Its first
    design doc covers asyncio ↔ Tokio bridging, free-threaded Python, and
    `abi3` wheels.
@@ -30,6 +31,27 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-11 (late night): 0005 §1–§3 implemented
+
+- `Node::run` now takes a `NodeContext` (`run_id` UUIDv7, `step`, `node`,
+  `task_id`, `attempt`, `resume`) and returns a `NodeOutput`
+  (`Update` / `Command{goto}` / `Suspend{payload}`). `node_fn` is unchanged;
+  `node_with_context` was added.
+- `may_goto` declarations are validated at build time (unknown targets,
+  `GotoWithRouter`) and at runtime (`unknown_route`, `missing_goto`).
+- Suspend/resume: `RunOutput.status` is `Completed | Suspended{interrupts,
+  snapshot}`. `Workflow::resume(snapshot, values)` validates first (snapshot
+  stays usable), and only suspended nodes see `ctx.resume()`. A suspended node
+  does not count toward joins. The step limit counts across resumes.
+- Reducers: `Replace` / `Append` / `UpsertById`, plus `$replace` and `$remove`.
+  Merges run on a copy (atomic).
+- Workflow fingerprint: FNV-1a of the structure, not of implementations.
+- New error codes: `invalid_value`, `missing_goto`, `resume_invalid`,
+  `workflow_mismatch`.
+- New dependency: `uuid` (v7).
+- Tests: 61 passing (18 new integration, 10 new reducer unit). New example:
+  `approval_workflow`.
 
 ### 2026-10-11 (night): Design approved; open questions resolved
 

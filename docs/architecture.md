@@ -122,12 +122,14 @@ Crate: `crates/agentbuild-core`. Dependencies: `tokio` (rt), `serde`,
 flowchart LR
     lib["lib.rs<br/>public API + END"]
     state["state.rs<br/>State, Update"]
+    reducer["reducer.rs<br/>Reducer, merge"]
     node["node.rs<br/>Node, Router traits<br/>node_fn, router_fn"]
     graph["graph.rs<br/>WorkflowBuilder → validate → Workflow<br/>internal Graph"]
     runtime["runtime.rs<br/>Run: superstep loop<br/>RunOptions, RunOutput"]
     error["error.rs<br/>NodeError, ValidationIssue,<br/>BuildError, RunError(Kind)"]
 
-    lib --> graph & runtime & state & node & error
+    lib --> graph & runtime & state & node & error & reducer
+    runtime --> reducer
     graph --> node & error
     runtime --> graph & state & error
     node --> state & error
@@ -138,7 +140,10 @@ flowchart LR
 |---|---|
 | `State` | JSON object shared by a run. Nodes read an `Arc<State>` snapshot. |
 | `Update` | Partial JSON object a node returns. Each key replaces the stored value. |
-| `Node` | Object-safe trait: `run(Arc<State>) -> BoxFuture<Result<Update, NodeError>>`. **The language-bridge seam.** |
+| `Node` | Object-safe trait: `run(NodeContext, Arc<State>) -> BoxFuture<Result<NodeOutput, NodeError>>`. **The language-bridge seam.** |
+| `NodeContext` / `NodeOutput` | Run info passed to nodes; `Update` / `Command{goto}` / `Suspend{payload}` |
+| `Reducer` | Per-key merge rule: `Replace`, `Append`, `UpsertById` |
+| `Snapshot` / `RunStatus` | Suspended run as JSON; `Completed` or `Suspended{interrupts, snapshot}` |
 | `Router` | Object-safe trait: `route(Arc<State>) -> BoxFuture<Result<String, NodeError>>`. Returns a label. |
 | `WorkflowBuilder` | Records nodes, entry, edges, routers and joins. `build()` validates and reports every issue at once. |
 | `Workflow` | Immutable compiled graph behind an `Arc`. Cheap to clone; safe for concurrent runs. |

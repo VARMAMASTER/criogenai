@@ -1,7 +1,9 @@
 # 0005: Core runtime extensions
 
-Status: **Proposed** (design phase). This document changes the implemented
-contract in [0001](0001-execution-model.md); every change is listed in §9.
+Status: **§1–§3 implemented** (NodeContext without `cancel`, `deadline`,
+`events` and `memo`; node outcomes with suspend/resume; reducers). §4–§6 and
+§5's saved task writes are **approved, not yet built**. This document changes
+[0001](0001-execution-model.md); every change is listed in §9.
 It provides what [0002](0002-messages-and-tools.md),
 [0003](0003-error-model.md) and [0004](0004-agent-loop.md) need. Research
 input: [langgraph](../research/langgraph.md) (engine, channels, checkpoints)

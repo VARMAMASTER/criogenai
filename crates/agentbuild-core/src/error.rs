@@ -144,6 +144,12 @@ pub enum ValidationIssue {
         "join target `{0}` must not be the entry or the target of another edge, route, or join"
     )]
     JoinTargetHasOtherInbound(String),
+    /// A node declares `may_goto` targets and also has a router.
+    #[error("node `{0}` has both a router and `may_goto` targets; use one or the other")]
+    GotoWithRouter(String),
+    /// A state key's reducer is declared more than once.
+    #[error("reducer for state key `{0}` is declared more than once")]
+    DuplicateReducer(String),
 }
 
 /// Returned by [`WorkflowBuilder::build`](crate::WorkflowBuilder::build).
@@ -220,6 +226,38 @@ pub enum RunErrorKind {
         /// The configured limit.
         limit: usize,
     },
+    /// A write could not be applied by the key's reducer.
+    #[error("node `{node}` wrote an invalid value to `{key}`: {message}")]
+    InvalidValue {
+        /// The writing node.
+        node: String,
+        /// The state key.
+        key: String,
+        /// What was wrong.
+        message: String,
+    },
+    /// A node that can only continue through `goto` returned no target.
+    #[error("node `{node}` has no outgoing edges and returned no `goto` target")]
+    MissingGoto {
+        /// The node.
+        node: String,
+    },
+    /// Resume input does not match the snapshot.
+    #[error("cannot resume: {reason}")]
+    ResumeInvalid {
+        /// What was wrong.
+        reason: String,
+    },
+    /// The snapshot was taken from a workflow with a different structure.
+    #[error(
+        "snapshot was taken from a different workflow (expected fingerprint {expected}, found {found})"
+    )]
+    WorkflowMismatch {
+        /// This workflow's fingerprint.
+        expected: String,
+        /// The snapshot's fingerprint.
+        found: String,
+    },
 }
 
 impl RunErrorKind {
@@ -232,6 +270,10 @@ impl RunErrorKind {
             Self::UnknownRoute { .. } => "unknown_route",
             Self::UpdateConflict { .. } => "update_conflict",
             Self::StepLimitExceeded { .. } => "step_limit_exceeded",
+            Self::InvalidValue { .. } => "invalid_value",
+            Self::MissingGoto { .. } => "missing_goto",
+            Self::ResumeInvalid { .. } => "resume_invalid",
+            Self::WorkflowMismatch { .. } => "workflow_mismatch",
         }
     }
 }

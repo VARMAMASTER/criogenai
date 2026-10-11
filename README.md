@@ -21,6 +21,10 @@ The `agentbuild-core` crate runs workflow graphs:
 - conditional routing via async routers
 - joins that wait for branches of different lengths
 - cycles, bounded by a step limit
+- per-key state reducers: replace, append, upsert-by-id
+- nodes that pick their next step (`Command` goto, validated)
+- **human-in-the-loop**: a node can suspend the run; the run returns a
+  JSON snapshot that can be stored anywhere and resumed later
 - concurrent execution of nodes scheduled in the same step
 - graph validation that reports every issue at once
 - structured errors with stable codes; failed steps are rolled back
@@ -35,6 +39,7 @@ Requires Rust 1.88+ ([rustup](https://rustup.rs)).
 ```sh
 cargo test
 cargo run -p agentbuild-core --example basic_workflow -- "Hello world"
+cargo run -p agentbuild-core --example approval_workflow -- yes
 ```
 
 The example is `Input → Transform → Conditional Branch → Output`:
