@@ -177,6 +177,27 @@ Target:      Node(NodeId) | End
 
 ---
 
+### `agentbuild-providers` (foundation implemented)
+
+Pure data and logic so far; no HTTP. Dependencies: `serde`, `serde_json`,
+`thiserror`, `uuid`, `tokio` (`time`, for `FakeModel`).
+
+| Module | Contents |
+|---|---|
+| `message.rs` | `Message`, `Role`, `ContentBlock` (9 types), `MediaSource`, `ToolStatus`, `ToolResultError`, `Usage`, `FinishReason`, `MessageMetadata` (0002 §1, §2, §4) |
+| `tool.rs` | `ToolSpec`, `ToolKind`, `ToolAnnotations`, `validate_tools` (0002 §3) |
+| `request.rs` | `ModelRequest`, `ToolChoice`, `OutputSpec`, `Settings`, `Reasoning`, `ModelResponse`, `Capabilities` (0002 §7) |
+| `error.rs` | `ModelError`, `ModelErrorKind`, `Dispatch`, `classify_http`, `sanitize_message` (0003 §4) |
+| `transcript.rs` | `check` / `repair`: every tool call gets exactly one result (0002 §6) |
+| `model.rs` | `Model` trait: `provider`, `model`, `capabilities`, `invoke` |
+| `fake.rs` | `FakeModel`: simulated 2–3 s replies, scripted tool calls, failures |
+
+The engine (`agentbuild-core`) does not depend on this crate. An agent node
+calls a `Model` and stores messages in the state under an `upsert_by_id` key;
+the package test (`tests/package/rust-consumer`) does exactly that.
+
+---
+
 ## 3. How a workflow is built (implemented)
 
 `WorkflowBuilder` methods only record declarations and never fail.
@@ -339,18 +360,22 @@ agentbuild/
 ├── AGENTS.md                     Orientation notes for assistants and contributors (CLAUDE.md imports it)
 ├── Cargo.toml                    Rust workspace
 ├── crates/
-│   └── agentbuild-core/          [implemented] execution engine
-│       ├── src/{lib,state,node,graph,runtime,error}.rs
-│       ├── tests/{execution,validation}.rs
-│       └── examples/basic_workflow.rs
+│   ├── agentbuild-core/          [implemented] execution engine
+│   │   ├── src/                  lib, state, node, graph, runtime, reducer, event, policy, cancel, memo, error
+│   │   ├── tests/                execution, validation, outcomes, events, policies, memo, llm_simulation
+│   │   │   └── support/fake_llm.rs   simulated LLM for engine tests
+│   │   └── examples/             basic, approval, llm, retry, recover workflows
+│   └── agentbuild-providers/     [foundation] messages, tools, model errors, Model trait, FakeModel
+├── scripts/test-package.sh       package the crates and use them from a separate project
+├── tests/package/rust-consumer/  that separate project (public API only)
 ├── docs/
 │   ├── architecture.md           this file
 │   ├── progress.md               dated log: decisions, status, next steps
-│   ├── design/                   numbered design contracts (0001 implemented; 0002–0005 proposed)
-│   └── research/                 LangChain / LangGraph source studies
+│   ├── design/                   numbered design contracts (0001, 0005 implemented; 0002, 0003, 0006 partly)
+│   └── research/                 LangChain / LangGraph / LiteLLM source studies
 ├── research/                     (git-ignored contents) .venv with langchain/langgraph, tools/ (portable Node + REA),
 │                                 wheels/, rea-evidence/
-└── .github/workflows/ci.yml      fmt, clippy, tests on Linux/Windows/macOS + MSRV
+└── .github/workflows/ci.yml      fmt, clippy, tests on Linux/Windows/macOS + MSRV; package test, docs, examples
 ```
 
 Planned additions (proposed): `crates/agentbuild-py/`, `crates/agentbuild-node/`,

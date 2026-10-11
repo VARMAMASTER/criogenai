@@ -31,14 +31,17 @@ write our own implementation.
   (`Workflow::stream`, `event_channel`, `ctx.events()`), policies
   (`NodePolicy` timeout/retry, run deadline, `CancelToken` with grace), and
   saved task writes with `ctx.memo()` plus snapshots on failure
-  (`RunError::snapshot`, `Workflow::retry`). 135 tests, plus the
-  package test.
-- **Next:** 0002 data types and the 0003 error catalog in Rust, then
-  `agentbuild-providers` (see `docs/progress.md`).
-  Update 0001 as each lands (0005 §9 lists the changes).
-- **Not started:** `agentbuild-providers`, gateway, Python SDK, TypeScript SDK,
-  agents/LLM, message-delta events, persistence. Do not describe these as existing
-  anywhere.
+  (`RunError::snapshot`, `Workflow::retry`).
+- **Implemented in `agentbuild-providers` (foundation):** the 0002 types
+  (`Message`, `ContentBlock`, `ToolSpec`, `ModelRequest`/`ModelResponse`,
+  `Capabilities`), `ModelError` with `classify_http` (0003 §4), transcript
+  check/repair (0002 §6), the `Model` trait and `FakeModel`. No HTTP yet.
+- Tests: 174 across both crates, plus the package test.
+- **Next:** SSE parser and stream assembler, HTTP transport, `openai_chat`
+  protocol (0006 §11), then the agent loop (0004). See `docs/progress.md`.
+- **Not started:** wire protocols and HTTP transport, gateway, Python SDK,
+  TypeScript SDK, the agent loop, message-delta events, persistence. Do not
+  describe these as existing anywhere.
 
 ## Commands
 
@@ -47,6 +50,7 @@ cargo build
 cargo test                       # unit + integration + doctests
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
+cargo test -p agentbuild-providers   # one crate
 cargo run -p agentbuild-core --example basic_workflow -- "some text"
 cargo run -p agentbuild-core --example approval_workflow -- yes
 cargo run -p agentbuild-core --example llm_workflow -- "remote work"
@@ -84,7 +88,9 @@ git-ignored. REA is not registered as an MCP server in any agent config.
 2. **Keep the core small.** Add a dependency only with a stated reason. Current
    deps: tokio (features `rt`, `sync`, `time`; no `macros`), serde, serde_json,
    thiserror, uuid (v7 run ids). Dev only: tokio `test-util` for the paused
-   clock.
+   clock. `agentbuild-providers` follows the budget in research
+   `litellm-providers.md` §10.11 (today: serde, serde_json, thiserror, uuid,
+   tokio `time`).
 3. **Engine semantics live in Rust only.** SDKs must not reimplement
    scheduling, merging or validation.
 4. **Strict now, relax later.** Validation rules start strict; relaxing them is
@@ -102,8 +108,10 @@ git-ignored. REA is not registered as an MCP server in any agent config.
    2–3 s (fixed per prompt) and can fail on a marker. Tests run it on Tokio's
    paused clock (`#[tokio::test(start_paused = true)]`) so timing is exact and
    the suite stays fast; examples run it in real time. See
-   `tests/llm_simulation.rs`. When `agentbuild-providers` exists, this becomes
-   a fake `Model` implementation there.
+   `tests/llm_simulation.rs`. Code that speaks the model contract
+   (`agentbuild-providers`, later the agent loop) uses
+   `agentbuild_providers::FakeModel` instead: the same 2–3 s timing, plus
+   scripted tool calls (`FakeReply`) and classified `ModelError`s.
 8. **Public API hygiene.** Public enums and structs that may grow are
    `#[non_exhaustive]`. Public items have docs and implement `Debug`
    (`missing_docs` and `missing_debug_implementations` are warnings; CI

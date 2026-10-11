@@ -1,0 +1,27 @@
+[package]
+name = "agentbuild-providers"
+description = "Model provider layer for AgentBuild: messages, tools, model errors, protocols"
+readme = "README.md"
+keywords = ["llm", "agents", "openai", "anthropic", "gateway"]
+categories = ["api-bindings", "asynchronous"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# Not published until the package name is confirmed.
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# `time`: FakeModel's simulated latency. More features arrive with the HTTP transport.
+tokio = { workspace = true, features = ["time"] }
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "test-util"] }
+
+[lints]
+workspace = true

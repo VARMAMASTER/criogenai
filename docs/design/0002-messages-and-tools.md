@@ -1,6 +1,36 @@
 # 0002: Messages, tools, tool calls and tool results
 
-Status: **Proposed** (design phase). Nothing in this document is implemented.
+Status: **Partly implemented** in `crates/agentbuild-providers`: the data
+types of §1, §2, §3 (`ToolSpec` and registration-time validation), §4 (tool
+message fields and statuses) and §7 (request, response, capabilities), and
+the transcript check and repair of §6. Not yet: the tool context (§3.1),
+result rendering, truncation and state updates (§4.2–§4.4), the tool call
+lifecycle (§5, part of the agent loop), adapter normalization (§7.1) and
+streaming (§8).
+
+Implementation decisions:
+
+- A tool message is a `Message` with `role: tool` and the extra fields
+  `call_id`, `tool`, `status`, `error`, `artifact`, all on the same flat
+  object (as in §4), not a separate type. `Message::validate()` enforces
+  the role/block table of §1 and the tool-message rules of §4.
+- Content-block variants are `#[non_exhaustive]` and built with constructors
+  (`ContentBlock::text(..)`, `ContentBlock::tool_call(..)`), so fields can be
+  added without breaking users. `tool_call.args` is typed as a JSON object;
+  any other JSON is rejected when parsing.
+- `reasoning.redacted` holds the provider's opaque redacted reasoning
+  (Anthropic `redacted_thinking.data`) as a string.
+- `metadata` keeps unknown fields (`other`), so data added by newer SDKs
+  round-trips.
+- Unknown block types are rejected when parsing (strict now; relaxing is
+  compatible).
+- Transcript repair inserts missing results right after the tool messages
+  that directly follow the assistant message, in call order, with ids
+  `msg_repair_<call_id>` (repairing twice is a no-op). A result placed after a
+  user message but before the next assistant message is valid, as the
+  invariant says; adapters that need contiguous results reorder when encoding.
+  An invalid tool call without a name gets `tool: "unknown"` in its inserted
+  result.
 
 Related: [0003 error model](0003-error-model.md) ·
 [0004 agent loop](0004-agent-loop.md) ·

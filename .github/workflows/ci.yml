@@ -22,7 +22,7 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all-targets
-      - run: cargo test --doc
+      - run: cargo test --doc --workspace
 
   msrv:
     runs-on: ubuntu-latest

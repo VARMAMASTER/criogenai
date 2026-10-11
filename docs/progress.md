@@ -10,12 +10,18 @@ handoff point for whoever continues the work.
 2. **Done:** all of 0005 (NodeContext, node outcomes with suspend/resume and
    JSON snapshots, reducers, policies, saved task writes and the task memo,
    snapshots on failure, events). Package testing in CI.
-3. Phase 2 (Python SDK via PyO3/maturin) can start after 0005 §1–§3. Its first
-   design doc covers asyncio ↔ Tokio bridging, free-threaded Python, and
-   `abi3` wheels.
-4. Implement the 0002 data types and the 0003 error catalog in Rust, with
-   JSON Schemas generated for the SDKs.
-5. `agentbuild-providers` foundation (0006 §11 step 1), in parallel with 3–4.
+3. **Done:** `agentbuild-providers` foundation, part 1: 0002 types, model
+   error classification, transcript repair, `Model` trait, `FakeModel`.
+   **Next (part 2):** SSE parser (with random chunk-cut tests), stream
+   assembler (0002 §8), HTTP transport with timeouts and dispatch tracking.
+   Then `openai_chat` (0006 §11 step 2).
+4. The agent loop (0004) on top of core + providers, tested with `FakeModel`.
+5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
+   Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
+   install the built wheel in a clean venv.
+6. Still open from the old plan: the 0003 run-error catalog generated from the
+   Rust enums and checked in CI; JSON Schemas for the 0002 types for the SDKs
+   (needs a schema generator dependency; decide when the SDKs start).
 
 ## Open decisions
 
@@ -31,6 +37,39 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-11: `agentbuild-providers` foundation, part 1
+
+- New crate (workspace member, `publish = false`). Deps: serde, serde_json,
+  thiserror, uuid, tokio `time`.
+- 0002 types: `Message` (flat, tool-message fields on the same object;
+  `validate()` checks the role/block table), `ContentBlock` (9 types,
+  `#[non_exhaustive]` variants with constructors; `tool_call.args` typed as a
+  JSON object), `MediaSource`, `ToolStatus`, `ToolResultError`, `Usage`,
+  `FinishReason`, `MessageMetadata` (keeps unknown fields). `ToolSpec` +
+  `validate_tools` (names, duplicates, reserved `final_output`, object schema,
+  zero limits; every issue reported). `ModelRequest`, `ToolChoice` (`"auto"`
+  … or `{"name"}`), `Settings`, `Reasoning`, `ModelResponse`,
+  `Capabilities` (tri-state).
+- `ModelError` / `ModelErrorKind` (14 kinds incl. `quota_exhausted`,
+  `invalid_response`), `Dispatch`, `classify_http`: in-band code → status →
+  text refinement for 400/413/422 only. Body shapes of OpenAI, Anthropic,
+  Ollama, vLLM, llama.cpp. `Retry-After` as ms, seconds or HTTP date (own
+  date parser, no dependency). `sanitize_message`: secrets, key-like tokens,
+  bearer tokens, URLs, 2 KB bound.
+- `transcript::check` / `repair` (0002 §6), deterministic repair ids,
+  idempotent.
+- `Model` trait (borrowed request; object-safe) and `FakeModel` (FakeLlm's
+  timing plus scripted tool calls and errors).
+- Clippy `result_large_err` allowed crate-wide: the `Ok` side is larger than
+  `ModelError`, so boxing would not shrink the `Result`.
+- Tests: 39 in the crate (29 unit, 8 integration, 2 doctests incl. the README).
+  Ten mutation checks: 9 caught; the other was equivalent (unreachable arm).
+  A missed check first found that no test proved delays vary by prompt; a
+  test was added and it is now caught.
+- Package test covers both crates. The consumer runs a workflow node that
+  calls `FakeModel` and stores provider `Message`s under an `upsert_by_id`
+  key: the two crates' JSON contracts fit together.
 
 ### 2026-10-11: 0005 §5 saved task writes, task memo, snapshots on failure; package tests
 

@@ -1,6 +1,16 @@
 # 0006: Provider layer and embeddable gateway
 
-Status: **Proposed** (design phase). Implements the provider contract of
+Status: **Approved; foundation in progress.** Built so far in
+`crates/agentbuild-providers`: the 0002 types, `ModelError` and the HTTP
+error classifier (§6), the `Model` trait (§3) and a `FakeModel` for tests.
+Next: SSE parser, stream assembler, HTTP transport, then `openai_chat`.
+
+`Model::invoke` borrows the request (`&ModelRequest`) instead of taking it
+by value, so retries and fallbacks do not copy the transcript. `stream()`
+will be added with a default implementation (one delta per block from
+`invoke`), so existing implementations keep compiling.
+
+Implements the provider contract of
 [0002 §7](0002-messages-and-tools.md) and the error kinds of
 [0003 §4](0003-error-model.md). It serves both products (architecture §1): the
 **agent engine** calls it in-process, and the **gateway** exposes it over HTTP.

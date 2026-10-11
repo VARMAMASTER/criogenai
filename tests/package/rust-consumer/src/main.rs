@@ -12,6 +12,10 @@ use agentbuild_core::{
     RunOptions, SNAPSHOT_FORMAT, Snapshot, State, Update, ValidationIssue, WorkflowBuilder,
     node_fn, node_with_context, router_fn,
 };
+use agentbuild_providers::{
+    FakeModel, FakeReply, HttpFailure, Message, Model, ModelErrorKind, ModelRequest, ToolSpec,
+    ToolStatus, classify_http, transcript, validate_tools,
+};
 use serde_json::json;
 
 #[tokio::main]
@@ -21,6 +25,8 @@ async fn main() {
     retry_a_failed_run_without_repeating_work().await;
     policies_and_cancellation().await;
     validation_reports_every_issue();
+    model_inside_a_workflow_node().await;
+    provider_errors_and_transcripts();
     println!("package smoke test: ok");
 }
 
@@ -206,4 +212,78 @@ fn validation_reports_every_issue() {
     assert!(err.issues.contains(&ValidationIssue::MissingEntry));
     assert!(err.issues.len() >= 2, "{err}");
     println!("  validation: ok");
+}
+
+/// How the agent layer will combine the crates: a node calls a `Model`.
+async fn model_inside_a_workflow_node() {
+    let model = Arc::new(
+        FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(5))
+            .then(FakeReply::tool_call("lookup", json!({"id": 7}))),
+    );
+    let tools = vec![ToolSpec::new(
+        "lookup",
+        "Find a record",
+        json!({"type": "object", "properties": {"id": {"type": "integer"}}}),
+    )];
+    validate_tools(&tools).expect("valid tools");
+
+    let node = {
+        let model = model.clone();
+        node_fn(move |state| {
+            let (model, tools) = (model.clone(), tools.clone());
+            async move {
+                let messages: Vec<Message> =
+                    serde_json::from_value(state.get("messages").cloned().unwrap_or(json!([])))
+                        .map_err(|e| NodeError::new(e.to_string()))?;
+                let request = ModelRequest::new(messages).with_tools(tools);
+                let response = model
+                    .invoke(&request)
+                    .await
+                    .map_err(|e| NodeError::new(e.to_string()).with_kind(e.kind.code()))?;
+                Ok(Update::new().set("messages", json!([response.message])))
+            }
+        })
+    };
+    let mut builder = WorkflowBuilder::new();
+    builder
+        .add_node("model", node)
+        .reducer("messages", Reducer::UpsertById)
+        .set_entry("model")
+        .add_edge("model", END);
+    let input = State::new().with("messages", json!([Message::user("find record 7")]));
+    let out = builder.build().unwrap().run(input).await.unwrap();
+
+    let messages: Vec<Message> =
+        serde_json::from_value(out.state.get("messages").unwrap().clone()).unwrap();
+    assert_eq!(messages.len(), 2);
+    let call = messages[1].tool_calls().next().expect("a tool call");
+    assert_eq!((call.name, call.args["id"].as_i64()), ("lookup", Some(7)));
+    assert_eq!(model.calls(), 1);
+    println!("  model call inside a workflow node: ok");
+}
+
+fn provider_errors_and_transcripts() {
+    let body = r#"{"type": "error", "error": {"type": "overloaded_error", "message": "Overloaded"}}"#;
+    let headers = vec![("retry-after".to_string(), "2".to_string())];
+    let error = classify_http(
+        &HttpFailure::new(529, &headers, body),
+        std::time::SystemTime::now(),
+    );
+    assert_eq!(error.kind, ModelErrorKind::Overloaded);
+    assert!(error.kind.is_transient());
+    assert_eq!(error.retry_after(), Some(Duration::from_secs(2)));
+
+    let mut args = serde_json::Map::new();
+    args.insert("q".into(), json!("x"));
+    let assistant = Message::with_content(
+        agentbuild_providers::Role::Assistant,
+        vec![agentbuild_providers::ContentBlock::tool_call("c1", "search", args)],
+    );
+    let repaired = transcript::repair(vec![Message::user("hi"), assistant]);
+    assert_eq!(repaired.changes.len(), 1);
+    assert_eq!(
+        repaired.messages.last().unwrap().status,
+        Some(ToolStatus::Cancelled)
+    );
+    println!("  provider error classification, transcript repair: ok");
 }

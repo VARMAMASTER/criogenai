@@ -80,6 +80,12 @@ code keeps working.
 Adapters must map every provider failure to a `ModelError.kind`. Retry logic is
 then generic and identical for all providers.
 
+Status: **implemented** in `agentbuild-providers` (`ModelErrorKind`,
+`ModelError`, `classify_http` for HTTP failures in the shapes of OpenAI,
+Anthropic, Ollama, vLLM and llama.cpp, `Retry-After` in all three forms,
+message sanitization). Transport failures (`network`, `timeout`,
+`dispatch=not_sent`) are classified when the HTTP transport exists.
+
 | `kind` | Typical source | Category | Retried by default |
 |---|---|---|---|
 | `rate_limited` | 429 | transient | yes, honoring `retry_after` (§5.2) |

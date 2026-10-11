@@ -8,9 +8,10 @@ on a fast Rust engine. It includes an embeddable **LLM gateway** that is also
 usable on its own. The planned developer API is sketched in
 [docs/design/0007-public-api.md](docs/design/0007-public-api.md).
 
-> **Status: early development (Phase 1).** Only the Rust execution core exists.
-> There are no Python or TypeScript packages yet, no LLM integrations, and no
-> persistence. Nothing has been published.
+> **Status: early development.** The Rust execution core exists, plus the
+> foundation of the provider layer (message and tool types, model errors, a
+> simulated model). There are no Python or TypeScript packages yet, no real
+> LLM integrations, and no persistence. Nothing has been published.
 
 ## What works today
 
@@ -35,6 +36,13 @@ The `agentbuild-core` crate runs workflow graphs:
 - concurrent execution of nodes scheduled in the same step
 - graph validation that reports every issue at once
 - structured errors with stable codes; failed steps are rolled back
+
+The `agentbuild-providers` crate holds the language-neutral data contracts
+for agents (design 0002): messages with ordered content blocks, tool
+definitions, the model request and response, classified model errors (rate
+limits, overload, context overflow, ... from any provider's HTTP error), and
+transcript repair. A `FakeModel` simulates a model for tests. Real provider
+protocols come next.
 
 The execution semantics are specified in
 [docs/design/0001-execution-model.md](docs/design/0001-execution-model.md).
@@ -86,7 +94,7 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 | 1     | Rust execution core                                           | In progress |
 | 2     | Python SDK (PyO3 + maturin)                                   | Planned     |
 | 3     | TypeScript SDK (NAPI-RS)                                      | Planned     |
-| 4     | Agents, tools, model-provider interface                       | Planned     |
+| 4     | Agents, tools, model providers (data types, errors: done)     | In progress |
 | 5     | Persistence (events, retries, snapshots on failure: done)     | In progress |
 | 6     | Docs, templates, publishing, benchmarks                       | Planned     |
 
