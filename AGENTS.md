@@ -27,7 +27,7 @@ write our own implementation.
   persistence and memory. Research is in `docs/research/`.
 - **Implemented in `agentbuild-core`:** the 0001 engine plus 0005 §1–§3:
   NodeContext, `Update`/`Command`/`Suspend` outcomes, suspend/resume with JSON
-  snapshots, reducers, and the workflow fingerprint. 61 tests.
+  snapshots, reducers, and the workflow fingerprint. 67 tests.
 - **Next:** 0005 §6 events, §4 policies, §5 saved task writes and memo.
   Update 0001 as each lands (0005 §9 lists the changes).
 - **Not started:** `agentbuild-providers`, gateway, Python SDK, TypeScript SDK,
@@ -43,6 +43,7 @@ cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
 cargo run -p agentbuild-core --example basic_workflow -- "some text"
 cargo run -p agentbuild-core --example approval_workflow -- yes
+cargo run -p agentbuild-core --example llm_workflow -- "remote work"
 ```
 
 On the original Windows dev machine, Rust lives in `~/.cargo/bin`. A shell that
@@ -84,6 +85,13 @@ git-ignored. REA is not registered as an MCP server in any agent config.
    `crates/agentbuild-core/tests/`. Concurrency claims need tests that would
    deadlock or time out if the claim were false (see
    `fan_out_runs_nodes_concurrently`).
+   **Simulate LLM calls; never call a real model in tests.** Use `FakeLlm`
+   (`crates/agentbuild-core/tests/support/fake_llm.rs`): it replies after
+   2–3 s (fixed per prompt) and can fail on a marker. Tests run it on Tokio's
+   paused clock (`#[tokio::test(start_paused = true)]`) so timing is exact and
+   the suite stays fast; examples run it in real time. See
+   `tests/llm_simulation.rs`. When `agentbuild-providers` exists, this becomes
+   a fake `Model` implementation there.
 8. **Public API hygiene.** Public enums and structs that may grow are
    `#[non_exhaustive]`. Public items have docs (`missing_docs` is a warning;
    CI treats warnings as errors).

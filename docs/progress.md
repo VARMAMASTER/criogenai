@@ -32,6 +32,27 @@ handoff point for whoever continues the work.
 
 ## Log
 
+### 2026-10-11: simulated LLM for tests and examples
+
+- Requested by the user: test workflows that call an LLM with a dummy
+  function that replies after 2–3 seconds.
+- `tests/support/fake_llm.rs`: `FakeLlm` with a deterministic per-prompt delay
+  (2–3 s by default), a reply derived from the prompt, a `failing_on(marker)`
+  option, and recorded prompts. It is shared by tests and examples via `#[path]`.
+  It is not part of the public API.
+- `tests/llm_simulation.rs` (6 tests, on Tokio's paused clock, so they finish
+  instantly):
+  - one call takes 2–3 s;
+  - sequential calls add up;
+  - parallel calls take as long as the slowest;
+  - a failing call aborts the step without waiting for a 30 s sibling and
+    commits nothing;
+  - the caller can bound a run with a timeout;
+  - resume does not repeat finished calls.
+- `examples/llm_workflow.rs`: plan → 3 parallel calls → join → write, in real
+  time. Measured on the dev machine: 6.6 s against 10.8 s one after another.
+- Dev-dependency: tokio `test-util` (paused clock).
+
 ### 2026-10-11 (late night): 0005 §1–§3 implemented
 
 - `Node::run` now takes a `NodeContext` (`run_id` UUIDv7, `step`, `node`,

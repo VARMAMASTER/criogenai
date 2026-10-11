@@ -40,6 +40,7 @@ Requires Rust 1.88+ ([rustup](https://rustup.rs)).
 cargo test
 cargo run -p agentbuild-core --example basic_workflow -- "Hello world"
 cargo run -p agentbuild-core --example approval_workflow -- yes
+cargo run -p agentbuild-core --example llm_workflow -- "remote work"   # simulated LLM calls, 2–3 s each
 ```
 
 The example is `Input → Transform → Conditional Branch → Output`:
