@@ -8,8 +8,8 @@ handoff point for whoever continues the work.
 
 1. ~~Design review~~ Approved (see log, 2026-10-11 night).
 2. **Done:** 0005 §1–§3 (NodeContext, node outcomes with suspend/resume and
-   JSON snapshots, reducers). **Next:** events (§6) → policies (§4) → saved task
-   writes and the task memo (§5) → snapshots on failure.
+   JSON snapshots, reducers) and §6 (events). **Next:** policies (§4) → saved
+   task writes and the task memo (§5) → snapshots on failure.
 3. Phase 2 (Python SDK via PyO3/maturin) can start after 0005 §1–§3. Its first
    design doc covers asyncio ↔ Tokio bridging, free-threaded Python, and
    `abi3` wheels.
@@ -31,6 +31,39 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-11: 0005 §6 events implemented
+
+- `Event` envelope: `seq`, `run_id`, `step`, `node`, `task_id`, `origin`,
+  `type` and `data`, plus `ts_ms`. Types: `run_started`, `step_started`,
+  `node_started`, `node_finished`, `node_failed`, `node_cancelled` (new),
+  `step_committed`, `suspended`, `run_finished`, `custom`.
+- Subscribing: `event_channel(cap)` plus `RunOptions::events`, or
+  `Workflow::stream(input)`, which returns a `RunStream` (`next()`,
+  `finish()`; dropping it cancels the run). Nodes emit with
+  `ctx.events().emit(name, payload)`.
+- Delivery (`Hub`, `src/event.rs`): `emit` is synchronous; a full channel
+  sends events to an in-order backlog, which the run drains at step boundaries
+  (backpressure only there). A dropped receiver disables delivery and the run
+  continues. Nothing is built without a subscriber.
+- `seq` continues across resume via `Snapshot.event_seq` (`#[serde(default)]`,
+  so older snapshots still load).
+- Deviations from the 0005 sketch, recorded in 0005 §6:
+  - `ts_ms` instead of an ISO string (no date-time dependency);
+  - `parent_run_id`, `namespace` and `call_id` deferred until subgraphs and
+    tools exist;
+  - one subscriber per run.
+- Core now uses tokio's `sync` feature (mpsc). No new crates.
+- `RunStatus::Suspended.snapshot` is now `Box<Snapshot>` (clippy
+  `large_enum_variant` after `event_seq` was added). `RunOutput::snapshot()`
+  is unchanged.
+- Tests: 84 passing (12 new integration tests in `tests/events.rs`, 4 new unit
+  tests, 1 doctest). Two mutation checks confirmed the backpressure and
+  real-time delivery tests fail when the behaviour is removed. The first
+  version of the backpressure test did not catch its mutation and was
+  strengthened.
+- `llm_workflow` example now prints live events. Measured: 6.6 s for 5
+  simulated calls against 10.8 s one after another.
 
 ### 2026-10-11: simulated LLM for tests and examples
 

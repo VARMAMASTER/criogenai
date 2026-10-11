@@ -25,13 +25,15 @@ write our own implementation.
   `docs/design/0002`–`0008` cover messages and tools, errors, the agent loop,
   core extensions, the provider layer and gateway, the public API, and
   persistence and memory. Research is in `docs/research/`.
-- **Implemented in `agentbuild-core`:** the 0001 engine plus 0005 §1–§3:
-  NodeContext, `Update`/`Command`/`Suspend` outcomes, suspend/resume with JSON
-  snapshots, reducers, and the workflow fingerprint. 67 tests.
-- **Next:** 0005 §6 events, §4 policies, §5 saved task writes and memo.
+- **Implemented in `agentbuild-core`:** the 0001 engine plus 0005 §1–§3 and
+  §6: NodeContext, `Update`/`Command`/`Suspend` outcomes, suspend/resume with
+  JSON snapshots, reducers, the workflow fingerprint, and live events
+  (`Workflow::stream`, `event_channel`, `ctx.events()`). 84 tests.
+- **Next:** 0005 §4 policies, §5 saved task writes and memo, snapshots on
+  failure.
   Update 0001 as each lands (0005 §9 lists the changes).
 - **Not started:** `agentbuild-providers`, gateway, Python SDK, TypeScript SDK,
-  agents/LLM, streaming events, persistence. Do not describe these as existing
+  agents/LLM, message-delta events, persistence. Do not describe these as existing
   anywhere.
 
 ## Commands

@@ -5,6 +5,7 @@ use std::sync::Arc;
 use serde_json::Value;
 
 use crate::error::NodeError;
+use crate::event::EventSink;
 use crate::state::{State, Update};
 
 /// A boxed, `Send` future. Used so [`Node`] and [`Router`] stay object-safe.
@@ -13,7 +14,7 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 /// Information about the current execution, passed to every node.
 ///
 /// Fields are read through methods so new ones (cancellation, deadline,
-/// events) can be added without breaking node code.
+/// memo) can be added without breaking node code.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct NodeContext {
@@ -22,6 +23,7 @@ pub struct NodeContext {
     pub(crate) node: Arc<str>,
     pub(crate) attempt: u32,
     pub(crate) resume: Option<Value>,
+    pub(crate) events: EventSink,
 }
 
 impl NodeContext {
@@ -55,6 +57,12 @@ impl NodeContext {
     /// this node suspended in the previous segment of the run.
     pub fn resume(&self) -> Option<&Value> {
         self.resume.as_ref()
+    }
+
+    /// Emits custom events to the run's subscriber, if any. Emitting never
+    /// blocks.
+    pub fn events(&self) -> &EventSink {
+        &self.events
     }
 }
 

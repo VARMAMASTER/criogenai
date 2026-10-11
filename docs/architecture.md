@@ -58,9 +58,9 @@ flowchart TB
     TSSDK --> MCP
 ```
 
-Which layer owns model-provider calls is an open decision (§7.2). The diagram
-shows the SDKs owning them; the alternative is a Rust provider layer that both
-SDKs share.
+Model-provider calls are **decided** to live in a shared Rust provider layer
+(`agentbuild-providers`, [0006](design/0006-provider-layer.md); §8 item 1), not
+in each SDK. The diagram above predates that decision for the SDK boxes.
 
 ### Products and how people use them (proposed)
 
@@ -123,13 +123,14 @@ flowchart LR
     lib["lib.rs<br/>public API + END"]
     state["state.rs<br/>State, Update"]
     reducer["reducer.rs<br/>Reducer, merge"]
+    event["event.rs<br/>Event, channel, Hub"]
     node["node.rs<br/>Node, Router traits<br/>node_fn, router_fn"]
     graph["graph.rs<br/>WorkflowBuilder → validate → Workflow<br/>internal Graph"]
     runtime["runtime.rs<br/>Run: superstep loop<br/>RunOptions, RunOutput"]
     error["error.rs<br/>NodeError, ValidationIssue,<br/>BuildError, RunError(Kind)"]
 
-    lib --> graph & runtime & state & node & error & reducer
-    runtime --> reducer
+    lib --> graph & runtime & state & node & error & reducer & event
+    runtime --> reducer & event
     graph --> node & error
     runtime --> graph & state & error
     node --> state & error
@@ -144,6 +145,8 @@ flowchart LR
 | `NodeContext` / `NodeOutput` | Run info passed to nodes; `Update` / `Command{goto}` / `Suspend{payload}` |
 | `Reducer` | Per-key merge rule: `Replace`, `Append`, `UpsertById` |
 | `Snapshot` / `RunStatus` | Suspended run as JSON; `Completed` or `Suspended{interrupts, snapshot}` |
+| `Event` / `EventKind` | Lifecycle and custom events with `seq`, scope and `ts_ms` (0005 §6) |
+| `event_channel` / `RunStream` | Subscribe to one run's events; `Workflow::stream` spawns the run and yields events |
 | `Router` | Object-safe trait: `route(Arc<State>) -> BoxFuture<Result<String, NodeError>>`. Returns a label. |
 | `WorkflowBuilder` | Records nodes, entry, edges, routers and joins. `build()` validates and reports every issue at once. |
 | `Workflow` | Immutable compiled graph behind an `Arc`. Cheap to clone; safe for concurrent runs. |

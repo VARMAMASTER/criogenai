@@ -1,4 +1,5 @@
-//! A multi-step "LLM" workflow with simulated model calls (2–3 s each).
+//! A multi-step "LLM" workflow with simulated model calls (2–3 s each),
+//! streaming live events as it runs.
 //!
 //! plan → { pros, cons, risks } in parallel → join → write
 //!
@@ -13,9 +14,9 @@ mod fake_llm;
 use std::sync::Arc;
 use std::time::Instant;
 
-use agentbuild_core::{END, Node, State, Update, WorkflowBuilder, node_with_context};
+use agentbuild_core::{END, EventKind, Node, State, Update, WorkflowBuilder, node_with_context};
 use fake_llm::FakeLlm;
-use serde_json::Value;
+use serde_json::{Value, json};
 
 fn text(state: &State, key: &str) -> String {
     state
@@ -25,9 +26,9 @@ fn text(state: &State, key: &str) -> String {
         .to_string()
 }
 
-/// A node that sends `prompt(state)` to the model, stores the reply under
-/// `key`, and prints when the call started and finished.
-fn ask<P>(llm: &Arc<FakeLlm>, clock: Instant, key: &'static str, prompt: P) -> impl Node
+/// A node that sends `prompt(state)` to the model and stores the reply under
+/// `key`. It reports the prompt as a custom event before calling.
+fn ask<P>(llm: &Arc<FakeLlm>, key: &'static str, prompt: P) -> impl Node
 where
     P: Fn(&State) -> String + Send + Sync + 'static,
 {
@@ -36,14 +37,8 @@ where
         let llm = llm.clone();
         let prompt = prompt(&state);
         async move {
-            let started = clock.elapsed().as_secs_f32();
+            ctx.events().emit("model_call", json!({ "prompt": prompt }));
             let reply = llm.complete(&prompt).await?;
-            println!(
-                "  step {} {:<6} {started:>4.1}s → {:>4.1}s",
-                ctx.step(),
-                ctx.node(),
-                clock.elapsed().as_secs_f32()
-            );
             Ok(Update::new().set(key, reply).into())
         }
     })
@@ -55,37 +50,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .unwrap_or_else(|| "remote work".into());
     let llm = Arc::new(FakeLlm::new());
-    let clock = Instant::now();
 
     let mut builder = WorkflowBuilder::new();
     builder
         .add_node(
             "plan",
-            ask(&llm, clock, "plan", |s| {
+            ask(&llm, "plan", |s| {
                 format!("outline a report on {}", text(s, "topic"))
             }),
         )
         .add_node(
             "pros",
-            ask(&llm, clock, "pros", |s| {
-                format!("pros of {}", text(s, "topic"))
-            }),
+            ask(&llm, "pros", |s| format!("pros of {}", text(s, "topic"))),
         )
         .add_node(
             "cons",
-            ask(&llm, clock, "cons", |s| {
-                format!("cons of {}", text(s, "topic"))
-            }),
+            ask(&llm, "cons", |s| format!("cons of {}", text(s, "topic"))),
         )
         .add_node(
             "risks",
-            ask(&llm, clock, "risks", |s| {
-                format!("risks of {}", text(s, "topic"))
-            }),
+            ask(&llm, "risks", |s| format!("risks of {}", text(s, "topic"))),
         )
         .add_node(
             "write",
-            ask(&llm, clock, "report", |s| {
+            ask(&llm, "report", |s| {
                 format!(
                     "write the report from: {} | {} | {}",
                     text(s, "pros"),
@@ -103,8 +91,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let workflow = builder.build()?;
 
     println!("topic: {topic}\n");
-    let out = workflow.run(State::new().with("topic", topic)).await?;
-    let total = clock.elapsed().as_secs_f32();
+    let clock = Instant::now();
+    let mut run = workflow.stream(State::new().with("topic", topic));
+    while let Some(event) = run.next().await {
+        let at = clock.elapsed().as_secs_f32();
+        let node = event.node.as_deref().unwrap_or("");
+        let detail = match &event.kind {
+            EventKind::StepStarted { nodes } => format!("step {}: {nodes:?}", event.step.unwrap()),
+            EventKind::NodeFinished { duration_ms, .. } => {
+                format!("{node} done in {:.1}s", duration_ms / 1000.0)
+            }
+            EventKind::Custom { name, payload } => format!("{node} {name}: {}", payload["prompt"]),
+            EventKind::RunFinished { status, steps, .. } => format!("{status} after {steps} steps"),
+            _ => continue,
+        };
+        println!("{at:>5.1}s  #{:<3} {detail}", event.seq);
+    }
+    let out = run.finish().await?;
 
     let one_by_one: f32 = llm
         .prompts()
@@ -112,9 +115,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map(|p| llm.delay_for(p).as_secs_f32())
         .sum();
     println!(
-        "\n{} model calls, {} steps, {total:.1}s (one after another: {one_by_one:.1}s)",
+        "\n{} model calls in {:.1}s (one after another: {one_by_one:.1}s)",
         llm.calls(),
-        out.steps.len()
+        clock.elapsed().as_secs_f32()
     );
     println!("\nreport: {}", text(&out.state, "report"));
     Ok(())

@@ -2,8 +2,8 @@
 
 Status: **Implemented** in `crates/agentbuild-core`. Pre-1.0; may change.
 Extended by [0005](0005-core-runtime-extensions.md) §1–§3 (node context,
-node outcomes, reducers, suspend/resume), which are implemented and described
-below.
+node outcomes, reducers, suspend/resume) and §6 (events), which are
+implemented and described below.
 
 This is the contract the Python and TypeScript SDKs will build on. Anything
 not described here is unspecified.
@@ -95,6 +95,24 @@ step's other nodes. If several nodes fail, which one is reported depends on
 timing. Dropping the `run` future cancels in-flight nodes at their next
 `.await`.
 
+### Events
+
+A run can report what happens as it happens: `RunOptions::events(sender)`
+with `event_channel(capacity)`, or `Workflow::stream(input)`, which runs in
+the background and returns a `RunStream`. The envelope, the event types and
+the delivery rules are in [0005 §6](0005-core-runtime-extensions.md#6-events).
+In short:
+
+- Every event has a `seq` that starts at 0 and continues across resumes
+  (stored in the snapshot as `event_seq`).
+- Every `node_started` is followed by exactly one `node_finished`,
+  `node_failed` or `node_cancelled`. Every run that starts ends with one
+  `run_finished`, including failed and suspended runs.
+- Nodes emit their own events with `ctx.events().emit(name, payload)`.
+- No event is lost while the subscriber is connected. Emitting never blocks
+  a node; a slow subscriber slows the run only at step boundaries.
+- Observing a run never changes its result.
+
 ## State
 
 State is a JSON object (`serde_json::Map`). Each key has a **reducer**, declared
@@ -155,7 +173,7 @@ JavaScript function cannot be called synchronously from a Tokio worker thread.
 
 ## Not yet implemented
 
-Designed in 0005–0008 but not yet built: streaming events, per-node retries
-and timeouts, deadlines, explicit cancellation tokens, the task memo and saved
+Designed in 0005–0008 but not yet built: message-delta events, per-node
+retries and timeouts, deadlines, explicit cancellation tokens, the task memo and saved
 task writes, snapshots attached to failures, persistence backends, dynamic
 fan-out (`Send`) and subgraphs.

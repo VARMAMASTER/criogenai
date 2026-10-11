@@ -1,11 +1,15 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
+use std::time::Instant;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::task::JoinSet;
+use tokio::task::{JoinHandle, JoinSet};
 
 use crate::error::{RunError, RunErrorKind};
+use crate::event::{
+    Event, EventKind, EventReceiver, EventSender, EventSink, Hub, Scope, event_channel,
+};
 use crate::graph::{Graph, Outgoing, Target, Workflow};
 use crate::node::{NodeContext, NodeOutput};
 use crate::reducer;
@@ -13,6 +17,9 @@ use crate::state::State;
 
 /// The `format` value of snapshots produced by this version.
 pub const SNAPSHOT_FORMAT: &str = "agentbuild.snapshot/1";
+
+/// Channel capacity used by [`Workflow::stream`].
+const STREAM_CAPACITY: usize = 256;
 
 /// Per-run settings.
 #[derive(Debug, Clone)]
@@ -22,11 +29,15 @@ pub struct RunOptions {
     /// before the run fails with [`RunErrorKind::StepLimitExceeded`]. Guards
     /// against unbounded cycles.
     pub max_steps: usize,
+    pub(crate) events: Option<EventSender>,
 }
 
 impl Default for RunOptions {
     fn default() -> Self {
-        Self { max_steps: 64 }
+        Self {
+            max_steps: 64,
+            events: None,
+        }
     }
 }
 
@@ -34,6 +45,12 @@ impl RunOptions {
     /// Sets [`max_steps`](Self::max_steps).
     pub fn max_steps(mut self, max_steps: usize) -> Self {
         self.max_steps = max_steps;
+        self
+    }
+
+    /// Sends the run's [`Event`]s to `sender` (see [`event_channel`]).
+    pub fn events(mut self, sender: EventSender) -> Self {
+        self.events = Some(sender);
         self
     }
 }
@@ -61,7 +78,7 @@ impl RunOutput {
     /// The snapshot to pass to [`Workflow::resume`], if suspended.
     pub fn snapshot(&self) -> Option<&Snapshot> {
         match &self.status {
-            RunStatus::Suspended { snapshot, .. } => Some(snapshot),
+            RunStatus::Suspended { snapshot, .. } => Some(snapshot.as_ref()),
             RunStatus::Completed => None,
         }
     }
@@ -86,8 +103,9 @@ pub enum RunStatus {
     Suspended {
         /// One entry per suspended node, in declaration order.
         interrupts: Vec<Interrupt>,
-        /// Everything needed to continue the run later.
-        snapshot: Snapshot,
+        /// Everything needed to continue the run later. Boxed to keep
+        /// `RunStatus` small.
+        snapshot: Box<Snapshot>,
     },
 }
 
@@ -123,6 +141,55 @@ pub struct Snapshot {
     pub join_progress: BTreeMap<String, Vec<String>>,
     /// The suspended nodes and their payloads.
     pub suspended: Vec<Interrupt>,
+    /// The [`seq`](Event::seq) the run's next event gets, so event numbering
+    /// continues after resume.
+    #[serde(default)]
+    pub event_seq: u64,
+}
+
+/// A run executing in the background, with its events. Created by
+/// [`Workflow::stream`].
+///
+/// Read events with [`next`](Self::next) until it returns `None`, then call
+/// [`finish`](Self::finish) for the result. Dropping a `RunStream` cancels the
+/// run.
+#[derive(Debug)]
+pub struct RunStream {
+    events: Option<EventReceiver>,
+    handle: Option<JoinHandle<Result<RunOutput, RunError>>>,
+}
+
+#[allow(clippy::result_large_err)]
+impl RunStream {
+    /// The next event, or `None` after the run's last event
+    /// ([`EventKind::RunFinished`]).
+    pub async fn next(&mut self) -> Option<Event> {
+        match &mut self.events {
+            Some(events) => events.recv().await,
+            None => None,
+        }
+    }
+
+    /// Waits for the run to end and returns its result. Events not yet read
+    /// are discarded.
+    pub async fn finish(mut self) -> Result<RunOutput, RunError> {
+        // Stop delivery first, so unread events cannot hold the run back.
+        self.events = None;
+        let handle = self.handle.take().expect("finish consumes the stream");
+        match handle.await {
+            Ok(result) => result,
+            Err(err) if err.is_panic() => std::panic::resume_unwind(err.into_panic()),
+            Err(_) => panic!("run task was cancelled (is the Tokio runtime shutting down?)"),
+        }
+    }
+}
+
+impl Drop for RunStream {
+    fn drop(&mut self) {
+        if let Some(handle) = &self.handle {
+            handle.abort();
+        }
+    }
 }
 
 /// The nodes that ran in one step, in declaration order.
@@ -149,9 +216,43 @@ impl Workflow {
 
     /// Runs the workflow with explicit options.
     pub async fn run_with(&self, input: State, options: RunOptions) -> Result<RunOutput, RunError> {
-        let run = Run::new(&self.graph, uuid::Uuid::now_v7().to_string(), input);
+        let run_id = uuid::Uuid::now_v7().to_string();
+        let run = Run::new(&self.graph, run_id, input, 0, &options);
         let start = BTreeSet::from([self.graph.entry]);
-        run.execute(start, 0, HashMap::new(), options).await
+        run.execute(start, 0, HashMap::new(), options, false).await
+    }
+
+    /// Starts a run in the background (on the current Tokio runtime) and
+    /// returns its events as they happen.
+    ///
+    /// ```
+    /// # use agentbuild_core::{END, State, Update, WorkflowBuilder, node_fn};
+    /// # tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
+    /// # let mut builder = WorkflowBuilder::new();
+    /// # builder.add_node("a", node_fn(|_| async { Ok(Update::new()) })).set_entry("a").add_edge("a", END);
+    /// # let workflow = builder.build().unwrap();
+    /// let mut run = workflow.stream(State::new());
+    /// while let Some(event) = run.next().await {
+    ///     println!("{} {:?}", event.type_name(), event.node);
+    /// }
+    /// let output = run.finish().await.unwrap();
+    /// # });
+    /// ```
+    pub fn stream(&self, input: State) -> RunStream {
+        self.stream_with(input, RunOptions::default())
+    }
+
+    /// [`stream`](Self::stream) with explicit options. Any event sender
+    /// already in `options` is replaced.
+    pub fn stream_with(&self, input: State, options: RunOptions) -> RunStream {
+        let (sender, events) = event_channel(STREAM_CAPACITY);
+        let workflow = self.clone();
+        let handle =
+            tokio::spawn(async move { workflow.run_with(input, options.events(sender)).await });
+        RunStream {
+            events: Some(events),
+            handle: Some(handle),
+        }
     }
 
     /// Continues a suspended run. `values` maps each suspended node's name to
@@ -240,9 +341,16 @@ impl Workflow {
             }
         }
 
-        let mut run = Run::new(graph, snapshot.run_id.clone(), snapshot.state.clone());
+        let mut run = Run::new(
+            graph,
+            snapshot.run_id.clone(),
+            snapshot.state.clone(),
+            snapshot.event_seq,
+            &options,
+        );
         run.join_progress = join_progress;
-        run.execute(frontier, snapshot.step, resume, options).await
+        run.execute(frontier, snapshot.step, resume, options, true)
+            .await
     }
 }
 
@@ -252,6 +360,10 @@ struct Run<'g> {
     state: Arc<State>,
     /// For each join, the sources that have completed since it last fired.
     join_progress: Vec<HashSet<usize>>,
+    /// Event delivery; `None` without a subscriber.
+    hub: Option<Arc<Hub>>,
+    /// `seq` of this segment's first event.
+    first_seq: u64,
 }
 
 struct StepOutcome {
@@ -261,13 +373,50 @@ struct StepOutcome {
 
 #[allow(clippy::result_large_err)]
 impl<'g> Run<'g> {
-    fn new(graph: &'g Graph, run_id: String, state: State) -> Self {
+    fn new(
+        graph: &'g Graph,
+        run_id: String,
+        state: State,
+        first_seq: u64,
+        options: &RunOptions,
+    ) -> Self {
+        let run_id: Arc<str> = run_id.into();
+        let hub = options
+            .events
+            .clone()
+            .map(|sender| Hub::new(run_id.clone(), sender, first_seq));
         Self {
             graph,
-            run_id: run_id.into(),
+            run_id,
             state: Arc::new(state),
             join_progress: vec![HashSet::new(); graph.joins.len()],
+            hub,
+            first_seq,
         }
+    }
+
+    /// Emits an engine event. `kind` is only built if someone is listening.
+    fn emit(&self, step: Option<usize>, node: Option<usize>, kind: impl FnOnce() -> EventKind) {
+        if let Some(hub) = &self.hub
+            && hub.is_enabled()
+        {
+            let scope = Scope {
+                step,
+                node: node.map(|id| self.graph.names[id].as_str().into()),
+            };
+            hub.emit(&scope, "internal", kind());
+        }
+    }
+
+    /// Waits until the subscriber has received every event emitted so far.
+    async fn flush(&self) {
+        if let Some(hub) = &self.hub {
+            hub.flush().await;
+        }
+    }
+
+    fn names(&self, ids: &BTreeSet<usize>) -> Vec<String> {
+        ids.iter().map(|&id| self.graph.names[id].clone()).collect()
     }
 
     async fn execute(
@@ -276,42 +425,53 @@ impl<'g> Run<'g> {
         first_step: usize,
         mut resume: HashMap<usize, Value>,
         options: RunOptions,
+        resumed: bool,
     ) -> Result<RunOutput, RunError> {
         let mut steps = Vec::new();
         let mut step = first_step;
+        self.emit(None, None, || EventKind::RunStarted { resumed });
 
         while !frontier.is_empty() {
+            // Step boundary: the only place a slow subscriber holds the run back.
+            self.flush().await;
             if step >= options.max_steps {
-                return Err(self.fail(
-                    step,
-                    RunErrorKind::StepLimitExceeded {
-                        limit: options.max_steps,
-                    },
-                ));
+                let kind = RunErrorKind::StepLimitExceeded {
+                    limit: options.max_steps,
+                };
+                return Err(self.fail(step, kind, steps.len()).await);
             }
+            self.emit(Some(step), None, || EventKind::StepStarted {
+                nodes: self.names(&frontier),
+            });
             // Resume values apply only to the first step of a segment.
             let outcome = match self
                 .step(step, &frontier, std::mem::take(&mut resume))
                 .await
             {
                 Ok(outcome) => outcome,
-                Err(kind) => return Err(self.fail(step, kind)),
+                Err(kind) => return Err(self.fail(step, kind, steps.len()).await),
             };
             steps.push(StepRecord {
                 step,
-                nodes: frontier
-                    .iter()
-                    .map(|&id| self.graph.names[id].clone())
-                    .collect(),
+                nodes: self.names(&frontier),
+            });
+            self.emit(Some(step), None, || EventKind::StepCommitted {
+                next: self.names(&outcome.next),
             });
             step += 1;
 
             if !outcome.suspended.is_empty() {
-                return Ok(self.suspend(step, outcome, steps));
+                return Ok(self.suspend(step, outcome, steps).await);
             }
             frontier = outcome.next;
         }
 
+        self.emit(None, None, || EventKind::RunFinished {
+            status: "completed".into(),
+            error: None,
+            steps: steps.len(),
+        });
+        self.flush().await;
         Ok(RunOutput {
             status: RunStatus::Completed,
             run_id: self.run_id.to_string(),
@@ -441,45 +601,98 @@ impl<'g> Run<'g> {
     ) -> Result<Vec<(usize, NodeOutput)>, RunErrorKind> {
         let mut tasks = JoinSet::new();
         let mut task_nodes = HashMap::new();
+        let mut started = HashMap::new();
         for &id in frontier {
+            let node: Arc<str> = self.graph.names[id].as_str().into();
             let ctx = NodeContext {
                 run_id: self.run_id.clone(),
                 step,
-                node: self.graph.names[id].as_str().into(),
+                node: node.clone(),
                 attempt: 1,
                 resume: resume.remove(&id),
+                events: EventSink::new(
+                    self.hub.clone(),
+                    Scope {
+                        step: Some(step),
+                        node: Some(node),
+                    },
+                ),
             };
+            self.emit(Some(step), Some(id), || EventKind::NodeStarted {
+                attempt: 1,
+            });
+            started.insert(id, Instant::now());
             let fut = self.graph.nodes[id].run(ctx, self.state.clone());
             let handle = tasks.spawn(async move { (id, fut.await) });
             task_nodes.insert(handle.id(), id);
         }
+        let elapsed_ms = |id: usize| started[&id].elapsed().as_secs_f64() * 1000.0;
 
         let mut outputs = Vec::with_capacity(frontier.len());
         while let Some(joined) = tasks.join_next().await {
-            match joined {
-                Ok((id, Ok(output))) => outputs.push((id, output)),
-                Ok((id, Err(source))) => {
-                    return Err(RunErrorKind::NodeFailed {
+            let (id, failure) = match joined {
+                Ok((id, Ok(output))) => {
+                    self.emit(Some(step), Some(id), || {
+                        let (update_keys, goto, suspended) = summarize(&output);
+                        EventKind::NodeFinished {
+                            duration_ms: elapsed_ms(id),
+                            update_keys,
+                            goto,
+                            suspended,
+                        }
+                    });
+                    outputs.push((id, output));
+                    continue;
+                }
+                Ok((id, Err(source))) => (
+                    id,
+                    RunErrorKind::NodeFailed {
                         node: self.graph.names[id].clone(),
                         source,
-                    });
-                }
+                    },
+                ),
                 Err(err) => {
-                    let node = self.graph.names[task_nodes[&err.id()]].clone();
+                    let id = task_nodes[&err.id()];
                     let message = if err.is_panic() {
                         panic_message(err.into_panic())
                     } else {
                         "task was cancelled".to_string()
                     };
-                    return Err(RunErrorKind::NodePanicked { node, message });
+                    let node = self.graph.names[id].clone();
+                    (id, RunErrorKind::NodePanicked { node, message })
+                }
+            };
+
+            // Fail fast: the remaining nodes are aborted when `tasks` drops.
+            self.emit(Some(step), Some(id), || EventKind::NodeFailed {
+                duration_ms: elapsed_ms(id),
+                code: failure.code().to_string(),
+                message: match &failure {
+                    RunErrorKind::NodeFailed { source, .. } => source.to_string(),
+                    RunErrorKind::NodePanicked { message, .. } => message.clone(),
+                    other => other.to_string(),
+                },
+            });
+            let finished: HashSet<usize> = outputs.iter().map(|(id, _)| *id).collect();
+            for &other in frontier {
+                if other != id && !finished.contains(&other) {
+                    self.emit(Some(step), Some(other), || EventKind::NodeCancelled {
+                        reason: "sibling_failed".into(),
+                    });
                 }
             }
+            return Err(failure);
         }
         outputs.sort_by_key(|(id, _)| *id);
         Ok(outputs)
     }
 
-    fn suspend(self, next_step: usize, outcome: StepOutcome, steps: Vec<StepRecord>) -> RunOutput {
+    async fn suspend(
+        self,
+        next_step: usize,
+        outcome: StepOutcome,
+        steps: Vec<StepRecord>,
+    ) -> RunOutput {
         let graph = self.graph;
         let mut frontier = outcome.next;
         frontier.extend(outcome.suspended.iter().map(|(id, _)| *id));
@@ -505,6 +718,20 @@ impl<'g> Run<'g> {
             })
             .collect();
 
+        self.emit(Some(next_step - 1), None, || EventKind::Suspended {
+            interrupts: interrupts.clone(),
+        });
+        self.emit(None, None, || EventKind::RunFinished {
+            status: "suspended".into(),
+            error: None,
+            steps: steps.len(),
+        });
+        self.flush().await;
+        let event_seq = self
+            .hub
+            .as_ref()
+            .map_or(self.first_seq, |hub| hub.next_seq());
+
         let state = into_state(self.state);
         let snapshot = Snapshot {
             format: SNAPSHOT_FORMAT.to_string(),
@@ -515,11 +742,12 @@ impl<'g> Run<'g> {
             frontier: frontier.iter().map(|&id| graph.names[id].clone()).collect(),
             join_progress,
             suspended: interrupts.clone(),
+            event_seq,
         };
         RunOutput {
             status: RunStatus::Suspended {
                 interrupts,
-                snapshot,
+                snapshot: Box::new(snapshot),
             },
             run_id: self.run_id.to_string(),
             state,
@@ -527,12 +755,28 @@ impl<'g> Run<'g> {
         }
     }
 
-    fn fail(self, step: usize, kind: RunErrorKind) -> RunError {
+    async fn fail(self, step: usize, kind: RunErrorKind, steps: usize) -> RunError {
+        self.emit(None, None, || EventKind::RunFinished {
+            status: "failed".into(),
+            error: Some(kind.code().to_string()),
+            steps,
+        });
+        self.flush().await;
         RunError {
             kind,
             step,
             state: into_state(self.state),
         }
+    }
+}
+
+/// `(update keys, goto targets, suspended)` for a `node_finished` event.
+fn summarize(output: &NodeOutput) -> (Vec<String>, Vec<String>, bool) {
+    let keys = |update: &crate::state::Update| update.keys().cloned().collect();
+    match output {
+        NodeOutput::Update(update) => (keys(update), Vec::new(), false),
+        NodeOutput::Command { update, goto } => (keys(update), goto.clone(), false),
+        NodeOutput::Suspend { update, .. } => (keys(update), Vec::new(), true),
     }
 }
 

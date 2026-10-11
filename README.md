@@ -25,6 +25,8 @@ The `agentbuild-core` crate runs workflow graphs:
 - nodes that pick their next step (`Command` goto, validated)
 - **human-in-the-loop**: a node can suspend the run; the run returns a
   JSON snapshot that can be stored anywhere and resumed later
+- **live events**: `workflow.stream(input)` reports run, step and node
+  progress as it happens; nodes can emit their own events
 - concurrent execution of nodes scheduled in the same step
 - graph validation that reports every issue at once
 - structured errors with stable codes; failed steps are rolled back
@@ -77,7 +79,7 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 | 2     | Python SDK (PyO3 + maturin)                                   | Planned     |
 | 3     | TypeScript SDK (NAPI-RS)                                      | Planned     |
 | 4     | Agents, tools, model-provider interface                       | Planned     |
-| 5     | Streaming events, retries/timeouts, checkpoints, persistence  | Planned     |
+| 5     | Retries/timeouts, checkpoints, persistence (events: done)     | In progress |
 | 6     | Docs, templates, publishing, benchmarks                       | Planned     |
 
 ## Documentation

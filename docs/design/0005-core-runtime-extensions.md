@@ -1,8 +1,8 @@
 # 0005: Core runtime extensions
 
-Status: **§1–§3 implemented** (NodeContext without `cancel`, `deadline`,
-`events` and `memo`; node outcomes with suspend/resume; reducers). §4–§6 and
-§5's saved task writes are **approved, not yet built**. This document changes
+Status: **§1–§3 and §6 implemented** (NodeContext without `cancel`,
+`deadline` and `memo`; node outcomes with suspend/resume; reducers; events).
+§4 and §5's saved task writes are **approved, not yet built**. This document changes
 [0001](0001-execution-model.md); every change is listed in §9.
 It provides what [0002](0002-messages-and-tools.md),
 [0003](0003-error-model.md) and [0004](0004-agent-loop.md) need. Research
@@ -189,42 +189,77 @@ the in-memory design is proven.
 
 ## 6. Events
 
+Status: **implemented** (core lifecycle events and custom events). Message
+deltas and agent events arrive with 0002/0004; `attempt_failed` with §4.
+
 ### 6.1 Envelope
 
 ```jsonc
 {
-  "seq": 42,                       // monotonically increasing per run; enables resumable streams
-  "run_id": "…", "parent_run_id": null,
-  "namespace": ["support", "research"],   // nesting path for subgraphs / sub-agents
-  "step": 3, "node": "tools", "task_id": "…", "call_id": "c1",
-  "origin": "agent" | "hook:<name>" | "internal" | "user",
-  "type": "node_started",
+  "seq": 42,                  // per run, starts at 0, continues across resumes
+  "run_id": "…",
+  "step": 3, "node": "tools", "task_id": "…",   // omitted when not applicable
+  "origin": "internal",       // "internal" (engine) | "user" (ctx.events().emit)
+  "type": "node_finished",
   "data": { … },
-  "ts": "2026-10-11T12:00:00.000Z"
+  "ts_ms": 1791720000000      // Unix time in milliseconds
 }
 ```
 
+Implementation decisions:
+
+- `ts_ms` (an integer) replaces the ISO string originally sketched, to avoid a
+  date-time dependency in the core. SDKs can render it.
+- `parent_run_id`, `namespace` and `call_id` are added when subgraphs and
+  tools exist. Adding fields is backwards compatible.
+- `seq` continues across suspend/resume: the snapshot stores the next value
+  (`event_seq`, default 0 for older snapshots).
+
 ### 6.2 Core event types
 
-`run_started`, `step_started`, `node_started`, `node_finished` (duration,
-update keys), `node_failed`, `attempt_failed`, `step_committed`, `suspended`,
-`run_finished` (outcome), `custom` (from `ctx.events.emit`). Agent-level types
-are listed in 0004 §8. Message streaming uses `message_delta` /
-`message_completed` / `message_aborted` (0002 §8).
+| `type` | scope | `data` |
+|---|---|---|
+| `run_started` | run | `resumed` |
+| `step_started` | step | `nodes` |
+| `node_started` | node | `attempt` |
+| `node_finished` | node | `duration_ms`, `update_keys`, `goto`, `suspended` |
+| `node_failed` | node | `duration_ms`, `code` (`node_failed` / `node_panicked`), `message` |
+| `node_cancelled` | node | `reason` (`sibling_failed`). Every `node_started` gets exactly one of finished / failed / cancelled |
+| `step_committed` | step | `next` (names scheduled for the next step) |
+| `suspended` | step | `interrupts` |
+| `run_finished` | run | `status` (`completed` / `suspended` / `failed`), `error` (code, if failed), `steps` |
+| `custom` | node | `name`, `payload` (from `ctx.events().emit`) |
+
+`attempt_failed` comes with retries (§4). Agent-level types are listed in
+0004 §8. Message streaming uses `message_delta` / `message_completed` /
+`message_aborted` (0002 §8).
+
+Every run that starts emits exactly one `run_finished`, including on failure.
+Validation failures before anything runs (`resume_invalid`,
+`workflow_mismatch`) emit nothing.
 
 ### 6.3 Delivery rules
 
-- Events are delivered through a bounded channel per subscriber.
-- **Lifecycle events are never dropped.** If a subscriber is slow, *delta*
-  events are **coalesced** (adjacent text deltas for the same block merged), so
-  slow consumers get fewer, larger deltas, never gaps.
-- Emitting never blocks node execution. If a subscriber's buffer is full of
-  lifecycle events, the run waits at the step boundary (backpressure), not
+- One subscriber per run: `event_channel(capacity)` gives a sender for
+  `RunOptions::events` and a receiver. `Workflow::stream` wraps this: it spawns
+  the run and returns a `RunStream` (`next()` for events, `finish()` for the
+  result).
+- **No event is dropped** while the subscriber is connected. Emitting never
+  blocks a node: if the channel is full, events wait in an in-order backlog.
+  The run drains the backlog at each step boundary and before returning, and
+  that is where a slow subscriber slows the run down (backpressure), never
   mid-node.
-- With no subscriber, events cost almost nothing (no serialization).
+- A subscriber that holds the receiver but never reads will stall the run at
+  the next step boundary once the channel is full. Read events concurrently
+  (as `RunStream` does), or drop the receiver.
+- When *delta* events exist, a slow subscriber gets adjacent deltas
+  **coalesced** (fewer, larger deltas, never gaps). Not yet applicable.
+- With no subscriber, nothing is built or serialized.
 - Observing never changes execution. LangChain switches `invoke` to streaming
   when a streaming callback is attached
   ([research](../research/langchain-core.md)); we must not.
+- A disconnected subscriber (receiver dropped) is removed; the run continues
+  (C8).
 
 ## 7. Routers: what they see
 
