@@ -1,0 +1,20 @@
+[package]
+name = "agentbuild-core"
+description = "Execution engine for AgentBuild workflows"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+# Not published until the package name and license are confirmed.
+publish = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt"] }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync"] }
+
+[lints]
+workspace = true
