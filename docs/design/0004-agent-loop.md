@@ -1,0 +1,377 @@
+# 0004: Agent loop, hooks, structured output and human-in-the-loop
+
+Status: **Proposed** (design phase). Builds on [0002](0002-messages-and-tools.md)
+(data contracts), [0003](0003-error-model.md) (errors) and
+[0005](0005-core-runtime-extensions.md) (core support). Research inputs:
+[langchain-agents](../research/langchain-agents.md),
+[langgraph](../research/langgraph.md), [langchain-core](../research/langchain-core.md).
+
+## Goals
+
+1. **Small concept count.** A user who wants a guarded agent with tools, approval
+   and typed output should need about 12 concepts, not the ~35 counted in
+   LangChain 1.x ([research](../research/langchain-agents.md) §7.2).
+2. **Fixed, tiny graph.** Middleware never becomes graph nodes. Adding a hook
+   does not change checkpoints, event shapes or step budgets.
+3. **Bounded by default.** Every agent has a model-call limit. No runaway
+   loops.
+4. **Errors per 0003.** No fake assistant messages, no exceptions as control
+   flow.
+5. **Same behaviour in Python and TypeScript**, because the loop, limits,
+   retries and routing live in Rust.
+
+---
+
+## 1. Public API (sketch)
+
+```python
+from agentbuild import Agent, tool, ToolError, Limits, Approve
+
+@tool
+async def search_docs(query: str, limit: int = 5) -> list[dict]:
+    """Search the product docs."""
+    ...
+
+@tool(destructive=True)
+async def send_email(to: str, body: str) -> str:
+    """Send an email."""
+    ...
+
+agent = Agent(
+    model="anthropic:claude-sonnet-5-5",        # or a Model instance
+    tools=[search_docs, send_email],
+    instructions="You are a support agent.",
+    hooks=[Approve(tools=["send_email"])],      # optional middleware
+    output=Answer,                              # optional Pydantic / Zod schema
+    limits=Limits(model_calls=25),              # defaults shown in §5
+)
+
+result = await agent.run("Reset my password", context=deps)
+result.status        # "completed" | "suspended"
+result.output        # Answer instance (if output=...), else final text
+result.stop_reason   # §4.3
+result.messages      # full transcript
+result.usage         # tokens across all model calls
+```
+
+```ts
+const agent = new Agent({ model: "anthropic:claude-sonnet-5-5", tools: [searchDocs, sendEmail],
+                          instructions: "...", hooks: [approve({ tools: ["send_email"] })] });
+const result = await agent.run("Reset my password", { context: deps, signal });
+for await (const event of agent.stream("...")) { /* 0005 §6 */ }
+```
+
+An `Agent` is also:
+- a **node** in a workflow: `workflow.add_node("support", agent)`. It reads and
+  writes the `messages` key and its output key.
+- a **tool** for another agent: `agent.as_tool(name, description)`. Errors
+  convert as in 0003 §7.
+
+---
+
+## 2. The agent graph
+
+The agent compiles into an ordinary core workflow (0001 plus 0005 extensions):
+
+```mermaid
+flowchart LR
+    START((start)) --> M[model]
+    M -->|tool calls, approval needed| R[review]
+    M -->|tool calls| T[tools]
+    M -->|final answer / output / end| E((end))
+    R -->|approved / edited / rejected| T
+    R -.->|"Suspend (waits for human)"| R
+    T -->|continue| M
+    T -->|return_direct / output / end| E
+```
+
+- `review` exists only if a hook requires approval. Otherwise the graph is
+  `model ⇄ tools`.
+- Each iteration costs 2 supersteps (3 with review). The core `max_steps` is
+  derived automatically: `3 × model_calls + 4`.
+
+### 2.1 Agent state
+
+| Key | Reducer (0005 §3) | Contents |
+|---|---|---|
+| `messages` | `upsert_by_id` | Transcript (0002). Upsert lets repairs and HITL edits replace one message without rewriting history |
+| `output` | `replace` | Structured output, when `output=` is set |
+| `agent` | `replace` | Run-scoped bookkeeping: `model_calls`, `tool_calls`, `output_retries`, `pending_control`. Not part of the public schema |
+| `hooks.<name>` | per hook | State declared by a hook, **namespaced** so two hooks can't collide |
+
+Inside a workflow, the agent's keys are prefixed by the node's name unless
+mapped explicitly. Two agents in one workflow can't overwrite each other's
+`messages` unless asked to.
+
+---
+
+## 3. Hooks (middleware)
+
+Six hooks. All are optional and run **in-process inside the model or tools
+node**.
+
+| Hook | Runs | Receives | Can |
+|---|---|---|---|
+| `on_start` | Once per run *segment* (each `run` or `resume`) | state, ctx | Set up resources; return a state update; `end` |
+| `before_model` | Before each model call | state, ctx | Return a state update; `end` |
+| `wrap_model` | Around each model call (retry/fallback chain inside) | request, handler | Change the request (`request.override(...)`); call `handler` 0..n times; replace the response |
+| `after_model` | After each model response, before routing | state (with the new message), ctx | Return a state update (e.g. replace the message); `end` |
+| `wrap_tool` | Around each tool call | call request, handler | Change arguments or the tool; short-circuit with a result; call `handler` 0..n times |
+| `on_end` | Once per segment, **always**: completed, failed, cancelled, suspended | state, ctx, outcome | Clean up; it cannot change the outcome |
+
+### 3.1 Ordering
+
+For `hooks=[A, B, C]`:
+
+- `on_start` and `before_model` run **A → B → C**.
+- `after_model` and `on_end` run **C → B → A**.
+- `wrap_model` and `wrap_tool`: **A is outermost**, so A's code runs first on the
+  way in and last on the way out.
+
+This is the usual "onion" order, now specified in one place instead of spread
+over generated graph nodes.
+
+### 3.2 Control
+
+A hook that may stop the loop returns `Control.end(output=None, message=None)`.
+There is no `jump_to` and no static `can_jump_to`. Because the agent's graph is
+fixed, `end` is the only jump a hook needs. The first `end` wins, in hook order.
+
+### 3.3 Hook rules
+
+- **State** is changed only through returned updates. Hooks receive a read-only
+  view and never mutate messages in place.
+- **Errors.** An exception in a hook is a developer error: `hook_failed`,
+  with the original exception as cause. Two exceptions: inside `wrap_tool`, a
+  `ToolError` is treated as the tool's own error, and inside `wrap_model`, a
+  `ModelError` passes through unchanged.
+- **Sync or async.** Python accepts both and adapts automatically, so there is
+  no runtime `NotImplementedError` as in LangChain. Sync hooks run inline and
+  must be fast. TS hooks may return a value or a Promise.
+- **Resources** must not be held across a suspension. Acquire them in
+  `on_start` and release them in `on_end`; both run for every segment.
+
+---
+
+## 4. One turn, precisely
+
+### 4.1 Model node
+
+1. **Repair the transcript** (0002 §6). Emit `transcript_repaired` if anything
+   changed.
+2. **Check limits** (§5). If over: `limit_exceeded`, or a graceful end per
+   `on_limit`.
+3. Run `before_model` hooks; apply their updates; honor `end`.
+4. Build the `ModelRequest`: instructions plus messages plus tool specs plus
+   output strategy (§6).
+5. Run the `wrap_model` onion around the retry/fallback/timeout chain (0003
+   §5.3).
+6. Normalize the response (0002 §7.1) and stream deltas as events.
+7. Run `after_model` hooks; honor `end`.
+8. Return the update: the new assistant message, counters, and any accepted
+   output.
+
+### 4.2 Routing after the model (in this order)
+
+| # | Condition | Next |
+|---|---|---|
+| 1 | A hook returned `end` | end (`stop_reason: hook_end`) |
+| 2 | Structured output accepted this turn (§6) | end (`output`) |
+| 3 | `finish_reason == content_filter` | end (`content_filter`) |
+| 4 | The message contains `tool_call` **or `invalid_tool_call`** blocks | `review` if any call needs approval, else `tools` |
+| 5 | `output=` is set and no output was produced | back to `model` with a reminder message (counts against `output_retries`) |
+| 6 | Otherwise | end (`final_answer`) |
+
+Rule 4 includes `invalid_tool_call` on purpose. In LangChain, a turn where
+every call is invalid **ends the run** with a malformed message
+([research](../research/langchain-agents.md) §1.3). Here, the tools node
+answers each invalid call with an error result, and the model gets to correct
+itself.
+
+### 4.3 Tools node and routing
+
+1. For each call in order, apply the 0002 §5 lifecycle: unknown tool, invalid
+   arguments, then execution through the `wrap_tool` onion.
+2. Execute concurrently, up to the configured bounds. Results are appended in
+   call order.
+3. Calls beyond `max_tool_calls_per_turn`, or beyond the run's remaining
+   tool-call budget, get `skipped`.
+4. If the turn contains the output tool (§6), all *other* calls are `skipped`
+   ("final output was provided in this turn"), so no side effects happen after
+   the model has declared it is done.
+
+| # | Condition after tools | Next |
+|---|---|---|
+| 1 | A hook returned `end` | end (`hook_end`) |
+| 2 | Output tool accepted | end (`output`) |
+| 3 | Any `return_direct` tool succeeded | end (`return_direct`); its result becomes `result.output` |
+| 4 | Otherwise | `model` |
+
+`stop_reason` values: `final_answer`, `output`, `return_direct`, `hook_end`,
+`content_filter`, `limit` (graceful limit end only).
+
+### 4.4 A turn with a failing tool (sequence)
+
+```mermaid
+sequenceDiagram
+    participant U as App
+    participant M as model node
+    participant P as Provider
+    participant T as tools node
+    participant A as search_docs
+    participant B as send_email
+
+    U->>M: run("...")
+    M->>P: request (2 tools)
+    P-->>M: assistant: tool_call c1 search_docs, c2 send_email
+    M->>T: route: tools (no approval configured)
+    par
+        T->>A: c1 {query}
+        A-->>T: raise ToolError("index offline")
+    and
+        T->>B: c2 {to, body}
+        B-->>T: "sent"
+    end
+    T->>T: c1 → status=error (model_recoverable), c2 → success
+    T->>M: messages += [tool c1 error, tool c2 success]  (call order)
+    M->>P: request (sees the error)
+    P-->>M: assistant: final text
+    M-->>U: RunResult(completed, final_answer)
+```
+
+If `search_docs` had raised `KeyError` instead (a developer error), the tools
+step would fail and commit no state. `c2`'s result was already saved in the
+tools task's memo when it finished (0005 §1, §5.1). Calling `resume(error.snapshot)` after fixing the bug
+re-executes only `c1`, so **the email is not sent twice**.
+
+---
+
+## 5. Limits
+
+| Limit | Default | Counted | When hit |
+|---|---|---|---|
+| `model_calls` | 25 | Each model node execution (retries don't count) | `on_limit` |
+| `tool_calls` | 200 | Each executed call (not skipped/rejected) | Excess calls `skipped`; next model call gets `on_limit` |
+| `tool_calls_per_turn` | 32 | Calls in one assistant message | Excess `skipped` |
+| `parallel_tool_calls` | 8 | Concurrent executions | Queued |
+| `output_retries` | 2 | Invalid structured-output attempts | `output_invalid` |
+| `deadline` | none | Wall clock for the run | `deadline_exceeded` |
+| `nesting` | 8 | Depth of agents running inside agents | `limit_exceeded` (`nesting`) |
+| `tokens` | none | Total input + output tokens | `on_limit` |
+
+`on_limit = "error"` (default) raises `LimitExceededError`. `"end"` ends
+gracefully with `stop_reason: limit`, a valid repaired transcript and the last
+assistant text as output. Limits are **run-scoped**. Thread-scoped limits
+(across turns of a conversation) are a hook concern.
+
+---
+
+## 6. Structured output
+
+| Strategy | Used when | Mechanism | On invalid output |
+|---|---|---|---|
+| `native` | The adapter declares `native_structured_output` | Provider JSON-schema mode; the final message text is parsed | Feed back the validation errors as a user message; retry up to `output_retries` |
+| `tool` | Otherwise (or forced) | A reserved `final_output` tool whose input schema is the output schema | Error tool result with the validation errors; retry up to `output_retries` |
+
+- The strategy is chosen from **declared capabilities**, never from model-name
+  patterns. `output_strategy="native"|"tool"` forces one.
+- Validation: the core checks the JSON Schema; the SDK parses into Pydantic or
+  Zod (0002 §5.1). Raw dict schemas are validated too; LangChain skips them.
+- With the tool strategy, `tool_choice` stays `auto`, so the model can still
+  call real tools first. A final text answer without `final_output` triggers
+  routing rule 5 (§4.2).
+- Exhausted retries raise `OutputValidationError` (`output_invalid`), carrying
+  the last raw output.
+
+---
+
+## 7. Human-in-the-loop
+
+### 7.1 Configuration
+
+```python
+Approve(
+    tools={"send_email": {"decisions": ["approve", "edit", "reject", "respond"]},
+           "delete_*": True},                 # glob; True = all four decisions
+    when=lambda call, state: ...,             # optional predicate per call
+    describe=lambda call, state: "...",       # optional text for the reviewer
+)
+```
+
+Configuration errors (no decisions allowed, unknown tool name) fail at build
+time.
+
+### 7.2 Flow
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant Run as Agent run
+    participant Review as review node
+
+    Run->>Review: assistant message with c1 (gated), c2 (not gated)
+    Review-->>Run: Suspend{ requests:[{call_id:c1, tool, args, description, allowed}] }
+    Note over Run: step commits; snapshot taken; nothing executed yet
+    Run-->>App: RunResult(status=suspended, interrupt, snapshot)
+    App->>App: show to human, store snapshot anywhere (it is JSON)
+    App->>Run: agent.resume(snapshot, {c1: edit {args}})
+    Run->>Review: invoked with ctx.resume = decisions (no replay of other nodes)
+    Review->>Run: validated decisions → update
+    Run->>Run: tools: c1 runs with edited args (+ notice to model), c2 runs
+```
+
+- **Review happens before any call in the batch executes.** Un-gated calls in
+  the same message wait too, so a batch is never half-executed while waiting.
+- **Decisions:**
+  - `approve`: run as is.
+  - `edit {name?, args}`: run the edited call. The result is prefixed with a
+    notice telling the model what actually ran.
+  - `reject {message?}`: `status: rejected` result; not executed.
+  - `respond {message}`: the human answers in place of the tool; `status: success`.
+- **Validation on resume:** one decision per gated call, the decision type is
+  allowed, edited args are valid. Otherwise `ResumeError(resume_invalid)`. The
+  snapshot is unchanged and can be resumed again correctly.
+- **No hidden replay.** Suspension is the **return value** of the review node
+  (0005 §2), not an exception thrown mid-function. On resume, that node is
+  invoked again with `ctx.resume` set. It has done no side effects before
+  suspending, by contract. No other node re-runs.
+
+---
+
+## 8. Events emitted by an agent
+
+On top of the core events (0005 §6): `model_request`, `message_delta`,
+`message_completed`, `message_aborted`, `attempt_failed`, `tool_call_started`,
+`tool_progress` (from `ctx.emit`), `tool_call_finished` (status, duration),
+`transcript_repaired`, `suspended`, `warning`. Each carries `origin`:
+`agent` | `hook:<name>` | `internal`. Internal model calls made by hooks (e.g. a
+summarizer) are tagged and never appear as the agent's own messages, so no
+stream post-filtering is needed.
+
+---
+
+## 9. Edge cases
+
+| # | Case | Behaviour |
+|---|---|---|
+| A1 | Model answers with text only, `output=` not set | `final_answer`; `result.output` = text |
+| A2 | Model returns only invalid tool calls | Tools node answers each with `invalid_arguments`; the model retries (rule 4) |
+| A3 | Model calls `final_output` with invalid data **and** `search_docs` | `search_docs` skipped; output error fed back; retry |
+| A4 | Two `return_direct` tools succeed in one turn | Loop ends; `result.output` is the list of their results in call order |
+| A5 | `return_direct` tool fails | No end; the error goes to the model; loop continues |
+| A6 | `model_calls` limit hit right after tools ran | Next model node raises `limit_exceeded` (or ends gracefully); tool results are already committed |
+| A7 | Hook `before_model` returns `end` on the first turn | Run ends with `hook_end` and no model call; `result.output` = the hook's output |
+| A8 | Approval-gated call plus a provider-hosted tool in one turn | The hosted result already came with the model response; review covers local calls only |
+| A9 | Resume with a snapshot from an older agent definition (tools changed) | `workflow_mismatch` unless the fingerprint matches; `resume(…, allow_mismatch=True)` re-validates the pending calls against current tools |
+| A10 | Resuming the same snapshot twice | Two independent continuations (a snapshot is a value). With a persistence backend, a version check rejects the second (0005 §5) |
+| A11 | Cancelled while tools are running | In-flight calls cancelled; `on_end(cancelled)` runs; state is the last committed step; the next run's repair inserts `cancelled` results |
+| A12 | Agent used as a tool hits its own limit | Parent model receives a `ToolError` ("sub-agent stopped: model call limit") per `as_tool()` |
+| A13 | Hook declares a tool with the same name as a user tool | Build error (duplicate tool name) |
+| A14 | Empty `tools` list | Valid. Model gets no tools; one call, then `final_answer` |
+| A15 | Provider switches mid-thread | Foreign reasoning/provider blocks omitted with a `warning` (0002 §9) |
+
+## 10. Concept count
+
+`Agent`, `tool`, `ToolError`, `ToolContext`, `Message`, `Hook` (6 methods),
+`Control.end`, `Limits`, `RunResult`, `Snapshot`/`resume`, `Approve`, `output=`.
+That is **12**, plus `Workflow` for custom graphs.

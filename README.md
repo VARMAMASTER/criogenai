@@ -3,6 +3,11 @@
 An AI agent orchestration framework with a Rust execution runtime and
 (planned) first-class Python and TypeScript SDKs.
 
+AgentBuild is for **building AI agents and workflows** in Python or TypeScript,
+on a fast Rust engine. It includes an embeddable **LLM gateway** that is also
+usable on its own. The planned developer API is sketched in
+[docs/design/0007-public-api.md](docs/design/0007-public-api.md).
+
 > **Status: early development (Phase 1).** Only the Rust execution core exists.
 > There are no Python or TypeScript packages yet, no LLM integrations, and no
 > persistence. Nothing has been published.
@@ -69,9 +74,26 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 | 5     | Streaming events, retries/timeouts, checkpoints, persistence  | Planned     |
 | 6     | Docs, templates, publishing, benchmarks                       | Planned     |
 
+## Documentation
+
+- [Architecture](docs/architecture.md): how the system is put together and how a run executes
+- [Execution model](docs/design/0001-execution-model.md): exact runtime semantics
+- [Progress log](docs/progress.md): status, decisions, next steps
+- [AGENTS.md](AGENTS.md): orientation for contributors and AI assistants
+
 ## Layout
 
 ```
 crates/agentbuild-core/   Rust execution engine
 docs/design/              Design decisions and contracts
+docs/research/            Studies of existing frameworks
 ```
+
+## License
+
+Licensed under either of [Apache License, Version 2.0](LICENSE-APACHE) or
+[MIT license](LICENSE-MIT), at your option.
+
+Unless you explicitly state otherwise, any contribution intentionally submitted
+for inclusion in this project by you, as defined in the Apache-2.0 license,
+shall be dual licensed as above, without any additional terms or conditions.

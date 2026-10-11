@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 .venv/
 node_modules/
+research/tools/
+research/wheels/
+research/rea-evidence/
+research/repos/
