@@ -1,5 +1,6 @@
 //! Tools: functions an agent's model may call (design 0002 §3–§5).
 
+use std::any::Any;
 use std::future::Future;
 use std::sync::Arc;
 
@@ -35,6 +36,7 @@ pub struct ToolContext {
     pub(crate) events: EventSink,
     /// How deep this call is in agents calling agents (0 = top level).
     pub(crate) depth: u32,
+    pub(crate) app: Option<Arc<dyn Any + Send + Sync>>,
 }
 
 impl ToolContext {
@@ -42,6 +44,12 @@ impl ToolContext {
     /// top-level agent).
     pub fn depth(&self) -> u32 {
         self.depth
+    }
+
+    /// The app services given to [`AgentBuilder::context`](crate::AgentBuilder::context)
+    /// (a database client, an HTTP client, settings), if they are a `T`.
+    pub fn context<T: Any + Send + Sync>(&self) -> Option<&T> {
+        self.app.as_deref().and_then(|app| app.downcast_ref::<T>())
     }
 
     /// Fires when the run is cancelled or the call times out.
@@ -66,9 +74,98 @@ pub enum ToolOutput {
     Json(Value),
     /// Content blocks as given (e.g. an image).
     Blocks(Vec<ContentBlock>),
+    /// Content plus app-only data and state changes. Build it with
+    /// [`with_artifact`](Self::with_artifact) /
+    /// [`with_state`](Self::with_state) on any output.
+    #[non_exhaustive]
+    Rich {
+        /// What the model sees.
+        content: Vec<ContentBlock>,
+        /// Kept in the tool message, never sent to the model.
+        artifact: Option<Value>,
+        /// State changes, merged in tool-call order (0002 §4.4).
+        state: Map<String, Value>,
+        /// The output as a value (for `return_direct`).
+        value: Value,
+    },
 }
 
 impl ToolOutput {
+    /// Adds app-only data (stored in the tool message's `artifact`, never
+    /// shown to the model).
+    pub fn with_artifact(self, artifact: Value) -> Self {
+        match self.into_rich() {
+            Self::Rich {
+                content,
+                state,
+                value,
+                ..
+            } => Self::Rich {
+                content,
+                artifact: Some(artifact),
+                state,
+                value,
+            },
+            _ => unreachable!("into_rich returns Rich"),
+        }
+    }
+
+    /// Adds a state change: `key` is set to `value` when the tools step
+    /// commits. Lists written to the same key by parallel calls are joined
+    /// in call order; any other overlap is an `update_conflict`.
+    pub fn with_state(self, key: impl Into<String>, value: Value) -> Self {
+        match self.into_rich() {
+            Self::Rich {
+                content,
+                artifact,
+                mut state,
+                value: output,
+            } => {
+                state.insert(key.into(), value);
+                Self::Rich {
+                    content,
+                    artifact,
+                    state,
+                    value: output,
+                }
+            }
+            _ => unreachable!("into_rich returns Rich"),
+        }
+    }
+
+    fn into_rich(self) -> Self {
+        match self {
+            rich @ Self::Rich { .. } => rich,
+            other => {
+                let value = other.to_value();
+                Self::Rich {
+                    content: other.into_content(),
+                    artifact: None,
+                    state: Map::new(),
+                    value,
+                }
+            }
+        }
+    }
+
+    /// `(content, artifact, state, value)`.
+    pub(crate) fn into_parts(
+        self,
+    ) -> (Vec<ContentBlock>, Option<Value>, Map<String, Value>, Value) {
+        match self {
+            Self::Rich {
+                content,
+                artifact,
+                state,
+                value,
+            } => (content, artifact, state, value),
+            other => {
+                let value = other.to_value();
+                (other.into_content(), None, Map::new(), value)
+            }
+        }
+    }
+
     pub(crate) fn into_content(self) -> Vec<ContentBlock> {
         match self {
             Self::Text(text) if text.is_empty() => vec![ContentBlock::text("(no output)")],
@@ -79,6 +176,10 @@ impl ToolOutput {
                 vec![ContentBlock::text("(no output)")]
             }
             Self::Blocks(blocks) => blocks,
+            Self::Rich { content, .. } if content.is_empty() => {
+                vec![ContentBlock::text("(no output)")]
+            }
+            Self::Rich { content, .. } => content,
         }
     }
 
@@ -88,6 +189,7 @@ impl ToolOutput {
             Self::Text(text) => Value::String(text.clone()),
             Self::Json(value) => value.clone(),
             Self::Blocks(blocks) => serde_json::to_value(blocks).unwrap_or(Value::Null),
+            Self::Rich { value, .. } => value.clone(),
         }
     }
 }

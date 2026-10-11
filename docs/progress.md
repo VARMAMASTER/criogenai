@@ -42,6 +42,18 @@ handoff point for whoever continues the work.
 
 ## Log
 
+### 2026-10-12: agent slice 8: tool features
+
+- Per-tool `max_concurrency`; safe retries (read-only/idempotent only,
+  after retryable errors or timeouts); result truncation with the full
+  content in the artifact; `ToolOutput::with_state` / `with_artifact`
+  (lists joined in call order, conflicts and reserved keys rejected);
+  `AgentBuilder::context` for app services.
+- Fixed while building it: a reused (memo-saved) call lost its
+  `return_direct` value on retry; memo entries now hold message, state
+  writes and direct value.
+- 11 tests; eight mutation checks, all caught.
+
 ### 2026-10-12: agent slice 7: agents as workflow nodes and as tools
 
 - `AgentNode` (`agent.as_node()`): nested run in a node; approval pauses

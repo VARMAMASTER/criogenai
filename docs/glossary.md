@@ -92,6 +92,10 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Retry-After** | The wait a provider asks for after a rate limit; honored up to `max_retry_after`, longer waits fail or fall back at once. | `ModelError::retry_after`, `AgentBuilder::max_retry_after` |
 | **Agent node / agent tool** | An agent inside a workflow (`agent.as_node()`: reads and writes a messages key, can pause the workflow for approval) or used by another agent as a tool (`agent.as_tool(name, description)`, argument `input`); bounded by `Limits::nesting`. | `AgentNode`, `AgentTool`, `ToolContext::depth` |
 | **Stop reason** | Why a run ended normally: `final_answer`, `return_direct`, `content_filter`. | `StopReason` |
+| **Tool annotations** | `read_only`, `idempotent`, `destructive`; only read-only or idempotent tools are retried. | `ToolAnnotations`, `AgentBuilder::tool_retry` |
+| **Artifact / truncation** | App-only data kept in a tool message (never sent to the model); oversized results are cut and kept whole in the artifact. | `ToolOutput::with_artifact`, `max_result_chars`, `metadata.truncated` |
+| **Tool state update** | A tool changing agent state; parallel writes are merged in call order (lists joined). | `ToolOutput::with_state` |
+| **App context** | Shared services (database, clients) for tools. | `AgentBuilder::context`, `ToolContext::context::<T>()` |
 | **Return direct** | A tool whose successful result ends the run and becomes the output. | `ToolSpec::return_direct` |
 | **Structured output** | The run must end with JSON matching a schema: through the model's JSON mode (`native`) or the reserved `final_output` tool (`tool`); invalid answers go back to the model, up to `output_retries`. | `AgentBuilder::output`, `FINAL_OUTPUT_TOOL`, stop reason `output`, error `output_invalid` |
 | **Agent result / error** | The transcript, output, usage and counts; or a coded failure (`model_failed`, `tool_failed`, `limit_exceeded`) with a snapshot to retry. | `AgentResult`, `AgentError` |

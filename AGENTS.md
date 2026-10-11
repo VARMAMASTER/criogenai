@@ -50,15 +50,16 @@ write our own implementation.
   wrap_tool, on_end); slice 5: `OnLimit::End`, token budget, spent tool
   budget ends at the next model call; slice 6: model resilience
   (`Retry-After`, immediate retry of unsent requests, fallback models);
-  slice 7: `agent.as_node()`, `agent.as_tool()`, `Limits::nesting`.
+  slice 7: `agent.as_node()`, `agent.as_tool()`, `Limits::nesting`;
+  slice 8: tool features (per-tool concurrency, safe retries, result
+  truncation, state updates, app context).
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 325 across the four crates, plus the package test.
-- **Next:** tool features (per-tool concurrency, safe retries, result
-  truncation, state updates, app context), `agent.stream()`;
-  `anthropic_messages`. See `docs/progress.md`. The user will build their
+- Tests: 335 across the four crates, plus the package test.
+- **Next:** `agent.stream()` (last agent task); then
+  `anthropic_messages`, persistence (0008), the Python SDK. See `docs/progress.md`. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.

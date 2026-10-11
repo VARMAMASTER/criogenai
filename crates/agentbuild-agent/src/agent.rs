@@ -25,7 +25,7 @@ use crate::hooks::{Hook, HookContext, ModelNext, Outcome, ToolCallRequest, ToolN
 use crate::output::{FINAL_OUTPUT_TOOL, OutputConfig};
 use crate::resilience::{CallEnv, ModelChain};
 use crate::schema;
-use crate::tool::{Tool, ToolContext, ToolOutput};
+use crate::tool::{Tool, ToolContext};
 
 /// State key holding the transcript (`upsert_by_id` reducer).
 pub const MESSAGES: &str = "messages";
@@ -65,6 +65,9 @@ pub struct Limits {
     pub on_limit: OnLimit,
     /// How deep agents may call agents ([`Agent::as_tool`]). Default 8.
     pub nesting: u32,
+    /// Tool results longer than this (in characters) are cut, unless the
+    /// tool sets its own `max_result_chars`. Default 100,000.
+    pub max_result_chars: usize,
 }
 
 /// What happens when the model-call, token or tool-call budget runs out
@@ -93,6 +96,7 @@ impl Default for Limits {
             tokens: None,
             on_limit: OnLimit::Error,
             nesting: 8,
+            max_result_chars: 100_000,
         }
     }
 }
@@ -125,6 +129,12 @@ impl Limits {
     /// Sets [`tokens`](Self::tokens).
     pub fn tokens(mut self, n: u64) -> Self {
         self.tokens = Some(n);
+        self
+    }
+
+    /// Sets [`max_result_chars`](Self::max_result_chars).
+    pub fn max_result_chars(mut self, n: usize) -> Self {
+        self.max_result_chars = n;
         self
     }
 
@@ -250,6 +260,8 @@ pub struct AgentBuilder {
     fallbacks: Vec<Arc<dyn Model>>,
     fallback_on: Vec<ModelErrorKind>,
     max_retry_after: Duration,
+    tool_retry: RetryPolicy,
+    app: Option<Arc<dyn std::any::Any + Send + Sync>>,
 }
 
 impl std::fmt::Debug for AgentBuilder {
@@ -325,6 +337,22 @@ impl AgentBuilder {
         self
     }
 
+    /// Retries for tools annotated `read_only` or `idempotent` after a
+    /// retryable [`ToolError`](crate::ToolError) or a timeout. Other tools
+    /// are never retried (retrying `send_email` is dangerous). Default: 3
+    /// attempts, backoff from 0.5 s with jitter.
+    pub fn tool_retry(mut self, retry: RetryPolicy) -> Self {
+        self.tool_retry = retry;
+        self
+    }
+
+    /// App services for tools (a database client, settings), read with
+    /// [`ToolContext::context`](crate::ToolContext::context).
+    pub fn context<T: std::any::Any + Send + Sync>(mut self, services: T) -> Self {
+        self.app = Some(Arc::new(services));
+        self
+    }
+
     /// The longest `Retry-After` the agent waits; longer ones fail (or fall
     /// back) at once instead of hanging. Default 60 s.
     pub fn max_retry_after(mut self, wait: Duration) -> Self {
@@ -370,6 +398,13 @@ impl AgentBuilder {
             let names: Vec<&str> = specs.iter().map(|s| s.name.as_str()).collect();
             approval.check(&names).map_err(AgentBuildError::Approval)?;
         }
+        let per_tool: HashMap<String, Arc<Semaphore>> = specs
+            .iter()
+            .filter_map(|s| {
+                let n = s.max_concurrency?;
+                Some((s.name.clone(), Arc::new(Semaphore::new(n as usize))))
+            })
+            .collect();
         let schemas: HashMap<String, Value> = specs
             .iter()
             .map(|s| (s.name.clone(), s.input_schema.clone()))
@@ -434,6 +469,9 @@ impl AgentBuilder {
             limits: limits.clone(),
             output,
             hooks: hooks.clone(),
+            per_tool,
+            retry: self.tool_retry,
+            app: self.app,
         }));
 
         let mut builder = WorkflowBuilder::new();
@@ -551,6 +589,8 @@ impl Agent {
             fallbacks: Vec::new(),
             fallback_on: Vec::new(),
             max_retry_after: Duration::from_secs(60),
+            tool_retry: RetryPolicy::new(),
+            app: None,
         }
     }
 
@@ -859,6 +899,7 @@ impl AgentError {
                             | "output_invalid"
                             | "hook_failed"
                             | "deadline_exceeded"
+                            | "update_conflict"
                     )
                 ) =>
             {
@@ -1362,6 +1403,21 @@ struct ToolsInner {
     limits: Limits,
     output: Option<Arc<OutputConfig>>,
     hooks: Arc<[Arc<dyn Hook>]>,
+    /// Tools with `max_concurrency`.
+    per_tool: HashMap<String, Arc<Semaphore>>,
+    retry: RetryPolicy,
+    app: Option<Arc<dyn std::any::Any + Send + Sync>>,
+}
+
+/// A finished call as saved in the tools task's memo, so a retried step
+/// reuses everything the call produced (not just its message).
+#[derive(Serialize, Deserialize)]
+struct SavedCall {
+    message: Message,
+    #[serde(default, skip_serializing_if = "Map::is_empty")]
+    state: Map<String, Value>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    direct: Option<Value>,
 }
 
 struct ToolsNode(Arc<ToolsInner>);
@@ -1387,12 +1443,60 @@ struct Pending {
     notice: Option<String>,
 }
 
+impl SavedCall {
+    /// Reads a saved call; entries from before state updates existed hold
+    /// only the message.
+    fn read(value: Value) -> Option<Self> {
+        serde_json::from_value::<SavedCall>(value.clone())
+            .or_else(|_| {
+                serde_json::from_value::<Message>(value).map(|message| SavedCall {
+                    message,
+                    state: Map::new(),
+                    direct: None,
+                })
+            })
+            .ok()
+    }
+}
+
 /// A finished call.
 struct Finished {
     index: usize,
     message: Message,
     /// The tool's output, when it succeeded with `return_direct`.
     direct: Option<Value>,
+    /// State changes the tool returned.
+    state: Map<String, Value>,
+}
+
+/// Cuts oversized content (0002 §4.3). Returns the content to send, the
+/// full content (for the artifact) if it was cut.
+fn truncate_content(content: Vec<ContentBlock>, max: usize) -> (Vec<ContentBlock>, Option<Value>) {
+    let rendered: Vec<String> = content
+        .iter()
+        .filter_map(|block| match block {
+            ContentBlock::Text { text, .. } => Some(text.clone()),
+            ContentBlock::Json { value, .. } => Some(value.to_string()),
+            _ => None,
+        })
+        .collect();
+    let text = rendered.join("\n");
+    let total = text.chars().count();
+    if total <= max {
+        return (content, None);
+    }
+    let cut: String = text.chars().take(max).collect();
+    let full = json!(content);
+    let mut kept = vec![ContentBlock::text(format!(
+        "{cut}\n[truncated: {} more characters]",
+        total - max
+    ))];
+    kept.extend(
+        content.into_iter().filter(|block| {
+            !matches!(block, ContentBlock::Text { .. } | ContentBlock::Json { .. })
+        }),
+    );
+    (kept, Some(full))
 }
 
 fn result_id(call_id: &str) -> String {
@@ -1437,6 +1541,8 @@ async fn tools_step(
 
     let memo = ctx.memo().clone();
     let limits = &inner.limits;
+    let mut direct_outputs: Vec<(usize, Value)> = Vec::new();
+    let mut state_writes: Vec<(usize, Map<String, Value>)> = Vec::new();
     let mut results: Vec<Option<Message>> = Vec::new();
     let mut pending = Vec::new();
     let mut executed = 0u32;
@@ -1558,10 +1664,16 @@ async fn tools_step(
         };
         // Saved by an earlier attempt of this step: never run twice.
         if let Some(saved) = memo.get(&format!("call:{call_id}"))
-            && let Ok(message) = serde_json::from_value::<Message>(saved)
+            && let Some(saved) = SavedCall::read(saved)
         {
             executed += 1;
-            results.push(Some(message));
+            if let Some(direct) = saved.direct {
+                direct_outputs.push((index, direct));
+            }
+            if !saved.state.is_empty() {
+                state_writes.push((index, saved.state));
+            }
+            results.push(Some(saved.message));
             continue;
         }
         let call_number = index as u32;
@@ -1637,6 +1749,7 @@ async fn tools_step(
             cancel: ctx.cancel_token().child(),
             events: events.clone(),
             depth: book.depth,
+            app: inner.app.clone(),
         };
         let timeout = call
             .tool
@@ -1644,37 +1757,107 @@ async fn tools_step(
             .timeout_ms
             .map_or(limits.tool_timeout, Duration::from_millis);
         let return_direct = call.tool.spec().return_direct;
+        let retry_safe = call.tool.spec().annotations.retry_safe();
+        let max_chars = call
+            .tool
+            .spec()
+            .max_result_chars
+            .map_or(limits.max_result_chars, |n| n as usize);
+        let tool_permits = inner.per_tool.get(&call.name).cloned();
         let (call_id, name) = (call.call_id.clone(), call.name.clone());
         let inner = inner.clone();
         let handle = tasks.spawn(async move {
             let _permit = semaphore.acquire_owned().await.expect("semaphore open");
+            // Calls to a tool with `max_concurrency` wait their turn (FIFO).
+            let _tool_permit = match tool_permits {
+                Some(permits) => Some(permits.acquire_owned().await.expect("semaphore open")),
+                None => None,
+            };
             events.emit(
                 "tool_call_started",
                 json!({"call_id": call.call_id, "tool": call.name, "args": call.args}),
             );
             let started = Instant::now();
-            // wrap_tool hooks nest around the call (the first hook outermost).
-            let chain = ToolNext {
-                hooks: &inner.hooks,
-                tools: &inner.tools,
-                ctx: tool_ctx,
+            // Only retry-safe tools (read-only or idempotent) are retried,
+            // after a retryable error or a timeout (0002 §5.2).
+            let max_attempts = if retry_safe {
+                inner.retry.max_attempts.max(1)
+            } else {
+                1
             };
-            let request = ToolCallRequest {
-                call_id: call.call_id.clone(),
-                name: call.name.clone(),
-                args: call.args,
+            let mut attempt = 1;
+            let outcome = loop {
+                // wrap_tool hooks nest around the call (the first hook outermost).
+                let chain = ToolNext {
+                    hooks: &inner.hooks,
+                    tools: &inner.tools,
+                    ctx: tool_ctx.clone(),
+                };
+                let request = ToolCallRequest {
+                    call_id: call.call_id.clone(),
+                    name: call.name.clone(),
+                    args: call.args.clone(),
+                };
+                let outcome = tokio::time::timeout(timeout, chain.call(request)).await;
+                let retryable = match &outcome {
+                    Ok(Ok(_)) => false,
+                    Ok(Err(error)) => !error.fatal && error.retryable,
+                    Err(_) => true,
+                };
+                if !retryable || attempt >= max_attempts {
+                    break outcome;
+                }
+                let delay = inner.retry.delay(attempt, &call.call_id);
+                events.emit(
+                    "tool_retry",
+                    json!({
+                        "call_id": call.call_id,
+                        "tool": call.name,
+                        "attempt": attempt,
+                        "retry_in_ms": delay.as_millis() as u64,
+                    }),
+                );
+                tokio::time::sleep(delay).await;
+                attempt += 1;
             };
-            let outcome = tokio::time::timeout(timeout, chain.call(request)).await;
+            let mut state = Map::new();
             let (message, direct) = match outcome {
                 Ok(Ok(output)) => {
-                    let direct = return_direct.then(|| output.to_value());
-                    let message = Message::tool_result(
+                    let (content, artifact, tool_state, value) = output.into_parts();
+                    state = tool_state;
+                    let direct = return_direct.then_some(value);
+                    let content = if content.is_empty() {
+                        vec![ContentBlock::text("(no output)")]
+                    } else {
+                        content
+                    };
+                    let (content, full) = truncate_content(content, max_chars);
+                    let mut message = Message::tool_result(
                         &call.call_id,
                         &call.name,
                         ToolStatus::Success,
-                        ToolOutput::into_content(output),
+                        content,
                     )
                     .with_id(result_id(&call.call_id));
+                    if let Some(full) = full {
+                        message.metadata.truncated = true;
+                        events.emit(
+                            "warning",
+                            json!({
+                                "code": "tool_result_truncated",
+                                "message": format!(
+                                    "the result of `{}` ({}) was cut to {max_chars} characters",
+                                    call.name, call.call_id
+                                ),
+                            }),
+                        );
+                        message.artifact = Some(artifact.map_or(
+                            full.clone(),
+                            |a| json!({"artifact": a, "full_content": full}),
+                        ));
+                    } else {
+                        message.artifact = artifact;
+                    }
                     (message, direct)
                 }
                 Ok(Err(error)) if error.fatal => return Err((call.call_id, call.name, error)),
@@ -1704,9 +1887,20 @@ async fn tools_step(
                 message.content.insert(0, ContentBlock::text(notice));
             }
             message.metadata.duration_ms = Some(started.elapsed().as_millis() as u64);
+            message.metadata.attempts = Some(attempt);
             // Saved at once, so a failure elsewhere in this step never makes
             // this call run again (0005 §5.1).
-            memo.put(format!("call:{}", call.call_id), to_json(&message));
+            let saved = SavedCall {
+                message,
+                state,
+                direct,
+            };
+            memo.put(format!("call:{}", call.call_id), to_json(&saved));
+            let SavedCall {
+                message,
+                state,
+                direct,
+            } = saved;
             events.emit(
                 "tool_call_finished",
                 json!({
@@ -1722,12 +1916,12 @@ async fn tools_step(
                 index: call.index,
                 message,
                 direct,
+                state,
             })
         });
         task_calls.insert(handle.id(), (call_id, name));
     }
 
-    let mut direct_outputs: Vec<(usize, Value)> = Vec::new();
     while let Some(joined) = tasks.join_next().await {
         let finished = match joined {
             Ok(Ok(finished)) => finished,
@@ -1751,7 +1945,35 @@ async fn tools_step(
         if let Some(direct) = finished.direct {
             direct_outputs.push((finished.index, direct));
         }
+        if !finished.state.is_empty() {
+            state_writes.push((finished.index, finished.state));
+        }
         results[finished.index] = Some(finished.message);
+    }
+    // Tool state changes, merged in call order (0002 §4.4).
+    state_writes.sort_by_key(|(index, _)| *index);
+    let mut tool_state: Map<String, Value> = Map::new();
+    for (_, writes) in state_writes {
+        for (key, value) in writes {
+            if [MESSAGES, AGENT, HOOKS].contains(&key.as_str()) {
+                return Err(NodeError::new(format!(
+                    "a tool may not write the agent's own state key `{key}`"
+                ))
+                .with_kind("tool_failed"));
+            }
+            match (tool_state.get_mut(&key), value) {
+                (None, value) => {
+                    tool_state.insert(key, value);
+                }
+                (Some(Value::Array(existing)), Value::Array(more)) => existing.extend(more),
+                (Some(_), _) => {
+                    return Err(NodeError::new(format!(
+                        "two tool calls in one turn wrote `{key}`; return lists to join them"
+                    ))
+                    .with_kind("update_conflict"));
+                }
+            }
+        }
     }
 
     let results: Vec<Message> = results.into_iter().flatten().collect();
@@ -1787,12 +2009,13 @@ async fn tools_step(
         });
         END
     };
-    Ok(NodeOutput::goto(
-        Update::new()
-            .set(MESSAGES, json!(results))
-            .set(AGENT, to_json(&book)),
-        [next],
-    ))
+    let mut update = Update::new()
+        .set(MESSAGES, json!(results))
+        .set(AGENT, to_json(&book));
+    for (key, value) in tool_state {
+        update = update.set(key, value);
+    }
+    Ok(NodeOutput::goto(update, [next]))
 }
 
 /// A developer error in a tool: the step fails. Calls that already finished

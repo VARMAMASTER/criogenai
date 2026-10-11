@@ -9,6 +9,28 @@ slice 3 (structured output, §6), slice 4 (hooks, §3) and slice 5 (the
 remaining limits of §5 except `nesting`). Not yet: `nesting` (comes with
 agents as tools), agents as nodes or tools.
 
+Implementation decisions (slice 8, tool features, 0002 §3–§5):
+
+- `ToolSpec.max_concurrency`: a per-tool semaphore (FIFO) inside the run's
+  `parallel_tool_calls` bound.
+- Retries only for tools annotated `read_only` or `idempotent`, after a
+  retryable `ToolError` or a timeout, with `AgentBuilder::tool_retry`
+  (default 3 attempts); event `tool_retry`; `metadata.attempts`.
+- Results longer than `max_result_chars` (the tool's, else
+  `Limits::max_result_chars`, 100,000) are cut with `[truncated: N more
+  characters]`; the full content goes to the message's `artifact` (next to
+  the tool's own artifact if it set one), `metadata.truncated`, a
+  `warning` event `tool_result_truncated`. Non-text blocks are kept.
+- `ToolOutput::with_artifact(v)` / `with_state(key, v)` (→ `Rich`). State
+  writes are merged in call order: lists for one key are joined, any other
+  overlap is `update_conflict`; writing `messages`, `agent` or `hooks` is
+  `tool_failed`.
+- Memo entries for finished calls now hold the message, its state writes
+  and its `return_direct` value (older entries holding only a message are
+  still read), so a retried step keeps them.
+- `AgentBuilder::context(T)` + `ToolContext::context::<T>()`: app services
+  for tools (agent-wide; per-run context comes with the SDKs).
+
 Implementation decisions (slice 7, agents as nodes and tools):
 
 - `agent.as_node()` → `AgentNode` (`messages_key`, default `messages`; a
