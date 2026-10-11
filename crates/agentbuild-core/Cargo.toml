@@ -4,7 +4,9 @@ description = "Execution engine for AgentBuild workflows"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
-# Not published until the package name and license are confirmed.
+license.workspace = true
+repository.workspace = true
+# Not published until the package name is confirmed.
 publish = false
 
 [dependencies]
