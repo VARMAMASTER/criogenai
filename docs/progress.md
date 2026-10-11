@@ -7,9 +7,9 @@ handoff point for whoever continues the work.
 ## Next steps
 
 1. ~~Design review~~ Approved (see log, 2026-10-11 night).
-2. **Done:** 0005 §1–§3 (NodeContext, node outcomes with suspend/resume and
-   JSON snapshots, reducers) and §6 (events). **Next:** policies (§4) → saved
-   task writes and the task memo (§5) → snapshots on failure.
+2. **Done:** 0005 §1–§4 and §6 (NodeContext, node outcomes with
+   suspend/resume and JSON snapshots, reducers, policies, events). **Next:**
+   saved task writes and the task memo (§5) → snapshots on failure.
 3. Phase 2 (Python SDK via PyO3/maturin) can start after 0005 §1–§3. Its first
    design doc covers asyncio ↔ Tokio bridging, free-threaded Python, and
    `abi3` wheels.
@@ -31,6 +31,35 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-11: 0005 §4 policies implemented
+
+- `NodePolicy { timeout_ms, retry }` per node via `builder.policy(..)`;
+  `RetryPolicy` (max_attempts 3, 500 ms × 2 up to 20 s, full jitter). Both are
+  serde data with defaults for missing fields.
+- Retries only for `NodeError::retryable()` errors (new `retryable` field;
+  `NodeError` is now `#[non_exhaustive]`). Jitter is deterministic from the
+  task id and attempt, with no RNG dependency. Timeouts and panics are never
+  retried.
+- Run options: `deadline` (per `run`/`resume` call), `cancel_token`,
+  `cancel_grace` (5 s). `RunStream::cancel()`.
+- New: `CancelToken` (own ~60-line implementation on `tokio::sync::Notify`,
+  with child tokens, instead of adding `tokio-util`); `ctx.cancel_token()`,
+  `ctx.remaining_time()`.
+- Engine: each node runs as a `NodeTask` (retry loop inside its own task).
+  The step waits on `guard(..)`, a two-way race against cancellation and the
+  deadline, written with `poll_fn` to avoid tokio's `macros` feature.
+- New codes: `node_timeout`, `deadline_exceeded`, `cancelled`. New event:
+  `attempt_failed`. `node_cancelled` reasons: `run_cancelled`,
+  `deadline_exceeded`, `sibling_failed`. New validation:
+  `DuplicatePolicy`, `InvalidPolicy`.
+- 0003 catalog statuses brought up to date (several were stale "proposed").
+- `FakeLlm::flaky_first(n)` simulates retryable provider errors.
+- Tests: 112 passing (19 in `tests/policies.rs`, 9 unit tests). Five
+  mutation checks: 4 caught. The fifth, a redundant token cancel on timeout,
+  was removed because the step token already covers it.
+- Example `retry_workflow`: a flaky model recovers on the 3rd attempt
+  (9.2 s); a 1 s timeout on a 2–3 s call fails at 1.0 s.
 
 ### 2026-10-11: 0005 §6 events implemented
 

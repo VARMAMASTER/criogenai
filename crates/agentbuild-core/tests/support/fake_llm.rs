@@ -21,6 +21,7 @@ pub struct FakeLlm {
     min: Duration,
     max: Duration,
     fail_marker: Option<String>,
+    flaky_calls: usize,
     prompts: Mutex<Vec<String>>,
 }
 
@@ -43,6 +44,7 @@ impl FakeLlm {
             min,
             max,
             fail_marker: None,
+            flaky_calls: 0,
             prompts: Mutex::new(Vec::new()),
         }
     }
@@ -50,6 +52,13 @@ impl FakeLlm {
     /// Prompts containing `marker` fail (after the delay) instead of replying.
     pub fn failing_on(mut self, marker: impl Into<String>) -> Self {
         self.fail_marker = Some(marker.into());
+        self
+    }
+
+    /// The first `calls` calls fail with a *retryable* error (like a rate
+    /// limit or a dropped connection); later calls succeed.
+    pub fn flaky_first(mut self, calls: usize) -> Self {
+        self.flaky_calls = calls;
         self
     }
 
@@ -66,8 +75,19 @@ impl FakeLlm {
 
     /// Simulates one model call.
     pub async fn complete(&self, prompt: &str) -> Result<String, NodeError> {
-        self.prompts.lock().unwrap().push(prompt.to_string());
+        let call = {
+            let mut prompts = self.prompts.lock().unwrap();
+            prompts.push(prompt.to_string());
+            prompts.len()
+        };
         tokio::time::sleep(self.delay_for(prompt)).await;
+        if call <= self.flaky_calls {
+            return Err(
+                NodeError::new(format!("simulated rate limit (call {call})"))
+                    .with_kind("fake_llm_transient")
+                    .retryable(),
+            );
+        }
         if let Some(marker) = &self.fail_marker
             && prompt.contains(marker.as_str())
         {

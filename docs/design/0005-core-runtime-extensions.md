@@ -1,8 +1,8 @@
 # 0005: Core runtime extensions
 
-Status: **§1–§3 and §6 implemented** (NodeContext without `cancel`,
-`deadline` and `memo`; node outcomes with suspend/resume; reducers; events).
-§4 and §5's saved task writes are **approved, not yet built**. This document changes
+Status: **§1–§4 and §6 implemented** (NodeContext without `memo`; node
+outcomes with suspend/resume; reducers; policies; events). §5's saved task
+writes and snapshots on failure are **approved, not yet built**. This document changes
 [0001](0001-execution-model.md); every change is listed in §9.
 It provides what [0002](0002-messages-and-tools.md),
 [0003](0003-error-model.md) and [0004](0004-agent-loop.md) need. Research
@@ -110,15 +110,84 @@ Each state key may declare how concurrent writes and successive writes combine:
 
 ## 4. Policies
 
+Status: **implemented**.
+
 | Policy | Scope | Default | Notes |
 |---|---|---|---|
-| `timeout` | per node | none | Exceeding it → `node_timeout`. The node's future is dropped; the cancellation token fires |
+| `timeout` | per node attempt | none | Exceeding it → `node_timeout`. The node's cancel token fires and its future is dropped |
 | `retry` | per node | none | Retries only when `NodeError.retryable == true`; backoff as 0003 §5; `ctx.attempt` increments |
-| `deadline` | per run | none | Bounds everything, including backoff sleeps → `deadline_exceeded` |
+| `deadline` | per run segment | none | Bounds everything, including backoff sleeps → `deadline_exceeded` |
 | `cancel_grace` | per run | 5 s | Time given to in-flight nodes after cancellation |
 | `max_steps` | per run | 64 | Unchanged; agents derive it (0004 §2) |
 
 Policies are plain data (serde), so SDKs pass them through unchanged.
+
+### 4.1 API
+
+```rust
+builder.policy("call_api", NodePolicy::new()
+    .timeout(Duration::from_secs(10))
+    .retry(RetryPolicy::new().max_attempts(3)));       // per node
+
+workflow.run_with(input, RunOptions::default()
+    .deadline(Duration::from_secs(60))                 // whole segment
+    .cancel_token(token.clone())                       // token.cancel() from anywhere
+    .cancel_grace(Duration::from_secs(5)));
+```
+
+JSON form: `{"timeout_ms": 10000, "retry": {"max_attempts": 3,
+"initial_backoff_ms": 500, "backoff_factor": 2.0, "max_backoff_ms": 20000,
+"jitter": true}}`.
+
+Validation at `build`: a policy for an unknown node (`unknown_node`), two
+policies for one node (`DuplicatePolicy`), `max_attempts` 0, a timeout under
+1 ms, or a `backoff_factor` below 1 (`InvalidPolicy`). Policies are not part
+of the workflow fingerprint: they change behaviour, not structure.
+
+### 4.2 Retry
+
+- Only errors the node marks retryable (`NodeError::new(..).retryable()`) are
+  retried. Timeouts, panics and non-retryable errors fail immediately. A node
+  with side effects should not mark its errors retryable (C4).
+- `max_attempts` counts the first attempt (default 3).
+- Before attempt *n*+1: `min(max_backoff, initial × factor^(n−1))`, with full
+  jitter (uniform in `[0, that]`). Jitter is derived from the task id and the
+  attempt number rather than a random generator, so it is reproducible and
+  needs no dependency.
+- Deadline-aware: if the backoff would end at or after the deadline, the node
+  fails with `deadline_exceeded` without sleeping (0003 E6).
+- Cancellation during a backoff ends the wait immediately.
+- Events: each failed attempt that will be retried emits `attempt_failed`
+  (`attempt`, `code`, `message`, `retry_in_ms`), then `node_started` with the
+  next attempt number. Each `node_started` is closed by exactly one of
+  `attempt_failed`, `node_finished`, `node_failed` or `node_cancelled`.
+  `node_finished.duration_ms` covers all attempts.
+
+### 4.3 Timeout, deadline and cancellation
+
+- **Node timeout** applies to each attempt. On expiry, the node's cancel token
+  fires, its future is dropped, and the step fails with `node_timeout`
+  (siblings are cancelled, as with any failure).
+- **Deadline** is measured from the start of each `run`/`resume` call. A
+  wall-clock instant cannot be carried meaningfully in a snapshot. When it
+  passes, in-flight nodes are cancelled at once (no grace: the deadline is a
+  hard bound) and the run fails with `deadline_exceeded`. It is also checked
+  before each step and when routers run.
+- **Cancellation**: `CancelToken::cancel()` (from `RunOptions::cancel_token`,
+  or `RunStream::cancel`). In-flight nodes see `ctx.cancel_token()` fire and
+  have `cancel_grace` to return; their results are discarded, then they are
+  dropped. The run fails with `cancelled`. Between steps it is noticed before
+  the next step starts. Dropping the run future still cancels immediately.
+- Each node gets a child token that fires on run cancellation, deadline,
+  its own timeout, or a sibling's failure. Rust nodes are also dropped, so
+  watching the token is optional for them; language bridges rely on it.
+- `ctx.remaining_time()` is the time left before the earlier of the run
+  deadline and the attempt's timeout.
+- A cancelled, timed-out or deadline-exceeded step commits nothing.
+- Unfinished nodes get `node_cancelled` with reason `run_cancelled`,
+  `deadline_exceeded` or `sibling_failed`.
+- In Rust, cancellation surfaces as a `RunError` with code `cancelled`. The
+  SDKs map it to their native form (`CancelledError`, `AbortError`; 0003 §2).
 
 ## 5. Snapshots, saved task writes and resume
 

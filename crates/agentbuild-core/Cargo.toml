@@ -13,8 +13,8 @@ publish = false
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-# `sync` for the event channel (bounded mpsc).
-tokio = { workspace = true, features = ["rt", "sync"] }
+# `sync`: event channel and cancel tokens. `time`: timeouts, deadlines, backoff.
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
 uuid.workspace = true
 
 [dev-dependencies]

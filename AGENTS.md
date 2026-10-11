@@ -25,11 +25,13 @@ write our own implementation.
   `docs/design/0002`–`0008` cover messages and tools, errors, the agent loop,
   core extensions, the provider layer and gateway, the public API, and
   persistence and memory. Research is in `docs/research/`.
-- **Implemented in `agentbuild-core`:** the 0001 engine plus 0005 §1–§3 and
+- **Implemented in `agentbuild-core`:** the 0001 engine plus 0005 §1–§4 and
   §6: NodeContext, `Update`/`Command`/`Suspend` outcomes, suspend/resume with
-  JSON snapshots, reducers, the workflow fingerprint, and live events
-  (`Workflow::stream`, `event_channel`, `ctx.events()`). 84 tests.
-- **Next:** 0005 §4 policies, §5 saved task writes and memo, snapshots on
+  JSON snapshots, reducers, the workflow fingerprint, live events
+  (`Workflow::stream`, `event_channel`, `ctx.events()`), and policies
+  (`NodePolicy` timeout/retry, run deadline, `CancelToken` with grace).
+  112 tests.
+- **Next:** 0005 §5 saved task writes and the task memo, snapshots on
   failure.
   Update 0001 as each lands (0005 §9 lists the changes).
 - **Not started:** `agentbuild-providers`, gateway, Python SDK, TypeScript SDK,
@@ -46,6 +48,7 @@ cargo fmt --all --check
 cargo run -p agentbuild-core --example basic_workflow -- "some text"
 cargo run -p agentbuild-core --example approval_workflow -- yes
 cargo run -p agentbuild-core --example llm_workflow -- "remote work"
+cargo run -p agentbuild-core --example retry_workflow
 ```
 
 On the original Windows dev machine, Rust lives in `~/.cargo/bin`. A shell that
@@ -74,7 +77,9 @@ git-ignored. REA is not registered as an MCP server in any agent config.
    to `docs/design/` first, or in the same change. Number new docs
    sequentially (`0002-…`).
 2. **Keep the core small.** Add a dependency only with a stated reason. Current
-   deps: tokio (rt), serde, serde_json, thiserror.
+   deps: tokio (features `rt`, `sync`, `time`; no `macros`), serde, serde_json,
+   thiserror, uuid (v7 run ids). Dev only: tokio `test-util` for the paused
+   clock.
 3. **Engine semantics live in Rust only.** SDKs must not reimplement
    scheduling, merging or validation.
 4. **Strict now, relax later.** Validation rules start strict; relaxing them is

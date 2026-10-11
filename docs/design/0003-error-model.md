@@ -326,11 +326,13 @@ and checked in CI, so docs and SDK mappings can't drift.
 | `unknown_route` | developer | core | implemented |
 | `update_conflict` | developer | core | implemented |
 | `step_limit_exceeded` | policy | core | implemented |
-| `node_timeout` | developer | core | proposed |
-| `deadline_exceeded` | policy | core | proposed |
-| `invalid_value` | developer | bridge: JSON conversion | proposed |
-| `resume_invalid` | developer | core: bad resume input | proposed |
-| `workflow_mismatch` | developer | core: snapshot from a different graph | proposed |
+| `node_timeout` | developer | core: node attempt exceeded its policy timeout | implemented |
+| `deadline_exceeded` | policy | core: run deadline (also cuts backoff short) | implemented |
+| `cancelled` | cancellation | core: `CancelToken::cancel` (an outcome in the SDKs, `RunError` in Rust) | implemented |
+| `invalid_value` | developer | core: a write a reducer cannot apply; bridge: JSON conversion | implemented (core) |
+| `missing_goto` | developer | core: goto-only node returned no target | implemented |
+| `resume_invalid` | developer | core: bad resume input | implemented |
+| `workflow_mismatch` | developer | core: snapshot from a different graph | implemented |
 | `internal` | internal | anywhere | proposed |
 | `model_failed` | per `kind` | agent: model node | proposed |
 | `tool_failed` | developer | agent: unexpected tool exception | proposed |

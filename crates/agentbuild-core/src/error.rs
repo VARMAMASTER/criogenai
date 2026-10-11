@@ -10,6 +10,7 @@ use crate::state::State;
 /// It is deliberately language-neutral so bindings can carry, for example, a
 /// Python exception's class name in `kind` and its attributes in `details`.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
 pub struct NodeError {
     /// Human-readable description.
     pub message: String,
@@ -19,6 +20,11 @@ pub struct NodeError {
     /// Optional structured context.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub details: Option<Value>,
+    /// `true` if trying again may succeed (e.g. a network hiccup). Only
+    /// retryable errors are retried by a node's
+    /// [`RetryPolicy`](crate::RetryPolicy).
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub retryable: bool,
 }
 
 impl NodeError {
@@ -28,6 +34,7 @@ impl NodeError {
             message: message.into(),
             kind: None,
             details: None,
+            retryable: false,
         }
     }
 
@@ -40,6 +47,12 @@ impl NodeError {
     /// Attaches structured context.
     pub fn with_details(mut self, details: impl Into<Value>) -> Self {
         self.details = Some(details.into());
+        self
+    }
+
+    /// Marks the error as safe to retry.
+    pub fn retryable(mut self) -> Self {
+        self.retryable = true;
         self
     }
 }
@@ -150,6 +163,17 @@ pub enum ValidationIssue {
     /// A state key's reducer is declared more than once.
     #[error("reducer for state key `{0}` is declared more than once")]
     DuplicateReducer(String),
+    /// A node's policy is declared more than once.
+    #[error("policy for node `{0}` is declared more than once")]
+    DuplicatePolicy(String),
+    /// A policy has an impossible setting.
+    #[error("policy for node `{node}` is invalid: {reason}")]
+    InvalidPolicy {
+        /// The node.
+        node: String,
+        /// What is wrong.
+        reason: String,
+    },
 }
 
 /// Returned by [`WorkflowBuilder::build`](crate::WorkflowBuilder::build).
@@ -248,6 +272,23 @@ pub enum RunErrorKind {
         /// What was wrong.
         reason: String,
     },
+    /// A node attempt exceeded its policy's timeout.
+    #[error("node `{node}` timed out after {timeout_ms} ms")]
+    NodeTimeout {
+        /// The node.
+        node: String,
+        /// The configured per-attempt limit.
+        timeout_ms: u64,
+    },
+    /// The run's deadline passed.
+    #[error("run exceeded its deadline of {deadline_ms} ms")]
+    DeadlineExceeded {
+        /// The configured deadline.
+        deadline_ms: u64,
+    },
+    /// The run was cancelled through its [`CancelToken`](crate::CancelToken).
+    #[error("run was cancelled")]
+    Cancelled,
     /// The snapshot was taken from a workflow with a different structure.
     #[error(
         "snapshot was taken from a different workflow (expected fingerprint {expected}, found {found})"
@@ -274,6 +315,9 @@ impl RunErrorKind {
             Self::MissingGoto { .. } => "missing_goto",
             Self::ResumeInvalid { .. } => "resume_invalid",
             Self::WorkflowMismatch { .. } => "workflow_mismatch",
+            Self::NodeTimeout { .. } => "node_timeout",
+            Self::DeadlineExceeded { .. } => "deadline_exceeded",
+            Self::Cancelled => "cancelled",
         }
     }
 }

@@ -1,9 +1,12 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::time::Duration;
 
 use serde_json::Value;
+use tokio::time::Instant;
 
+use crate::cancel::CancelToken;
 use crate::error::NodeError;
 use crate::event::EventSink;
 use crate::state::{State, Update};
@@ -13,8 +16,8 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// Information about the current execution, passed to every node.
 ///
-/// Fields are read through methods so new ones (cancellation, deadline,
-/// memo) can be added without breaking node code.
+/// Fields are read through methods so new ones (such as the task memo) can be
+/// added without breaking node code.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct NodeContext {
@@ -24,6 +27,8 @@ pub struct NodeContext {
     pub(crate) attempt: u32,
     pub(crate) resume: Option<Value>,
     pub(crate) events: EventSink,
+    pub(crate) cancel: CancelToken,
+    pub(crate) deadline: Option<Instant>,
 }
 
 impl NodeContext {
@@ -63,6 +68,21 @@ impl NodeContext {
     /// blocks.
     pub fn events(&self) -> &EventSink {
         &self.events
+    }
+
+    /// Fires when this execution should stop: the run was cancelled or hit its
+    /// deadline, this attempt timed out, or a sibling node failed. Rust nodes
+    /// are also dropped, so watching it is optional; use it to stop work that
+    /// runs outside the node's future (threads, child processes).
+    pub fn cancel_token(&self) -> &CancelToken {
+        &self.cancel
+    }
+
+    /// Time left before the run's deadline or this attempt's timeout,
+    /// whichever comes first. `None` if neither is set.
+    pub fn remaining_time(&self) -> Option<Duration> {
+        self.deadline
+            .map(|deadline| deadline.saturating_duration_since(Instant::now()))
     }
 }
 

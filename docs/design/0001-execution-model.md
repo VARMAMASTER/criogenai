@@ -2,8 +2,8 @@
 
 Status: **Implemented** in `crates/agentbuild-core`. Pre-1.0; may change.
 Extended by [0005](0005-core-runtime-extensions.md) §1–§3 (node context,
-node outcomes, reducers, suspend/resume) and §6 (events), which are
-implemented and described below.
+node outcomes, reducers, suspend/resume), §4 (policies) and §6 (events),
+which are implemented and described below.
 
 This is the contract the Python and TypeScript SDKs will build on. Anything
 not described here is unspecified.
@@ -85,6 +85,9 @@ edges, routes, `may_goto`, joins and reducers), not of node implementations.
 | `missing_goto`        | a goto-only node returned no target            |
 | `resume_invalid`      | bad resume input or snapshot format            |
 | `workflow_mismatch`   | snapshot from a workflow with another fingerprint |
+| `node_timeout`        | a node attempt exceeded its policy's timeout   |
+| `deadline_exceeded`   | the run's deadline passed                      |
+| `cancelled`           | the run's cancel token fired                   |
 
 Every `RunError` has `code`, `step` (zero-based index of the failing step),
 and `state`. `NodeError` is language-neutral: `message`, optional `kind`
@@ -112,6 +115,24 @@ In short:
 - No event is lost while the subscriber is connected. Emitting never blocks
   a node; a slow subscriber slows the run only at step boundaries.
 - Observing a run never changes its result.
+
+### Policies: timeouts, retries, deadlines, cancellation
+
+Details in [0005 §4](0005-core-runtime-extensions.md#4-policies). In short:
+
+- `builder.policy(node, NodePolicy::new().timeout(..).retry(..))`. The
+  timeout applies to **each attempt** (`node_timeout`). Retries happen only for
+  errors marked `NodeError::retryable()`, with exponential backoff and full
+  jitter. Timeouts and panics are never retried.
+- `RunOptions::deadline(d)` bounds a whole `run`/`resume` call, including
+  backoff (`deadline_exceeded`). A backoff that would cross the deadline fails
+  at once.
+- `RunOptions::cancel_token(t)` plus `t.cancel()`, or `RunStream::cancel()`:
+  in-flight nodes see `ctx.cancel_token()` fire and get `cancel_grace`
+  (default 5 s) to return. Their results are discarded, then they are
+  dropped. The run fails with `cancelled`.
+- In every case the interrupted step commits nothing; earlier steps stay
+  committed.
 
 ## State
 
@@ -173,7 +194,6 @@ JavaScript function cannot be called synchronously from a Tokio worker thread.
 
 ## Not yet implemented
 
-Designed in 0005–0008 but not yet built: message-delta events, per-node
-retries and timeouts, deadlines, explicit cancellation tokens, the task memo and saved
+Designed in 0005–0008 but not yet built: message-delta events, the task memo and saved
 task writes, snapshots attached to failures, persistence backends, dynamic
 fan-out (`Send`) and subgraphs.

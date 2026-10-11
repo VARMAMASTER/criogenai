@@ -1,17 +1,23 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
+use std::future::{Future, poll_fn};
+use std::pin::pin;
 use std::sync::Arc;
-use std::time::Instant;
+use std::task::Poll;
+use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::task::{JoinHandle, JoinSet};
+use tokio::time::Instant;
 
-use crate::error::{RunError, RunErrorKind};
+use crate::cancel::CancelToken;
+use crate::error::{NodeError, RunError, RunErrorKind};
 use crate::event::{
     Event, EventKind, EventReceiver, EventSender, EventSink, Hub, Scope, event_channel,
 };
 use crate::graph::{Graph, Outgoing, Target, Workflow};
-use crate::node::{NodeContext, NodeOutput};
+use crate::node::{Node, NodeContext, NodeOutput};
+use crate::policy::NodePolicy;
 use crate::reducer;
 use crate::state::State;
 
@@ -29,14 +35,25 @@ pub struct RunOptions {
     /// before the run fails with [`RunErrorKind::StepLimitExceeded`]. Guards
     /// against unbounded cycles.
     pub max_steps: usize,
+    /// Time limit for this `run`/`resume` call, including retries and
+    /// backoff. Exceeding it fails the run with
+    /// [`RunErrorKind::DeadlineExceeded`].
+    pub deadline: Option<Duration>,
+    /// After cancellation, how long in-flight nodes get to return before
+    /// they are dropped. Default 5 s.
+    pub cancel_grace: Duration,
     pub(crate) events: Option<EventSender>,
+    pub(crate) cancel: Option<CancelToken>,
 }
 
 impl Default for RunOptions {
     fn default() -> Self {
         Self {
             max_steps: 64,
+            deadline: None,
+            cancel_grace: Duration::from_secs(5),
             events: None,
+            cancel: None,
         }
     }
 }
@@ -45,6 +62,25 @@ impl RunOptions {
     /// Sets [`max_steps`](Self::max_steps).
     pub fn max_steps(mut self, max_steps: usize) -> Self {
         self.max_steps = max_steps;
+        self
+    }
+
+    /// Sets [`deadline`](Self::deadline).
+    pub fn deadline(mut self, deadline: Duration) -> Self {
+        self.deadline = Some(deadline);
+        self
+    }
+
+    /// Lets the caller cancel the run with `token.cancel()`. The run then
+    /// fails with [`RunErrorKind::Cancelled`].
+    pub fn cancel_token(mut self, token: CancelToken) -> Self {
+        self.cancel = Some(token);
+        self
+    }
+
+    /// Sets [`cancel_grace`](Self::cancel_grace).
+    pub fn cancel_grace(mut self, grace: Duration) -> Self {
+        self.cancel_grace = grace;
         self
     }
 
@@ -151,16 +187,23 @@ pub struct Snapshot {
 /// [`Workflow::stream`].
 ///
 /// Read events with [`next`](Self::next) until it returns `None`, then call
-/// [`finish`](Self::finish) for the result. Dropping a `RunStream` cancels the
-/// run.
+/// [`finish`](Self::finish) for the result. [`cancel`](Self::cancel) stops the
+/// run gracefully; dropping a `RunStream` stops it at once.
 #[derive(Debug)]
 pub struct RunStream {
     events: Option<EventReceiver>,
     handle: Option<JoinHandle<Result<RunOutput, RunError>>>,
+    cancel: CancelToken,
 }
 
 #[allow(clippy::result_large_err)]
 impl RunStream {
+    /// Cancels the run (see [`RunOptions::cancel_token`]). Keep reading
+    /// events, or call [`finish`](Self::finish), to see it end.
+    pub fn cancel(&self) {
+        self.cancel.cancel();
+    }
+
     /// The next event, or `None` after the run's last event
     /// ([`EventKind::RunFinished`]).
     pub async fn next(&mut self) -> Option<Event> {
@@ -244,14 +287,16 @@ impl Workflow {
 
     /// [`stream`](Self::stream) with explicit options. Any event sender
     /// already in `options` is replaced.
-    pub fn stream_with(&self, input: State, options: RunOptions) -> RunStream {
+    pub fn stream_with(&self, input: State, mut options: RunOptions) -> RunStream {
         let (sender, events) = event_channel(STREAM_CAPACITY);
+        let cancel = options.cancel.get_or_insert_with(CancelToken::new).clone();
         let workflow = self.clone();
         let handle =
             tokio::spawn(async move { workflow.run_with(input, options.events(sender)).await });
         RunStream {
             events: Some(events),
             handle: Some(handle),
+            cancel,
         }
     }
 
@@ -364,6 +409,31 @@ struct Run<'g> {
     hub: Option<Arc<Hub>>,
     /// `seq` of this segment's first event.
     first_seq: u64,
+    /// Fires when the caller cancels; parent of every node's token.
+    cancel: CancelToken,
+    deadline: Option<Deadline>,
+    cancel_grace: Duration,
+}
+
+#[derive(Clone, Copy)]
+struct Deadline {
+    at: Instant,
+    limit_ms: u64,
+}
+
+impl Deadline {
+    fn exceeded(self) -> RunErrorKind {
+        RunErrorKind::DeadlineExceeded {
+            deadline_ms: self.limit_ms,
+        }
+    }
+}
+
+/// Why the run had to stop waiting.
+#[derive(Clone, Copy)]
+enum Stop {
+    Cancelled,
+    Deadline,
 }
 
 struct StepOutcome {
@@ -385,6 +455,10 @@ impl<'g> Run<'g> {
             .events
             .clone()
             .map(|sender| Hub::new(run_id.clone(), sender, first_seq));
+        let deadline = options.deadline.map(|limit| Deadline {
+            at: Instant::now() + limit,
+            limit_ms: u64::try_from(limit.as_millis()).unwrap_or(u64::MAX),
+        });
         Self {
             graph,
             run_id,
@@ -392,7 +466,55 @@ impl<'g> Run<'g> {
             join_progress: vec![HashSet::new(); graph.joins.len()],
             hub,
             first_seq,
+            cancel: options.cancel.clone().unwrap_or_default(),
+            deadline,
+            cancel_grace: options.cancel_grace,
         }
+    }
+
+    /// Runs `fut` unless the run is cancelled or its deadline passes first.
+    async fn guard<F: Future>(&self, fut: F) -> Result<F::Output, Stop> {
+        let stop = async {
+            match self.deadline {
+                Some(deadline) => {
+                    match race(
+                        self.cancel.cancelled(),
+                        tokio::time::sleep_until(deadline.at),
+                    )
+                    .await
+                    {
+                        Either::Left(()) => Stop::Cancelled,
+                        Either::Right(()) => Stop::Deadline,
+                    }
+                }
+                None => {
+                    self.cancel.cancelled().await;
+                    Stop::Cancelled
+                }
+            }
+        };
+        match race(stop, fut).await {
+            Either::Left(stop) => Err(stop),
+            Either::Right(output) => Ok(output),
+        }
+    }
+
+    /// The error for a [`Stop`].
+    fn stopped(&self, stop: Stop) -> RunErrorKind {
+        match (stop, self.deadline) {
+            (Stop::Deadline, Some(deadline)) => deadline.exceeded(),
+            _ => RunErrorKind::Cancelled,
+        }
+    }
+
+    /// `Some` if the run must not start another step.
+    fn check_stop(&self) -> Option<RunErrorKind> {
+        if self.cancel.is_cancelled() {
+            return Some(RunErrorKind::Cancelled);
+        }
+        self.deadline
+            .filter(|deadline| Instant::now() >= deadline.at)
+            .map(Deadline::exceeded)
     }
 
     /// Emits an engine event. `kind` is only built if someone is listening.
@@ -433,7 +555,11 @@ impl<'g> Run<'g> {
 
         while !frontier.is_empty() {
             // Step boundary: the only place a slow subscriber holds the run back.
-            self.flush().await;
+            // Cancellation and the deadline still apply while waiting.
+            let _ = self.guard(self.flush()).await;
+            if let Some(kind) = self.check_stop() {
+                return Err(self.fail(step, kind, steps.len()).await);
+            }
             if step >= options.max_steps {
                 let kind = RunErrorKind::StepLimitExceeded {
                     limit: options.max_steps,
@@ -471,7 +597,8 @@ impl<'g> Run<'g> {
             error: None,
             steps: steps.len(),
         });
-        self.flush().await;
+        // Cancellation or the deadline also end the wait for a slow subscriber.
+        let _ = self.guard(self.flush()).await;
         Ok(RunOutput {
             status: RunStatus::Completed,
             run_id: self.run_id.to_string(),
@@ -524,11 +651,13 @@ impl<'g> Run<'g> {
             match &graph.outgoing[id] {
                 Outgoing::Static(targets) => next.extend(targets.iter().filter_map(node_id)),
                 Outgoing::Routed { router, routes } => {
-                    let label = router.route(next_state.clone()).await.map_err(|source| {
-                        RunErrorKind::RouterFailed {
-                            node: node(),
-                            source,
-                        }
+                    let routed = self
+                        .guard(router.route(next_state.clone()))
+                        .await
+                        .map_err(|stop| self.stopped(stop))?;
+                    let label = routed.map_err(|source| RunErrorKind::RouterFailed {
+                        node: node(),
+                        source,
                     })?;
                     match routes.iter().find(|(l, _)| *l == label) {
                         Some((_, target)) => next.extend(node_id(target)),
@@ -599,37 +728,55 @@ impl<'g> Run<'g> {
         frontier: &BTreeSet<usize>,
         resume: &mut HashMap<usize, Value>,
     ) -> Result<Vec<(usize, NodeOutput)>, RunErrorKind> {
+        // Parent of this step's node tokens: fired on any early exit, so
+        // in-flight nodes (and language bridges) learn they must stop.
+        let step_token = self.cancel.child();
         let mut tasks = JoinSet::new();
         let mut task_nodes = HashMap::new();
         let mut started = HashMap::new();
         for &id in frontier {
-            let node: Arc<str> = self.graph.names[id].as_str().into();
-            let ctx = NodeContext {
+            let task = NodeTask {
+                node: self.graph.nodes[id].clone(),
+                state: self.state.clone(),
+                policy: self.graph.policies[id].clone(),
                 run_id: self.run_id.clone(),
                 step,
-                node: node.clone(),
-                attempt: 1,
+                name: self.graph.names[id].as_str().into(),
                 resume: resume.remove(&id),
-                events: EventSink::new(
-                    self.hub.clone(),
-                    Scope {
-                        step: Some(step),
-                        node: Some(node),
-                    },
-                ),
+                hub: self.hub.clone(),
+                cancel: step_token.child(),
+                run_deadline: self.deadline,
             };
             self.emit(Some(step), Some(id), || EventKind::NodeStarted {
                 attempt: 1,
             });
             started.insert(id, Instant::now());
-            let fut = self.graph.nodes[id].run(ctx, self.state.clone());
-            let handle = tasks.spawn(async move { (id, fut.await) });
+            let handle = tasks.spawn(async move { (id, task.execute().await) });
             task_nodes.insert(handle.id(), id);
         }
         let elapsed_ms = |id: usize| started[&id].elapsed().as_secs_f64() * 1000.0;
 
         let mut outputs = Vec::with_capacity(frontier.len());
-        while let Some(joined) = tasks.join_next().await {
+        loop {
+            let joined = match self.guard(tasks.join_next()).await {
+                Ok(Some(joined)) => joined,
+                Ok(None) => break,
+                Err(stop) => {
+                    step_token.cancel();
+                    let reason = match stop {
+                        Stop::Cancelled => {
+                            // Grace period: nodes may finish cleaning up.
+                            // Their results are discarded either way.
+                            let drain = async { while tasks.join_next().await.is_some() {} };
+                            let _ = tokio::time::timeout(self.cancel_grace, drain).await;
+                            "run_cancelled"
+                        }
+                        Stop::Deadline => "deadline_exceeded",
+                    };
+                    self.emit_cancelled(step, frontier, &outputs, None, reason);
+                    return Err(self.stopped(stop));
+                }
+            };
             let (id, failure) = match joined {
                 Ok((id, Ok(output))) => {
                     self.emit(Some(step), Some(id), || {
@@ -644,13 +791,18 @@ impl<'g> Run<'g> {
                     outputs.push((id, output));
                     continue;
                 }
-                Ok((id, Err(source))) => (
-                    id,
-                    RunErrorKind::NodeFailed {
-                        node: self.graph.names[id].clone(),
-                        source,
-                    },
-                ),
+                Ok((id, Err(failure))) => {
+                    let node = self.graph.names[id].clone();
+                    let kind = match failure {
+                        Failure::Error(source) => RunErrorKind::NodeFailed { node, source },
+                        Failure::Timeout(timeout_ms) => {
+                            RunErrorKind::NodeTimeout { node, timeout_ms }
+                        }
+                        Failure::Deadline => self.stopped(Stop::Deadline),
+                        Failure::Cancelled => RunErrorKind::Cancelled,
+                    };
+                    (id, kind)
+                }
                 Err(err) => {
                     let id = task_nodes[&err.id()];
                     let message = if err.is_panic() {
@@ -664,6 +816,7 @@ impl<'g> Run<'g> {
             };
 
             // Fail fast: the remaining nodes are aborted when `tasks` drops.
+            step_token.cancel();
             self.emit(Some(step), Some(id), || EventKind::NodeFailed {
                 duration_ms: elapsed_ms(id),
                 code: failure.code().to_string(),
@@ -673,18 +826,30 @@ impl<'g> Run<'g> {
                     other => other.to_string(),
                 },
             });
-            let finished: HashSet<usize> = outputs.iter().map(|(id, _)| *id).collect();
-            for &other in frontier {
-                if other != id && !finished.contains(&other) {
-                    self.emit(Some(step), Some(other), || EventKind::NodeCancelled {
-                        reason: "sibling_failed".into(),
-                    });
-                }
-            }
+            self.emit_cancelled(step, frontier, &outputs, Some(id), "sibling_failed");
             return Err(failure);
         }
         outputs.sort_by_key(|(id, _)| *id);
         Ok(outputs)
+    }
+
+    /// `node_cancelled` for every node in `frontier` that neither finished
+    /// nor is `failed`.
+    fn emit_cancelled(
+        &self,
+        step: usize,
+        frontier: &BTreeSet<usize>,
+        finished: &[(usize, NodeOutput)],
+        failed: Option<usize>,
+        reason: &str,
+    ) {
+        for &id in frontier {
+            if Some(id) != failed && !finished.iter().any(|(done, _)| *done == id) {
+                self.emit(Some(step), Some(id), || EventKind::NodeCancelled {
+                    reason: reason.into(),
+                });
+            }
+        }
     }
 
     async fn suspend(
@@ -726,7 +891,7 @@ impl<'g> Run<'g> {
             error: None,
             steps: steps.len(),
         });
-        self.flush().await;
+        let _ = self.guard(self.flush()).await;
         let event_seq = self
             .hub
             .as_ref()
@@ -761,7 +926,15 @@ impl<'g> Run<'g> {
             error: Some(kind.code().to_string()),
             steps,
         });
-        self.flush().await;
+        if matches!(
+            kind,
+            RunErrorKind::Cancelled | RunErrorKind::DeadlineExceeded { .. }
+        ) {
+            // The run is stopping: give a slow subscriber the grace period, no more.
+            let _ = tokio::time::timeout(self.cancel_grace, self.flush()).await;
+        } else {
+            self.flush().await;
+        }
         RunError {
             kind,
             step,
@@ -778,6 +951,129 @@ fn summarize(output: &NodeOutput) -> (Vec<String>, Vec<String>, bool) {
         NodeOutput::Command { update, goto } => (keys(update), goto.clone(), false),
         NodeOutput::Suspend { update, .. } => (keys(update), Vec::new(), true),
     }
+}
+
+/// Why a node execution ended without output.
+enum Failure {
+    Error(NodeError),
+    Timeout(u64),
+    /// The next retry would start after the run deadline.
+    Deadline,
+    Cancelled,
+}
+
+/// One node's execution within a step, including its retries.
+struct NodeTask {
+    node: Arc<dyn Node>,
+    state: Arc<State>,
+    policy: NodePolicy,
+    run_id: Arc<str>,
+    step: usize,
+    name: Arc<str>,
+    resume: Option<Value>,
+    hub: Option<Arc<Hub>>,
+    cancel: CancelToken,
+    run_deadline: Option<Deadline>,
+}
+
+impl NodeTask {
+    fn scope(&self) -> Scope {
+        Scope {
+            step: Some(self.step),
+            node: Some(self.name.clone()),
+        }
+    }
+
+    fn emit(&self, kind: impl FnOnce() -> EventKind) {
+        if let Some(hub) = &self.hub
+            && hub.is_enabled()
+        {
+            hub.emit(&self.scope(), "internal", kind());
+        }
+    }
+
+    async fn execute(self) -> Result<NodeOutput, Failure> {
+        let task_id = format!("{}:{}:{}", self.run_id, self.step, self.name);
+        let mut attempt = 1;
+        loop {
+            if attempt > 1 {
+                self.emit(|| EventKind::NodeStarted { attempt });
+            }
+            let attempt_end = self
+                .policy
+                .timeout_ms
+                .map(|ms| Instant::now() + Duration::from_millis(ms));
+            let run_end = self.run_deadline.map(|deadline| deadline.at);
+            let ctx = NodeContext {
+                run_id: self.run_id.clone(),
+                step: self.step,
+                node: self.name.clone(),
+                attempt,
+                resume: self.resume.clone(),
+                events: EventSink::new(self.hub.clone(), self.scope()),
+                cancel: self.cancel.clone(),
+                deadline: match (attempt_end, run_end) {
+                    (Some(a), Some(b)) => Some(a.min(b)),
+                    (a, b) => a.or(b),
+                },
+            };
+            let fut = self.node.run(ctx, self.state.clone());
+            let result = match (attempt_end, self.policy.timeout_ms) {
+                (Some(end), Some(ms)) => match tokio::time::timeout_at(end, fut).await {
+                    Ok(result) => result,
+                    // `run_nodes` fires this node's token (via the step token).
+                    Err(_) => return Err(Failure::Timeout(ms)),
+                },
+                _ => fut.await,
+            };
+            let error = match result {
+                Ok(output) => return Ok(output),
+                Err(error) => error,
+            };
+
+            let retry = self.policy.retry.as_ref();
+            let Some(retry) = retry.filter(|r| error.retryable && attempt < r.max_attempts) else {
+                return Err(Failure::Error(error));
+            };
+            let delay = retry.delay(attempt, &task_id);
+            if run_end.is_some_and(|end| Instant::now() + delay >= end) {
+                return Err(Failure::Deadline);
+            }
+            self.emit(|| EventKind::AttemptFailed {
+                attempt,
+                code: "node_failed".into(),
+                message: error.to_string(),
+                retry_in_ms: u64::try_from(delay.as_millis()).unwrap_or(u64::MAX),
+            });
+            if let Either::Left(()) = race(self.cancel.cancelled(), tokio::time::sleep(delay)).await
+            {
+                return Err(Failure::Cancelled);
+            }
+            attempt += 1;
+        }
+    }
+}
+
+enum Either<A, B> {
+    Left(A),
+    Right(B),
+}
+
+/// Waits for whichever future finishes first, preferring `a` when both are
+/// ready. (A two-way `select!` without tokio's `macros` feature.)
+async fn race<A: Future, B: Future>(a: A, b: B) -> Either<A::Output, B::Output> {
+    let mut a = pin!(a);
+    let mut b = pin!(b);
+    poll_fn(|cx| {
+        if let Poll::Ready(out) = a.as_mut().poll(cx) {
+            return Poll::Ready(Either::Left(out));
+        }
+        if let Poll::Ready(out) = b.as_mut().poll(cx) {
+            return Poll::Ready(Either::Right(out));
+        }
+        Poll::Pending
+    })
+    .await
 }
 
 fn into_state(state: Arc<State>) -> State {

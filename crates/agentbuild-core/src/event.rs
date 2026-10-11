@@ -77,18 +77,30 @@ pub enum EventKind {
         /// `true` if it returned `Suspend`.
         suspended: bool,
     },
-    /// A node returned an error or panicked.
+    /// A node returned an error, panicked or timed out.
     NodeFailed {
         /// Wall time from start to failure.
         duration_ms: f64,
-        /// `node_failed` or `node_panicked`.
+        /// The run error code, e.g. `node_failed`, `node_panicked`,
+        /// `node_timeout`.
         code: String,
         /// The error message.
         message: String,
     },
+    /// A node attempt failed and will be retried (design 0005 §4.2).
+    AttemptFailed {
+        /// The attempt that failed (1-based).
+        attempt: u32,
+        /// Always `node_failed` for now.
+        code: String,
+        /// The error message.
+        message: String,
+        /// Backoff before the next attempt.
+        retry_in_ms: u64,
+    },
     /// A node was stopped before finishing.
     NodeCancelled {
-        /// Why, e.g. `sibling_failed`.
+        /// `sibling_failed`, `run_cancelled` or `deadline_exceeded`.
         reason: String,
     },
     /// A step's updates were committed.
@@ -129,6 +141,7 @@ impl EventKind {
             Self::NodeStarted { .. } => "node_started",
             Self::NodeFinished { .. } => "node_finished",
             Self::NodeFailed { .. } => "node_failed",
+            Self::AttemptFailed { .. } => "attempt_failed",
             Self::NodeCancelled { .. } => "node_cancelled",
             Self::StepCommitted { .. } => "step_committed",
             Self::Suspended { .. } => "suspended",

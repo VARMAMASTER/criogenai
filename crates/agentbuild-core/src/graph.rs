@@ -4,6 +4,7 @@ use std::sync::Arc;
 use crate::END;
 use crate::error::{BuildError, ValidationIssue};
 use crate::node::{Node, Router};
+use crate::policy::NodePolicy;
 use crate::reducer::Reducer;
 
 /// Declares a workflow graph. Call [`build`](Self::build) to validate it.
@@ -19,6 +20,7 @@ pub struct WorkflowBuilder {
     joins: Vec<(Vec<String>, String)>,
     gotos: Vec<(String, Vec<String>)>,
     reducers: Vec<(String, Reducer)>,
+    policies: Vec<(String, NodePolicy)>,
 }
 
 struct RouterDecl {
@@ -110,6 +112,13 @@ impl WorkflowBuilder {
     /// declaration use [`Reducer::Replace`].
     pub fn reducer(&mut self, key: impl Into<String>, reducer: Reducer) -> &mut Self {
         self.reducers.push((key.into(), reducer));
+        self
+    }
+
+    /// Sets how `node` is executed: per-attempt timeout and retries. Nodes
+    /// without a policy run once, with no time limit.
+    pub fn policy(&mut self, node: impl Into<String>, policy: NodePolicy) -> &mut Self {
+        self.policies.push((node.into(), policy));
         self
     }
 
@@ -238,6 +247,25 @@ impl WorkflowBuilder {
             }
         }
 
+        let mut policies = vec![NodePolicy::default(); n];
+        let mut has_policy = HashSet::new();
+        for (node, policy) in &self.policies {
+            if !has_policy.insert(node) {
+                v.issues
+                    .push(ValidationIssue::DuplicatePolicy(node.clone()));
+                continue;
+            }
+            if let Err(reason) = policy.validate() {
+                v.issues.push(ValidationIssue::InvalidPolicy {
+                    node: node.clone(),
+                    reason,
+                });
+            }
+            if let Some(id) = v.node(node, || format!("policy for `{node}`")) {
+                policies[id] = policy.clone();
+            }
+        }
+
         let mut feeds_joins: Vec<Vec<usize>> = vec![Vec::new(); n];
         for (j, join) in joins.iter().enumerate() {
             for &s in &join.sources {
@@ -339,6 +367,7 @@ impl WorkflowBuilder {
             joins,
             feeds_joins,
             reducers,
+            policies,
             fingerprint: String::new(),
         };
         graph.fingerprint = fingerprint(&graph);
@@ -479,6 +508,8 @@ pub(crate) struct Graph {
     /// For each node, the joins it is a source of.
     pub feeds_joins: Vec<Vec<usize>>,
     pub reducers: HashMap<String, Reducer>,
+    /// Per node, in declaration order.
+    pub policies: Vec<NodePolicy>,
     pub fingerprint: String,
 }
 

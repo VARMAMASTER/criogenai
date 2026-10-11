@@ -124,13 +124,15 @@ flowchart LR
     state["state.rs<br/>State, Update"]
     reducer["reducer.rs<br/>Reducer, merge"]
     event["event.rs<br/>Event, channel, Hub"]
+    policy["policy.rs<br/>NodePolicy, RetryPolicy"]
+    cancel["cancel.rs<br/>CancelToken"]
     node["node.rs<br/>Node, Router traits<br/>node_fn, router_fn"]
     graph["graph.rs<br/>WorkflowBuilder → validate → Workflow<br/>internal Graph"]
     runtime["runtime.rs<br/>Run: superstep loop<br/>RunOptions, RunOutput"]
     error["error.rs<br/>NodeError, ValidationIssue,<br/>BuildError, RunError(Kind)"]
 
-    lib --> graph & runtime & state & node & error & reducer & event
-    runtime --> reducer & event
+    lib --> graph & runtime & state & node & error & reducer & event & policy & cancel
+    runtime --> reducer & event & policy & cancel
     graph --> node & error
     runtime --> graph & state & error
     node --> state & error
@@ -147,6 +149,8 @@ flowchart LR
 | `Snapshot` / `RunStatus` | Suspended run as JSON; `Completed` or `Suspended{interrupts, snapshot}` |
 | `Event` / `EventKind` | Lifecycle and custom events with `seq`, scope and `ts_ms` (0005 §6) |
 | `event_channel` / `RunStream` | Subscribe to one run's events; `Workflow::stream` spawns the run and yields events |
+| `NodePolicy` / `RetryPolicy` | Per-node timeout and retry with backoff (0005 §4) |
+| `CancelToken` | Cooperative cancellation with child tokens; `RunOptions::cancel_token`, `ctx.cancel_token()` |
 | `Router` | Object-safe trait: `route(Arc<State>) -> BoxFuture<Result<String, NodeError>>`. Returns a label. |
 | `WorkflowBuilder` | Records nodes, entry, edges, routers and joins. `build()` validates and reports every issue at once. |
 | `Workflow` | Immutable compiled graph behind an `Arc`. Cheap to clone; safe for concurrent runs. |

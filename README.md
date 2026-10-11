@@ -27,6 +27,8 @@ The `agentbuild-core` crate runs workflow graphs:
   JSON snapshot that can be stored anywhere and resumed later
 - **live events**: `workflow.stream(input)` reports run, step and node
   progress as it happens; nodes can emit their own events
+- **reliability policies**: per-node timeouts and retries with backoff, a
+  run deadline, and graceful cancellation
 - concurrent execution of nodes scheduled in the same step
 - graph validation that reports every issue at once
 - structured errors with stable codes; failed steps are rolled back
@@ -43,6 +45,7 @@ cargo test
 cargo run -p agentbuild-core --example basic_workflow -- "Hello world"
 cargo run -p agentbuild-core --example approval_workflow -- yes
 cargo run -p agentbuild-core --example llm_workflow -- "remote work"   # simulated LLM calls, 2–3 s each
+cargo run -p agentbuild-core --example retry_workflow                  # retries and timeouts
 ```
 
 The example is `Input → Transform → Conditional Branch → Output`:
@@ -79,7 +82,7 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 | 2     | Python SDK (PyO3 + maturin)                                   | Planned     |
 | 3     | TypeScript SDK (NAPI-RS)                                      | Planned     |
 | 4     | Agents, tools, model-provider interface                       | Planned     |
-| 5     | Retries/timeouts, checkpoints, persistence (events: done)     | In progress |
+| 5     | Checkpoints, persistence (events, retries/timeouts: done)     | In progress |
 | 6     | Docs, templates, publishing, benchmarks                       | Planned     |
 
 ## Documentation

@@ -25,20 +25,24 @@
 //! # });
 //! ```
 
+mod cancel;
 mod error;
 mod event;
 mod graph;
 mod node;
+mod policy;
 mod reducer;
 mod runtime;
 mod state;
 
+pub use cancel::CancelToken;
 pub use error::{BuildError, NodeError, NotAnObject, RunError, RunErrorKind, ValidationIssue};
 pub use event::{Event, EventKind, EventReceiver, EventSender, EventSink, event_channel};
 pub use graph::{Workflow, WorkflowBuilder};
 pub use node::{
     BoxFuture, Node, NodeContext, NodeOutput, Router, node_fn, node_with_context, router_fn,
 };
+pub use policy::{NodePolicy, RetryPolicy};
 pub use reducer::Reducer;
 pub use runtime::{
     Interrupt, RunOptions, RunOutput, RunStatus, RunStream, SNAPSHOT_FORMAT, Snapshot, StepRecord,
