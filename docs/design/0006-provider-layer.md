@@ -2,8 +2,20 @@
 
 Status: **Approved; foundation in progress.** Built so far in
 `crates/agentbuild-providers`: the 0002 types, `ModelError` and the HTTP
-error classifier (§6), the `Model` trait (§3) and a `FakeModel` for tests.
-Next: SSE parser, stream assembler, HTTP transport, then `openai_chat`.
+error classifier (§6), the `Model` trait (§3), a `FakeModel` for tests, the
+incremental SSE parser and the stream assembler (§5). Next: HTTP transport,
+then `openai_chat`.
+
+Streaming as built: decoders produce `StreamItem`s (`Start`, `Delta{index,
+BlockDelta}`, `BlockEnd`, `Usage`, `Finish`, `Warning`); `BlockDelta` also has
+a `Block` form for blocks that arrive whole (redacted reasoning, provider
+blocks). The `Assembler` returns each delta as a `MessageDelta` (the
+`message_delta` event) and, at the end, the authoritative message plus
+warnings. Tool-call arguments are parsed once, at block end or at finish;
+an open tool call when the finish reason is `length` becomes an
+`invalid_tool_call` with error `truncated`. `Usage` items replace earlier
+values field by field when non-zero. The SSE parser is tested with 2,000
+pseudo-random chunk cuttings (own xorshift, no `proptest` dependency).
 
 `Model::invoke` borrows the request (`&ModelRequest`) instead of taking it
 by value, so retries and fallbacks do not copy the transcript. `stream()`

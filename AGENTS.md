@@ -35,10 +35,11 @@ write our own implementation.
 - **Implemented in `agentbuild-providers` (foundation):** the 0002 types
   (`Message`, `ContentBlock`, `ToolSpec`, `ModelRequest`/`ModelResponse`,
   `Capabilities`), `ModelError` with `classify_http` (0003 §4), transcript
-  check/repair (0002 §6), the `Model` trait and `FakeModel`. No HTTP yet.
-- Tests: 174 across both crates, plus the package test.
-- **Next:** SSE parser and stream assembler, HTTP transport, `openai_chat`
-  protocol (0006 §11), then the agent loop (0004). See `docs/progress.md`.
+  check/repair (0002 §6), the `Model` trait, `FakeModel`, the SSE parser
+  and the stream assembler. No HTTP yet.
+- Tests: 193 across both crates, plus the package test.
+- **Next:** HTTP transport, `openai_chat` protocol (0006 §11), then the
+  agent loop (0004). See `docs/progress.md`.
 - **Not started:** wire protocols and HTTP transport, gateway, Python SDK,
   TypeScript SDK, the agent loop, message-delta events, persistence. Do not
   describe these as existing anywhere.

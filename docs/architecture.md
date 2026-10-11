@@ -189,6 +189,8 @@ Pure data and logic so far; no HTTP. Dependencies: `serde`, `serde_json`,
 | `request.rs` | `ModelRequest`, `ToolChoice`, `OutputSpec`, `Settings`, `Reasoning`, `ModelResponse`, `Capabilities` (0002 §7) |
 | `error.rs` | `ModelError`, `ModelErrorKind`, `Dispatch`, `classify_http`, `sanitize_message` (0003 §4) |
 | `transcript.rs` | `check` / `repair`: every tool call gets exactly one result (0002 §6) |
+| `sse.rs` | `SseParser`: incremental WHATWG SSE parsing, independent of chunk boundaries |
+| `stream.rs` | `StreamItem`, `BlockDelta`, `Assembler` → `message_delta` + final message (0002 §8) |
 | `model.rs` | `Model` trait: `provider`, `model`, `capabilities`, `invoke` |
 | `fake.rs` | `FakeModel`: simulated 2–3 s replies, scripted tool calls, failures |
 

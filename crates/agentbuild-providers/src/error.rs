@@ -187,6 +187,12 @@ impl ModelError {
         self
     }
 
+    /// Sets [`emitted_deltas`](Self::emitted_deltas).
+    pub fn with_emitted(mut self, emitted_deltas: bool) -> Self {
+        self.emitted_deltas = emitted_deltas;
+        self
+    }
+
     /// Sets [`retry_after_ms`](Self::retry_after_ms).
     pub fn with_retry_after(mut self, retry_after: Duration) -> Self {
         self.retry_after_ms = Some(u64::try_from(retry_after.as_millis()).unwrap_or(u64::MAX));

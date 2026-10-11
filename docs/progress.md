@@ -12,9 +12,10 @@ handoff point for whoever continues the work.
    snapshots on failure, events). Package testing in CI.
 3. **Done:** `agentbuild-providers` foundation, part 1: 0002 types, model
    error classification, transcript repair, `Model` trait, `FakeModel`.
-   **Next (part 2):** SSE parser (with random chunk-cut tests), stream
-   assembler (0002 §8), HTTP transport with timeouts and dispatch tracking.
-   Then `openai_chat` (0006 §11 step 2).
+   Part 2 done: SSE parser and stream assembler. **Next:** HTTP transport
+   with timeouts and dispatch tracking (adds reqwest + rustls; see research
+   §10.11), then `openai_chat` (0006 §11 step 2) with golden translation
+   tests and recorded streams.
 4. The agent loop (0004) on top of core + providers, tested with `FakeModel`.
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
@@ -37,6 +38,25 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-11: providers part 2: SSE parser and stream assembler
+
+- `SseParser` (WHATWG): `
+`, ``, `
+` (also split across chunks), BOM
+  (also split), comments, multi-line data, `id` persistence, `retry`,
+  unterminated tail dropped. 2,000 pseudo-random chunk cuttings give
+  identical events.
+- `Assembler`: index-ordered blocks; text/reasoning concatenation (signature
+  appended to the same block); tool-call args parsed once at block end;
+  invalid JSON, non-object args, missing name → `invalid_tool_call`; `length`
+  with an open call → `truncated`; missing/duplicate call ids repaired with
+  warnings; no finish reason → `server` error with `dispatch: streaming` and
+  `emitted_deltas`.
+- Ten mutation checks: 9 caught, 1 equivalent (comment detection; an empty
+  field name is ignored anyway). The CRLF mutant was first missed because an
+  edit script wrote real CR/LF into a Rust literal, which Rust normalizes;
+  the test now uses escapes and catches it.
 
 ### 2026-10-11: `agentbuild-providers` foundation, part 1
 

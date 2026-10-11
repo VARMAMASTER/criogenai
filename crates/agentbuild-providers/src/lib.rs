@@ -6,9 +6,10 @@
 //! trait is what the agent runtime calls; [`FakeModel`] simulates one for
 //! tests.
 //!
-//! **Status:** data types, error classification, transcript repair and the
-//! fake model exist. Wire protocols (OpenAI-compatible, Anthropic), the HTTP
-//! transport and streaming are planned (0006 §11).
+//! **Status:** data types, error classification, transcript repair, the SSE
+//! parser, the stream assembler and the fake model exist. Wire protocols
+//! (OpenAI-compatible, Anthropic) and the HTTP transport are planned
+//! (0006 §11).
 //!
 //! ```
 //! use agentbuild_providers::{FakeModel, Message, Model, ModelRequest};
@@ -36,6 +37,8 @@ mod fake;
 mod message;
 mod model;
 mod request;
+mod sse;
+mod stream;
 mod tool;
 pub mod transcript;
 
@@ -53,6 +56,8 @@ pub use request::{
     Capabilities, ModelRequest, ModelResponse, OutputSpec, OutputStrategy, Reasoning,
     ReasoningEffort, Settings, ToolChoice,
 };
+pub use sse::{SseEvent, SseParser};
+pub use stream::{Assembled, Assembler, BlockDelta, MessageDelta, StreamItem, Warning};
 pub use tool::{
     RESERVED_TOOL_NAMES, ToolAnnotations, ToolIssue, ToolKind, ToolSpec, validate_tools,
 };
