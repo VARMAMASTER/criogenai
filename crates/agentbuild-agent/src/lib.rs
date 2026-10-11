@@ -19,8 +19,12 @@
 //!   turn runs, and [`Agent::resume`] continues with each [`Decision`]
 //!   (approve, edit, reject, respond).
 //!
-//! **Status:** the loop, tools, limits and human approval exist. Structured
-//! output and hooks are designed (0004 §3, §6) but not built.
+//! - [`AgentBuilder::output`] makes the run end with JSON matching a schema,
+//!   through the model's JSON mode or a reserved `final_output` tool;
+//!   invalid answers are sent back with the validation errors.
+//!
+//! **Status:** the loop, tools, limits, human approval and structured
+//! output exist. Hooks are designed (0004 §3) but not built.
 //!
 //! ```
 //! use agentbuild_agent::{Agent, ToolError, tool_fn};
@@ -55,6 +59,7 @@ struct ReadmeDoctests;
 
 mod agent;
 mod approval;
+mod output;
 mod schema;
 mod tool;
 
@@ -65,5 +70,6 @@ pub use agent::{
 pub use approval::{
     APPROVAL_INTERRUPT, Approval, ApprovalRequest, ApprovalRule, Decision, DecisionKind,
 };
+pub use output::FINAL_OUTPUT_TOOL;
 pub use schema::validate as validate_arguments;
 pub use tool::{Tool, ToolContext, ToolError, ToolOutput, tool_fn};

@@ -4,9 +4,34 @@ Status: **Partly implemented** in `crates/agentbuild-agent`: slice 1 (the
 graph of §2, the model node and routing of §4.1–§4.2
 (without hooks and structured output), the tools node of §4.3, the limits
 `model_calls`, `tool_calls`, `tool_calls_per_turn`, `parallel_tool_calls`
-of §5, and the events of §8 that apply) and slice 2 (human approval, §7).
-Not yet: hooks (§3), structured output (§6), `on_limit = "end"`,
+of §5, and the events of §8 that apply), slice 2 (human approval, §7) and
+slice 3 (structured output, §6). Not yet: hooks (§3), `on_limit = "end"`,
 `nesting`, `tokens`, agents as nodes or tools.
+
+Implementation decisions (slice 3, structured output):
+
+- `AgentBuilder::output(schema)` picks `native` when the model declares
+  `native_structured_output: true`, otherwise `tool` (unknown counts as
+  no); `output_with(schema, strategy)` forces one. The schema must be a JSON
+  object (a schema document).
+- Tool strategy: the reserved `final_output` tool is added to every request
+  (`tool_choice` stays `auto`). A schema whose root is not an object is
+  wrapped as `{"value": …}` for the tool and unwrapped in the result. When
+  a turn contains `final_output`, only the first such call counts; every
+  other call of the turn is `skipped` ("the final output was provided in
+  this turn"), valid or not, so nothing runs after the model declared it
+  is done. Valid → stop reason `output`; invalid → an `invalid_arguments`
+  error result with the validation messages, back to the model.
+- Native strategy: `ModelRequest.output` carries the schema; the answer
+  text is parsed (a surrounding Markdown code fence is removed) and
+  validated. Invalid → a user message with the problems, back to the model
+  (the model node routes to itself).
+- A plain-text answer under the tool strategy gets the reminder "Give your
+  final answer by calling the `final_output` tool."
+- Each invalid answer or reminder counts against `Limits::output_retries`
+  (default 2); one more fails the run with `output_invalid`, details
+  `{problem, raw}`. The step limit grows by `2 × output_retries`.
+- `final_output` is never gated by approval rules (it is not a user tool).
 
 Implementation decisions (slice 2, approval):
 

@@ -11,8 +11,9 @@ use agentbuild_core::{
     WorkflowBuilder,
 };
 use agentbuild_providers::{
-    ContentBlock, FinishReason, Message, MessageDelta, Model, ModelError, ModelRequest, Role,
-    ToolIssue, ToolResultError, ToolSpec, ToolStatus, Usage, transcript, validate_tools,
+    ContentBlock, FinishReason, Message, MessageDelta, Model, ModelError, ModelRequest, OutputSpec,
+    OutputStrategy, Role, ToolIssue, ToolResultError, ToolSpec, ToolStatus, Usage, transcript,
+    validate_tools,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
@@ -20,6 +21,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::approval::{APPROVAL_INTERRUPT, Approval, ApprovalRequest, Decision, check_decisions};
+use crate::output::{FINAL_OUTPUT_TOOL, OutputConfig};
 use crate::schema;
 use crate::tool::{Tool, ToolContext, ToolOutput};
 
@@ -49,6 +51,9 @@ pub struct Limits {
     pub parallel_tool_calls: usize,
     /// Time limit per tool call when the tool sets none. Default 60 s.
     pub tool_timeout: Duration,
+    /// Invalid structured-output answers tolerated before the run fails
+    /// with `output_invalid`. Default 2.
+    pub output_retries: u32,
 }
 
 impl Default for Limits {
@@ -59,6 +64,7 @@ impl Default for Limits {
             tool_calls_per_turn: 32,
             parallel_tool_calls: 8,
             tool_timeout: Duration::from_secs(60),
+            output_retries: 2,
         }
     }
 }
@@ -88,6 +94,12 @@ impl Limits {
         self
     }
 
+    /// Sets [`output_retries`](Self::output_retries).
+    pub fn output_retries(mut self, n: u32) -> Self {
+        self.output_retries = n;
+        self
+    }
+
     /// Sets [`tool_timeout`](Self::tool_timeout).
     pub fn tool_timeout(mut self, timeout: Duration) -> Self {
         self.tool_timeout = timeout;
@@ -97,7 +109,7 @@ impl Limits {
     /// The core step limit that fits `model_calls`: each model call and each
     /// tools round is one step.
     pub fn max_steps(&self) -> usize {
-        2 * self.model_calls as usize + 4
+        2 * self.model_calls as usize + 2 * self.output_retries as usize + 4
     }
 }
 
@@ -112,6 +124,8 @@ pub enum StopReason {
     ReturnDirect,
     /// The model declined to answer (`finish_reason: content_filter`).
     ContentFilter,
+    /// Structured output was accepted; it is the output.
+    Output,
 }
 
 /// Run bookkeeping, stored under [`AGENT`].
@@ -129,6 +143,13 @@ struct Bookkeeping {
     /// consumed by the next tools step.
     #[serde(skip_serializing_if = "BTreeMap::is_empty")]
     decisions: BTreeMap<String, Decision>,
+    /// Invalid structured-output answers so far.
+    #[serde(skip_serializing_if = "is_zero")]
+    output_retries: u32,
+}
+
+fn is_zero(n: &u32) -> bool {
+    *n == 0
 }
 
 /// A problem found when building an agent.
@@ -141,6 +162,9 @@ pub enum AgentBuildError {
     /// A limit is zero.
     #[error("limit `{0}` must be at least 1")]
     ZeroLimit(&'static str),
+    /// The output schema is not a JSON object.
+    #[error("the output schema must be a JSON Schema object")]
+    OutputSchema,
     /// The approval settings are invalid.
     #[error("invalid approval settings: {0}")]
     Approval(String),
@@ -157,6 +181,7 @@ pub struct AgentBuilder {
     limits: Limits,
     model_retry: RetryPolicy,
     approval: Option<Approval>,
+    output: Option<(Value, Option<OutputStrategy>)>,
 }
 
 impl std::fmt::Debug for AgentBuilder {
@@ -209,6 +234,22 @@ impl AgentBuilder {
         self
     }
 
+    /// The run must end with JSON matching `schema` (design 0004 §6). The
+    /// strategy follows the model's capabilities: its native JSON mode when
+    /// declared, otherwise a reserved `final_output` tool. Invalid answers
+    /// are sent back with the validation errors, up to
+    /// [`Limits::output_retries`] times.
+    pub fn output(mut self, schema: Value) -> Self {
+        self.output = Some((schema, None));
+        self
+    }
+
+    /// [`output`](Self::output) with a fixed strategy.
+    pub fn output_with(mut self, schema: Value, strategy: OutputStrategy) -> Self {
+        self.output = Some((schema, Some(strategy)));
+        self
+    }
+
     /// Requires a person to approve some tool calls before they run
     /// (design 0004 §7). The run suspends with the requests; continue it
     /// with [`Agent::resume`].
@@ -230,6 +271,20 @@ impl AgentBuilder {
             .map(|s| (s.name.clone(), s.input_schema.clone()))
             .collect();
         let approval = self.approval.map(Arc::new);
+        let output = match self.output {
+            None => None,
+            Some((schema, _)) if !schema.is_object() => return Err(AgentBuildError::OutputSchema),
+            Some((schema, strategy)) => {
+                let strategy = strategy.unwrap_or(
+                    if self.model.capabilities().native_structured_output == Some(true) {
+                        OutputStrategy::Native
+                    } else {
+                        OutputStrategy::Tool
+                    },
+                );
+                Some(Arc::new(OutputConfig::new(schema, strategy)))
+            }
+        };
         let limits = self.limits;
         for (name, value) in [
             ("model_calls", limits.model_calls as usize),
@@ -253,10 +308,12 @@ impl AgentBuilder {
             specs,
             limits: limits.clone(),
             approval: approval.clone(),
+            output: output.clone(),
         }));
         let tools_node = ToolsNode(Arc::new(ToolsInner {
             tools,
             limits: limits.clone(),
+            output,
         }));
 
         let mut builder = WorkflowBuilder::new();
@@ -278,12 +335,12 @@ impl AgentBuilder {
                             schemas: schemas.clone(),
                         })),
                     )
-                    .may_goto(MODEL_NODE, [TOOLS_NODE, REVIEW_NODE, END])
+                    .may_goto(MODEL_NODE, [TOOLS_NODE, REVIEW_NODE, MODEL_NODE, END])
                     .may_goto(REVIEW_NODE, [TOOLS_NODE]);
-                3 * limits.model_calls as usize + 4
+                3 * limits.model_calls as usize + 2 * limits.output_retries as usize + 4
             }
             None => {
-                builder.may_goto(MODEL_NODE, [TOOLS_NODE, END]);
+                builder.may_goto(MODEL_NODE, [TOOLS_NODE, MODEL_NODE, END]);
                 limits.max_steps()
             }
         };
@@ -355,6 +412,7 @@ impl Agent {
             limits: Limits::default(),
             model_retry: RetryPolicy::new(),
             approval: None,
+            output: None,
         }
     }
 
@@ -559,6 +617,7 @@ impl AgentError {
                             | "limit_exceeded"
                             | "invalid_state"
                             | "resume_invalid"
+                            | "output_invalid"
                     )
                 ) =>
             {
@@ -654,6 +713,7 @@ struct ModelInner {
     specs: Vec<ToolSpec>,
     limits: Limits,
     approval: Option<Arc<Approval>>,
+    output: Option<Arc<OutputConfig>>,
 }
 
 struct ModelNode(Arc<ModelInner>);
@@ -690,7 +750,19 @@ async fn model_step(
         request_messages.push(Message::system(instructions.clone()).with_id("msg_instructions"));
     }
     request_messages.extend(repaired.messages.iter().cloned());
-    let request = ModelRequest::new(request_messages).with_tools(inner.specs.clone());
+    let mut tools = inner.specs.clone();
+    let mut request_output = None;
+    match inner.output.as_deref() {
+        Some(output) if output.strategy == OutputStrategy::Native => {
+            request_output = Some(
+                OutputSpec::new(output.schema().clone()).with_strategy(OutputStrategy::Native),
+            );
+        }
+        Some(output) => tools.push(output.tool_spec()),
+        None => {}
+    }
+    let mut request = ModelRequest::new(request_messages).with_tools(tools);
+    request.output = request_output;
     if events.is_enabled() {
         // Enough to rebuild the call in a tracing tool (design 0009 §2).
         let tools: Vec<&str> = inner.specs.iter().map(|t| t.name.as_str()).collect();
@@ -740,6 +812,7 @@ async fn model_step(
     book.model_calls += 1;
     book.usage = book.usage.add(&response.usage);
     // Routing after the model (0004 §4.2).
+    let mut reminders = Vec::new();
     let next = if response.finish_reason == FinishReason::ContentFilter {
         book.stop_reason = Some(StopReason::ContentFilter);
         book.output = Some(Value::String(message.text()));
@@ -752,6 +825,32 @@ async fn model_step(
             })
         });
         if gated { REVIEW_NODE } else { TOOLS_NODE }
+    } else if let Some(output) = inner.output.as_deref() {
+        // Rule 5: an answer is due, in the required shape.
+        let problems = match output.strategy {
+            OutputStrategy::Native => match output.accept_text(&message.text()) {
+                Ok(value) => {
+                    book.stop_reason = Some(StopReason::Output);
+                    book.output = Some(value);
+                    None
+                }
+                Err(problems) => Some(format!(
+                    "Your answer does not match the required format: {}. Answer again with only the JSON.",
+                    problems.join("; ")
+                )),
+            },
+            _ => Some(format!(
+                "Give your final answer by calling the `{FINAL_OUTPUT_TOOL}` tool."
+            )),
+        };
+        match problems {
+            None => END,
+            Some(reminder) => {
+                count_output_retry(&mut book, &inner.limits, &reminder, &message.text())?;
+                reminders.push(Message::user(reminder));
+                MODEL_NODE
+            }
+        }
     } else {
         book.stop_reason = Some(StopReason::FinalAnswer);
         book.output = Some(Value::String(message.text()));
@@ -759,12 +858,15 @@ async fn model_step(
     };
 
     let messages_update = if repaired.changes.is_empty() {
-        json!([message])
+        let mut new = vec![message];
+        new.append(&mut reminders);
+        json!(new)
     } else {
         // Repairs can insert results before later messages, which an
         // upsert (append) cannot express: replace the list (repairs are rare).
         let mut all = repaired.messages;
         all.push(message);
+        all.append(&mut reminders);
         json!({"$replace": all})
     };
     Ok(NodeOutput::goto(
@@ -773,6 +875,26 @@ async fn model_step(
             .set(AGENT, to_json(&book)),
         [next],
     ))
+}
+
+/// Counts an invalid structured-output answer; fails with `output_invalid`
+/// once [`Limits::output_retries`] is used up.
+fn count_output_retry(
+    book: &mut Bookkeeping,
+    limits: &Limits,
+    problem: &str,
+    raw: &str,
+) -> Result<(), NodeError> {
+    book.output_retries += 1;
+    if book.output_retries > limits.output_retries {
+        return Err(NodeError::new(format!(
+            "no valid structured output after {} attempt(s): {problem}",
+            book.output_retries
+        ))
+        .with_kind("output_invalid")
+        .with_details(json!({"problem": problem, "raw": raw})));
+    }
+    Ok(())
 }
 
 // ---------- review node ----------
@@ -842,6 +964,7 @@ async fn review_step(
 struct ToolsInner {
     tools: HashMap<String, Arc<dyn Tool>>,
     limits: Limits,
+    output: Option<Arc<OutputConfig>>,
 }
 
 struct ToolsNode(Arc<ToolsInner>);
@@ -922,6 +1045,19 @@ async fn tools_step(
     let mut executed = 0u32;
     let mut available: Vec<&str> = inner.tools.keys().map(String::as_str).collect();
     available.sort_unstable();
+    // Tool strategy: when the model calls `final_output`, that call decides
+    // the turn and every other call is skipped (0004 §4.3, rule 4).
+    let final_call = inner
+        .output
+        .as_deref()
+        .filter(|o| o.strategy != OutputStrategy::Native)
+        .and_then(|_| {
+            assistant
+                .tool_calls()
+                .find(|c| c.name == FINAL_OUTPUT_TOOL)
+                .map(|c| c.id.to_string())
+        });
+    let mut final_output: Option<Result<Value, String>> = None;
 
     for block in &assistant.content {
         let index = results.len();
@@ -948,6 +1084,36 @@ async fn tools_step(
         let args = args.expect("tool call");
         if answered.contains(call_id.as_str()) {
             results.push(None);
+            continue;
+        }
+        if let Some(final_id) = &final_call {
+            let output = inner.output.as_deref().expect("final call implies output");
+            let message = if call_id == final_id {
+                match output.accept_tool_args(&Value::Object(args.clone())) {
+                    Ok(value) => {
+                        final_output = Some(Ok(value));
+                        Message::tool_result(
+                            call_id,
+                            name,
+                            ToolStatus::Success,
+                            vec![ContentBlock::text("Final output accepted.")],
+                        )
+                        .with_id(result_id(call_id))
+                    }
+                    Err(problems) => {
+                        let problem = format!("Invalid final output: {}", problems.join("; "));
+                        final_output = Some(Err(problem.clone()));
+                        error_result(call_id, name, "invalid_arguments", problem)
+                    }
+                }
+            } else {
+                skipped_result(
+                    call_id,
+                    name,
+                    "the final output was provided in this turn".to_string(),
+                )
+            };
+            results.push(Some(message));
             continue;
         }
         // A reviewer's decision (0004 §7.2) comes before anything else.
@@ -1180,7 +1346,24 @@ async fn tools_step(
     let results: Vec<Message> = results.into_iter().flatten().collect();
     book.tool_calls += executed;
     book.decisions.clear();
-    let next = if direct_outputs.is_empty() {
+    let next = if let Some(final_output) = final_output {
+        match final_output {
+            Ok(value) => {
+                book.stop_reason = Some(StopReason::Output);
+                book.output = Some(value);
+                END
+            }
+            Err(problem) => {
+                let raw = assistant
+                    .tool_calls()
+                    .find(|c| c.name == FINAL_OUTPUT_TOOL)
+                    .map(|c| Value::Object(c.args.clone()).to_string())
+                    .unwrap_or_default();
+                count_output_retry(&mut book, &inner.limits, &problem, &raw)?;
+                MODEL_NODE
+            }
+        }
+    } else if direct_outputs.is_empty() {
         MODEL_NODE
     } else {
         direct_outputs.sort_by_key(|(index, _)| *index);

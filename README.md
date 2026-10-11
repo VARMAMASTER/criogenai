@@ -53,8 +53,9 @@ The `agentbuild-agent` crate runs agents: a model with tools, as a
 against their schemas, calls run concurrently with limits and timeouts, and a
 failed run can be retried without repeating tool calls that already ran.
 Tool calls can require a person's approval: the run pauses before anything
-runs, and continues with approve, edit, reject or respond. Structured output
-is next.
+runs, and continues with approve, edit, reject or respond. An agent can be
+required to end with JSON matching a schema (structured output), with
+invalid answers sent back to the model to fix.
 
 The `agentbuild-telemetry` crate sends every run to
 [Langfuse](https://langfuse.com) or any OpenTelemetry backend: runs are

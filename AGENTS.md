@@ -44,20 +44,20 @@ write our own implementation.
   `model` ⇄ `tools` workflow, Rust tools (`tool_fn`), argument validation,
   concurrent calls in call order, timeouts, limits, model retries, events,
   memo-backed `Agent::retry`; slice 2: human approval (`Approval`,
-  `review` node, `Agent::resume` with `Decision`s).
+  `review` node, `Agent::resume` with `Decision`s); slice 3: structured
+  output (`AgentBuilder::output`, native or `final_output` tool).
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 283 across the four crates, plus the package test.
-- **Next:** agent slice 3, structured output (0004 §6); then hooks (§3),
-  remaining limits, model fallback and `Retry-After`, agents as nodes and
-  tools; `anthropic_messages`. See `docs/progress.md`. The user will build their
+- Tests: 295 across the four crates, plus the package test.
+- **Next:** agent hooks (0004 §3); then remaining limits, model fallback
+  and `Retry-After`, agents as nodes and tools; `anthropic_messages`. See `docs/progress.md`. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
 - **Not started:** the Anthropic protocol, gateway, Python SDK,
-  TypeScript SDK, agent structured output/hooks, persistence. Do not
+  TypeScript SDK, agent hooks, persistence. Do not
   describe these as existing anywhere.
 
 ## Commands

@@ -14,9 +14,9 @@ handoff point for whoever continues the work.
    error classification, transcript repair, `Model` trait, `FakeModel`.
    Parts 2–4 done: SSE parser, stream assembler, HTTP transport,
    `openai_chat` + `ProviderModel` + presets.
-4. **Done:** agent slices 1–2 (loop, tools, approval); observability and
-   Langfuse (`agentbuild-telemetry`, 0009). **Next (agent list, in order):**
-   structured output (§6) → hooks (§3) → remaining limits (`on_limit=end`,
+4. **Done:** agent slices 1–3 (loop, tools, approval, structured output);
+   observability and Langfuse (`agentbuild-telemetry`, 0009). **Next
+   (agent list, in order):** hooks (§3) → remaining limits (`on_limit=end`,
    tokens, nesting) → model resilience (`Retry-After`, fallback models) →
    agents as workflow nodes and as tools → tool features (per-tool
    concurrency, safe retries, result truncation, state updates, app
@@ -42,6 +42,20 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-11: agent slice 3: structured output (0004 §6)
+
+- `AgentBuilder::output(schema)` / `output_with(schema, strategy)`;
+  `Limits::output_retries` (2); `StopReason::Output`; error
+  `output_invalid`; `FINAL_OUTPUT_TOOL`.
+- Tool strategy (default unless the model declares native JSON mode),
+  non-object schemas wrapped as `{"value": …}`; other calls in the final
+  turn skipped; plain-text answers get a reminder. Native strategy parses
+  the answer (code fences removed).
+- 9 integration tests, 3 unit tests. Eight mutation checks: seven caught;
+  the eighth did not apply (rustfmt had re-wrapped the line) and its
+  behaviour is asserted directly by
+  `non_object_schemas_are_wrapped_for_the_tool`.
 
 ### 2026-10-11: agent slice 2: human approval (0004 §7)
 

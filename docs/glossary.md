@@ -90,6 +90,7 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Limits** | Bounds on model calls, tool calls (per run and per turn), parallel calls, tool timeout. | `Limits` |
 | **Stop reason** | Why a run ended normally: `final_answer`, `return_direct`, `content_filter`. | `StopReason` |
 | **Return direct** | A tool whose successful result ends the run and becomes the output. | `ToolSpec::return_direct` |
+| **Structured output** | The run must end with JSON matching a schema: through the model's JSON mode (`native`) or the reserved `final_output` tool (`tool`); invalid answers go back to the model, up to `output_retries`. | `AgentBuilder::output`, `FINAL_OUTPUT_TOOL`, stop reason `output`, error `output_invalid` |
 | **Agent result / error** | The transcript, output, usage and counts; or a coded failure (`model_failed`, `tool_failed`, `limit_exceeded`) with a snapshot to retry. | `AgentResult`, `AgentError` |
 | **Hook / middleware** *(planned)* | Code that wraps model calls or tool calls (e.g. summarization, approval). | |
 | **Approval / review** | A person approving tool calls before they run; the `review` node suspends the run with the requests. | `Approval`, `ApprovalRule`, node `review` |
