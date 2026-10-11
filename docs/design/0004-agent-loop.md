@@ -9,6 +9,13 @@ slice 3 (structured output, §6), slice 4 (hooks, §3) and slice 5 (the
 remaining limits of §5 except `nesting`). Not yet: `nesting` (comes with
 agents as tools), agents as nodes or tools.
 
+Implementation decisions (slice 9, streaming): `agent.stream(input)` /
+`stream_with(input, options)` spawn the run (same code path as `run`, so
+hooks, limits and approval behave identically) and return an
+`AgentStream`: `next()` yields `AgentEvent::{Text, ToolCallStarted,
+ToolCallFinished, Message, ApprovalNeeded, Other}`, `cancel()`,
+`finish()` → the `AgentResult`. Dropping the stream aborts the run.
+
 Implementation decisions (slice 8, tool features, 0002 §3–§5):
 
 - `ToolSpec.max_concurrency`: a per-tool semaphore (FIFO) inside the run's

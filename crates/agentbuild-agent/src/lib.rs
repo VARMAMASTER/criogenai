@@ -27,8 +27,10 @@
 //!   `wrap_model`, `after_model`, `wrap_tool`, `on_end`) without changing
 //!   the graph.
 //!
-//! **Status:** the loop, tools, limits, human approval, structured output
-//! and hooks exist (design 0004).
+//! - [`Agent::stream`] gives a UI typed [`AgentEvent`]s as they happen.
+//!
+//! **Status:** everything in design 0004 is built, except per-run app
+//! context and forwarding nested agents' events (planned with the SDKs).
 //!
 //! ```
 //! use agentbuild_agent::{Agent, ToolError, tool_fn};
@@ -68,6 +70,7 @@ mod nested;
 mod output;
 mod resilience;
 mod schema;
+mod stream;
 mod tool;
 
 pub use agent::{
@@ -83,4 +86,5 @@ pub use hooks::{
 pub use nested::{AGENT_APPROVAL_INTERRUPT, AgentNode, AgentTool};
 pub use output::FINAL_OUTPUT_TOOL;
 pub use schema::validate as validate_arguments;
+pub use stream::{AgentEvent, AgentStream};
 pub use tool::{Tool, ToolContext, ToolError, ToolOutput, tool_fn};

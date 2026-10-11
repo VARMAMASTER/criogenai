@@ -96,6 +96,7 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Artifact / truncation** | App-only data kept in a tool message (never sent to the model); oversized results are cut and kept whole in the artifact. | `ToolOutput::with_artifact`, `max_result_chars`, `metadata.truncated` |
 | **Tool state update** | A tool changing agent state; parallel writes are merged in call order (lists joined). | `ToolOutput::with_state` |
 | **App context** | Shared services (database, clients) for tools. | `AgentBuilder::context`, `ToolContext::context::<T>()` |
+| **Agent stream** | A run in the background with typed events for a UI (text pieces, tool calls, messages, approval needed). | `Agent::stream`, `AgentStream`, `AgentEvent` |
 | **Return direct** | A tool whose successful result ends the run and becomes the output. | `ToolSpec::return_direct` |
 | **Structured output** | The run must end with JSON matching a schema: through the model's JSON mode (`native`) or the reserved `final_output` tool (`tool`); invalid answers go back to the model, up to `output_retries`. | `AgentBuilder::output`, `FINAL_OUTPUT_TOOL`, stop reason `output`, error `output_invalid` |
 | **Agent result / error** | The transcript, output, usage and counts; or a coded failure (`model_failed`, `tool_failed`, `limit_exceeded`) with a snapshot to retry. | `AgentResult`, `AgentError` |

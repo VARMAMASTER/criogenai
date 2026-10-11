@@ -421,7 +421,15 @@ async fn agents_as_nodes_and_tools() {
     .tool(sub.as_tool("ask_sub", "Ask the sub-agent"))
     .build()
     .unwrap();
-    let result = lead.run("go").await.expect("lead agent");
+    let mut stream = lead.stream("go");
+    let mut texts = Vec::new();
+    while let Some(event) = stream.next().await {
+        if let agentbuild_agent::AgentEvent::Text { text, .. } = event {
+            texts.push(text);
+        }
+    }
+    let result = stream.finish().await.expect("lead agent");
     assert_eq!(result.text(), Some("lead-answer"));
+    assert_eq!(texts, ["lead-answer"]);
     println!("  agents as workflow nodes and as tools: ok");
 }

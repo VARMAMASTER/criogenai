@@ -14,12 +14,12 @@ handoff point for whoever continues the work.
    error classification, transcript repair, `Model` trait, `FakeModel`.
    Parts 2–4 done: SSE parser, stream assembler, HTTP transport,
    `openai_chat` + `ProviderModel` + presets.
-4. **Done:** agent slices 1–4 (loop, tools, approval, structured output,
-   hooks); observability and Langfuse (`agentbuild-telemetry`, 0009).
-   Limits, model resilience, agents as nodes/tools done too. **Next
-   (agent list, in order):** tool features (per-tool
-   concurrency, safe retries, result truncation, state updates, app
-   context) → `agent.stream()`. Then `anthropic_messages`.
+4. **Done:** the whole agent list of 0004 (loop, tools, approval,
+   structured output, hooks, limits, model resilience, agents as nodes and
+   tools, tool features, `agent.stream()`); observability and Langfuse
+   (`agentbuild-telemetry`, 0009). **Next:** `anthropic_messages` (0006 §11
+   step 3), then persistence (0008: in-memory → SQLite → Postgres,
+   threads, memory store).
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
    install the built wheel in a clean venv.
@@ -41,6 +41,15 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-12: agent slice 9: `agent.stream()`; the agent list is complete
+
+- `AgentStream` / `AgentEvent` (text pieces, tool calls, messages,
+  approval needed, other events); `finish()` gives the `AgentResult`.
+- 4 tests, three mutation checks (all caught); package consumer streams.
+- All of design 0004's agent tasks are built. Remaining gaps recorded in
+  0004: per-run app context and nested agents' events in the parent's
+  stream/trace (both with the SDKs).
 
 ### 2026-10-12: agent slice 8: tool features
 

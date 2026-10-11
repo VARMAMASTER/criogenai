@@ -59,7 +59,8 @@ invalid answers sent back to the model to fix. Hooks run code around every
 model call and tool call (summaries, guardrails, caching, retries) without
 changing the graph. Model calls retry with the provider's requested wait
 and can fall back to other models. An agent can be one node of a larger
-workflow, or a tool of another agent.
+workflow, or a tool of another agent, and `agent.stream()` gives a UI the
+answer and tool calls as they happen.
 
 The `agentbuild-telemetry` crate sends every run to
 [Langfuse](https://langfuse.com) or any OpenTelemetry backend: runs are
