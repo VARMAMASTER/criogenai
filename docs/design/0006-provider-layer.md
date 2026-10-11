@@ -3,8 +3,20 @@
 Status: **Approved; foundation in progress.** Built so far in
 `crates/agentbuild-providers`: the 0002 types, `ModelError` and the HTTP
 error classifier (§6), the `Model` trait (§3), a `FakeModel` for tests, the
-incremental SSE parser and the stream assembler (§5). Next: HTTP transport,
-then `openai_chat`.
+incremental SSE parser, the stream assembler (§5) and the HTTP transport.
+Next: `openai_chat` and `ProviderModel`.
+
+Transport as built: `Transport` (reqwest 0.13, rustls with the OS trust
+store via the platform verifier, HTTP/2, `HTTP(S)_PROXY`), behind the default
+feature `http`. `send` returns a whole 2xx body; `open` returns a `Body`
+read chunk by chunk. Timeouts: connect (10 s), first byte (defaults to the
+total), idle between chunks (60 s), total (120 s). Dispatch: connection
+failures (refused, DNS, TLS, connect timeout) are `not_sent`; failures after
+sending are `sent`; failures while reading a 2xx body are `streaming`.
+Non-2xx bodies (up to 64 KB) go through `classify_http`. Error messages are
+built without the URL (it may carry a key) and redacted with the endpoint's
+secrets. Tests use a scripted local TCP server, not `wiremock`, so they can
+stall, trickle and cut responses at exact points.
 
 Streaming as built: decoders produce `StreamItem`s (`Start`, `Delta{index,
 BlockDelta}`, `BlockEnd`, `Usage`, `Finish`, `Warning`); `BlockDelta` also has

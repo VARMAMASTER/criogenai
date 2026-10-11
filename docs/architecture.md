@@ -179,8 +179,9 @@ Target:      Node(NodeId) | End
 
 ### `agentbuild-providers` (foundation implemented)
 
-Pure data and logic so far; no HTTP. Dependencies: `serde`, `serde_json`,
-`thiserror`, `uuid`, `tokio` (`time`, for `FakeModel`).
+Dependencies: `serde`, `serde_json`, `thiserror`, `uuid`, `tokio` (`time`),
+and `reqwest` (rustls, HTTP/2, system proxy) behind the default `http`
+feature. Without `http` the crate is pure data and logic.
 
 | Module | Contents |
 |---|---|
@@ -191,6 +192,7 @@ Pure data and logic so far; no HTTP. Dependencies: `serde`, `serde_json`,
 | `transcript.rs` | `check` / `repair`: every tool call gets exactly one result (0002 §6) |
 | `sse.rs` | `SseParser`: incremental WHATWG SSE parsing, independent of chunk boundaries |
 | `stream.rs` | `StreamItem`, `BlockDelta`, `Assembler` → `message_delta` + final message (0002 §8) |
+| `transport.rs` | `Transport`, `HttpConfig`, `WireRequest`, `Body`: HTTP with connect / first-byte / idle / total timeouts and dispatch tracking (feature `http`) |
 | `model.rs` | `Model` trait: `provider`, `model`, `capabilities`, `invoke` |
 | `fake.rs` | `FakeModel`: simulated 2–3 s replies, scripted tool calls, failures |
 

@@ -23,6 +23,8 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all-targets
       - run: cargo test --doc --workspace
+      - name: providers without the http feature
+        run: cargo test -p agentbuild-providers --no-default-features
 
   msrv:
     runs-on: ubuntu-latest

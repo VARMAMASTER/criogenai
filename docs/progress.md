@@ -12,10 +12,10 @@ handoff point for whoever continues the work.
    snapshots on failure, events). Package testing in CI.
 3. **Done:** `agentbuild-providers` foundation, part 1: 0002 types, model
    error classification, transcript repair, `Model` trait, `FakeModel`.
-   Part 2 done: SSE parser and stream assembler. **Next:** HTTP transport
-   with timeouts and dispatch tracking (adds reqwest + rustls; see research
-   §10.11), then `openai_chat` (0006 §11 step 2) with golden translation
-   tests and recorded streams.
+   Part 2 done: SSE parser and stream assembler. Part 3 done: HTTP
+   transport. **Next:** `openai_chat` (0006 §11 step 2) with golden
+   translation tests and recorded streams, and `ProviderModel`; then the
+   agent loop.
 4. The agent loop (0004) on top of core + providers, tested with `FakeModel`.
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
@@ -39,10 +39,29 @@ handoff point for whoever continues the work.
 
 ## Log
 
+### 2026-10-11: providers part 3: HTTP transport; AgentBuild's first user
+
+- The user will build **Axon Health OS** (AI hospital operating system,
+  axonhealth.in) on AgentBuild once it is done. The framework stays general;
+  healthcare needs (approval gates, audit, no patient data in logs,
+  self-hosted models) inform priorities. Suggested a trademark check on
+  "Axon" (Axon Enterprise exists).
+- `Transport` on reqwest 0.13 (rustls + aws-lc-rs, platform verifier,
+  HTTP/2, system proxy), feature `http` (default). Builds on Windows without
+  extra tools (~1 min clean).
+- Timeouts: connect, first byte, idle, total. Dispatch: `not_sent` for
+  connection failures, `sent`, `streaming`. Non-2xx → `classify_http`.
+  URL-free, redacted messages.
+- 7 tests against a scripted local TCP server. Found while testing: on
+  Windows a refused localhost connection is retried until the connect timeout,
+  so it surfaces as `timeout` (still `not_sent`); the test accepts both.
+  Six mutation checks: all caught. CI also tests the crate without `http`.
+
 ### 2026-10-11: providers part 2: SSE parser and stream assembler
 
 - `SseParser` (WHATWG): `
-`, ``, `
+`, `
+`, `
 ` (also split across chunks), BOM
   (also split), comments, multi-line data, `id` persistence, `retry`,
   unterminated tail dropped. 2,000 pseudo-random chunk cuttings give

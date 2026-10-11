@@ -35,11 +35,15 @@ write our own implementation.
 - **Implemented in `agentbuild-providers` (foundation):** the 0002 types
   (`Message`, `ContentBlock`, `ToolSpec`, `ModelRequest`/`ModelResponse`,
   `Capabilities`), `ModelError` with `classify_http` (0003 §4), transcript
-  check/repair (0002 §6), the `Model` trait, `FakeModel`, the SSE parser
-  and the stream assembler. No HTTP yet.
-- Tests: 193 across both crates, plus the package test.
-- **Next:** HTTP transport, `openai_chat` protocol (0006 §11), then the
-  agent loop (0004). See `docs/progress.md`.
+  check/repair (0002 §6), the `Model` trait, `FakeModel`, the SSE parser,
+  the stream assembler and the HTTP `Transport` (feature `http`, on by
+  default). No wire protocol yet, so no real model can be called.
+- Tests: 200 across both crates, plus the package test.
+- **Next:** `openai_chat` protocol and `ProviderModel` (0006 §11), then the
+  agent loop (0004). See `docs/progress.md`. The user will build their
+  hospital product (Axon Health OS) on AgentBuild: keep the framework
+  general, but approval gates, audit trails, no patient data in logs, and
+  self-hosted models matter.
 - **Not started:** wire protocols and HTTP transport, gateway, Python SDK,
   TypeScript SDK, the agent loop, message-delta events, persistence. Do not
   describe these as existing anywhere.
@@ -91,7 +95,9 @@ git-ignored. REA is not registered as an MCP server in any agent config.
    thiserror, uuid (v7 run ids). Dev only: tokio `test-util` for the paused
    clock. `agentbuild-providers` follows the budget in research
    `litellm-providers.md` §10.11 (today: serde, serde_json, thiserror, uuid,
-   tokio `time`).
+   tokio `time`, reqwest behind the `http` feature).
+   Transport tests use a scripted local TCP server
+   (`tests/transport.rs`), never the network.
 3. **Engine semantics live in Rust only.** SDKs must not reimplement
    scheduling, merging or validation.
 4. **Strict now, relax later.** Validation rules start strict; relaxing them is

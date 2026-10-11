@@ -41,6 +41,8 @@ mod sse;
 mod stream;
 mod tool;
 pub mod transcript;
+#[cfg(feature = "http")]
+mod transport;
 
 pub use error::{
     Dispatch, HttpFailure, MAX_MESSAGE_BYTES, ModelError, ModelErrorKind, classify_http,
@@ -61,3 +63,5 @@ pub use stream::{Assembled, Assembler, BlockDelta, MessageDelta, StreamItem, War
 pub use tool::{
     RESERVED_TOOL_NAMES, ToolAnnotations, ToolIssue, ToolKind, ToolSpec, validate_tools,
 };
+#[cfg(feature = "http")]
+pub use transport::{Body, HttpConfig, Transport, WireRequest};
