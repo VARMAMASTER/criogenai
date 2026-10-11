@@ -46,6 +46,8 @@ OpenAI, OpenRouter, Ollama, LM Studio, vLLM and most gateways, with streaming
 and tool calls. A `FakeModel` simulates a model for tests. The Anthropic
 protocol comes later.
 
+Terms and naming conventions: [docs/glossary.md](docs/glossary.md).
+
 The execution semantics are specified in
 [docs/design/0001-execution-model.md](docs/design/0001-execution-model.md).
 

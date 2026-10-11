@@ -166,6 +166,7 @@ git-ignored. REA is not registered as an MCP server in any agent config.
 
 | Question | File |
 |---|---|
+| What does a term mean? Naming rules? | `docs/glossary.md` |
 | How does a run execute? | `docs/architecture.md` §4, `crates/agentbuild-core/src/runtime.rs` |
 | What are the exact semantics? | `docs/design/0001-execution-model.md` |
 | What's done, what's next, what's undecided? | `docs/progress.md` |
