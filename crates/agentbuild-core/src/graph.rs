@@ -23,6 +23,19 @@ pub struct WorkflowBuilder {
     policies: Vec<(String, NodePolicy)>,
 }
 
+// Nodes and routers are user closures, so Debug shows names only.
+impl std::fmt::Debug for WorkflowBuilder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WorkflowBuilder")
+            .field(
+                "nodes",
+                &self.nodes.iter().map(|(n, _)| n).collect::<Vec<_>>(),
+            )
+            .field("entry", &self.entry)
+            .finish_non_exhaustive()
+    }
+}
+
 struct RouterDecl {
     from: String,
     router: Arc<dyn Router>,
@@ -410,6 +423,16 @@ impl Validator {
 #[derive(Clone)]
 pub struct Workflow {
     pub(crate) graph: Arc<Graph>,
+}
+
+impl std::fmt::Debug for Workflow {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Workflow")
+            .field("nodes", &self.graph.names)
+            .field("entry", &self.graph.names[self.graph.entry])
+            .field("fingerprint", &self.graph.fingerprint)
+            .finish_non_exhaustive()
+    }
 }
 
 impl Workflow {

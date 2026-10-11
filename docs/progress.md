@@ -7,9 +7,9 @@ handoff point for whoever continues the work.
 ## Next steps
 
 1. ~~Design review~~ Approved (see log, 2026-10-11 night).
-2. **Done:** 0005 §1–§4 and §6 (NodeContext, node outcomes with
-   suspend/resume and JSON snapshots, reducers, policies, events). **Next:**
-   saved task writes and the task memo (§5) → snapshots on failure.
+2. **Done:** all of 0005 (NodeContext, node outcomes with suspend/resume and
+   JSON snapshots, reducers, policies, saved task writes and the task memo,
+   snapshots on failure, events). Package testing in CI.
 3. Phase 2 (Python SDK via PyO3/maturin) can start after 0005 §1–§3. Its first
    design doc covers asyncio ↔ Tokio bridging, free-threaded Python, and
    `abi3` wheels.
@@ -31,6 +31,44 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-11: 0005 §5 saved task writes, task memo, snapshots on failure; package tests
+
+- Each finished node's output is saved in the step's progress as it
+  arrives. When the step fails, `RunError.snapshot` (new, `Option<Box<Snapshot>>`)
+  holds it in `pending_writes` (keyed by node name). `Workflow::retry` /
+  `retry_with` re-run the step: saved outputs are reused (`node_finished` with
+  new field `reused: true`, no `node_started`).
+- `ctx.memo()` → `TaskMemo` (`get`, `put`, `once`): shared across attempts,
+  saved in failure snapshots and in suspension snapshots (so a suspended node
+  that drafted something does not draft again on resume). Starts empty in
+  each new step.
+- Blame rule: outputs that caused `update_conflict`, `invalid_value`,
+  `missing_goto` or a goto `unknown_route` are not saved. Router failures keep
+  outputs; routers re-run.
+- Output returned during the cancel grace period is never saved (a node may
+  return a partial result because it was cancelled). Memo entries are.
+- Failure snapshots don't repeat `suspended`: resume values already supplied
+  are kept as `pending_writes[node].resume` (a `null` value survives JSON).
+- Snapshot gains `pending_writes` and `error {code, message}`, both serde
+  defaults, so older snapshots load. `NodeOutput` is now serde (externally
+  tagged). `RunError` is now `#[non_exhaustive]`.
+- Cost: step outputs are cloned once when merged (kept for the snapshot).
+  The step already clones the state; no benchmark yet.
+- Tests: 135 passing (17 in `tests/memo.rs`). Eight mutation checks
+  (reuse, memo sharing, blame rule, suspension memo, progress reset, saved
+  resume value, null resume, saved outputs): all caught.
+- Example `recover_workflow`: a run fails after sending an email; after the
+  fix, `retry` finishes in 0.0 s with no repeated model calls.
+- **Package tests** (user request): `scripts/test-package.sh` packages the
+  crate, checks its contents, and runs `tests/package/rust-consumer` against
+  the unpacked package. It found two real problems: the package had no README
+  or license files (crate README, `LICENSE-*` copies and metadata added; the
+  README example runs as a doctest), and `Workflow`/`WorkflowBuilder` did not
+  implement `Debug`, so `build().unwrap_err()` did not compile in user code
+  (fixed; `missing_debug_implementations` lint enabled). New CI job `package`
+  (Linux and Windows) runs the docs build with `-D warnings`, the package
+  test and every example.
 
 ### 2026-10-11: 0005 §4 policies implemented
 

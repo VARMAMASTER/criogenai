@@ -1,8 +1,8 @@
 # 0005: Core runtime extensions
 
-Status: **§1–§4 and §6 implemented** (NodeContext without `memo`; node
-outcomes with suspend/resume; reducers; policies; events). §5's saved task
-writes and snapshots on failure are **approved, not yet built**. This document changes
+Status: **implemented** (§1–§6: NodeContext with the task memo; node
+outcomes with suspend/resume; reducers; policies; saved task writes and
+snapshots on failure; events). Dynamic fan-out (§2) stays deferred. This document changes
 [0001](0001-execution-model.md); every change is listed in §9.
 It provides what [0002](0002-messages-and-tools.md),
 [0003](0003-error-model.md) and [0004](0004-agent-loop.md) need. Research
@@ -97,7 +97,7 @@ Each state key may declare how concurrent writes and successive writes combine:
 | `append` | Value is a list; writes are lists appended in node declaration order | none |
 | `upsert_by_id` | Value is a list of objects with `id`. A write with a new id appends; an existing id replaces in place; `{"id": …, "$remove": true}` removes | Two writes to the same id in one step → `update_conflict` |
 
-- Declared on the workflow: `builder.state_key("messages", Reducer::UpsertById)`.
+- Declared on the workflow: `builder.reducer("messages", Reducer::UpsertById)`.
   Undeclared keys use `replace`.
 - `upsert_by_id` is what `messages` uses. Appending is O(new messages), and
   transcript repair and HITL edits replace single messages without rewriting
@@ -191,35 +191,67 @@ of the workflow fingerprint: they change behaviour, not structure.
 
 ## 5. Snapshots, saved task writes and resume
 
+Status: **implemented**.
+
 ### 5.1 Atomicity, restated
 
 > The **state commit** of a step is all-or-nothing (unchanged).
-> In addition, each **finished task's output is recorded** in the run's
-> *pending writes* as soon as it finishes, together with any `ctx.memo`
-> entries the task saved while running (§1). When a step is retried or
-> resumed, tasks with recorded output are **not executed again**. Tasks that
-> did not finish are re-executed with their memo entries available, so
-> finer-grained work they already completed (e.g. individual tool calls) is not
-> repeated.
+> In addition, each **finished task's output is recorded** in the step's
+> *pending writes* as soon as it finishes, together with any `ctx.memo()`
+> entries the task saved while running (§1). When a failed step is resumed,
+> tasks with recorded output are **not executed again**. Tasks that did not
+> finish are re-executed with their memo entries available, so finer-grained
+> work they already completed (e.g. individual tool calls) is not repeated.
 
 This is LangGraph's best runtime idea. It closes the duplicate-side-effect gap
 from 0003 E2: a failed step can be resumed after fixing a bug without
 re-running the tools that already succeeded.
+
+**Task memo.** `ctx.memo()` returns the task's `TaskMemo`:
+
+| Method | Meaning |
+|---|---|
+| `get(key) -> Option<Value>` | A value saved by an earlier attempt or execution of this task |
+| `put(key, value)` | Saves at once (not at step commit). A later `put` to the same key replaces it |
+| `once(key, async fn) -> Result<T>` | Returns the saved value if there is one; otherwise runs the function and saves its `Ok` result. Errors are not saved |
+
+The memo survives, for the same node in the same pending step:
+
+- **retries** (same `TaskMemo` object across attempts, also after a timed-out
+  attempt),
+- **resume of a failed step** (memo travels in the failure snapshot),
+- **resume of a suspended node** (memo travels in the suspension snapshot, so a
+  node that did work before suspending can skip it when invoked again).
+
+It is cleared when the step commits for that node (a finished node's next
+execution in a later step starts empty). Values are JSON and must be small;
+the memo is not a store for documents.
+
+**Blame rule.** Some failures come from a finished task's output rather than
+from a running task: `update_conflict` (both writers), `invalid_value`,
+`missing_goto`, and `unknown_route` from a `goto`. That output is **not**
+saved, so on resume the node runs again. This is what makes "fix the bug and
+resume" work. Router failures keep all outputs: routers are re-evaluated on
+resume.
 
 ### 5.2 Snapshot format (language-neutral JSON)
 
 ```jsonc
 {
   "format": "agentbuild.snapshot/1",
-  "workflow_fingerprint": "sha256:…",       // hash of the graph structure + reducers + policies
-  "run_id": "…", "step": 7, "created_at": "…",
-  "state": { … },
-  "frontier": ["tools"],                    // nodes scheduled for the step to (re)execute
+  "workflow_fingerprint": "fnv1a64:…",      // graph structure + reducers (not policies)
+  "run_id": "…", "step": 7,
+  "state": { … },                           // committed state before `step`
+  "frontier": ["tools", "notes"],           // nodes `step` (re)executes
   "join_progress": { "combine": ["short"] },
-  "pending_writes": { "<task_id>": { "node": "tools", "output": null,   // null = task did not finish
-                                     "memo": { "call:c2": { … } } } },
-  "suspended": [ { "task_id": "…", "node": "review", "payload": { … } } ],
-  "error": null                              // the RunError when the snapshot came from a failure
+  "suspended": [ { "node": "review", "payload": { … } } ],
+  "pending_writes": {                       // keyed by node name; omitted when empty
+    "notes": { "output": { "update": { "notes": "…" } } },   // finished: reused
+    "tools": { "memo": { "call:c2": { … } } },              // unfinished: re-run with memo
+    "review": { "resume": true }                              // resume value already supplied
+  },
+  "error": { "code": "node_failed", "message": "…" },        // only on failure snapshots
+  "event_seq": 42
 }
 ```
 
@@ -227,24 +259,52 @@ re-running the tools that already succeeded.
   Python class paths in msgpack, which a TypeScript SDK cannot read
   ([research](../research/langgraph.md)). Our snapshots can be resumed from
   either SDK.
-- A snapshot is returned on `suspended` and attached to every `failed` outcome
-  (`error.snapshot`). Even with no persistence backend, the app can store the
-  snapshot anywhere and resume later. This gives durability *by value* from
-  day one.
+- `output` uses the external tag form: `{"update": {…}}`,
+  `{"command": {"update": {…}, "goto": [..]}}`,
+  `{"suspend": {"update": {…}, "payload": …}}`.
+- `pending_writes` is keyed by node name, because a step has at most one task
+  per node. Dynamic fan-out (§2, deferred) will need a new key form and a new
+  format version.
+- A snapshot is returned on `suspended` and attached to **every failure that
+  happens while running** (`RunError::snapshot`), including cancellation,
+  deadlines and the step limit. Even with no persistence backend, the app can
+  store the snapshot anywhere and resume later. This gives durability *by
+  value* from day one.
+- The exceptions are `resume_invalid` and `workflow_mismatch`: they are
+  rejected before anything runs, and the caller still holds the snapshot it
+  passed in, unchanged.
+- New fields have serde defaults, so snapshots from earlier builds still load.
 
 ### 5.3 Resume
 
-`workflow.resume(snapshot, resume_values?, options?)`:
+`workflow.resume(snapshot, values)` (or `retry(snapshot)` when no node is
+suspended, typically after a failure):
 
 1. Check `format`, then `workflow_fingerprint`. A mismatch gives
-   `workflow_mismatch`, unless `allow_mismatch` (the caller accepts the risk).
-2. Restore state, join progress and frontier.
-3. Re-run the snapshot's step: tasks in `pending_writes` reuse their output;
-   suspended tasks get `ctx.resume`; the rest execute.
-4. Continue normally.
+   `workflow_mismatch`. (`allow_mismatch` is not offered yet.)
+2. Check `values`: exactly one per entry in `suspended`. Check that every
+   `pending_writes` entry names a node in the `frontier`.
+3. Restore state, join progress and frontier.
+4. Re-run the snapshot's step: nodes with a recorded `output` reuse it and do
+   not run (no `node_started`; `node_finished` with `reused: true`); suspended
+   nodes get `ctx.resume()` (from `values`, or from a recorded `resume`); the
+   rest execute with their memo.
+5. Continue normally.
 
 Resume input that fails validation is rejected **before** anything runs, so the
-snapshot stays usable.
+snapshot stays usable. Resuming the same snapshot twice runs it twice; preventing
+that needs a checkpointer with versions (§5.4).
+
+Choices made while implementing:
+
+- A failure snapshot does not repeat `suspended`: resume values the caller
+  already supplied are kept in `pending_writes[node].resume`, so `retry` needs
+  no input.
+- A failure at a step boundary (cancel, deadline, step limit) has a snapshot
+  whose step has not started; resuming simply starts it. For the step limit,
+  pass a larger `max_steps`.
+- `RunError` is now `#[non_exhaustive]` and carries `snapshot:
+  Option<Box<Snapshot>>`.
 
 ### 5.4 Persistence (later; designed in [0008](0008-persistence-and-memory.md))
 
@@ -291,7 +351,7 @@ Implementation decisions:
 | `run_started` | run | `resumed` |
 | `step_started` | step | `nodes` |
 | `node_started` | node | `attempt` |
-| `node_finished` | node | `duration_ms`, `update_keys`, `goto`, `suspended` |
+| `node_finished` | node | `duration_ms`, `update_keys`, `goto`, `suspended`, `reused` (output saved by an earlier failed attempt of this step; the node did not run) |
 | `node_failed` | node | `duration_ms`, `code` (`node_failed` / `node_panicked`), `message` |
 | `node_cancelled` | node | `reason` (`sibling_failed`). Every `node_started` gets exactly one of finished / failed / cancelled |
 | `step_committed` | step | `next` (names scheduled for the next step) |

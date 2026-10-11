@@ -25,14 +25,16 @@ write our own implementation.
   `docs/design/0002`–`0008` cover messages and tools, errors, the agent loop,
   core extensions, the provider layer and gateway, the public API, and
   persistence and memory. Research is in `docs/research/`.
-- **Implemented in `agentbuild-core`:** the 0001 engine plus 0005 §1–§4 and
-  §6: NodeContext, `Update`/`Command`/`Suspend` outcomes, suspend/resume with
+- **Implemented in `agentbuild-core`:** the 0001 engine plus all of 0005:
+  NodeContext, `Update`/`Command`/`Suspend` outcomes, suspend/resume with
   JSON snapshots, reducers, the workflow fingerprint, live events
-  (`Workflow::stream`, `event_channel`, `ctx.events()`), and policies
-  (`NodePolicy` timeout/retry, run deadline, `CancelToken` with grace).
-  112 tests.
-- **Next:** 0005 §5 saved task writes and the task memo, snapshots on
-  failure.
+  (`Workflow::stream`, `event_channel`, `ctx.events()`), policies
+  (`NodePolicy` timeout/retry, run deadline, `CancelToken` with grace), and
+  saved task writes with `ctx.memo()` plus snapshots on failure
+  (`RunError::snapshot`, `Workflow::retry`). 135 tests, plus the
+  package test.
+- **Next:** 0002 data types and the 0003 error catalog in Rust, then
+  `agentbuild-providers` (see `docs/progress.md`).
   Update 0001 as each lands (0005 §9 lists the changes).
 - **Not started:** `agentbuild-providers`, gateway, Python SDK, TypeScript SDK,
   agents/LLM, message-delta events, persistence. Do not describe these as existing
@@ -49,6 +51,9 @@ cargo run -p agentbuild-core --example basic_workflow -- "some text"
 cargo run -p agentbuild-core --example approval_workflow -- yes
 cargo run -p agentbuild-core --example llm_workflow -- "remote work"
 cargo run -p agentbuild-core --example retry_workflow
+cargo run -p agentbuild-core --example recover_workflow
+RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
+bash scripts/test-package.sh     # package the crate, use it from a separate project
 ```
 
 On the original Windows dev machine, Rust lives in `~/.cargo/bin`. A shell that
@@ -100,8 +105,17 @@ git-ignored. REA is not registered as an MCP server in any agent config.
    `tests/llm_simulation.rs`. When `agentbuild-providers` exists, this becomes
    a fake `Model` implementation there.
 8. **Public API hygiene.** Public enums and structs that may grow are
-   `#[non_exhaustive]`. Public items have docs (`missing_docs` is a warning;
-   CI treats warnings as errors).
+   `#[non_exhaustive]`. Public items have docs and implement `Debug`
+   (`missing_docs` and `missing_debug_implementations` are warnings; CI
+   treats warnings as errors).
+9. **Test the packages, not just the code.** `scripts/test-package.sh` runs
+   `cargo package` (fails if the package misses a file), checks the README and
+   license files are inside, then builds `tests/package/rust-consumer`, a
+   separate project that depends on the unpacked package and uses only the
+   public API. Extend the consumer when you add public API. CI runs it on
+   Linux and Windows. When the Python and TypeScript SDKs exist, the same rule
+   applies: install the built wheel / npm tarball into a clean environment and
+   run a consumer script against it.
 
 ## Git and GitHub
 

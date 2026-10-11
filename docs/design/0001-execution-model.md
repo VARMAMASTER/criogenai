@@ -2,8 +2,9 @@
 
 Status: **Implemented** in `crates/agentbuild-core`. Pre-1.0; may change.
 Extended by [0005](0005-core-runtime-extensions.md) §1–§3 (node context,
-node outcomes, reducers, suspend/resume), §4 (policies) and §6 (events),
-which are implemented and described below.
+node outcomes, reducers, suspend/resume), §4 (policies), §5 (saved task
+writes, the task memo, snapshots on failure) and §6 (events), which are
+implemented and described below.
 
 This is the contract the Python and TypeScript SDKs will build on. Anything
 not described here is unspecified.
@@ -16,7 +17,7 @@ Workflows run as **supersteps** over a directed graph that may contain cycles.
 2. In each step, every scheduled node runs **concurrently** on the Tokio
    runtime against the **same immutable snapshot** of the state.
 3. Each node receives a **`NodeContext`** (`run_id`, `step`, `node`,
-   `task_id` = `"{run_id}:{step}:{node}"`, `attempt`, `resume`) and returns a
+   `task_id` = `"{run_id}:{step}:{node}"`, `attempt`, `resume`, `memo`) and returns a
    **`NodeOutput`**:
    - `Update`: a partial JSON object;
    - `Command { update, goto }`: also schedules `goto` targets, which must
@@ -70,6 +71,31 @@ including the suspending node's own. Then:
 
 The **workflow fingerprint** is an FNV-1a hash of the graph structure (nodes,
 edges, routes, `may_goto`, joins and reducers), not of node implementations.
+
+### Saved task writes, the task memo, and snapshots on failure
+
+Details in [0005 §5](0005-core-runtime-extensions.md#5-snapshots-saved-task-writes-and-resume).
+
+- The state commit stays all-or-nothing. In addition, each node's output is
+  **saved as soon as the node finishes**. If the step then fails, the
+  `RunError` carries a `snapshot` (JSON, same format as for suspension) with
+  those outputs in `pending_writes`.
+- `Workflow::retry(snapshot)` re-runs the failed step: nodes with a saved
+  output are **not run again** (`node_finished` with `reused: true`); the
+  others run.
+- `ctx.memo()` saves finer-grained results immediately (`get`, `put`,
+  `once(key, f)`). They survive retries, timeouts, failure snapshots and
+  suspension, so work such as an already-sent email is not repeated. A
+  node's memo starts empty in each new step.
+- **Blame rule:** an output that itself caused the failure
+  (`update_conflict`, `invalid_value`, `missing_goto`, `unknown_route` from a
+  goto) is not saved, so its node runs again after the fix.
+- Output a node returns after the run was cancelled is not saved (it may be
+  a partial result); its memo entries are.
+- Every failure while running has a snapshot, including `cancelled`,
+  `deadline_exceeded` and `step_limit_exceeded` (retry with a larger
+  `max_steps`). Rejected resume input (`resume_invalid`,
+  `workflow_mismatch`) has none; the caller still holds its snapshot.
 
 ### Failure behaviour
 
@@ -194,6 +220,6 @@ JavaScript function cannot be called synchronously from a Tokio worker thread.
 
 ## Not yet implemented
 
-Designed in 0005–0008 but not yet built: message-delta events, the task memo and saved
-task writes, snapshots attached to failures, persistence backends, dynamic
-fan-out (`Send`) and subgraphs.
+Designed in 0005–0008 but not yet built: message-delta events, persistence
+backends (checkpointers with versions, so the same snapshot cannot be resumed
+twice), dynamic fan-out (`Send`) and subgraphs.

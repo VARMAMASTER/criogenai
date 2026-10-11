@@ -76,6 +76,10 @@ pub enum EventKind {
         goto: Vec<String>,
         /// `true` if it returned `Suspend`.
         suspended: bool,
+        /// `true` if the node did not run: its output was saved before the
+        /// step failed and is reused on resume (0005 §5.1).
+        #[serde(default)]
+        reused: bool,
     },
     /// A node returned an error, panicked or timed out.
     NodeFailed {

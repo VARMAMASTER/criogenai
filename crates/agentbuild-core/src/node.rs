@@ -3,12 +3,14 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tokio::time::Instant;
 
 use crate::cancel::CancelToken;
 use crate::error::NodeError;
 use crate::event::EventSink;
+use crate::memo::TaskMemo;
 use crate::state::{State, Update};
 
 /// A boxed, `Send` future. Used so [`Node`] and [`Router`] stay object-safe.
@@ -16,8 +18,8 @@ pub type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// Information about the current execution, passed to every node.
 ///
-/// Fields are read through methods so new ones (such as the task memo) can be
-/// added without breaking node code.
+/// Fields are read through methods so new ones can be added without breaking
+/// node code.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct NodeContext {
@@ -29,6 +31,7 @@ pub struct NodeContext {
     pub(crate) events: EventSink,
     pub(crate) cancel: CancelToken,
     pub(crate) deadline: Option<Instant>,
+    pub(crate) memo: TaskMemo,
 }
 
 impl NodeContext {
@@ -53,7 +56,8 @@ impl NodeContext {
         format!("{}:{}:{}", self.run_id, self.step, self.node)
     }
 
-    /// 1-based attempt number. Always 1 until retry policies exist.
+    /// 1-based attempt number; greater than 1 when a
+    /// [`RetryPolicy`](crate::RetryPolicy) runs the node again.
     pub fn attempt(&self) -> u32 {
         self.attempt
     }
@@ -84,10 +88,22 @@ impl NodeContext {
         self.deadline
             .map(|deadline| deadline.saturating_duration_since(Instant::now()))
     }
+
+    /// Results this task saved earlier, which survive retries and resume.
+    /// Use [`TaskMemo::once`] around side effects (sending an email, calling
+    /// a paid API) so they are not repeated.
+    pub fn memo(&self) -> &TaskMemo {
+        &self.memo
+    }
 }
 
 /// What a node produces.
-#[derive(Debug, Clone, PartialEq)]
+///
+/// In JSON (snapshots) it is externally tagged: `{"update": {..}}`,
+/// `{"command": {"update": {..}, "goto": [..]}}` or
+/// `{"suspend": {"update": {..}, "payload": ..}}`.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum NodeOutput {
     /// Change the state; outgoing edges decide what runs next.

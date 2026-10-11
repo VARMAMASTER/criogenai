@@ -1,0 +1,209 @@
+//! Package smoke test: uses `agentbuild-core` from its packaged `.crate`, the
+//! way a downstream project would, through the public API only.
+//!
+//! Run by `scripts/test-package.sh`. Every check panics on failure.
+
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Duration;
+
+use agentbuild_core::{
+    CancelToken, END, EventKind, NodeError, NodeOutput, NodePolicy, Reducer, RetryPolicy,
+    RunOptions, SNAPSHOT_FORMAT, Snapshot, State, Update, ValidationIssue, WorkflowBuilder,
+    node_fn, node_with_context, router_fn,
+};
+use serde_json::json;
+
+#[tokio::main]
+async fn main() {
+    branching_with_reducers_and_events().await;
+    suspend_and_resume_through_json().await;
+    retry_a_failed_run_without_repeating_work().await;
+    policies_and_cancellation().await;
+    validation_reports_every_issue();
+    println!("package smoke test: ok");
+}
+
+async fn branching_with_reducers_and_events() {
+    let mut builder = WorkflowBuilder::new();
+    builder
+        .add_node(
+            "split",
+            node_fn(|_| async { Ok(Update::new().set("log", json!(["split"]))) }),
+        )
+        .add_node(
+            "left",
+            node_fn(|_| async { Ok(Update::new().set("log", json!(["left"]))) }),
+        )
+        .add_node(
+            "right",
+            node_fn(|_| async { Ok(Update::new().set("log", json!(["right"]))) }),
+        )
+        .add_node("join", node_fn(|_| async { Ok(Update::new()) }))
+        .reducer("log", Reducer::Append)
+        .set_entry("split")
+        .add_edge("split", "left")
+        .add_edge("split", "right")
+        .add_join(["left", "right"], "join")
+        .add_router(
+            "join",
+            router_fn(|state| async move {
+                let n = state.get("log").and_then(|v| v.as_array()).map_or(0, Vec::len);
+                Ok(if n == 3 { "done" } else { "broken" })
+            }),
+            [("done", END), ("broken", END)],
+        );
+    let workflow = builder.build().expect("valid graph");
+
+    let mut stream = workflow.stream(State::new());
+    let mut types = Vec::new();
+    while let Some(event) = stream.next().await {
+        types.push(event.type_name());
+    }
+    let output = stream.finish().await.expect("run completes");
+    assert_eq!(output.state.get("log").unwrap(), &json!(["split", "left", "right"]));
+    assert_eq!(types.first(), Some(&"run_started"));
+    assert_eq!(types.last(), Some(&"run_finished"));
+    println!("  branching, joins, reducers, events: ok");
+}
+
+async fn suspend_and_resume_through_json() {
+    let mut builder = WorkflowBuilder::new();
+    builder
+        .add_node(
+            "approve",
+            node_with_context(|ctx, _| async move {
+                Ok(match ctx.resume() {
+                    None => NodeOutput::suspend(Update::new(), json!({"question": "ship it?"})),
+                    Some(answer) => Update::new().set("approved", answer.clone()).into(),
+                })
+            }),
+        )
+        .set_entry("approve")
+        .add_edge("approve", END);
+    let workflow = builder.build().unwrap();
+
+    let paused = workflow.run(State::new()).await.unwrap();
+    assert!(paused.is_suspended());
+    let text = serde_json::to_string(paused.snapshot().unwrap()).unwrap();
+    let snapshot: Snapshot = serde_json::from_str(&text).unwrap();
+    assert_eq!(snapshot.format, SNAPSHOT_FORMAT);
+    let done = workflow
+        .resume(&snapshot, [("approve", json!(true))])
+        .await
+        .unwrap();
+    assert_eq!(done.state.get("approved").unwrap(), true);
+    println!("  suspend / JSON snapshot / resume: ok");
+}
+
+async fn retry_a_failed_run_without_repeating_work() {
+    let sends = Arc::new(AtomicUsize::new(0));
+    let runs = Arc::new(AtomicUsize::new(0));
+    let mut builder = WorkflowBuilder::new();
+    let node = {
+        let (sends, runs) = (sends.clone(), runs.clone());
+        node_with_context(move |ctx, _| {
+            let (sends, runs) = (sends.clone(), runs.clone());
+            async move {
+                let receipt: String = ctx
+                    .memo()
+                    .once("send", || async {
+                        sends.fetch_add(1, Ordering::SeqCst);
+                        Ok("receipt-1".to_string())
+                    })
+                    .await?;
+                if runs.fetch_add(1, Ordering::SeqCst) == 0 {
+                    return Err(NodeError::new("crashed after sending"));
+                }
+                Ok(Update::new().set("receipt", receipt).into())
+            }
+        })
+    };
+    builder.add_node("notify", node).set_entry("notify").add_edge("notify", END);
+    let workflow = builder.build().unwrap();
+
+    let err = workflow.run(State::new()).await.unwrap_err();
+    assert_eq!(err.code(), "node_failed");
+    let text = serde_json::to_string(err.snapshot().unwrap()).unwrap();
+    let snapshot: Snapshot = serde_json::from_str(&text).unwrap();
+    let done = workflow.retry(&snapshot).await.unwrap();
+    assert_eq!(done.state.get("receipt").unwrap(), "receipt-1");
+    assert_eq!(sends.load(Ordering::SeqCst), 1, "side effect repeated");
+    println!("  failure snapshot / retry / task memo: ok");
+}
+
+async fn policies_and_cancellation() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let flaky = {
+        let calls = calls.clone();
+        node_fn(move |_| {
+            let calls = calls.clone();
+            async move {
+                if calls.fetch_add(1, Ordering::SeqCst) < 2 {
+                    return Err(NodeError::new("rate limited").retryable());
+                }
+                Ok(Update::new().set("ok", true))
+            }
+        })
+    };
+    let retry = RetryPolicy::new()
+        .max_attempts(3)
+        .backoff(Duration::from_millis(1), 2.0, Duration::from_millis(5));
+    let mut builder = WorkflowBuilder::new();
+    builder
+        .add_node("flaky", flaky)
+        .set_entry("flaky")
+        .add_edge("flaky", END)
+        .policy("flaky", NodePolicy::new().retry(retry));
+    let out = builder.build().unwrap().run(State::new()).await.unwrap();
+    assert_eq!(out.state.get("ok").unwrap(), true);
+
+    let mut builder = WorkflowBuilder::new();
+    builder
+        .add_node(
+            "slow",
+            node_fn(|_| async {
+                tokio::time::sleep(Duration::from_secs(60)).await;
+                Ok(Update::new())
+            }),
+        )
+        .set_entry("slow")
+        .add_edge("slow", END);
+    let workflow = builder.build().unwrap();
+    let token = CancelToken::new();
+    let canceller = token.clone();
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        canceller.cancel();
+    });
+    let options = RunOptions::default()
+        .cancel_token(token)
+        .cancel_grace(Duration::from_millis(10));
+    let err = workflow.run_with(State::new(), options).await.unwrap_err();
+    assert_eq!(err.code(), "cancelled");
+
+    let err = workflow
+        .run_with(State::new(), RunOptions::default().deadline(Duration::from_millis(20)))
+        .await
+        .unwrap_err();
+    assert_eq!(err.code(), "deadline_exceeded");
+
+    let mut stream =
+        workflow.stream_with(State::new(), RunOptions::default().cancel_grace(Duration::ZERO));
+    let first = stream.next().await.unwrap();
+    assert!(matches!(first.kind, EventKind::RunStarted { .. }));
+    stream.cancel();
+    assert_eq!(stream.finish().await.unwrap_err().code(), "cancelled");
+    println!("  retries, cancellation, deadlines: ok");
+}
+
+fn validation_reports_every_issue() {
+    let mut builder = WorkflowBuilder::new();
+    builder
+        .add_node("a", node_fn(|_| async { Ok(Update::new()) }))
+        .add_edge("a", "missing");
+    let err = builder.build().unwrap_err();
+    assert!(err.issues.contains(&ValidationIssue::MissingEntry));
+    assert!(err.issues.len() >= 2, "{err}");
+    println!("  validation: ok");
+}

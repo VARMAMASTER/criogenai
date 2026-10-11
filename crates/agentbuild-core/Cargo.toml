@@ -1,6 +1,9 @@
 [package]
 name = "agentbuild-core"
 description = "Execution engine for AgentBuild workflows"
+readme = "README.md"
+keywords = ["agents", "workflow", "llm", "orchestration", "async"]
+categories = ["asynchronous", "concurrency"]
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

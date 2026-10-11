@@ -16,6 +16,7 @@ use crate::event::{
     Event, EventKind, EventReceiver, EventSender, EventSink, Hub, Scope, event_channel,
 };
 use crate::graph::{Graph, Outgoing, Target, Workflow};
+use crate::memo::TaskMemo;
 use crate::node::{Node, NodeContext, NodeOutput};
 use crate::policy::NodePolicy;
 use crate::reducer;
@@ -166,21 +167,69 @@ pub struct Snapshot {
     pub workflow_fingerprint: String,
     /// The run's id.
     pub run_id: String,
-    /// Index of the next step to execute.
+    /// Index of the step to execute on resume: the step after a suspension,
+    /// or the step that failed.
     pub step: usize,
-    /// Committed state.
+    /// Committed state before `step`.
     pub state: State,
-    /// Nodes scheduled for the next step, in declaration order. Includes the
-    /// suspended nodes.
+    /// Nodes `step` runs, in declaration order. Includes suspended nodes.
     pub frontier: Vec<String>,
     /// For each join target, the sources that completed since it last fired.
     pub join_progress: BTreeMap<String, Vec<String>>,
-    /// The suspended nodes and their payloads.
+    /// The suspended nodes and their payloads. Each needs a resume value.
     pub suspended: Vec<Interrupt>,
+    /// Work already done in `step`, by node name: saved outputs, memo entries
+    /// and resume values (0005 §5.1).
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub pending_writes: BTreeMap<String, PendingWrite>,
+    /// Why the run failed, for snapshots taken from a [`RunError`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub error: Option<SnapshotError>,
     /// The [`seq`](Event::seq) the run's next event gets, so event numbering
     /// continues after resume.
     #[serde(default)]
     pub event_seq: u64,
+}
+
+/// Work one node already did in a [`Snapshot`]'s step.
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct PendingWrite {
+    /// The node's output, if it finished. Reused on resume; the node does not
+    /// run again.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub output: Option<NodeOutput>,
+    /// Entries the node saved in its [`TaskMemo`], restored on resume.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub memo: BTreeMap<String, Value>,
+    /// A resume value already supplied for this node (it may be `null`).
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "present"
+    )]
+    pub resume: Option<Value>,
+}
+
+impl PendingWrite {
+    fn is_empty(&self) -> bool {
+        self.output.is_none() && self.memo.is_empty() && self.resume.is_none()
+    }
+}
+
+/// Reads a field that is present as `Some`, even when it is `null`.
+fn present<'de, D: serde::Deserializer<'de>>(deserializer: D) -> Result<Option<Value>, D::Error> {
+    Value::deserialize(deserializer).map(Some)
+}
+
+/// Why a run failed, as recorded in its [`Snapshot`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct SnapshotError {
+    /// The [`RunErrorKind::code`].
+    pub code: String,
+    /// The error message.
+    pub message: String,
 }
 
 /// A run executing in the background, with its events. Created by
@@ -262,7 +311,8 @@ impl Workflow {
         let run_id = uuid::Uuid::now_v7().to_string();
         let run = Run::new(&self.graph, run_id, input, 0, &options);
         let start = BTreeSet::from([self.graph.entry]);
-        run.execute(start, 0, HashMap::new(), options, false).await
+        run.execute(start, 0, StepProgress::default(), options, false)
+            .await
     }
 
     /// Starts a run in the background (on the current Tokio runtime) and
@@ -300,9 +350,10 @@ impl Workflow {
         }
     }
 
-    /// Continues a suspended run. `values` maps each suspended node's name to
-    /// the value it receives as [`NodeContext::resume`]; every suspended node
-    /// needs exactly one value.
+    /// Continues a run from a snapshot. `values` maps each suspended node's
+    /// name to the value it receives as [`NodeContext::resume`]; every
+    /// suspended node needs exactly one value. Nodes whose output the snapshot
+    /// saved are not run again.
     ///
     /// Invalid input is rejected before anything runs, so the snapshot stays
     /// usable.
@@ -312,6 +363,25 @@ impl Workflow {
         K: Into<String>,
     {
         self.resume_with(snapshot, values, RunOptions::default())
+            .await
+    }
+
+    /// Continues a run from a snapshot in which no node waits for input,
+    /// typically [`RunError::snapshot`] after fixing what made the run fail.
+    /// Nodes that finished before the failure are not run again; the others
+    /// run with their [`TaskMemo`] entries.
+    pub async fn retry(&self, snapshot: &Snapshot) -> Result<RunOutput, RunError> {
+        self.retry_with(snapshot, RunOptions::default()).await
+    }
+
+    /// [`retry`](Self::retry) with explicit options (e.g. a larger
+    /// `max_steps` after `step_limit_exceeded`).
+    pub async fn retry_with(
+        &self,
+        snapshot: &Snapshot,
+        options: RunOptions,
+    ) -> Result<RunOutput, RunError> {
+        self.resume_with(snapshot, std::iter::empty::<(String, Value)>(), options)
             .await
     }
 
@@ -331,6 +401,7 @@ impl Workflow {
             kind,
             step: snapshot.step,
             state: snapshot.state.clone(),
+            snapshot: None,
         };
         let invalid = |reason: String| reject(RunErrorKind::ResumeInvalid { reason });
 
@@ -353,9 +424,34 @@ impl Workflow {
                 .ok_or_else(|| invalid(format!("snapshot refers to unknown node `{name}`")))
         };
 
+        let mut frontier = BTreeSet::new();
+        for name in &snapshot.frontier {
+            frontier.insert(id_of(name)?);
+        }
+
+        let mut progress = StepProgress::default();
+        for (name, write) in &snapshot.pending_writes {
+            let id = id_of(name)?;
+            if !frontier.contains(&id) {
+                return Err(invalid(format!(
+                    "pending write for `{name}`, which is not in the frontier"
+                )));
+            }
+            if let Some(output) = &write.output {
+                progress.outputs.insert(id, output.clone());
+            }
+            if !write.memo.is_empty() {
+                progress
+                    .memos
+                    .insert(id, TaskMemo::from_entries(write.memo.clone()));
+            }
+            if let Some(value) = &write.resume {
+                progress.resume.insert(id, value.clone());
+            }
+        }
+
         let mut values: HashMap<String, Value> =
             values.into_iter().map(|(k, v)| (k.into(), v)).collect();
-        let mut resume = HashMap::new();
         for interrupt in &snapshot.suspended {
             let value = values.remove(&interrupt.node).ok_or_else(|| {
                 invalid(format!(
@@ -363,15 +459,17 @@ impl Workflow {
                     interrupt.node
                 ))
             })?;
-            resume.insert(id_of(&interrupt.node)?, value);
+            let id = id_of(&interrupt.node)?;
+            if progress.outputs.contains_key(&id) {
+                return Err(invalid(format!(
+                    "node `{}` is suspended but also has a saved output",
+                    interrupt.node
+                )));
+            }
+            progress.resume.insert(id, value);
         }
         if let Some(extra) = values.keys().min() {
             return Err(invalid(format!("node `{extra}` is not suspended")));
-        }
-
-        let mut frontier = BTreeSet::new();
-        for name in &snapshot.frontier {
-            frontier.insert(id_of(name)?);
         }
         let mut join_progress = vec![HashSet::new(); graph.joins.len()];
         for (target, sources) in &snapshot.join_progress {
@@ -394,7 +492,7 @@ impl Workflow {
             &options,
         );
         run.join_progress = join_progress;
-        run.execute(frontier, snapshot.step, resume, options, true)
+        run.execute(frontier, snapshot.step, progress, options, true)
             .await
     }
 }
@@ -439,6 +537,68 @@ enum Stop {
 struct StepOutcome {
     next: BTreeSet<usize>,
     suspended: Vec<(usize, Value)>,
+}
+
+/// What the current step's tasks have done so far (0005 §5.1). Becomes the
+/// snapshot's `pending_writes` if the step fails.
+#[derive(Default)]
+struct StepProgress {
+    /// Outputs of finished tasks, in declaration order.
+    outputs: BTreeMap<usize, NodeOutput>,
+    /// Each task's memo, shared with the running task.
+    memos: HashMap<usize, TaskMemo>,
+    /// Resume values for nodes continuing after `Suspend`.
+    resume: HashMap<usize, Value>,
+}
+
+impl StepProgress {
+    /// Drops the outputs that caused `kind`, so those nodes run again on
+    /// resume (the "blame rule").
+    fn forget_blamed(&mut self, graph: &Graph, kind: &RunErrorKind) {
+        let blamed: Vec<&String> = match kind {
+            RunErrorKind::UpdateConflict { first, second, .. } => vec![first, second],
+            RunErrorKind::InvalidValue { node, .. } | RunErrorKind::MissingGoto { node } => {
+                vec![node]
+            }
+            // From a `goto` (a node with `may_goto` has no router). A router's
+            // bad label is the router's fault; it runs again anyway.
+            RunErrorKind::UnknownRoute { node, .. }
+                if graph
+                    .index_of(node)
+                    .is_some_and(|id| matches!(graph.outgoing[id], Outgoing::Static(_))) =>
+            {
+                vec![node]
+            }
+            _ => Vec::new(),
+        };
+        for name in blamed {
+            if let Some(id) = graph.index_of(name) {
+                self.outputs.remove(&id);
+            }
+        }
+    }
+
+    fn into_pending_writes(mut self, graph: &Graph) -> BTreeMap<String, PendingWrite> {
+        let ids: BTreeSet<usize> = (self.outputs.keys())
+            .chain(self.memos.keys())
+            .chain(self.resume.keys())
+            .copied()
+            .collect();
+        ids.into_iter()
+            .filter_map(|id| {
+                let write = PendingWrite {
+                    output: self.outputs.remove(&id),
+                    memo: self
+                        .memos
+                        .get(&id)
+                        .map(TaskMemo::entries)
+                        .unwrap_or_default(),
+                    resume: self.resume.remove(&id),
+                };
+                (!write.is_empty()).then(|| (graph.names[id].clone(), write))
+            })
+            .collect()
+    }
 }
 
 #[allow(clippy::result_large_err)]
@@ -545,7 +705,7 @@ impl<'g> Run<'g> {
         mut self,
         mut frontier: BTreeSet<usize>,
         first_step: usize,
-        mut resume: HashMap<usize, Value>,
+        mut progress: StepProgress,
         options: RunOptions,
         resumed: bool,
     ) -> Result<RunOutput, RunError> {
@@ -558,24 +718,29 @@ impl<'g> Run<'g> {
             // Cancellation and the deadline still apply while waiting.
             let _ = self.guard(self.flush()).await;
             if let Some(kind) = self.check_stop() {
-                return Err(self.fail(step, kind, steps.len()).await);
+                return Err(self
+                    .fail(step, &frontier, progress, kind, steps.len())
+                    .await);
             }
             if step >= options.max_steps {
                 let kind = RunErrorKind::StepLimitExceeded {
                     limit: options.max_steps,
                 };
-                return Err(self.fail(step, kind, steps.len()).await);
+                return Err(self
+                    .fail(step, &frontier, progress, kind, steps.len())
+                    .await);
             }
             self.emit(Some(step), None, || EventKind::StepStarted {
                 nodes: self.names(&frontier),
             });
-            // Resume values apply only to the first step of a segment.
-            let outcome = match self
-                .step(step, &frontier, std::mem::take(&mut resume))
-                .await
-            {
+            let outcome = match self.step(step, &frontier, &mut progress).await {
                 Ok(outcome) => outcome,
-                Err(kind) => return Err(self.fail(step, kind, steps.len()).await),
+                Err(kind) => {
+                    progress.forget_blamed(self.graph, &kind);
+                    return Err(self
+                        .fail(step, &frontier, progress, kind, steps.len())
+                        .await);
+                }
             };
             steps.push(StepRecord {
                 step,
@@ -587,9 +752,12 @@ impl<'g> Run<'g> {
             step += 1;
 
             if !outcome.suspended.is_empty() {
-                return Ok(self.suspend(step, outcome, steps).await);
+                return Ok(self.suspend(step, outcome, steps, progress).await);
             }
             frontier = outcome.next;
+            // Saved work (and resume values) belong to the step that just
+            // committed.
+            progress = StepProgress::default();
         }
 
         self.emit(None, None, || EventKind::RunFinished {
@@ -613,17 +781,18 @@ impl<'g> Run<'g> {
         &mut self,
         step: usize,
         frontier: &BTreeSet<usize>,
-        mut resume: HashMap<usize, Value>,
+        progress: &mut StepProgress,
     ) -> Result<StepOutcome, RunErrorKind> {
         let graph = self.graph;
-        let outputs = self.run_nodes(step, frontier, &mut resume).await?;
+        self.run_nodes(step, frontier, progress).await?;
 
-        let mut updates = Vec::with_capacity(outputs.len());
+        let mut updates = Vec::with_capacity(progress.outputs.len());
         let mut gotos: HashMap<usize, Vec<String>> = HashMap::new();
         let mut suspended = Vec::new();
-        for (id, output) in outputs {
+        // Cloned: the outputs stay saved in case merging or routing fails.
+        for (&id, output) in &progress.outputs {
             let name = graph.names[id].clone();
-            match output {
+            match output.clone() {
                 NodeOutput::Update(update) => updates.push((name, update)),
                 NodeOutput::Command { update, goto } => {
                     updates.push((name, update));
@@ -720,14 +889,15 @@ impl<'g> Run<'g> {
         Ok(StepOutcome { next, suspended })
     }
 
-    /// Runs the frontier's nodes concurrently and returns their outputs in
-    /// declaration order. Fails fast: the first error aborts the rest.
+    /// Runs the frontier's nodes concurrently, recording each output in
+    /// `progress` as it arrives. Nodes with a saved output are not run. Fails
+    /// fast: the first error aborts the rest.
     async fn run_nodes(
         &self,
         step: usize,
         frontier: &BTreeSet<usize>,
-        resume: &mut HashMap<usize, Value>,
-    ) -> Result<Vec<(usize, NodeOutput)>, RunErrorKind> {
+        progress: &mut StepProgress,
+    ) -> Result<(), RunErrorKind> {
         // Parent of this step's node tokens: fired on any early exit, so
         // in-flight nodes (and language bridges) learn they must stop.
         let step_token = self.cancel.child();
@@ -735,6 +905,20 @@ impl<'g> Run<'g> {
         let mut task_nodes = HashMap::new();
         let mut started = HashMap::new();
         for &id in frontier {
+            if let Some(output) = progress.outputs.get(&id) {
+                // Finished before an earlier failure of this step: reuse it.
+                self.emit(Some(step), Some(id), || {
+                    let (update_keys, goto, suspended) = summarize(output);
+                    EventKind::NodeFinished {
+                        duration_ms: 0.0,
+                        update_keys,
+                        goto,
+                        suspended,
+                        reused: true,
+                    }
+                });
+                continue;
+            }
             let task = NodeTask {
                 node: self.graph.nodes[id].clone(),
                 state: self.state.clone(),
@@ -742,7 +926,8 @@ impl<'g> Run<'g> {
                 run_id: self.run_id.clone(),
                 step,
                 name: self.graph.names[id].as_str().into(),
-                resume: resume.remove(&id),
+                resume: progress.resume.get(&id).cloned(),
+                memo: progress.memos.entry(id).or_default().clone(),
                 hub: self.hub.clone(),
                 cancel: step_token.child(),
                 run_deadline: self.deadline,
@@ -756,7 +941,6 @@ impl<'g> Run<'g> {
         }
         let elapsed_ms = |id: usize| started[&id].elapsed().as_secs_f64() * 1000.0;
 
-        let mut outputs = Vec::with_capacity(frontier.len());
         loop {
             let joined = match self.guard(tasks.join_next()).await {
                 Ok(Some(joined)) => joined,
@@ -773,7 +957,7 @@ impl<'g> Run<'g> {
                         }
                         Stop::Deadline => "deadline_exceeded",
                     };
-                    self.emit_cancelled(step, frontier, &outputs, None, reason);
+                    self.emit_cancelled(step, frontier, &progress.outputs, None, reason);
                     return Err(self.stopped(stop));
                 }
             };
@@ -786,9 +970,10 @@ impl<'g> Run<'g> {
                             update_keys,
                             goto,
                             suspended,
+                            reused: false,
                         }
                     });
-                    outputs.push((id, output));
+                    progress.outputs.insert(id, output);
                     continue;
                 }
                 Ok((id, Err(failure))) => {
@@ -826,11 +1011,16 @@ impl<'g> Run<'g> {
                     other => other.to_string(),
                 },
             });
-            self.emit_cancelled(step, frontier, &outputs, Some(id), "sibling_failed");
+            self.emit_cancelled(
+                step,
+                frontier,
+                &progress.outputs,
+                Some(id),
+                "sibling_failed",
+            );
             return Err(failure);
         }
-        outputs.sort_by_key(|(id, _)| *id);
-        Ok(outputs)
+        Ok(())
     }
 
     /// `node_cancelled` for every node in `frontier` that neither finished
@@ -839,12 +1029,12 @@ impl<'g> Run<'g> {
         &self,
         step: usize,
         frontier: &BTreeSet<usize>,
-        finished: &[(usize, NodeOutput)],
+        finished: &BTreeMap<usize, NodeOutput>,
         failed: Option<usize>,
         reason: &str,
     ) {
         for &id in frontier {
-            if Some(id) != failed && !finished.iter().any(|(done, _)| *done == id) {
+            if Some(id) != failed && !finished.contains_key(&id) {
                 self.emit(Some(step), Some(id), || EventKind::NodeCancelled {
                     reason: reason.into(),
                 });
@@ -852,24 +1042,17 @@ impl<'g> Run<'g> {
         }
     }
 
-    async fn suspend(
-        self,
-        next_step: usize,
-        outcome: StepOutcome,
-        steps: Vec<StepRecord>,
-    ) -> RunOutput {
+    /// A snapshot that resumes at `step` with `frontier` and the committed
+    /// state. Call it after the last flush, so `event_seq` is final.
+    fn snapshot(
+        &self,
+        step: usize,
+        frontier: &BTreeSet<usize>,
+        suspended: Vec<Interrupt>,
+        pending_writes: BTreeMap<String, PendingWrite>,
+        error: Option<SnapshotError>,
+    ) -> Snapshot {
         let graph = self.graph;
-        let mut frontier = outcome.next;
-        frontier.extend(outcome.suspended.iter().map(|(id, _)| *id));
-
-        let interrupts: Vec<Interrupt> = outcome
-            .suspended
-            .into_iter()
-            .map(|(id, payload)| Interrupt {
-                node: graph.names[id].clone(),
-                payload,
-            })
-            .collect();
         let join_progress = graph
             .joins
             .iter()
@@ -882,6 +1065,56 @@ impl<'g> Run<'g> {
                 (graph.names[join.target].clone(), sources)
             })
             .collect();
+        Snapshot {
+            format: SNAPSHOT_FORMAT.to_string(),
+            workflow_fingerprint: graph.fingerprint.clone(),
+            run_id: self.run_id.to_string(),
+            step,
+            state: (*self.state).clone(),
+            frontier: self.names(frontier),
+            join_progress,
+            suspended,
+            pending_writes,
+            error,
+            event_seq: self
+                .hub
+                .as_ref()
+                .map_or(self.first_seq, |hub| hub.next_seq()),
+        }
+    }
+
+    async fn suspend(
+        self,
+        next_step: usize,
+        outcome: StepOutcome,
+        steps: Vec<StepRecord>,
+        progress: StepProgress,
+    ) -> RunOutput {
+        let graph = self.graph;
+        let mut frontier = outcome.next;
+        frontier.extend(outcome.suspended.iter().map(|(id, _)| *id));
+
+        // A suspended node runs again on resume: keep what it saved.
+        let pending_writes = outcome
+            .suspended
+            .iter()
+            .filter_map(|(id, _)| {
+                let memo = progress.memos.get(id)?.entries();
+                let write = PendingWrite {
+                    memo,
+                    ..PendingWrite::default()
+                };
+                (!write.is_empty()).then(|| (graph.names[*id].clone(), write))
+            })
+            .collect();
+        let interrupts: Vec<Interrupt> = outcome
+            .suspended
+            .into_iter()
+            .map(|(id, payload)| Interrupt {
+                node: graph.names[id].clone(),
+                payload,
+            })
+            .collect();
 
         self.emit(Some(next_step - 1), None, || EventKind::Suspended {
             interrupts: interrupts.clone(),
@@ -892,35 +1125,35 @@ impl<'g> Run<'g> {
             steps: steps.len(),
         });
         let _ = self.guard(self.flush()).await;
-        let event_seq = self
-            .hub
-            .as_ref()
-            .map_or(self.first_seq, |hub| hub.next_seq());
 
-        let state = into_state(self.state);
-        let snapshot = Snapshot {
-            format: SNAPSHOT_FORMAT.to_string(),
-            workflow_fingerprint: graph.fingerprint.clone(),
-            run_id: self.run_id.to_string(),
-            step: next_step,
-            state: state.clone(),
-            frontier: frontier.iter().map(|&id| graph.names[id].clone()).collect(),
-            join_progress,
-            suspended: interrupts.clone(),
-            event_seq,
-        };
+        let snapshot = self.snapshot(
+            next_step,
+            &frontier,
+            interrupts.clone(),
+            pending_writes,
+            None,
+        );
         RunOutput {
             status: RunStatus::Suspended {
                 interrupts,
                 snapshot: Box::new(snapshot),
             },
             run_id: self.run_id.to_string(),
-            state,
+            state: into_state(self.state),
             steps,
         }
     }
 
-    async fn fail(self, step: usize, kind: RunErrorKind, steps: usize) -> RunError {
+    /// Ends the run with `kind`. The error carries a snapshot that retries
+    /// `step` with `frontier`, reusing what `progress` saved.
+    async fn fail(
+        self,
+        step: usize,
+        frontier: &BTreeSet<usize>,
+        progress: StepProgress,
+        kind: RunErrorKind,
+        steps: usize,
+    ) -> RunError {
         self.emit(None, None, || EventKind::RunFinished {
             status: "failed".into(),
             error: Some(kind.code().to_string()),
@@ -935,10 +1168,17 @@ impl<'g> Run<'g> {
         } else {
             self.flush().await;
         }
+        let error = SnapshotError {
+            code: kind.code().to_string(),
+            message: kind.to_string(),
+        };
+        let pending_writes = progress.into_pending_writes(self.graph);
+        let snapshot = self.snapshot(step, frontier, Vec::new(), pending_writes, Some(error));
         RunError {
             kind,
             step,
             state: into_state(self.state),
+            snapshot: Some(Box::new(snapshot)),
         }
     }
 }
@@ -971,6 +1211,8 @@ struct NodeTask {
     step: usize,
     name: Arc<str>,
     resume: Option<Value>,
+    /// Shared with the step's progress, so saved entries outlive the task.
+    memo: TaskMemo,
     hub: Option<Arc<Hub>>,
     cancel: CancelToken,
     run_deadline: Option<Deadline>,
@@ -1016,6 +1258,7 @@ impl NodeTask {
                     (Some(a), Some(b)) => Some(a.min(b)),
                     (a, b) => a.or(b),
                 },
+                memo: self.memo.clone(),
             };
             let fut = self.node.run(ctx, self.state.clone());
             let result = match (attempt_end, self.policy.timeout_ms) {

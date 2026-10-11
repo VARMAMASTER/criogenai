@@ -19,6 +19,7 @@ uuid = { version = "1.10", default-features = false, features = ["std", "v7"] }
 [workspace.lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
+missing_debug_implementations = "warn"
 
 [workspace.lints.clippy]
 all = { level = "warn", priority = -1 }

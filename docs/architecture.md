@@ -115,8 +115,8 @@ or validation, or Python and TypeScript will drift apart.
 
 ## 2. Rust core: module map (implemented)
 
-Crate: `crates/agentbuild-core`. Dependencies: `tokio` (rt), `serde`,
-`serde_json`, `thiserror`.
+Crate: `crates/agentbuild-core`. Dependencies: `tokio` (rt, sync, time),
+`serde`, `serde_json`, `thiserror`, `uuid`.
 
 ```mermaid
 flowchart LR
@@ -126,13 +126,14 @@ flowchart LR
     event["event.rs<br/>Event, channel, Hub"]
     policy["policy.rs<br/>NodePolicy, RetryPolicy"]
     cancel["cancel.rs<br/>CancelToken"]
+    memo["memo.rs<br/>TaskMemo"]
     node["node.rs<br/>Node, Router traits<br/>node_fn, router_fn"]
     graph["graph.rs<br/>WorkflowBuilder → validate → Workflow<br/>internal Graph"]
     runtime["runtime.rs<br/>Run: superstep loop<br/>RunOptions, RunOutput"]
     error["error.rs<br/>NodeError, ValidationIssue,<br/>BuildError, RunError(Kind)"]
 
-    lib --> graph & runtime & state & node & error & reducer & event & policy & cancel
-    runtime --> reducer & event & policy & cancel
+    lib --> graph & runtime & state & node & error & reducer & event & policy & cancel & memo
+    runtime --> reducer & event & policy & cancel & memo
     graph --> node & error
     runtime --> graph & state & error
     node --> state & error
@@ -146,7 +147,8 @@ flowchart LR
 | `Node` | Object-safe trait: `run(NodeContext, Arc<State>) -> BoxFuture<Result<NodeOutput, NodeError>>`. **The language-bridge seam.** |
 | `NodeContext` / `NodeOutput` | Run info passed to nodes; `Update` / `Command{goto}` / `Suspend{payload}` |
 | `Reducer` | Per-key merge rule: `Replace`, `Append`, `UpsertById` |
-| `Snapshot` / `RunStatus` | Suspended run as JSON; `Completed` or `Suspended{interrupts, snapshot}` |
+| `Snapshot` / `RunStatus` | Suspended or failed run as JSON, with `pending_writes` (saved outputs, memo, resume values); `Completed` or `Suspended{interrupts, snapshot}` |
+| `TaskMemo` | `ctx.memo()`: per-task saved results that survive retries and resume (`get`, `put`, `once`) |
 | `Event` / `EventKind` | Lifecycle and custom events with `seq`, scope and `ts_ms` (0005 §6) |
 | `event_channel` / `RunStream` | Subscribe to one run's events; `Workflow::stream` spawns the run and yields events |
 | `NodePolicy` / `RetryPolicy` | Per-node timeout and retry with backoff (0005 §4) |
@@ -156,7 +158,7 @@ flowchart LR
 | `Workflow` | Immutable compiled graph behind an `Arc`. Cheap to clone; safe for concurrent runs. |
 | `Graph` (internal) | Nodes indexed by `usize` (declaration order); per-node outgoing transitions; join tables. |
 | `Run` (internal) | One run's mutable state: committed `State` and join progress. |
-| `RunError` | `kind` (stable `code()`), failing `step`, last committed `state`. |
+| `RunError` | `kind` (stable `code()`), failing `step`, last committed `state`, `snapshot` for `Workflow::retry`. |
 
 ### Compiled graph representation
 

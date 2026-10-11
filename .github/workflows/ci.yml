@@ -30,3 +30,28 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.88
       - run: cargo check --all-targets
+
+  # Uses the crate the way a downstream project would: packaged, unpacked,
+  # and depended on from a separate project. Also checks the docs build and
+  # runs every example (simulated LLM calls, a few seconds each).
+  package:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo doc --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+      - run: bash scripts/test-package.sh
+        shell: bash
+      - name: examples
+        shell: bash
+        run: |
+          cargo run -p agentbuild-core --example basic_workflow -- "Hello world"
+          cargo run -p agentbuild-core --example approval_workflow -- yes
+          cargo run -p agentbuild-core --example llm_workflow -- "remote work"
+          cargo run -p agentbuild-core --example retry_workflow
+          cargo run -p agentbuild-core --example recover_workflow

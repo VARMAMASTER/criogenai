@@ -3,6 +3,7 @@ use std::fmt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::runtime::Snapshot;
 use crate::state::State;
 
 /// An error raised by user code inside a node or router.
@@ -328,6 +329,7 @@ impl RunErrorKind {
 /// step that completed, and `step` is the index of the step that failed.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 #[error("step {step}: {kind}")]
+#[non_exhaustive]
 pub struct RunError {
     /// What went wrong.
     #[source]
@@ -336,11 +338,21 @@ pub struct RunError {
     pub step: usize,
     /// State as of the last completed step.
     pub state: State,
+    /// Everything needed to continue the run after fixing the cause, with
+    /// [`Workflow::retry`](crate::Workflow::retry). Finished nodes of the
+    /// failed step are not run again. `None` only when resume input was
+    /// rejected before anything ran (the caller still has its snapshot).
+    pub snapshot: Option<Box<Snapshot>>,
 }
 
 impl RunError {
     /// Shorthand for `self.kind.code()`.
     pub fn code(&self) -> &'static str {
         self.kind.code()
+    }
+
+    /// Shorthand for `self.snapshot.as_deref()`.
+    pub fn snapshot(&self) -> Option<&Snapshot> {
+        self.snapshot.as_deref()
     }
 }
