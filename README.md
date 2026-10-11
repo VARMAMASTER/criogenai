@@ -48,6 +48,12 @@ protocol comes later.
 
 Terms and naming conventions: [docs/glossary.md](docs/glossary.md).
 
+The `agentbuild-agent` crate runs agents: a model with tools, as a
+`model` ⇄ `tools` loop on the workflow engine. Tool arguments are validated
+against their schemas, calls run concurrently with limits and timeouts, and a
+failed run can be retried without repeating tool calls that already ran.
+Human approval and structured output are next.
+
 The execution semantics are specified in
 [docs/design/0001-execution-model.md](docs/design/0001-execution-model.md).
 
@@ -99,7 +105,7 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 | 1     | Rust execution core                                           | In progress |
 | 2     | Python SDK (PyO3 + maturin)                                   | Planned     |
 | 3     | TypeScript SDK (NAPI-RS)                                      | Planned     |
-| 4     | Agents, tools, model providers (data types, errors: done)     | In progress |
+| 4     | Agents, tools, providers (loop, tools, OpenAI protocol: done) | In progress |
 | 5     | Persistence (events, retries, snapshots on failure: done)     | In progress |
 | 6     | Docs, templates, publishing, benchmarks                       | Planned     |
 

@@ -41,6 +41,11 @@ impl TaskMemo {
         self.lock().get(key).cloned()
     }
 
+    /// The saved keys, sorted.
+    pub fn keys(&self) -> Vec<String> {
+        self.lock().keys().cloned().collect()
+    }
+
     /// Saves `value` under `key` immediately (not at step commit), replacing
     /// any earlier value.
     pub fn put(&self, key: impl Into<String>, value: impl Into<Value>) {

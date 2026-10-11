@@ -27,6 +27,7 @@ async fn main() {
     validation_reports_every_issue();
     model_inside_a_workflow_node().await;
     provider_errors_and_transcripts();
+    agent_with_tools().await;
     println!("package smoke test: ok");
 }
 
@@ -286,4 +287,36 @@ fn provider_errors_and_transcripts() {
         Some(ToolStatus::Cancelled)
     );
     println!("  provider error classification, transcript repair: ok");
+}
+
+/// The agent crate: a model ⇄ tools loop with a validated tool.
+async fn agent_with_tools() {
+    use agentbuild_agent::{Agent, ToolError, tool_fn};
+
+    let model = FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
+        .then(FakeReply::tool_calls([
+            ("double", json!({"n": 21})),
+            ("double", json!({"n": "x"})),
+        ]))
+        .then(FakeReply::text("21 doubled is 42"));
+    let double = tool_fn(
+        ToolSpec::new(
+            "double",
+            "Double a number",
+            json!({"type": "object", "properties": {"n": {"type": "integer"}}, "required": ["n"]}),
+        ),
+        |args, _ctx| async move { Ok::<_, ToolError>(json!(args["n"].as_i64().unwrap_or(0) * 2)) },
+    );
+    let agent = Agent::builder(model).tool(double).build().expect("valid agent");
+    let result = agent.run("double 21").await.expect("agent run");
+    assert_eq!(result.text(), Some("21 doubled is 42"));
+    assert_eq!((result.model_calls, result.tool_calls), (2, 1));
+    let statuses: Vec<Option<ToolStatus>> = result
+        .messages
+        .iter()
+        .filter(|m| m.role == agentbuild_providers::Role::Tool)
+        .map(|m| m.status)
+        .collect();
+    assert_eq!(statuses, [Some(ToolStatus::Success), Some(ToolStatus::Error)]);
+    println!("  agent loop with tools and argument validation: ok");
 }

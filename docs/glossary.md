@@ -77,14 +77,22 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Warning** | Something dropped or repaired, never silently. | `Warning` |
 | **Fake model / fake LLM** | Simulated models for tests: 2–3 s replies, scripted tool calls, failures. | `FakeModel`, `FakeLlm` (core tests) |
 
-## 3. Agents *(planned, design 0004)*
+## 3. Agents (`agentbuild-agent`; design 0004)
 
-| Term | Meaning |
-|---|---|
-| **Agent** | A model plus tools plus instructions, run as a fixed workflow: **model node** ⇄ **tools node** until the model answers without tool calls. |
-| **Agent loop** | That cycle. Each model call and each tools round is a step. |
-| **Tools node** | Runs the tool calls of one assistant message concurrently and appends the results in call order. |
-| **Hook / middleware** | Code that wraps model calls or tool calls (e.g. summarization, approval). |
+| Term | Meaning | In code |
+|---|---|---|
+| **Agent** | A model plus tools plus instructions, run as a fixed workflow: **model node** ⇄ **tools node** until the model answers without tool calls. | `Agent`, `Agent::builder(model)` |
+| **Agent loop** | That cycle. Each model call and each tools round is a step. | |
+| **Model node** | Repairs the transcript, checks limits, calls the model, routes. | node `model` |
+| **Tools node** | Runs the tool calls of one assistant message concurrently and appends the results in call order. | node `tools` |
+| **Tool (Rust)** | A function the agent can call; arguments are validated first. | `Tool`, `tool_fn`, `ToolContext` |
+| **Tool output / tool error** | What a tool returns; `ToolError::new` is shown to the model, `ToolError::fatal` fails the run. | `ToolOutput`, `ToolError` |
+| **Limits** | Bounds on model calls, tool calls (per run and per turn), parallel calls, tool timeout. | `Limits` |
+| **Stop reason** | Why a run ended normally: `final_answer`, `return_direct`, `content_filter`. | `StopReason` |
+| **Return direct** | A tool whose successful result ends the run and becomes the output. | `ToolSpec::return_direct` |
+| **Agent result / error** | The transcript, output, usage and counts; or a coded failure (`model_failed`, `tool_failed`, `limit_exceeded`) with a snapshot to retry. | `AgentResult`, `AgentError` |
+| **Hook / middleware** *(planned)* | Code that wraps model calls or tool calls (e.g. summarization, approval). | |
+| **Review / approval** *(planned)* | A human approving, editing or rejecting tool calls before they run. | |
 | **Thread** | A persisted conversation that runs continue (with a **checkpointer**, design 0008). |
 | **Gateway** | The HTTP server that exposes the provider layer to other apps (design 0006 §7). |
 

@@ -13,9 +13,10 @@ handoff point for whoever continues the work.
 3. **Done:** `agentbuild-providers` foundation, part 1: 0002 types, model
    error classification, transcript repair, `Model` trait, `FakeModel`.
    Parts 2–4 done: SSE parser, stream assembler, HTTP transport,
-   `openai_chat` + `ProviderModel` + presets. **Next:** the agent loop (0004)
-   tested with `FakeModel` (tool-calling graphs), then `anthropic_messages`.
-4. The agent loop (0004) on top of core + providers, tested with `FakeModel`.
+   `openai_chat` + `ProviderModel` + presets.
+4. **Done:** agent slice 1 (`agentbuild-agent`). **Next:** slice 2, human
+   approval (`review` node, 0004 §7); then structured output, hooks, agents
+   as nodes; `anthropic_messages`.
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
    install the built wheel in a clean venv.
@@ -37,6 +38,27 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-11: agent slice 1 (`agentbuild-agent`); glossary
+
+- `docs/glossary.md`: every term, plus naming rules for code, JSON, events,
+  error codes and ids (user request).
+- New crate `agentbuild-agent`: `Agent` compiles to `model` ⇄ `tools`;
+  `Tool`/`tool_fn`; JSON Schema subset validation; concurrent calls bounded
+  by a semaphore, results in call order; per-tool timeouts; limits;
+  `return_direct`; refusals end the run; transient model errors retried by
+  the core node policy; events `message_delta`, `message_completed`,
+  `message_aborted`, `tool_call_started`, `tool_call_finished`,
+  `transcript_repaired`, `warning`; memo-backed `Agent::retry` (the 0003 E2
+  email scenario is a test).
+- Core: `TaskMemo::keys()`. Providers: `FakeReply::Message` (scripted
+  message; its `finish_reason` is used).
+- 17 tool-calling graph tests on the paused clock (parallelism, ordering,
+  limits, timeouts, retries, repair, cancellation and retry, refusal).
+  Twelve mutation checks: all caught.
+- Package test now covers all three crates. Packaging the agent crate needs
+  its unpublished dependencies patched to the unpacked packages
+  (`--config patch.crates-io...`); the consumer runs an agent loop.
 
 ### 2026-10-11: providers part 4: `openai_chat`, endpoints, `ProviderModel`
 

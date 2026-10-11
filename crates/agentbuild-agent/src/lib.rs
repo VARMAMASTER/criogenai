@@ -1,0 +1,61 @@
+//! Agents for AgentBuild: a model with tools, run as a loop on the workflow
+//! engine (design 0004).
+//!
+//! An [`Agent`] compiles into an ordinary [`agentbuild_core::Workflow`] with
+//! two nodes: `model` calls the model; `tools` runs the tool calls of the
+//! model's last message, concurrently, and appends the results in call order.
+//! The loop ends when the model answers without calling a tool.
+//!
+//! - Tool arguments are validated against the tool's JSON Schema before the
+//!   tool runs; problems go back to the model as `invalid_arguments`.
+//! - Unknown tools, `ToolError`s and timeouts become error results the model
+//!   can react to; [`ToolError::fatal`] fails the run.
+//! - Every finished call is saved at once in the task memo: if the step
+//!   fails, [`Agent::retry`] does not run those calls again.
+//! - [`Limits`] bound model calls and tool calls; transient model errors are
+//!   retried with backoff.
+//!
+//! **Status:** the loop, tools and limits exist. Human approval, structured
+//! output and hooks are designed (0004 §3, §6, §7) but not built.
+//!
+//! ```
+//! use agentbuild_agent::{Agent, ToolError, tool_fn};
+//! use agentbuild_providers::{FakeModel, FakeReply, ToolSpec};
+//! use serde_json::json;
+//!
+//! # tokio::runtime::Builder::new_current_thread().enable_time().start_paused(true).build().unwrap().block_on(async {
+//! let model = FakeModel::new()
+//!     .then(FakeReply::tool_call("add", json!({"a": 2, "b": 3})))
+//!     .then(FakeReply::text("2 + 3 = 5"));
+//! let add = tool_fn(
+//!     ToolSpec::new("add", "Add two numbers", json!({
+//!         "type": "object",
+//!         "properties": {"a": {"type": "number"}, "b": {"type": "number"}},
+//!         "required": ["a", "b"]
+//!     })),
+//!     |args, _ctx| async move {
+//!         Ok::<_, ToolError>(json!(args["a"].as_f64().unwrap() + args["b"].as_f64().unwrap()))
+//!     },
+//! );
+//! let agent = Agent::builder(model).tool(add).build().unwrap();
+//! let result = agent.run("What is 2 + 3?").await.unwrap();
+//! assert_eq!(result.text(), Some("2 + 3 = 5"));
+//! assert_eq!((result.model_calls, result.tool_calls), (2, 1));
+//! # });
+//! ```
+
+// Compiles and runs the README's example with the doctests.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+struct ReadmeDoctests;
+
+mod agent;
+mod schema;
+mod tool;
+
+pub use agent::{
+    AGENT, Agent, AgentBuildError, AgentBuilder, AgentError, AgentInput, AgentResult, Limits,
+    MESSAGES, StopReason,
+};
+pub use schema::validate as validate_arguments;
+pub use tool::{Tool, ToolContext, ToolError, ToolOutput, tool_fn};

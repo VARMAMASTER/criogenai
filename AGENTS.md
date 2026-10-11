@@ -40,14 +40,19 @@ write our own implementation.
   default), the `openai_chat` protocol, `Endpoint` presets and
   `ProviderModel` (OpenAI, OpenRouter, Ollama, LM Studio, vLLM, any
   OpenAI-compatible server).
-- Tests: 223 across both crates, plus the package test.
-- **Next:** the agent loop (0004) on `Model`, tested with `FakeModel`; then
+- **Implemented in `agentbuild-agent` (slice 1):** the agent loop (0004):
+  `model` ⇄ `tools` workflow, Rust tools (`tool_fn`), argument validation,
+  concurrent calls in call order, timeouts, limits, model retries, events,
+  memo-backed `Agent::retry`.
+- Tests: 247 across the three crates, plus the package test.
+- **Next:** agent slice 2, human approval (0004 §7, the `review` node);
+  then structured output (§6), hooks (§3), agents as workflow nodes;
   `anthropic_messages`. See `docs/progress.md`. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
 - **Not started:** the Anthropic protocol, gateway, Python SDK,
-  TypeScript SDK, the agent loop, message-delta events, persistence. Do not
+  TypeScript SDK, agent approval/structured output/hooks, persistence. Do not
   describe these as existing anywhere.
 
 ## Commands

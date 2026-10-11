@@ -204,6 +204,28 @@ the package test (`tests/package/rust-consumer`) does exactly that.
 
 ---
 
+### `agentbuild-agent` (slice 1 implemented)
+
+Depends on `agentbuild-core` and `agentbuild-providers` (feature `http`
+forwarded). An `Agent` compiles into a two-node workflow:
+
+```mermaid
+flowchart LR
+    S((start)) --> M[model]
+    M -->|tool calls| T[tools]
+    M -->|answer / refusal| E((end))
+    T -->|results| M
+    T -->|return_direct| E
+```
+
+| Module | Contents |
+|---|---|
+| `agent.rs` | `Agent`, `AgentBuilder`, `Limits`, `AgentResult`, `AgentError`, `StopReason`; the model and tools nodes |
+| `tool.rs` | `Tool` trait, `tool_fn`, `ToolContext`, `ToolOutput`, `ToolError` |
+| `schema.rs` | Tool-argument validation (JSON Schema subset) |
+
+---
+
 ## 3. How a workflow is built (implemented)
 
 `WorkflowBuilder` methods only record declarations and never fail.

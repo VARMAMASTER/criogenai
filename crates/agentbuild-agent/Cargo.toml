@@ -1,0 +1,33 @@
+[package]
+name = "agentbuild-agent"
+description = "Agents for AgentBuild: the model and tools loop on the workflow engine"
+readme = "README.md"
+keywords = ["agents", "llm", "tools", "workflow", "ai"]
+categories = ["asynchronous"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# Not published until the package name is confirmed.
+publish = false
+
+[dependencies]
+agentbuild-core = { path = "../agentbuild-core", version = "0.1.0" }
+agentbuild-providers = { path = "../agentbuild-providers", version = "0.1.0", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# `rt`: tool calls run as tasks; `sync`: the parallel-call semaphore; `time`: tool timeouts.
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
+
+[features]
+default = ["http"]
+# Real model providers over HTTP (agentbuild-providers' `http`).
+http = ["agentbuild-providers/http"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "test-util"] }
+
+[lints]
+workspace = true

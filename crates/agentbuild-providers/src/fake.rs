@@ -39,9 +39,18 @@ pub enum FakeReply {
     ToolCalls(Vec<(String, Map<String, Value>)>),
     /// A failure.
     Error(ModelError),
+    /// This exact assistant message (e.g. with an invalid tool call). Its
+    /// `metadata.finish_reason`, if set, is the response's finish reason.
+    /// Build it with [`FakeReply::message`].
+    Message(Box<Message>),
 }
 
 impl FakeReply {
+    /// This exact assistant message.
+    pub fn message(message: Message) -> Self {
+        Self::Message(Box::new(message))
+    }
+
     /// A text answer.
     pub fn text(text: impl Into<String>) -> Self {
         Self::Text(text.into())
@@ -174,6 +183,16 @@ impl FakeModel {
         let scripted = self.script.lock().expect("script lock").pop_front();
         let (content, finish) = match scripted {
             Some(FakeReply::Error(error)) => return Err(error),
+            Some(FakeReply::Message(message)) => {
+                let finish = if let Some(reason) = message.metadata.finish_reason {
+                    reason
+                } else if message.call_ids().next().is_some() {
+                    FinishReason::ToolCalls
+                } else {
+                    FinishReason::Stop
+                };
+                (message.content, finish)
+            }
             Some(FakeReply::Text(text)) => (vec![ContentBlock::text(text)], FinishReason::Stop),
             Some(FakeReply::ToolCalls(calls)) => (
                 calls

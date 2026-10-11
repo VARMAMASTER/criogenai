@@ -1,6 +1,43 @@
 # 0004: Agent loop, hooks, structured output and human-in-the-loop
 
-Status: **Proposed** (design phase). Builds on [0002](0002-messages-and-tools.md)
+Status: **Partly implemented** in `crates/agentbuild-agent` (slice 1): the
+graph of §2 without `review`, the model node and routing of §4.1–§4.2
+(without hooks and structured output), the tools node of §4.3, the limits
+`model_calls`, `tool_calls`, `tool_calls_per_turn`, `parallel_tool_calls`
+of §5, and the events of §8 that apply. Not yet: hooks (§3), structured
+output (§6), human approval (§7), `on_limit = "end"`, `nesting`, `tokens`,
+agents as nodes or tools.
+
+Implementation decisions (slice 1):
+
+- The graph is `model` ⇄ `tools` with `may_goto` (`model → tools | END`,
+  `tools → model | END`); `max_steps` is `2 × model_calls + 4`.
+- State: `messages` (`upsert_by_id`), `agent` (bookkeeping: `model_calls`,
+  `tool_calls`, `usage`, `stop_reason`, `output`).
+- Instructions are sent as the first system message of every request and
+  are not stored in the transcript.
+- Transcript repair happens in the model node. When it changed something,
+  the model node writes the whole list with `$replace`: an inserted result
+  must sit before later messages, which an upsert (append) cannot express.
+  Repairs are rare, so the cost is acceptable.
+- Model calls use `Model::stream`; each delta is a `message_delta` event.
+  Transient `ModelError`s become retryable `NodeError`s, so the core node
+  retry policy (default 3 attempts) retries them; `Retry-After` is not
+  honored yet. Attempts are not counted as model calls.
+- Agent error codes travel as `NodeError.kind` (`model_failed`,
+  `tool_failed`, `limit_exceeded`, `invalid_state`) and are surfaced by
+  `AgentError.code`.
+- Tool arguments are validated in Rust with a JSON Schema subset (`type`,
+  `properties`, `required`, `additionalProperties`, `items`, `enum`,
+  `const`, numeric and length bounds). Unsupported keywords are ignored.
+- Each finished call is saved in the tools task's memo under
+  `call:<call_id>` before the step ends; `Agent::retry` reuses them. A fatal
+  tool error lists `completed_calls` in the error details.
+- Result message ids are `msg_result_<call_id>` (deterministic).
+- Rust tools: the `Tool` trait and `tool_fn`; `ToolError::new` goes to the
+  model, `ToolError::fatal` fails the run.
+
+Builds on [0002](0002-messages-and-tools.md)
 (data contracts), [0003](0003-error-model.md) (errors) and
 [0005](0005-core-runtime-extensions.md) (core support). Research inputs:
 [langchain-agents](../research/langchain-agents.md),

@@ -13,7 +13,10 @@ set -euo pipefail
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$root"
 
-crates=(agentbuild-core agentbuild-providers)
+# In dependency order: each crate is verified against the unpacked packages
+# of the ones before it (they are not on crates.io, so their registry
+# dependencies are patched to those packages).
+crates=(agentbuild-core agentbuild-providers agentbuild-agent)
 template="$root/tests/package/rust-consumer/Cargo.toml.in"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -21,11 +24,12 @@ cp -r "$root/tests/package/rust-consumer/." "$work/"
 rm "$work/Cargo.toml.in"
 cp "$template" "$work/Cargo.toml"
 
+patches=()
 for crate in "${crates[@]}"; do
   version="$(cargo pkgid -p "$crate" | sed 's/.*[@#]//')"
   echo "== packaging $crate $version"
   # --allow-dirty: also test uncommitted changes when run locally.
-  cargo package -p "$crate" --allow-dirty
+  cargo package -p "$crate" --allow-dirty "${patches[@]}"
 
   package_dir="$root/target/package/$crate-$version"
   for file in README.md LICENSE-MIT LICENSE-APACHE Cargo.toml src/lib.rs; do
@@ -43,8 +47,9 @@ for crate in "${crates[@]}"; do
   fi
   placeholder="@$(echo "$crate" | tr '[:lower:]-' '[:upper:]_')_DIR@"
   # Not `sed -i`: its syntax differs between GNU and BSD (macOS) sed.
-  sed "s|$placeholder|$path|" "$work/Cargo.toml" >"$work/Cargo.toml.new"
+  sed "s|$placeholder|$path|g" "$work/Cargo.toml" >"$work/Cargo.toml.new"
   mv "$work/Cargo.toml.new" "$work/Cargo.toml"
+  patches+=(--config "patch.crates-io.$crate.path=\"$path\"")
 done
 
 if grep -q "_DIR@" "$work/Cargo.toml"; then

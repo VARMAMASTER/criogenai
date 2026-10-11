@@ -3,6 +3,18 @@
 version = 4
 
 [[package]]
+name = "agentbuild-agent"
+version = "0.1.0"
+dependencies = [
+ "agentbuild-core",
+ "agentbuild-providers",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
 name = "agentbuild-core"
 version = "0.1.0"
 dependencies = [
