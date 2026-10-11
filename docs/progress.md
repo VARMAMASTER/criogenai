@@ -14,9 +14,9 @@ handoff point for whoever continues the work.
    error classification, transcript repair, `Model` trait, `FakeModel`.
    Parts 2–4 done: SSE parser, stream assembler, HTTP transport,
    `openai_chat` + `ProviderModel` + presets.
-4. **Done:** agent slices 1–3 (loop, tools, approval, structured output);
-   observability and Langfuse (`agentbuild-telemetry`, 0009). **Next
-   (agent list, in order):** hooks (§3) → remaining limits (`on_limit=end`,
+4. **Done:** agent slices 1–4 (loop, tools, approval, structured output,
+   hooks); observability and Langfuse (`agentbuild-telemetry`, 0009).
+   **Next (agent list, in order):** remaining limits (`on_limit=end`,
    tokens, nesting) → model resilience (`Retry-After`, fallback models) →
    agents as workflow nodes and as tools → tool features (per-tool
    concurrency, safe retries, result truncation, state updates, app
@@ -42,6 +42,21 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-12: agent slice 4: hooks (0004 §3)
+
+- `Hook` trait with six optional methods; `HookAction` (state, replace
+  transcript, replace message, end); `HookContext`; `ModelNext` /
+  `ToolNext` chains (first hook outermost, callable several times);
+  `HookError` → `hook_failed`; `StopReason::HookEnd`; `HOOKS` state key.
+- `on_start` / `on_end` wrap each `run`, `resume`, `retry`; `on_end` always
+  runs, in reverse order.
+- 10 tests: exact onion order across a full run, summarizer, cached answer
+  without a model call, guardrail (redact or end), recovery from context
+  overflow in `wrap_model`, `wrap_tool` changing/short-circuiting/blocking,
+  hook state across turns, failing hook (with `on_end`), suspended
+  segments, duplicate names. Eight mutation checks: all caught (one
+  re-run with a mutation that compiles).
 
 ### 2026-10-11: agent slice 3: structured output (0004 §6)
 

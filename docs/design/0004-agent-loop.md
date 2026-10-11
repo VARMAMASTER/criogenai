@@ -5,8 +5,35 @@ graph of §2, the model node and routing of §4.1–§4.2
 (without hooks and structured output), the tools node of §4.3, the limits
 `model_calls`, `tool_calls`, `tool_calls_per_turn`, `parallel_tool_calls`
 of §5, and the events of §8 that apply), slice 2 (human approval, §7) and
-slice 3 (structured output, §6). Not yet: hooks (§3), `on_limit = "end"`,
-`nesting`, `tokens`, agents as nodes or tools.
+slice 3 (structured output, §6) and slice 4 (hooks, §3). Not yet:
+`on_limit = "end"`, `nesting`, `tokens`, agents as nodes or tools.
+
+Implementation decisions (slice 4, hooks):
+
+- Rust: `trait Hook { name, on_start, before_model, wrap_model,
+  after_model, wrap_tool, on_end }`, every method with a no-op default;
+  `AgentBuilder::hook(h)`. Two hooks with one name fail the build.
+- `before_model` / `after_model` return a `HookAction`: `state` (saved under
+  the `hooks` state key, one entry per hook name, shown to the hook as
+  `HookContext::hook_state`), `messages` (before_model: replace the whole
+  transcript, for this call and in state; written with `$replace`),
+  `message` (after_model: replace the new message), `end(output)` (stop
+  reason `hook_end`; the first `end` in execution order wins).
+- `wrap_model(request, next)` / `wrap_tool(call, next)` nest with the first
+  hook outermost; `next.call(..)` may be called zero or more times
+  (`ModelNext` / `ToolNext` are `Clone`). Retries inside `wrap_model` are
+  not counted as model calls. A `ToolError` returned by `wrap_tool` is the
+  tool's own error.
+- `on_start` and `on_end` run around each `Agent::run`, `resume` and
+  `retry` call (one run segment), not inside the workflow: running
+  `agent.workflow()` directly skips them. `on_start` may save hook state
+  (applied on `run`; on `resume`/`retry` the snapshot's state is used as
+  is). `on_end` runs for completed, suspended and failed segments, in
+  reverse order, and cannot change the outcome. A new run's `run_id` is
+  empty in `on_start` (the engine assigns it when the run starts).
+- A hook error fails the run with `hook_failed` (`details.hook`,
+  `details.stage`); the failure snapshot allows `Agent::retry` after the
+  fix.
 
 Implementation decisions (slice 3, structured output):
 

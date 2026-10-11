@@ -23,8 +23,12 @@
 //!   through the model's JSON mode or a reserved `final_output` tool;
 //!   invalid answers are sent back with the validation errors.
 //!
-//! **Status:** the loop, tools, limits, human approval and structured
-//! output exist. Hooks are designed (0004 §3) but not built.
+//! - [`Hook`]s run around the loop (`on_start`, `before_model`,
+//!   `wrap_model`, `after_model`, `wrap_tool`, `on_end`) without changing
+//!   the graph.
+//!
+//! **Status:** the loop, tools, limits, human approval, structured output
+//! and hooks exist (design 0004).
 //!
 //! ```
 //! use agentbuild_agent::{Agent, ToolError, tool_fn};
@@ -59,16 +63,20 @@ struct ReadmeDoctests;
 
 mod agent;
 mod approval;
+mod hooks;
 mod output;
 mod schema;
 mod tool;
 
 pub use agent::{
-    AGENT, Agent, AgentBuildError, AgentBuilder, AgentError, AgentInput, AgentResult, Limits,
-    MESSAGES, StopReason,
+    AGENT, Agent, AgentBuildError, AgentBuilder, AgentError, AgentInput, AgentResult, HOOKS,
+    Limits, MESSAGES, StopReason,
 };
 pub use approval::{
     APPROVAL_INTERRUPT, Approval, ApprovalRequest, ApprovalRule, Decision, DecisionKind,
+};
+pub use hooks::{
+    Hook, HookAction, HookContext, HookError, ModelNext, Outcome, ToolCallRequest, ToolNext,
 };
 pub use output::FINAL_OUTPUT_TOOL;
 pub use schema::validate as validate_arguments;

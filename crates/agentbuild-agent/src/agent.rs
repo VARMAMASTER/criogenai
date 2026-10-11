@@ -21,6 +21,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::approval::{APPROVAL_INTERRUPT, Approval, ApprovalRequest, Decision, check_decisions};
+use crate::hooks::{Hook, HookContext, ModelNext, Outcome, ToolCallRequest, ToolNext};
 use crate::output::{FINAL_OUTPUT_TOOL, OutputConfig};
 use crate::schema;
 use crate::tool::{Tool, ToolContext, ToolOutput};
@@ -30,6 +31,8 @@ pub const MESSAGES: &str = "messages";
 /// State key holding the run's bookkeeping (model and tool call counts,
 /// usage, stop reason, output).
 pub const AGENT: &str = "agent";
+/// State key holding hook state, one entry per hook name.
+pub const HOOKS: &str = "hooks";
 
 const MODEL_NODE: &str = "model";
 const TOOLS_NODE: &str = "tools";
@@ -126,6 +129,8 @@ pub enum StopReason {
     ContentFilter,
     /// Structured output was accepted; it is the output.
     Output,
+    /// A hook ended the run.
+    HookEnd,
 }
 
 /// Run bookkeeping, stored under [`AGENT`].
@@ -165,6 +170,9 @@ pub enum AgentBuildError {
     /// The output schema is not a JSON object.
     #[error("the output schema must be a JSON Schema object")]
     OutputSchema,
+    /// Two hooks share a name.
+    #[error("hook `{0}` is added more than once")]
+    DuplicateHook(String),
     /// The approval settings are invalid.
     #[error("invalid approval settings: {0}")]
     Approval(String),
@@ -182,6 +190,7 @@ pub struct AgentBuilder {
     model_retry: RetryPolicy,
     approval: Option<Approval>,
     output: Option<(Value, Option<OutputStrategy>)>,
+    hooks: Vec<Arc<dyn Hook>>,
 }
 
 impl std::fmt::Debug for AgentBuilder {
@@ -250,6 +259,12 @@ impl AgentBuilder {
         self
     }
 
+    /// Adds a hook (design 0004 §3). Order matters: see [`Hook`].
+    pub fn hook(mut self, hook: impl Hook) -> Self {
+        self.hooks.push(Arc::new(hook));
+        self
+    }
+
     /// Requires a person to approve some tool calls before they run
     /// (design 0004 §7). The run suspends with the requests; continue it
     /// with [`Agent::resume`].
@@ -271,6 +286,13 @@ impl AgentBuilder {
             .map(|s| (s.name.clone(), s.input_schema.clone()))
             .collect();
         let approval = self.approval.map(Arc::new);
+        let mut hook_names = HashSet::new();
+        for hook in &self.hooks {
+            if !hook_names.insert(hook.name().to_string()) {
+                return Err(AgentBuildError::DuplicateHook(hook.name().to_string()));
+            }
+        }
+        let hooks: Arc<[Arc<dyn Hook>]> = self.hooks.into();
         let output = match self.output {
             None => None,
             Some((schema, _)) if !schema.is_object() => return Err(AgentBuildError::OutputSchema),
@@ -309,11 +331,13 @@ impl AgentBuilder {
             limits: limits.clone(),
             approval: approval.clone(),
             output: output.clone(),
+            hooks: hooks.clone(),
         }));
         let tools_node = ToolsNode(Arc::new(ToolsInner {
             tools,
             limits: limits.clone(),
             output,
+            hooks: hooks.clone(),
         }));
 
         let mut builder = WorkflowBuilder::new();
@@ -350,6 +374,7 @@ impl AgentBuilder {
             limits,
             max_steps,
             schemas,
+            hooks,
         })
     }
 }
@@ -360,13 +385,27 @@ impl AgentBuilder {
 /// It compiles into an ordinary [`Workflow`] with two nodes, `model` and
 /// `tools`, so streaming, cancellation, deadlines, snapshots and
 /// [`retry`](Self::retry) work exactly as for any workflow.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Agent {
     workflow: Workflow,
     limits: Limits,
     max_steps: usize,
     /// Tool argument schemas, to check edited calls on resume.
     schemas: HashMap<String, Value>,
+    hooks: Arc<[Arc<dyn Hook>]>,
+}
+
+impl std::fmt::Debug for Agent {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Agent")
+            .field("workflow", &self.workflow)
+            .field("limits", &self.limits)
+            .field(
+                "hooks",
+                &self.hooks.iter().map(|h| h.name()).collect::<Vec<_>>(),
+            )
+            .finish_non_exhaustive()
+    }
 }
 
 /// What an agent run starts from.
@@ -413,6 +452,7 @@ impl Agent {
             model_retry: RetryPolicy::new(),
             approval: None,
             output: None,
+            hooks: Vec::new(),
         }
     }
 
@@ -453,12 +493,74 @@ impl Agent {
         mut options: RunOptions,
     ) -> Result<AgentResult, AgentError> {
         options.max_steps = options.max_steps.max(self.max_steps);
-        let output = self
-            .workflow
-            .run_with(Self::initial_state(input), options)
-            .await
-            .map_err(AgentError::from_run)?;
-        AgentResult::from_output(output)
+        let mut state = Self::initial_state(input);
+        let run_id = String::new();
+        let hook_state = self.on_start(&run_id, &state).await?;
+        if let Some(hook_state) = hook_state {
+            state.insert(HOOKS, hook_state);
+        }
+        let result = self.workflow.run_with(state, options).await;
+        self.finish(result).await
+    }
+
+    /// Runs every `on_start` hook (in order). Returns the hooks' state to
+    /// store, if any hook set some.
+    async fn on_start(&self, run_id: &str, state: &State) -> Result<Option<Value>, AgentError> {
+        if self.hooks.is_empty() {
+            return Ok(None);
+        }
+        let mut saved = read_hooks(state);
+        let mut changed = false;
+        let state = Arc::new(state.clone());
+        for hook in self.hooks.iter() {
+            let ctx = hook_context(run_id, &state, hook.name(), &saved)
+                .map_err(AgentError::invalid_state)?;
+            let action = hook.on_start(&ctx).await.map_err(|err| AgentError {
+                code: "hook_failed".into(),
+                message: format!("hook `{}` failed in on_start: {err}", hook.name()),
+                details: Some(json!({"hook": hook.name(), "stage": "on_start"})),
+                run_error: None,
+            })?;
+            if let Some(value) = action.state {
+                saved.insert(hook.name().to_string(), value);
+                changed = true;
+            }
+        }
+        Ok(changed.then_some(Value::Object(saved)))
+    }
+
+    /// Runs every `on_end` hook (in reverse order) and builds the result.
+    async fn finish(&self, result: Result<RunOutput, RunError>) -> Result<AgentResult, AgentError> {
+        let (outcome, state, run_id) = match &result {
+            Ok(output) if output.is_suspended() => (
+                Outcome::Suspended,
+                output.state.clone(),
+                output.run_id.clone(),
+            ),
+            Ok(output) => (
+                Outcome::Completed,
+                output.state.clone(),
+                output.run_id.clone(),
+            ),
+            Err(error) => (
+                Outcome::Failed,
+                error.state.clone(),
+                error
+                    .snapshot()
+                    .map(|s| s.run_id.clone())
+                    .unwrap_or_default(),
+            ),
+        };
+        if !self.hooks.is_empty() {
+            let saved = read_hooks(&state);
+            let state = Arc::new(state);
+            for hook in self.hooks.iter().rev() {
+                if let Ok(ctx) = hook_context(&run_id, &state, hook.name(), &saved) {
+                    hook.on_end(&ctx, outcome).await;
+                }
+            }
+        }
+        AgentResult::from_output(result.map_err(AgentError::from_run)?)
     }
 
     /// Continues a run suspended for approval, with one decision per
@@ -497,23 +599,20 @@ impl Agent {
         check_decisions(&requests, &decisions, &self.schemas)
             .map_err(AgentError::resume_invalid)?;
         options.max_steps = options.max_steps.max(self.max_steps);
-        let output = self
+        self.on_start(&snapshot.run_id, &snapshot.state).await?;
+        let result = self
             .workflow
             .resume_with(snapshot, [(REVIEW_NODE, to_json(&decisions))], options)
-            .await
-            .map_err(AgentError::from_run)?;
-        AgentResult::from_output(output)
+            .await;
+        self.finish(result).await
     }
 
     /// Continues a failed run from its snapshot. Tool calls that finished
     /// before the failure are not run again.
     pub async fn retry(&self, snapshot: &Snapshot) -> Result<AgentResult, AgentError> {
-        let output = self
-            .workflow
-            .retry_with(snapshot, self.run_options())
-            .await
-            .map_err(AgentError::from_run)?;
-        AgentResult::from_output(output)
+        self.on_start(&snapshot.run_id, &snapshot.state).await?;
+        let result = self.workflow.retry_with(snapshot, self.run_options()).await;
+        self.finish(result).await
     }
 }
 
@@ -618,6 +717,7 @@ impl AgentError {
                             | "invalid_state"
                             | "resume_invalid"
                             | "output_invalid"
+                            | "hook_failed"
                     )
                 ) =>
             {
@@ -683,6 +783,35 @@ fn read_book(state: &State) -> Result<Bookkeeping, NodeError> {
     }
 }
 
+/// The saved state of every hook (`hooks` key).
+fn read_hooks(state: &State) -> Map<String, Value> {
+    match state.get(HOOKS) {
+        Some(Value::Object(map)) => map.clone(),
+        _ => Map::new(),
+    }
+}
+
+fn hook_context(
+    run_id: &str,
+    state: &Arc<State>,
+    hook: &str,
+    saved: &Map<String, Value>,
+) -> Result<HookContext, NodeError> {
+    Ok(HookContext {
+        run_id: run_id.to_string(),
+        messages: read_messages(state)?,
+        model_calls: read_book(state)?.model_calls,
+        hook_state: saved.get(hook).cloned(),
+        state: state.clone(),
+    })
+}
+
+fn hook_failed(hook: &str, stage: &str, error: impl std::fmt::Display) -> NodeError {
+    NodeError::new(format!("hook `{hook}` failed in {stage}: {error}"))
+        .with_kind("hook_failed")
+        .with_details(json!({"hook": hook, "stage": stage}))
+}
+
 fn to_json<T: Serialize>(value: &T) -> Value {
     serde_json::to_value(value).expect("agent data serializes")
 }
@@ -714,6 +843,7 @@ struct ModelInner {
     limits: Limits,
     approval: Option<Arc<Approval>>,
     output: Option<Arc<OutputConfig>>,
+    hooks: Arc<[Arc<dyn Hook>]>,
 }
 
 struct ModelNode(Arc<ModelInner>);
@@ -745,11 +875,51 @@ async fn model_step(
     if !repaired.changes.is_empty() {
         events.emit("transcript_repaired", json!({"changes": repaired.changes}));
     }
-    let mut request_messages = Vec::with_capacity(repaired.messages.len() + 1);
+    // before_model hooks (in order): may save state, replace the
+    // transcript, or end the run without calling the model.
+    let mut transcript = repaired.messages;
+    let mut replaced = !repaired.changes.is_empty();
+    let mut saved_hooks = read_hooks(&state);
+    let mut hooks_changed = false;
+    for hook in inner.hooks.iter() {
+        let hook_ctx = HookContext {
+            run_id: ctx.run_id().to_string(),
+            messages: transcript.clone(),
+            model_calls: book.model_calls,
+            hook_state: saved_hooks.get(hook.name()).cloned(),
+            state: state.clone(),
+        };
+        let action = hook
+            .before_model(&hook_ctx)
+            .await
+            .map_err(|err| hook_failed(hook.name(), "before_model", err))?;
+        if let Some(value) = action.state {
+            saved_hooks.insert(hook.name().to_string(), value);
+            hooks_changed = true;
+        }
+        if let Some(messages) = action.messages {
+            transcript = messages;
+            replaced = true;
+        }
+        if let Some(output) = action.end {
+            book.stop_reason = Some(StopReason::HookEnd);
+            book.output = output;
+            let mut update = Update::new().set(AGENT, to_json(&book));
+            if replaced {
+                update = update.set(MESSAGES, json!({"$replace": transcript}));
+            }
+            if hooks_changed {
+                update = update.set(HOOKS, Value::Object(saved_hooks));
+            }
+            return Ok(NodeOutput::goto(update, [END]));
+        }
+    }
+
+    let mut request_messages = Vec::with_capacity(transcript.len() + 1);
     if let Some(instructions) = &inner.instructions {
         request_messages.push(Message::system(instructions.clone()).with_id("msg_instructions"));
     }
-    request_messages.extend(repaired.messages.iter().cloned());
+    request_messages.extend(transcript.iter().cloned());
     let mut tools = inner.specs.clone();
     let mut request_output = None;
     match inner.output.as_deref() {
@@ -779,12 +949,18 @@ async fn model_step(
     }
 
     let delta_events = events.clone();
-    let mut on_delta = move |delta: MessageDelta| {
+    let on_delta = Arc::new(move |delta: MessageDelta| {
         if delta_events.is_enabled() {
             delta_events.emit("message_delta", to_json(&delta));
         }
+    });
+    // wrap_model hooks nest around the call (the first hook outermost).
+    let chain = ModelNext {
+        hooks: &inner.hooks,
+        model: inner.model.as_ref(),
+        on_delta,
     };
-    let response = match inner.model.stream(&request, &mut on_delta).await {
+    let response = match chain.call(request).await {
         Ok(response) => response,
         Err(error) => {
             if error.emitted_deltas {
@@ -797,7 +973,35 @@ async fn model_step(
     for warning in &response.warnings {
         events.emit("warning", to_json(warning));
     }
-    let message = response.message;
+    let mut message = response.message;
+    // after_model hooks (reverse order): may save state, replace the new
+    // message, or end the run.
+    let mut hook_end = None;
+    for hook in inner.hooks.iter().rev() {
+        let mut messages = transcript.clone();
+        messages.push(message.clone());
+        let hook_ctx = HookContext {
+            run_id: ctx.run_id().to_string(),
+            messages,
+            model_calls: book.model_calls + 1,
+            hook_state: saved_hooks.get(hook.name()).cloned(),
+            state: state.clone(),
+        };
+        let action = hook
+            .after_model(&hook_ctx)
+            .await
+            .map_err(|err| hook_failed(hook.name(), "after_model", err))?;
+        if let Some(value) = action.state {
+            saved_hooks.insert(hook.name().to_string(), value);
+            hooks_changed = true;
+        }
+        if let Some(replacement) = action.message {
+            message = replacement;
+        }
+        if hook_end.is_none() {
+            hook_end = action.end;
+        }
+    }
     events.emit(
         "message_completed",
         json!({
@@ -813,7 +1017,11 @@ async fn model_step(
     book.usage = book.usage.add(&response.usage);
     // Routing after the model (0004 §4.2).
     let mut reminders = Vec::new();
-    let next = if response.finish_reason == FinishReason::ContentFilter {
+    let next = if let Some(output) = hook_end {
+        book.stop_reason = Some(StopReason::HookEnd);
+        book.output = output;
+        END
+    } else if response.finish_reason == FinishReason::ContentFilter {
         book.stop_reason = Some(StopReason::ContentFilter);
         book.output = Some(Value::String(message.text()));
         END
@@ -857,24 +1065,25 @@ async fn model_step(
         END
     };
 
-    let messages_update = if repaired.changes.is_empty() {
+    let messages_update = if !replaced {
         let mut new = vec![message];
         new.append(&mut reminders);
         json!(new)
     } else {
-        // Repairs can insert results before later messages, which an
-        // upsert (append) cannot express: replace the list (repairs are rare).
-        let mut all = repaired.messages;
+        // Repairs and hook rewrites change earlier messages, which an upsert
+        // (append) cannot express: replace the list (both are rare).
+        let mut all = transcript;
         all.push(message);
         all.append(&mut reminders);
         json!({"$replace": all})
     };
-    Ok(NodeOutput::goto(
-        Update::new()
-            .set(MESSAGES, messages_update)
-            .set(AGENT, to_json(&book)),
-        [next],
-    ))
+    let mut update = Update::new()
+        .set(MESSAGES, messages_update)
+        .set(AGENT, to_json(&book));
+    if hooks_changed {
+        update = update.set(HOOKS, Value::Object(saved_hooks));
+    }
+    Ok(NodeOutput::goto(update, [next]))
 }
 
 /// Counts an invalid structured-output answer; fails with `output_invalid`
@@ -965,6 +1174,7 @@ struct ToolsInner {
     tools: HashMap<String, Arc<dyn Tool>>,
     limits: Limits,
     output: Option<Arc<OutputConfig>>,
+    hooks: Arc<[Arc<dyn Hook>]>,
 }
 
 struct ToolsNode(Arc<ToolsInner>);
@@ -1246,6 +1456,7 @@ async fn tools_step(
             .map_or(limits.tool_timeout, Duration::from_millis);
         let return_direct = call.tool.spec().return_direct;
         let (call_id, name) = (call.call_id.clone(), call.name.clone());
+        let inner = inner.clone();
         let handle = tasks.spawn(async move {
             let _permit = semaphore.acquire_owned().await.expect("semaphore open");
             events.emit(
@@ -1253,7 +1464,18 @@ async fn tools_step(
                 json!({"call_id": call.call_id, "tool": call.name, "args": call.args}),
             );
             let started = Instant::now();
-            let outcome = tokio::time::timeout(timeout, call.tool.call(call.args, tool_ctx)).await;
+            // wrap_tool hooks nest around the call (the first hook outermost).
+            let chain = ToolNext {
+                hooks: &inner.hooks,
+                tools: &inner.tools,
+                ctx: tool_ctx,
+            };
+            let request = ToolCallRequest {
+                call_id: call.call_id.clone(),
+                name: call.name.clone(),
+                args: call.args,
+            };
+            let outcome = tokio::time::timeout(timeout, chain.call(request)).await;
             let (message, direct) = match outcome {
                 Ok(Ok(output)) => {
                     let direct = return_direct.then(|| output.to_value());

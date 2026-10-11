@@ -92,7 +92,7 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Return direct** | A tool whose successful result ends the run and becomes the output. | `ToolSpec::return_direct` |
 | **Structured output** | The run must end with JSON matching a schema: through the model's JSON mode (`native`) or the reserved `final_output` tool (`tool`); invalid answers go back to the model, up to `output_retries`. | `AgentBuilder::output`, `FINAL_OUTPUT_TOOL`, stop reason `output`, error `output_invalid` |
 | **Agent result / error** | The transcript, output, usage and counts; or a coded failure (`model_failed`, `tool_failed`, `limit_exceeded`) with a snapshot to retry. | `AgentResult`, `AgentError` |
-| **Hook / middleware** *(planned)* | Code that wraps model calls or tool calls (e.g. summarization, approval). | |
+| **Hook / middleware** | Code that runs around the loop: `on_start`, `before_model`, `wrap_model`, `after_model`, `wrap_tool`, `on_end`; onion order (first hook outermost). | `Hook`, `HookAction`, `HookContext`, `ModelNext`, `ToolNext`, stop reason `hook_end`, error `hook_failed` |
 | **Approval / review** | A person approving tool calls before they run; the `review` node suspends the run with the requests. | `Approval`, `ApprovalRule`, node `review` |
 | **Approval request** | One gated call waiting for a decision: call id, tool, arguments, description, allowed decisions. | `ApprovalRequest`, `AgentResult::approval_requests` |
 | **Decision** | `approve`, `edit` (run changed arguments), `reject` (not run; model told why), `respond` (not run; reviewer's answer is the result). | `Decision`, `DecisionKind`, `Agent::resume` |
