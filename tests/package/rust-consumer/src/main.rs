@@ -30,6 +30,7 @@ async fn main() {
     agent_with_tools().await;
     telemetry_never_breaks_a_run().await;
     approval_before_a_tool_runs().await;
+    agents_as_nodes_and_tools().await;
     println!("package smoke test: ok");
 }
 
@@ -385,4 +386,42 @@ async fn approval_before_a_tool_runs() {
     assert_eq!(done.text(), Some("Refund handled."));
     assert_eq!(refunds.load(Ordering::SeqCst), 1);
     println!("  human approval (suspend, decide, resume): ok");
+}
+
+/// An agent as a workflow node, and as another agent's tool.
+async fn agents_as_nodes_and_tools() {
+    use agentbuild_agent::Agent;
+
+    let quick = |replies: Vec<FakeReply>| {
+        let mut model = FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1));
+        for reply in replies {
+            model = model.then(reply);
+        }
+        model
+    };
+    let expert = Agent::builder(quick(vec![FakeReply::text("42")])).build().unwrap();
+    let mut builder = WorkflowBuilder::new();
+    builder
+        .add_node("expert", expert.as_node().output_key("answer"))
+        .set_entry("expert")
+        .add_edge("expert", END);
+    let out = builder
+        .build()
+        .unwrap()
+        .run(State::new().with("messages", "What is six times seven?"))
+        .await
+        .expect("workflow with an agent node");
+    assert_eq!(out.state.get("answer").unwrap(), "42");
+
+    let sub = Agent::builder(quick(vec![FakeReply::text("sub-answer")])).build().unwrap();
+    let lead = Agent::builder(quick(vec![
+        FakeReply::tool_call("ask_sub", json!({"input": "help"})),
+        FakeReply::text("lead-answer"),
+    ]))
+    .tool(sub.as_tool("ask_sub", "Ask the sub-agent"))
+    .build()
+    .unwrap();
+    let result = lead.run("go").await.expect("lead agent");
+    assert_eq!(result.text(), Some("lead-answer"));
+    println!("  agents as workflow nodes and as tools: ok");
 }

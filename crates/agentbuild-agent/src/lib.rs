@@ -64,6 +64,7 @@ struct ReadmeDoctests;
 mod agent;
 mod approval;
 mod hooks;
+mod nested;
 mod output;
 mod resilience;
 mod schema;
@@ -79,6 +80,7 @@ pub use approval::{
 pub use hooks::{
     Hook, HookAction, HookContext, HookError, ModelNext, Outcome, ToolCallRequest, ToolNext,
 };
+pub use nested::{AGENT_APPROVAL_INTERRUPT, AgentNode, AgentTool};
 pub use output::FINAL_OUTPUT_TOOL;
 pub use schema::validate as validate_arguments;
 pub use tool::{Tool, ToolContext, ToolError, ToolOutput, tool_fn};

@@ -33,9 +33,17 @@ pub struct ToolContext {
     pub run_id: String,
     pub(crate) cancel: CancelToken,
     pub(crate) events: EventSink,
+    /// How deep this call is in agents calling agents (0 = top level).
+    pub(crate) depth: u32,
 }
 
 impl ToolContext {
+    /// How many agents are above the agent making this call (0 for a
+    /// top-level agent).
+    pub fn depth(&self) -> u32 {
+        self.depth
+    }
+
     /// Fires when the run is cancelled or the call times out.
     pub fn cancel_token(&self) -> &CancelToken {
         &self.cancel

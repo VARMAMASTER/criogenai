@@ -63,6 +63,8 @@ pub struct Limits {
     pub tokens: Option<u64>,
     /// What happens when a limit is reached. Default [`OnLimit::Error`].
     pub on_limit: OnLimit,
+    /// How deep agents may call agents ([`Agent::as_tool`]). Default 8.
+    pub nesting: u32,
 }
 
 /// What happens when the model-call, token or tool-call budget runs out
@@ -90,6 +92,7 @@ impl Default for Limits {
             output_retries: 2,
             tokens: None,
             on_limit: OnLimit::Error,
+            nesting: 8,
         }
     }
 }
@@ -122,6 +125,12 @@ impl Limits {
     /// Sets [`tokens`](Self::tokens).
     pub fn tokens(mut self, n: u64) -> Self {
         self.tokens = Some(n);
+        self
+    }
+
+    /// Sets [`nesting`](Self::nesting).
+    pub fn nesting(mut self, depth: u32) -> Self {
+        self.nesting = depth;
         self
     }
 
@@ -195,6 +204,9 @@ struct Bookkeeping {
     /// The limit that ended the run (`OnLimit::End`).
     #[serde(skip_serializing_if = "Option::is_none")]
     limit: Option<String>,
+    /// Agents above this one (agents used as tools).
+    #[serde(skip_serializing_if = "is_zero")]
+    depth: u32,
 }
 
 fn is_zero(n: &u32) -> bool {
@@ -576,10 +588,38 @@ impl Agent {
     pub async fn run_with(
         &self,
         input: impl Into<AgentInput>,
+        options: RunOptions,
+    ) -> Result<AgentResult, AgentError> {
+        self.run_at_depth(input, 0, options).await
+    }
+
+    /// A run `depth` levels below a top-level agent (agents as tools).
+    pub(crate) async fn run_at_depth(
+        &self,
+        input: impl Into<AgentInput>,
+        depth: u32,
         mut options: RunOptions,
     ) -> Result<AgentResult, AgentError> {
+        if depth > self.limits.nesting {
+            return Err(AgentError {
+                code: "limit_exceeded".into(),
+                message: format!(
+                    "agents are nested {depth} deep; the limit is {}",
+                    self.limits.nesting
+                ),
+                details: Some(json!({"limit": "nesting", "value": self.limits.nesting})),
+                run_error: None,
+            });
+        }
         options.max_steps = options.max_steps.max(self.max_steps);
         let mut state = Self::initial_state(input);
+        if depth > 0 {
+            let book = Bookkeeping {
+                depth,
+                ..Bookkeeping::default()
+            };
+            state.insert(AGENT, to_json(&book));
+        }
         let run_id = String::new();
         let hook_state = self.on_start(&run_id, &state).await?;
         if let Some(hook_state) = hook_state {
@@ -696,8 +736,18 @@ impl Agent {
     /// Continues a failed run from its snapshot. Tool calls that finished
     /// before the failure are not run again.
     pub async fn retry(&self, snapshot: &Snapshot) -> Result<AgentResult, AgentError> {
+        self.retry_with(snapshot, self.run_options()).await
+    }
+
+    /// [`retry`](Self::retry) with options.
+    pub async fn retry_with(
+        &self,
+        snapshot: &Snapshot,
+        mut options: RunOptions,
+    ) -> Result<AgentResult, AgentError> {
+        options.max_steps = options.max_steps.max(self.max_steps);
         self.on_start(&snapshot.run_id, &snapshot.state).await?;
-        let result = self.workflow.retry_with(snapshot, self.run_options()).await;
+        let result = self.workflow.retry_with(snapshot, options).await;
         self.finish(result).await
     }
 }
@@ -1586,6 +1636,7 @@ async fn tools_step(
             run_id: ctx.run_id().to_string(),
             cancel: ctx.cancel_token().child(),
             events: events.clone(),
+            depth: book.depth,
         };
         let timeout = call
             .tool

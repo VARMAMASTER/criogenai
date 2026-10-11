@@ -9,6 +9,31 @@ slice 3 (structured output, §6), slice 4 (hooks, §3) and slice 5 (the
 remaining limits of §5 except `nesting`). Not yet: `nesting` (comes with
 agents as tools), agents as nodes or tools.
 
+Implementation decisions (slice 7, agents as nodes and tools):
+
+- `agent.as_node()` → `AgentNode` (`messages_key`, default `messages`; a
+  string there is taken as one user message; optional `output_key`). It
+  runs the agent as a nested run inside the node (cancellation and the
+  remaining deadline are passed down) and writes the full transcript and
+  the output back. Approval inside the agent suspends the workflow with
+  `{"kind": "agent_approval", "requests"}`; the agent's snapshot is kept in
+  the node's task memo, which travels with the workflow snapshot, so
+  `workflow.resume(snapshot, [(node, {call_id: decision})])` continues it.
+  A failed agent's snapshot is kept the same way, so retrying the workflow
+  retries the agent (its finished tool calls are not repeated). Agent
+  error codes become the node error's `kind`.
+- `agent.as_tool(name, description)` → `AgentTool` with arguments
+  `{"input": string}`. Output text or JSON is the result. `limit_exceeded`,
+  `output_invalid`, `deadline_exceeded`, `cancelled` and transient model
+  failures become tool errors the calling model sees ("sub-agent stopped:
+  …"); everything else (auth, broken tools or hooks) is fatal (0003 E16,
+  A12). A sub-agent that needs approval is fatal as a tool (use a node).
+- `Limits::nesting` (default 8) is checked by the agent being started:
+  `depth` comes from `ToolContext::depth()` + 1 and is kept in the run's
+  bookkeeping. A refused sub-agent never calls its model.
+- Not yet: forwarding a nested run's events into the parent's stream /
+  trace (nested agents are separate traces for now).
+
 Implementation decisions (slice 6, model resilience): model retries moved
 from the core node policy into the agent (`resilience.rs`), inside the
 hooks, so `Retry-After`, immediate retries of unsent requests and fallback

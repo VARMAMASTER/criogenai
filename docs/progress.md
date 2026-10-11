@@ -16,9 +16,8 @@ handoff point for whoever continues the work.
    `openai_chat` + `ProviderModel` + presets.
 4. **Done:** agent slices 1–4 (loop, tools, approval, structured output,
    hooks); observability and Langfuse (`agentbuild-telemetry`, 0009).
-   Limits and model resilience done too. **Next (agent list, in
-   order):**
-   agents as workflow nodes and as tools → tool features (per-tool
+   Limits, model resilience, agents as nodes/tools done too. **Next
+   (agent list, in order):** tool features (per-tool
    concurrency, safe retries, result truncation, state updates, app
    context) → `agent.stream()`. Then `anthropic_messages`.
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
@@ -42,6 +41,19 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-12: agent slice 7: agents as workflow nodes and as tools
+
+- `AgentNode` (`agent.as_node()`): nested run in a node; approval pauses
+  the workflow (agent snapshot in the node memo); workflow retry retries
+  the agent without repeating its tool calls.
+- `AgentTool` (`agent.as_tool()`): recoverable sub-agent failures are tool
+  errors for the calling model, the rest fail the run; `Limits::nesting`
+  (8), `ToolContext::depth()`, `Agent::retry_with`.
+- 7 tests. Five mutation checks: all caught, after strengthening the retry
+  test (a fresh rerun consumed the next scripted reply and looked the
+  same; the test now checks the transcript continued the failed turn).
+- Package consumer covers both.
 
 ### 2026-10-12: agent slice 6: model resilience (0003 §5)
 
