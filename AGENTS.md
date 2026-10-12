@@ -53,19 +53,28 @@ write our own implementation.
   slice 7: `agent.as_node()`, `agent.as_tool()`, `Limits::nesting`;
   slice 8: tool features (per-tool concurrency, safe retries, result
   truncation, state updates, app context); slice 9: `agent.stream()`.
-  The 0004 agent list is complete.
+  The 0004 agent list is complete. Threads (0008 §11): `agent.thread(id)`
+  with `send`, `approve`/`reject`/`decide`, `retry`, `cancel`, `history`,
+  `rewind`, `delete`.
+- **Implemented in `agentbuild-storage` (0008 step 1):** `Checkpoint`,
+  the `Checkpointer` trait (compare-and-set commit), `InMemoryCheckpointer`,
+  `Storage` with per-thread leases and `OnBusy` (wait, reject, interrupt).
+  One checkpoint per call (durability `exit`); per-step commits come with
+  SQLite.
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 371 across the four crates, plus the package test.
-- **Next:** persistence (0008: in-memory, then SQLite, then Postgres),
-  the Python SDK (Phase 2). See `docs/progress.md`. The user will build their
+- Tests: 395 across the five crates, plus the package test.
+- **Next:** persistence step 2 (0008: SQLite backend with per-step commits
+  and delta + keyframe checkpoints), then the memory store and Postgres;
+  then the Python SDK (Phase 2). See `docs/progress.md`. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
-- **Not started:** gateway, Python SDK, TypeScript SDK, persistence. Do not
-  describe these as existing anywhere.
+- **Not started:** gateway, Python SDK, TypeScript SDK, database storage
+  backends (SQLite, Postgres), the long-term memory store. Do not describe
+  these as existing anywhere.
 
 ## Commands
 
@@ -81,6 +90,7 @@ cargo run -p agentbuild-core --example llm_workflow -- "remote work"
 cargo run -p agentbuild-core --example retry_workflow
 cargo run -p agentbuild-core --example recover_workflow
 cargo run -p agentbuild-agent --example approval_agent -- edit   # or approve, reject
+cargo run -p agentbuild-agent --example thread_agent
 # Langfuse, manual only (needs LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY):
 cargo run -p agentbuild-telemetry --example langfuse
 # Real model, manual only (needs a server; default: Ollama on localhost):

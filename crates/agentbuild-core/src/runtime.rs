@@ -94,6 +94,11 @@ impl RunOptions {
         self
     }
 
+    /// The token set with [`cancel_token`](Self::cancel_token), if any.
+    pub fn cancellation(&self) -> Option<&CancelToken> {
+        self.cancel.as_ref()
+    }
+
     /// Sets [`cancel_grace`](Self::cancel_grace).
     pub fn cancel_grace(mut self, grace: Duration) -> Self {
         self.cancel_grace = grace;

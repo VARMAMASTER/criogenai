@@ -205,10 +205,10 @@ the package test (`tests/package/rust-consumer`) does exactly that.
 
 ---
 
-### `agentbuild-agent` (slice 1 implemented)
+### `agentbuild-agent` (implemented)
 
-Depends on `agentbuild-core` and `agentbuild-providers` (feature `http`
-forwarded). An `Agent` compiles into a two-node workflow:
+Depends on `agentbuild-core`, `agentbuild-providers` (feature `http`
+forwarded) and `agentbuild-storage`. An `Agent` compiles into a two-node workflow:
 
 ```mermaid
 flowchart LR
@@ -224,6 +224,21 @@ flowchart LR
 | `agent.rs` | `Agent`, `AgentBuilder`, `Limits`, `AgentResult`, `AgentError`, `StopReason`; the model and tools nodes |
 | `tool.rs` | `Tool` trait, `tool_fn`, `ToolContext`, `ToolOutput`, `ToolError` |
 | `schema.rs` | Tool-argument validation (JSON Schema subset) |
+| `thread.rs` | `Thread`, `Reply`, `Agent::thread`: a conversation kept in the agent's `Storage` (0008 §11) |
+
+---
+
+### `agentbuild-storage` (step 1 of 0008 implemented)
+
+Depends on `agentbuild-core`, `tokio` (sync, time), `uuid`. Holds what is
+stored and the rules for using it; agents add the `Thread` API on top.
+
+| Module | Contents |
+|---|---|
+| `checkpoint.rs` | `Checkpoint` (plain JSON), `CheckpointMeta`, `Source`, `CheckpointStatus`; the `Checkpointer` trait (load, compare-and-set commit, history, delete) |
+| `memory.rs` | `InMemoryCheckpointer` |
+| `storage.rs` | `Storage` (checkpointer + `OnBusy` + `busy_timeout`), per-thread `ThreadLease`s, `cancel` |
+| `error.rs` | `StorageError`, `StorageErrorKind` (`thread_busy`, `storage_unavailable`, `storage_conflict`, `checkpoint_not_found`, `storage_corrupt`) |
 
 ---
 
@@ -482,7 +497,9 @@ flowchart TB
    learned from LiteLLM (MIT). See [0006](design/0006-provider-layer.md).
 2. **Dynamic fan-out** (`Send`-style). Deferred (0005 §2); the frontier design
    stays compatible.
-3. **Persistence backends**: designed in 0008 (SQLite and Postgres first). Built after in-memory snapshots are proven.
+3. **Persistence backends**: designed in 0008. Step 1 is built
+   (`agentbuild-storage`: contract, in-memory backend, agent threads);
+   SQLite and Postgres are next.
 4. **Subgraphs and multi-agent handoffs.** After the agent loop ships;
    `as_tool()` covers the first use case.
 

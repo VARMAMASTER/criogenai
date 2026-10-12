@@ -8,10 +8,10 @@ on a fast Rust engine. It includes an embeddable **LLM gateway** that is also
 usable on its own. The planned developer API is sketched in
 [docs/design/0007-public-api.md](docs/design/0007-public-api.md).
 
-> **Status: early development.** The Rust execution core exists, plus the
-> foundation of the provider layer (message and tool types, model errors, a
-> simulated model). There are no Python or TypeScript packages yet, no real
-> LLM integrations, and no persistence. Nothing has been published.
+> **Status: early development.** The Rust crates exist: the execution core,
+> the provider layer (OpenAI-compatible and Anthropic protocols), agents,
+> telemetry, and in-memory threads. There are no Python or TypeScript
+> packages yet and no database backends. Nothing has been published.
 
 ## What works today
 
@@ -63,6 +63,13 @@ and can fall back to other models. An agent can be one node of a larger
 workflow, or a tool of another agent, and `agent.stream()` gives a UI the
 answer and tool calls as they happen.
 
+Agents keep conversations in **threads** (`agentbuild-storage`):
+`agent.thread("user-42").send("...")` remembers earlier messages, a pending
+approval waits in storage until any agent instance calls `approve()`, a
+failed run can be retried, and history can be listed and rewound. Commits
+are compare-and-set, and a second message on a busy thread waits its turn.
+Storage is in memory for now; SQLite and Postgres backends are next.
+
 The `agentbuild-telemetry` crate sends every run to
 [Langfuse](https://langfuse.com) or any OpenTelemetry backend: runs are
 traces, model calls are generations with token usage, tool calls are tool
@@ -84,6 +91,7 @@ cargo run -p agentbuild-core --example llm_workflow -- "remote work"   # simulat
 cargo run -p agentbuild-core --example retry_workflow                  # retries and timeouts
 cargo run -p agentbuild-core --example recover_workflow                # retry a failed run, no repeats
 cargo run -p agentbuild-agent --example approval_agent -- edit         # a doctor edits an order before it runs
+cargo run -p agentbuild-agent --example thread_agent                   # a conversation and an approval kept in a thread
 bash scripts/test-package.sh                                           # test the packaged crates as dependencies
 cargo run -p agentbuild-providers --example chat -- "hi"               # real model via Ollama (or AGENTBUILD_BASE_URL)
 ```
@@ -122,7 +130,7 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 | 2     | Python SDK (PyO3 + maturin)                                   | Planned     |
 | 3     | TypeScript SDK (NAPI-RS)                                      | Planned     |
 | 4     | Agents, tools, providers (loop, tools, OpenAI protocol: done) | In progress |
-| 5     | Persistence (events, retries, snapshots on failure: done)     | In progress |
+| 5     | Persistence (snapshots, retries, in-memory threads: done)     | In progress |
 | 6     | Docs, templates, publishing, benchmarks                       | Planned     |
 
 ## Documentation
@@ -135,9 +143,13 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 ## Layout
 
 ```
-crates/agentbuild-core/   Rust execution engine
-docs/design/              Design decisions and contracts
-docs/research/            Studies of existing frameworks
+crates/agentbuild-core/        Rust execution engine
+crates/agentbuild-providers/   Model types, protocols and HTTP providers
+crates/agentbuild-agent/       Agents: the model ⇄ tools loop, threads
+crates/agentbuild-storage/     Threads, checkpoints, storage backends
+crates/agentbuild-telemetry/   OpenTelemetry and Langfuse export
+docs/design/                   Design decisions and contracts
+docs/research/                 Studies of existing frameworks
 ```
 
 ## License

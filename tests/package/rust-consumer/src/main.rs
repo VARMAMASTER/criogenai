@@ -32,6 +32,7 @@ async fn main() {
     telemetry_never_breaks_a_run().await;
     approval_before_a_tool_runs().await;
     agents_as_nodes_and_tools().await;
+    threads_keep_conversations().await;
     println!("package smoke test: ok");
 }
 
@@ -464,4 +465,60 @@ async fn agents_as_nodes_and_tools() {
     assert_eq!(result.text(), Some("lead-answer"));
     assert_eq!(texts, ["lead-answer"]);
     println!("  agents as workflow nodes and as tools: ok");
+}
+
+/// Threads: a conversation and a pending approval kept in storage, used by
+/// a second agent instance (another process, in real life).
+async fn threads_keep_conversations() {
+    use agentbuild_agent::{Agent, Approval, ToolError, tool_fn};
+    use agentbuild_storage::{CheckpointStatus, OnBusy, Source, Storage};
+
+    let storage = Storage::in_memory().on_busy(OnBusy::Reject);
+    let refund = || {
+        tool_fn(
+            ToolSpec::new("refund", "Refund", json!({"type": "object"})),
+            |_, _| async { Ok::<_, ToolError>("refunded") },
+        )
+    };
+    let fast = || FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1));
+    let first = Agent::builder(
+        fast()
+            .then(FakeReply::text("Hello Ada"))
+            .then(FakeReply::tool_call("refund", json!({}))),
+    )
+    .tool(refund())
+    .approval(Approval::new().tool("refund"))
+    .storage(storage.clone())
+    .build()
+    .expect("valid agent");
+    let chat = first.thread("user-42");
+    chat.send("I am Ada").await.expect("send");
+    let paused = chat.send("Refund my order").await.expect("send");
+    assert!(paused.needs_approval());
+    assert_eq!(chat.send("hello?").await.unwrap_err().code, "thread_suspended");
+
+    let second = Agent::builder(fast().then(FakeReply::text("Refunded, Ada.")))
+        .tool(refund())
+        .approval(Approval::new().tool("refund"))
+        .storage(storage)
+        .build()
+        .expect("valid agent");
+    let chat = second.thread("user-42");
+    let done = chat.approve().await.expect("approve");
+    assert_eq!(done.text(), Some("Refunded, Ada."));
+    assert_eq!(done.result.messages.len(), 6);
+    let history = chat.history(10).await.expect("history");
+    let kinds: Vec<(Source, CheckpointStatus)> =
+        history.iter().map(|c| (c.source, c.status)).collect();
+    assert_eq!(
+        kinds,
+        [
+            (Source::Step, CheckpointStatus::Completed),
+            (Source::Suspend, CheckpointStatus::Suspended),
+            (Source::Step, CheckpointStatus::Completed),
+        ]
+    );
+    chat.rewind(&history[2].id).await.expect("rewind");
+    assert_eq!(chat.messages().await.expect("messages").len(), 2);
+    println!("  threads (memory, approval across instances, rewind): ok");
 }

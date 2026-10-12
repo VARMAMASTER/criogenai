@@ -10,10 +10,17 @@ with tools, run as a loop on the AgentBuild workflow engine.
 - tool calls run concurrently (bounded) and their results keep call order
 - every finished call is saved at once: retrying a failed run never repeats
   a call that already ran (for example, sending an email)
-- limits on model calls and tool calls; transient model errors are retried
+- limits on model calls, tool calls and tokens; transient model errors are
+  retried, with fallback models
+- human approval of tool calls (approve, edit, reject, respond), structured
+  output, hooks around model and tool calls, agents as nodes and as tools,
+  `agent.stream()` for UIs
+- threads: `agent.thread("user-42").send(...)` keeps the conversation in
+  storage; pending approvals and failed runs wait there for `approve()` or
+  `retry()` from any agent instance
 
-> **Early development.** Human approval, structured output and hooks are
-> designed but not built.
+> **Early development.** Storage is in memory for now (SQLite and Postgres
+> are planned). Nothing is published yet.
 
 ## Example
 
@@ -43,6 +50,26 @@ async fn main() {
     let result = agent.run("Weather in Paris?").await.unwrap();
     assert_eq!(result.text(), Some("It is 21 °C in Paris."));
 }
+```
+
+## Threads
+
+```rust
+use agentbuild_agent::Agent;
+use agentbuild_providers::{FakeModel, FakeReply};
+
+# tokio::runtime::Builder::new_current_thread().enable_time().start_paused(true).build().unwrap().block_on(async {
+let model = FakeModel::new()
+    .then(FakeReply::text("Hello Ada"))
+    .then(FakeReply::text("Your name is Ada"));
+let agent = Agent::builder(model).build().unwrap(); // in-memory storage by default
+
+let chat = agent.thread("user-42");
+chat.send("I am Ada").await.unwrap();
+let reply = chat.send("What is my name?").await.unwrap();
+assert_eq!(reply.text(), Some("Your name is Ada"));
+assert_eq!(chat.history(10).await.unwrap().len(), 2);
+# });
 ```
 
 ## License

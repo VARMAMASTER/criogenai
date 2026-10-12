@@ -29,6 +29,10 @@
 //!
 //! - [`Agent::stream`] gives a UI typed [`AgentEvent`]s as they happen.
 //!
+//! - [`Agent::thread`] keeps a conversation across runs in the agent's
+//!   storage (design 0008): [`Thread::send`], [`Thread::approve`],
+//!   [`Thread::history`], [`Thread::rewind`].
+//!
 //! **Status:** everything in design 0004 is built, except per-run app
 //! context and forwarding nested agents' events (planned with the SDKs).
 //!
@@ -71,6 +75,7 @@ mod output;
 mod resilience;
 mod schema;
 mod stream;
+mod thread;
 mod tool;
 
 pub use agent::{
@@ -87,4 +92,5 @@ pub use nested::{AGENT_APPROVAL_INTERRUPT, AgentNode, AgentTool};
 pub use output::FINAL_OUTPUT_TOOL;
 pub use schema::validate as validate_arguments;
 pub use stream::{AgentEvent, AgentStream};
+pub use thread::{Reply, Thread};
 pub use tool::{Tool, ToolContext, ToolError, ToolOutput, tool_fn};

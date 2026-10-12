@@ -107,7 +107,11 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Approval / review** | A person approving tool calls before they run; the `review` node suspends the run with the requests. | `Approval`, `ApprovalRule`, node `review` |
 | **Approval request** | One gated call waiting for a decision: call id, tool, arguments, description, allowed decisions. | `ApprovalRequest`, `AgentResult::approval_requests` |
 | **Decision** | `approve`, `edit` (run changed arguments), `reject` (not run; model told why), `respond` (not run; reviewer's answer is the result). | `Decision`, `DecisionKind`, `Agent::resume` |
-| **Thread** | A persisted conversation that runs continue (with a **checkpointer**, design 0008). |
+| **Thread** | One conversation or work item kept in storage: each call ends in a checkpoint and the next call starts from it (design 0008). | `Agent::thread`, `Thread`, `Reply` |
+| **Checkpoint** | The durable record of a thread at one point: state, plus the snapshot of a suspended or failed run; versioned 1, 2, 3… per thread. | `Checkpoint`, `CheckpointMeta`, `Source`, `CheckpointStatus` |
+| **Checkpointer** | A storage backend for checkpoints: load, compare-and-set commit, history, delete. | `Checkpointer`, `InMemoryCheckpointer` |
+| **Storage** | A checkpointer plus the busy-thread rules (`wait`, `reject`, `interrupt`). | `Storage`, `OnBusy`, `ThreadLease`, error `thread_busy` |
+| **Rewind** | Making an older checkpoint the thread's head again (a new `fork` checkpoint); later steps run again. | `Thread::rewind` |
 | **Gateway** | The HTTP server that exposes the provider layer to other apps (design 0006 §7). |
 
 ## 4. Observability (`agentbuild-telemetry`; design 0009)

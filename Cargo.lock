@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "agentbuild-core",
  "agentbuild-providers",
+ "agentbuild-storage",
  "serde",
  "serde_json",
  "thiserror",
@@ -30,6 +31,18 @@ name = "agentbuild-providers"
 version = "0.1.0"
 dependencies = [
  "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "agentbuild-storage"
+version = "0.1.0"
+dependencies = [
+ "agentbuild-core",
  "serde",
  "serde_json",
  "thiserror",

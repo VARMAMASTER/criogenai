@@ -15,6 +15,7 @@ publish = false
 [dependencies]
 agentbuild-core = { path = "../agentbuild-core", version = "0.1.0" }
 agentbuild-providers = { path = "../agentbuild-providers", version = "0.1.0", default-features = false }
+agentbuild-storage = { path = "../agentbuild-storage", version = "0.1.0" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

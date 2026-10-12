@@ -17,9 +17,11 @@ handoff point for whoever continues the work.
 4. **Done:** the whole agent list of 0004 (loop, tools, approval,
    structured output, hooks, limits, model resilience, agents as nodes and
    tools, tool features, `agent.stream()`); observability and Langfuse
-   (`agentbuild-telemetry`, 0009); `anthropic_messages` (0006 §11 step 3).
-   **Next:** persistence (0008: in-memory → SQLite → Postgres, threads,
-   memory store).
+   (`agentbuild-telemetry`, 0009); `anthropic_messages` (0006 §11 step 3);
+   persistence step 1 (0008 §11: `agentbuild-storage`, in-memory threads).
+   **Next:** persistence step 2: SQLite backend (sqlx), per-step commits
+   with `put_pending`, delta + keyframe format, migrations; then the memory
+   store (step 3) and Postgres (step 4).
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
    install the built wheel in a clean venv.
@@ -41,6 +43,42 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-12: persistence step 1: threads and in-memory storage (0008 §11)
+
+- New crate `agentbuild-storage` (deps: core, serde, thiserror, tokio
+  `sync`/`time`, uuid). `Checkpoint` is plain JSON (state, plus the
+  snapshot of a suspended or failed run; status derives from it).
+  `Checkpointer` has four boxed-future methods: `load`, compare-and-set
+  `commit`, `history` (head's branch), `delete_thread`.
+  `InMemoryCheckpointer` implements it.
+- `Storage` = checkpointer + `OnBusy` (`Wait` default, `Reject`,
+  `Interrupt`) + `busy_timeout` (60 s). Thread operations hold a
+  process-local lease; the lease table forgets idle threads.
+- `agentbuild-agent`: `AgentBuilder::storage` (default in-memory),
+  `agent.thread(id)` → `Thread` with `send`/`send_with`, `approve`,
+  `reject`, `decide`/`decide_with`, `retry`, `cancel`, `head`, `state`,
+  `messages`, `pending_approvals`, `history`, `rewind`, `delete`. `Reply`
+  carries the `AgentResult`, checkpoint id and version.
+- Decisions (recorded in 0008 §11): one checkpoint per call in step 1
+  (durability `exit`; memory cannot survive a crash anyway); new error
+  `thread_suspended` for `send` while approvals are pending (strict now);
+  per-run bookkeeping (`agent`, `hooks`) resets each turn, other keys
+  carry over; a failed run is saved as a `failure` checkpoint so `retry`
+  works later; a caller's cancel token keeps working (the thread uses a
+  child token, via the new `RunOptions::cancellation` getter in core).
+- Not in step 1: workflow threads, `thread.stream`, `update`, `fork`,
+  `on_mismatch`, retention, encryption, the memory store.
+- Tests: 13 thread tests (conversation memory, approval across agent
+  instances, double approve, reject/edit/invalid decisions, retry without
+  repeating tools, send after failure, wait/reject/timeout/interrupt,
+  cancel with caller token, rewind incl. to a suspension, delete, failed
+  commit, error before the run), 6 storage contract tests + 1 unit test,
+  doctests; package consumer step; example `thread_agent` (run in CI).
+  Total 395. Mutation check: 16 of 16 caught.
+- The dev machine's C: drive filled up (0 bytes free) during the build;
+  `cargo clean` freed the project's 17 GB `target/`. Builds without
+  incremental caches (`CARGO_INCREMENTAL=0`) use less space.
 
 ### 2026-10-12: providers: `anthropic_messages` (0006 §11 step 3)
 

@@ -15,6 +15,7 @@ use agentbuild_providers::{
     ModelRequest, OutputSpec, OutputStrategy, Role, ToolIssue, ToolResultError, ToolSpec,
     ToolStatus, Usage, transcript, validate_tools,
 };
+use agentbuild_storage::Storage;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use tokio::sync::Semaphore;
@@ -262,6 +263,7 @@ pub struct AgentBuilder {
     max_retry_after: Duration,
     tool_retry: RetryPolicy,
     app: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    storage: Option<Storage>,
 }
 
 impl std::fmt::Debug for AgentBuilder {
@@ -390,6 +392,13 @@ impl AgentBuilder {
         self
     }
 
+    /// Where [`Agent::thread`] keeps conversations (design 0008). Default:
+    /// a new in-memory store, lost when the process exits.
+    pub fn storage(mut self, storage: Storage) -> Self {
+        self.storage = Some(storage);
+        self
+    }
+
     /// Validates the tools and limits and compiles the agent's workflow.
     pub fn build(self) -> Result<Agent, AgentBuildError> {
         let specs: Vec<ToolSpec> = self.tools.iter().map(|t| t.spec().clone()).collect();
@@ -508,6 +517,7 @@ impl AgentBuilder {
             max_steps,
             schemas,
             hooks,
+            storage: self.storage.unwrap_or_default(),
         })
     }
 }
@@ -526,6 +536,7 @@ pub struct Agent {
     /// Tool argument schemas, to check edited calls on resume.
     schemas: HashMap<String, Value>,
     hooks: Arc<[Arc<dyn Hook>]>,
+    storage: Storage,
 }
 
 impl std::fmt::Debug for Agent {
@@ -591,6 +602,7 @@ impl Agent {
             max_retry_after: Duration::from_secs(60),
             tool_retry: RetryPolicy::new(),
             app: None,
+            storage: None,
         }
     }
 
@@ -602,6 +614,11 @@ impl Agent {
     /// The limits.
     pub fn limits(&self) -> &Limits {
         &self.limits
+    }
+
+    /// Where [`thread`](Self::thread)s are kept.
+    pub fn storage(&self) -> &Storage {
+        &self.storage
     }
 
     /// The initial state for a run starting from `input`.
@@ -638,7 +655,7 @@ impl Agent {
         &self,
         input: impl Into<AgentInput>,
         depth: u32,
-        mut options: RunOptions,
+        options: RunOptions,
     ) -> Result<AgentResult, AgentError> {
         if depth > self.limits.nesting {
             return Err(AgentError {
@@ -651,7 +668,6 @@ impl Agent {
                 run_error: None,
             });
         }
-        options.max_steps = options.max_steps.max(self.max_steps);
         let mut state = Self::initial_state(input);
         if depth > 0 {
             let book = Bookkeeping {
@@ -660,6 +676,16 @@ impl Agent {
             };
             state.insert(AGENT, to_json(&book));
         }
+        self.run_state(state, options).await
+    }
+
+    /// Runs from a prepared state (a new run, e.g. a thread's next turn).
+    pub(crate) async fn run_state(
+        &self,
+        mut state: State,
+        mut options: RunOptions,
+    ) -> Result<AgentResult, AgentError> {
+        options.max_steps = options.max_steps.max(self.max_steps);
         let run_id = String::new();
         let hook_state = self.on_start(&run_id, &state).await?;
         if let Some(hook_state) = hook_state {
@@ -858,7 +884,7 @@ impl AgentResult {
 }
 
 /// The approval requests in a snapshot's interrupts.
-fn approval_requests(interrupts: &[agentbuild_core::Interrupt]) -> Vec<ApprovalRequest> {
+pub(crate) fn approval_requests(interrupts: &[agentbuild_core::Interrupt]) -> Vec<ApprovalRequest> {
     interrupts
         .iter()
         .filter(|i| i.node == REVIEW_NODE && i.payload["kind"] == APPROVAL_INTERRUPT)
@@ -919,7 +945,16 @@ impl AgentError {
         }
     }
 
-    fn resume_invalid(message: impl Into<String>) -> Self {
+    pub(crate) fn new(code: impl Into<String>, message: impl Into<String>) -> Self {
+        Self {
+            code: code.into(),
+            message: message.into(),
+            details: None,
+            run_error: None,
+        }
+    }
+
+    pub(crate) fn resume_invalid(message: impl Into<String>) -> Self {
         Self {
             code: "resume_invalid".into(),
             message: message.into(),
@@ -928,7 +963,7 @@ impl AgentError {
         }
     }
 
-    fn invalid_state(error: NodeError) -> Self {
+    pub(crate) fn invalid_state(error: NodeError) -> Self {
         Self {
             code: "invalid_state".into(),
             message: error.message,
@@ -945,7 +980,7 @@ impl AgentError {
 
 // ---------- shared helpers ----------
 
-fn read_messages(state: &State) -> Result<Vec<Message>, NodeError> {
+pub(crate) fn read_messages(state: &State) -> Result<Vec<Message>, NodeError> {
     match state.get(MESSAGES) {
         None | Some(Value::Null) => Ok(Vec::new()),
         Some(value) => serde_json::from_value(value.clone()).map_err(|err| {

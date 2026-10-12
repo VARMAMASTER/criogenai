@@ -1,6 +1,6 @@
 # 0008: Persistence, threads and memory
 
-Status: **Proposed** (design phase). Builds on [0005](0005-core-runtime-extensions.md)
+Status: **Accepted**; §10 step 1 built (§11). Builds on [0005](0005-core-runtime-extensions.md)
 §5 (snapshots, saved task writes, resume) and gives developers the easy
 interactive API sketched in [0007](0007-public-api.md). Research input:
 [langgraph](../research/langgraph.md) §5 (checkpointing), §6 (interrupts) and §8 (store).
@@ -337,6 +337,7 @@ the bridge adapts them.
 | `checkpoint_not_found` | developer | `rewind`/`fork` to an unknown id |
 | `workflow_mismatch` | developer | §6.3 |
 | `storage_corrupt` | internal | A delta chain cannot be replayed (checksum mismatch) |
+| `thread_suspended` | developer | `send` on a thread that waits for approval: answer it first (`approve`, `reject`, `decide`) |
 
 A storage failure **during** a run fails the step (nothing committed) and the
 run reports the error with its in-memory snapshot attached, so no work is lost
@@ -367,3 +368,68 @@ even if the database was down.
 3. Memory store (keyword search) + agent `Memory` hook and tools.
 4. Postgres backend, `on_busy="wait"` across processes.
 5. Vector search (`sqlite-vec`, `pgvector`), retention, encryption.
+
+## 11. Step 1 as built
+
+Crate `agentbuild-storage` (depends on `agentbuild-core` only) holds the
+storage contract and the in-memory backend; `agentbuild-agent` adds the
+`Thread` API on top. SQL backends will be features of the storage crate.
+
+**Checkpoints.** A `Checkpoint` is plain JSON: `id` (UUIDv7), `thread_id`,
+`parent_id`, `version` (1, 2, 3… per thread), `source`, `run_id`, `step`,
+`state`, and `snapshot` when the run is resumable (suspended or failed).
+Its status follows from the snapshot: `suspended` if it has suspended nodes,
+`failed` if it carries an error, otherwise `completed`.
+
+**Checkpointer.** Four methods, all returning boxed futures so the trait
+works behind `Arc<dyn Checkpointer>`:
+
+| Method | Contract |
+|---|---|
+| `load(thread, at)` | The head (`at = None`) or one checkpoint of that thread; `None` if missing |
+| `commit(checkpoint, expected)` | Compare-and-set: succeeds only if the head version is `expected` (0 for a new thread) and `checkpoint.version == expected + 1`; the checkpoint becomes the head. Otherwise `storage_conflict` |
+| `history(thread, limit)` | The head's branch, newest first, as `CheckpointMeta` (no state) |
+| `delete_thread(thread)` | Removes the thread and all its checkpoints; `true` if it existed |
+
+`put_pending` (§7) arrives with per-step commits (step 2).
+
+**Durability in step 1 is `exit`** (§5.1): one checkpoint per call, written
+when the run completes, suspends or fails. The in-memory backend cannot
+survive a crash anyway; per-step commits and crash recovery come with
+SQLite.
+
+**Storage and busy threads.** `Storage` bundles a checkpointer with the
+`on_busy` policy (`Wait` default, `Reject`, `Interrupt`) and `busy_timeout`
+(60 s). Each thread operation holds a process-local lease for the thread;
+`Interrupt` cancels the active run first. The lease table drops a thread's
+entry when no one holds or waits for it. Compare-and-set still catches
+writers in other processes.
+
+**Agent threads.** Every agent has a `Storage` (default: a fresh in-memory
+one; `AgentBuilder::storage` shares one). `agent.thread(id)` returns a
+`Thread`:
+
+| Method | Does |
+|---|---|
+| `send(input)`, `send_with(input, options)` | Starts from the head state, appends the input messages, runs, commits. Per-run bookkeeping (`agent`, `hooks` keys) is reset; other keys carry over. Fails with `thread_suspended` while approvals are pending |
+| `approve()`, `reject(msg)` | One decision for every pending request |
+| `decide(decisions)`, `decide_with` | One `Decision` per `call_id` (edit, respond, mixed) |
+| `retry()` | Continues a failed head from its snapshot (finished tool calls are not run again) |
+| `cancel()` | Cancels this thread's active run in this process |
+| `state()`, `messages()`, `head()`, `pending_approvals()` | Read the head |
+| `history(limit)` | Checkpoints of the current branch, newest first |
+| `rewind(checkpoint_id)` | New head (source `fork`) copying an older checkpoint |
+| `delete()` | Deletes the thread |
+
+`send` and `decide` return a `Reply`: the `AgentResult` plus the new
+checkpoint's id and version. A failed run is committed as a `failure`
+checkpoint (so `retry` works later) and its `AgentError` is returned. An
+error before the run starts (hook failure, invalid decisions) commits
+nothing. If the commit itself fails, the storage error is returned with the
+run's error attached when there was one.
+
+`send_with` keeps a caller's cancel token: the thread runs on a child of it,
+so both `thread.cancel()` and the caller's token stop the run.
+
+Not in step 1: workflow threads (`resume(values)`), `stream`, `update`,
+`fork`, `on_mismatch`, retention, encryption, the memory store.

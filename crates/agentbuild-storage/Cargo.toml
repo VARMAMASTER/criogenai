@@ -1,0 +1,29 @@
+[package]
+name = "agentbuild-storage"
+description = "Threads, checkpoints and storage backends for AgentBuild"
+readme = "README.md"
+keywords = ["agents", "checkpoint", "persistence", "workflow", "llm"]
+categories = ["asynchronous", "database"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# Not published until the package name is confirmed.
+publish = false
+
+[dependencies]
+agentbuild-core = { path = "../agentbuild-core", version = "0.1.0" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# `sync`: the per-thread leases; `time`: `busy_timeout`.
+tokio = { workspace = true, features = ["sync", "time"] }
+# Checkpoint ids (v7: ordered by creation time).
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "time", "sync", "test-util"] }
+
+[lints]
+workspace = true
