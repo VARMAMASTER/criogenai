@@ -72,7 +72,23 @@ async fn crash_during_shipping(storage: &Storage, charges: &Arc<AtomicUsize>) {
         Duration::from_secs(3600),
     );
     let run = tokio::spawn(async move { agent.thread("order-1").send("buy").await });
-    tokio::time::sleep(Duration::from_secs(1)).await;
+    // Wait until the charge's result is in storage (not a fixed time: disks
+    // on CI machines can be slow), then kill the run.
+    let saved = async {
+        loop {
+            let head = storage.checkpointer().load("order-1", None).await.unwrap();
+            let memo = head
+                .and_then(|h| h.snapshot)
+                .and_then(|s| s.pending_writes.get("tools").map(|w| w.memo.len()));
+            if memo == Some(1) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(60), saved)
+        .await
+        .expect("the charge is saved");
     assert_eq!(charges.load(Ordering::SeqCst), 1);
     run.abort();
     assert!(run.await.unwrap_err().is_cancelled());
