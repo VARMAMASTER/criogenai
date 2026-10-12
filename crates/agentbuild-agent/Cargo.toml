@@ -26,9 +26,15 @@ tokio = { workspace = true, features = ["rt", "sync", "time"] }
 default = ["http"]
 # Real model providers over HTTP (agentbuild-providers' `http`).
 http = ["agentbuild-providers/http"]
+# SQLite thread storage (agentbuild-storage's `sqlite`).
+sqlite = ["agentbuild-storage/sqlite"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "test-util", "net", "io-util"] }
 
 [lints]
 workspace = true
+
+[[example]]
+name = "durable_agent"
+required-features = ["sqlite"]

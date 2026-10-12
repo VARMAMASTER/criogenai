@@ -10,8 +10,9 @@ usable on its own. The planned developer API is sketched in
 
 > **Status: early development.** The Rust crates exist: the execution core,
 > the provider layer (OpenAI-compatible and Anthropic protocols), agents,
-> telemetry, and in-memory threads. There are no Python or TypeScript
-> packages yet and no database backends. Nothing has been published.
+> telemetry, and threads stored in memory or SQLite. There are no Python
+> or TypeScript packages yet and no Postgres backend. Nothing has been
+> published.
 
 ## What works today
 
@@ -68,7 +69,12 @@ Agents keep conversations in **threads** (`agentbuild-storage`):
 approval waits in storage until any agent instance calls `approve()`, a
 failed run can be retried, and history can be listed and rewound. Commits
 are compare-and-set, and a second message on a busy thread waits its turn.
-Storage is in memory for now; SQLite and Postgres backends are next.
+Storage is in memory by default or a SQLite file (feature `sqlite`:
+`Storage::connect("sqlite://agent.db")`). Runs are saved after every step
+and every tool call, so a run killed mid-way continues with
+`thread.retry()` without repeating finished tool calls. SQLite stores only
+what changed per step (plus a full copy every 25), so a long chat stores
+each message about once. Postgres and long-term memory are next.
 
 The `agentbuild-telemetry` crate sends every run to
 [Langfuse](https://langfuse.com) or any OpenTelemetry backend: runs are
@@ -92,6 +98,7 @@ cargo run -p agentbuild-core --example retry_workflow                  # retries
 cargo run -p agentbuild-core --example recover_workflow                # retry a failed run, no repeats
 cargo run -p agentbuild-agent --example approval_agent -- edit         # a doctor edits an order before it runs
 cargo run -p agentbuild-agent --example thread_agent                   # a conversation and an approval kept in a thread
+cargo run -p agentbuild-agent --features sqlite --example durable_agent # a run killed mid-step, continued from SQLite
 bash scripts/test-package.sh                                           # test the packaged crates as dependencies
 cargo run -p agentbuild-providers --example chat -- "hi"               # real model via Ollama (or AGENTBUILD_BASE_URL)
 ```
@@ -130,7 +137,7 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 | 2     | Python SDK (PyO3 + maturin)                                   | Planned     |
 | 3     | TypeScript SDK (NAPI-RS)                                      | Planned     |
 | 4     | Agents, tools, providers (loop, tools, OpenAI protocol: done) | In progress |
-| 5     | Persistence (snapshots, retries, in-memory threads: done)     | In progress |
+| 5     | Persistence (snapshots, threads, SQLite, crash recovery: done) | In progress |
 | 6     | Docs, templates, publishing, benchmarks                       | Planned     |
 
 ## Documentation

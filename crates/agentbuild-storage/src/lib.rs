@@ -8,9 +8,13 @@
 //!
 //! Agents use this through `agentbuild_agent::Agent::thread`.
 //!
-//! **Status:** step 1 of design 0008: the contract and the in-memory backend.
-//! SQLite, Postgres, the memory store, per-step commits and retention are
-//! planned.
+//! Runs are saved as they go ([`Durability::Step`], via [`ThreadWriter`]),
+//! so a run interrupted by a crash continues where it stopped.
+//!
+//! **Status:** steps 1–2 of design 0008: the contract, the in-memory
+//! backend and, with the `sqlite` feature, `SqliteCheckpointer` (delta
+//! checkpoints with keyframes, migrations). Postgres, the memory store and
+//! retention are planned.
 //!
 //! ```
 //! use agentbuild_core::State;
@@ -32,14 +36,23 @@
 //! ```
 
 mod checkpoint;
+pub mod delta;
 mod error;
 mod memory;
+#[cfg(feature = "sqlite")]
+mod sqlite;
 mod storage;
+mod writer;
 
-pub use checkpoint::{Checkpoint, CheckpointMeta, CheckpointStatus, Checkpointer, Source};
+pub use checkpoint::{
+    Checkpoint, CheckpointMeta, CheckpointStatus, Checkpointer, Source, merge_pending,
+};
 pub use error::{StorageError, StorageErrorKind};
 pub use memory::InMemoryCheckpointer;
-pub use storage::{OnBusy, Storage, ThreadLease};
+#[cfg(feature = "sqlite")]
+pub use sqlite::SqliteCheckpointer;
+pub use storage::{Durability, OnBusy, Storage, ThreadLease};
+pub use writer::ThreadWriter;
 
 // Compiles and runs the README's example with the doctests.
 #[cfg(doctest)]

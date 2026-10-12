@@ -108,9 +108,12 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Approval request** | One gated call waiting for a decision: call id, tool, arguments, description, allowed decisions. | `ApprovalRequest`, `AgentResult::approval_requests` |
 | **Decision** | `approve`, `edit` (run changed arguments), `reject` (not run; model told why), `respond` (not run; reviewer's answer is the result). | `Decision`, `DecisionKind`, `Agent::resume` |
 | **Thread** | One conversation or work item kept in storage: each call ends in a checkpoint and the next call starts from it (design 0008). | `Agent::thread`, `Thread`, `Reply` |
-| **Checkpoint** | The durable record of a thread at one point: state, plus the snapshot of a suspended or failed run; versioned 1, 2, 3… per thread. | `Checkpoint`, `CheckpointMeta`, `Source`, `CheckpointStatus` |
-| **Checkpointer** | A storage backend for checkpoints: load, compare-and-set commit, history, delete. | `Checkpointer`, `InMemoryCheckpointer` |
-| **Storage** | A checkpointer plus the busy-thread rules (`wait`, `reject`, `interrupt`). | `Storage`, `OnBusy`, `ThreadLease`, error `thread_busy` |
+| **Checkpoint** | The durable record of a thread at one point: state, plus the snapshot of a run that can continue (suspended, failed or in progress); versioned 1, 2, 3… per thread. | `Checkpoint`, `CheckpointMeta`, `Source`, `CheckpointStatus` |
+| **Checkpointer** | A storage backend for checkpoints: load, compare-and-set commit, history, delete, task writes. | `Checkpointer`, `InMemoryCheckpointer`, `SqliteCheckpointer` |
+| **Storage** | A checkpointer plus the busy-thread rules (`wait`, `reject`, `interrupt`) and the durability. | `Storage`, `OnBusy`, `Durability`, `ThreadLease`, error `thread_busy` |
+| **Durability** | When a run is written: `step` (before every step and after every task; a crash loses at most unfinished tasks) or `exit` (once per call). | `Durability`, `Persister`, `RunOptions::persist`, `ThreadWriter` |
+| **Keyframe / delta** | How SQL backends store checkpoints: a delta holds only the changes since the parent (`set`, `append`, `remove`); a keyframe the full state, every 25 checkpoints. | `agentbuild_storage::delta` |
+| **Interrupted run** | A thread whose head is `in_progress` while no process runs it (e.g. after a crash). `retry` continues it; `send` refuses with `thread_interrupted`. | `Thread::retry` |
 | **Rewind** | Making an older checkpoint the thread's head again (a new `fork` checkpoint); later steps run again. | `Thread::rewind` |
 | **Gateway** | The HTTP server that exposes the provider layer to other apps (design 0006 §7). |
 

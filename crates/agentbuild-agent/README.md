@@ -68,9 +68,16 @@ let chat = agent.thread("user-42");
 chat.send("I am Ada").await.unwrap();
 let reply = chat.send("What is my name?").await.unwrap();
 assert_eq!(reply.text(), Some("Your name is Ada"));
-assert_eq!(chat.history(10).await.unwrap().len(), 2);
+// Each call saved a checkpoint before its first step and one at the end.
+assert_eq!(chat.history(10).await.unwrap().len(), 4);
 # });
 ```
+
+For storage that survives restarts, enable the `sqlite` feature and pass
+`Storage::connect("sqlite://agent.db").await?` to `AgentBuilder::storage`.
+Runs are saved after every step and every tool call, so a run interrupted
+by a crash continues with `thread.retry()` without repeating finished tool
+calls.
 
 ## License
 

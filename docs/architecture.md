@@ -224,21 +224,45 @@ flowchart LR
 | `agent.rs` | `Agent`, `AgentBuilder`, `Limits`, `AgentResult`, `AgentError`, `StopReason`; the model and tools nodes |
 | `tool.rs` | `Tool` trait, `tool_fn`, `ToolContext`, `ToolOutput`, `ToolError` |
 | `schema.rs` | Tool-argument validation (JSON Schema subset) |
-| `thread.rs` | `Thread`, `Reply`, `Agent::thread`: a conversation kept in the agent's `Storage` (0008 §11) |
+| `thread.rs` | `Thread`, `Reply`, `Agent::thread`: a conversation kept in the agent's `Storage`, saved per step through a `ThreadWriter` (0008 §11, §12) |
 
 ---
 
-### `agentbuild-storage` (step 1 of 0008 implemented)
+### `agentbuild-storage` (steps 1–2 of 0008 implemented)
 
-Depends on `agentbuild-core`, `tokio` (sync, time), `uuid`. Holds what is
-stored and the rules for using it; agents add the `Thread` API on top.
+Depends on `agentbuild-core`, `tokio` (sync, time), `uuid`; `sqlx` (SQLite,
+bundled) behind the `sqlite` feature. Holds what is stored and the rules for
+using it; agents add the `Thread` API on top.
+
+```mermaid
+sequenceDiagram
+    participant T as Thread
+    participant W as ThreadWriter (Persister)
+    participant R as Run loop (core)
+    participant C as Checkpointer
+    T->>W: new(head)
+    T->>R: run(options.persist(W))
+    R->>W: save_checkpoint (before step 0)
+    W->>C: commit(input, expected = v)
+    loop each step
+        R->>W: save_task (node output, memo.save)
+        W->>C: put_pending(latest checkpoint)
+        R->>W: save_checkpoint (step committed)
+        W->>C: commit(step, expected = v+1…)
+    end
+    R-->>T: completed / suspended / failed
+    T->>W: commit(outcome)
+```
 
 | Module | Contents |
 |---|---|
-| `checkpoint.rs` | `Checkpoint` (plain JSON), `CheckpointMeta`, `Source`, `CheckpointStatus`; the `Checkpointer` trait (load, compare-and-set commit, history, delete) |
+| `checkpoint.rs` | `Checkpoint` (plain JSON), `CheckpointMeta`, `Source`, `CheckpointStatus` (incl. `in_progress`); the `Checkpointer` trait (load, compare-and-set commit, history, delete, `put_pending`); `merge_pending` |
 | `memory.rs` | `InMemoryCheckpointer` |
-| `storage.rs` | `Storage` (checkpointer + `OnBusy` + `busy_timeout`), per-thread `ThreadLease`s, `cancel` |
-| `error.rs` | `StorageError`, `StorageErrorKind` (`thread_busy`, `storage_unavailable`, `storage_conflict`, `checkpoint_not_found`, `storage_corrupt`) |
+| `sqlite.rs` | `SqliteCheckpointer` (feature `sqlite`): tables, migrations, delta/keyframe encoding, compare-and-set in one `BEGIN IMMEDIATE` transaction |
+| `delta.rs` | `diff` / `apply` of `set` / `append` / `remove` operations (public, for custom backends) |
+| `writer.rs` | `ThreadWriter`: one thread's chain of checkpoints during a call; implements core's `Persister` |
+| `storage.rs` | `Storage` (checkpointer + `OnBusy` + `busy_timeout` + `Durability`), `Storage::connect(url)`, per-thread `ThreadLease`s, `cancel` |
+| `error.rs` | `StorageError`, `StorageErrorKind` (`thread_busy`, `storage_unavailable`, `storage_conflict`, `checkpoint_not_found`, `storage_corrupt`, `storage_incompatible`) |
 
 ---
 
@@ -497,9 +521,10 @@ flowchart TB
    learned from LiteLLM (MIT). See [0006](design/0006-provider-layer.md).
 2. **Dynamic fan-out** (`Send`-style). Deferred (0005 §2); the frontier design
    stays compatible.
-3. **Persistence backends**: designed in 0008. Step 1 is built
-   (`agentbuild-storage`: contract, in-memory backend, agent threads);
-   SQLite and Postgres are next.
+3. **Persistence backends**: designed in 0008. Steps 1–2 are built
+   (`agentbuild-storage`: contract, in-memory and SQLite backends,
+   per-step saving and crash recovery, agent threads); the memory store
+   and Postgres are next.
 4. **Subgraphs and multi-agent handoffs.** After the agent loop ships;
    `as_tool()` covers the first use case.
 

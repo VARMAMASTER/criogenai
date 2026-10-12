@@ -11,9 +11,13 @@ Threads, checkpoints and storage backends for
 - busy threads: a second operation waits its turn (default), fails fast, or
   interrupts the active run
 - history follows the current branch; rewinding keeps the old branch
+- runs are saved before every step and after every task (durability
+  `step`), so an interrupted run continues without repeating finished work
+- backends: in memory, and SQLite (feature `sqlite`), which stores only
+  what changed per checkpoint plus a full copy every 25
 
-**Status:** the contract and the in-memory backend. SQLite, Postgres, the
-long-term memory store, per-step commits and retention are planned.
+**Status:** the contract, the in-memory and SQLite backends, per-step
+saving. Postgres, the long-term memory store and retention are planned.
 
 Most code uses this through agents (`agent.thread("user-42")`, see
 `agentbuild-agent`). The contract underneath:
@@ -37,4 +41,7 @@ assert_eq!(store.history("chat-1", 10).await.unwrap().len(), 1);
 # });
 ```
 
-A custom backend implements the four methods of `Checkpointer`.
+With the `sqlite` feature, `Storage::connect("sqlite://agent.db")` opens
+(or creates) a database file; tables are created on first use.
+
+A custom backend implements the five methods of `Checkpointer`.

@@ -56,24 +56,28 @@ write our own implementation.
   The 0004 agent list is complete. Threads (0008 §11): `agent.thread(id)`
   with `send`, `approve`/`reject`/`decide`, `retry`, `cancel`, `history`,
   `rewind`, `delete`.
-- **Implemented in `agentbuild-storage` (0008 step 1):** `Checkpoint`,
-  the `Checkpointer` trait (compare-and-set commit), `InMemoryCheckpointer`,
-  `Storage` with per-thread leases and `OnBusy` (wait, reject, interrupt).
-  One checkpoint per call (durability `exit`); per-step commits come with
-  SQLite.
+- **Implemented in `agentbuild-storage` (0008 steps 1–2):** `Checkpoint`,
+  the `Checkpointer` trait (compare-and-set commit, `put_pending`),
+  `InMemoryCheckpointer`, `SqliteCheckpointer` (feature `sqlite`, sqlx
+  0.8: delta + keyframe checkpoints, migrations), `ThreadWriter`,
+  `Storage` with per-thread leases, `OnBusy` (wait, reject, interrupt) and
+  `Durability` (`Step` default: saved per step and per tool call via core's
+  `Persister` / `RunOptions::persist`; `Exit`). Crash recovery:
+  `thread.retry()` on an `in_progress` head.
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 395 across the five crates, plus the package test.
-- **Next:** persistence step 2 (0008: SQLite backend with per-step commits
-  and delta + keyframe checkpoints), then the memory store and Postgres;
-  then the Python SDK (Phase 2). See `docs/progress.md`. The user will build their
+- Tests: 415 across the five crates (with `--all-features`), plus the
+  package test.
+- **Next:** the `demos/support-chat` app (Rust server + Next.js UI, real
+  models, manual only), then persistence step 3 (memory store + agent
+  `Memory`), step 4 (Postgres); then the Python SDK (Phase 2). See `docs/progress.md`. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
-- **Not started:** gateway, Python SDK, TypeScript SDK, database storage
-  backends (SQLite, Postgres), the long-term memory store. Do not describe
+- **Not started:** gateway, Python SDK, TypeScript SDK, the Postgres
+  backend, the long-term memory store. Do not describe
   these as existing anywhere.
 
 ## Commands
@@ -81,6 +85,7 @@ write our own implementation.
 ```sh
 cargo build
 cargo test                       # unit + integration + doctests
+cargo test --workspace --all-features   # also the SQLite backend
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
 cargo test -p agentbuild-providers   # one crate
@@ -91,6 +96,7 @@ cargo run -p agentbuild-core --example retry_workflow
 cargo run -p agentbuild-core --example recover_workflow
 cargo run -p agentbuild-agent --example approval_agent -- edit   # or approve, reject
 cargo run -p agentbuild-agent --example thread_agent
+cargo run -p agentbuild-agent --features sqlite --example durable_agent
 # Langfuse, manual only (needs LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY):
 cargo run -p agentbuild-telemetry --example langfuse
 # Real model, manual only (needs a server; default: Ollama on localhost):

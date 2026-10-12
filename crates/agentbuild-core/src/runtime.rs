@@ -19,6 +19,7 @@ use crate::event::{
 use crate::graph::{Graph, Outgoing, Target, Workflow};
 use crate::memo::TaskMemo;
 use crate::node::{Node, NodeContext, NodeOutput};
+use crate::persist::Persister;
 use crate::policy::NodePolicy;
 use crate::reducer;
 use crate::state::State;
@@ -48,6 +49,17 @@ pub struct RunOptions {
     pub(crate) cancel: Option<CancelToken>,
     pub(crate) observers: Observers,
     pub(crate) metadata: Option<Value>,
+    pub(crate) persist: Option<Persist>,
+}
+
+/// The run's persister (shown as a flag in `Debug`).
+#[derive(Clone)]
+pub(crate) struct Persist(pub(crate) Arc<dyn Persister>);
+
+impl std::fmt::Debug for Persist {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Persister")
+    }
 }
 
 /// The observers attached to a run (shown as a count in `Debug`).
@@ -70,6 +82,7 @@ impl Default for RunOptions {
             cancel: None,
             observers: Observers::default(),
             metadata: None,
+            persist: None,
         }
     }
 }
@@ -129,6 +142,15 @@ impl RunOptions {
     /// "s1"}` for tracing tools).
     pub fn metadata(mut self, metadata: Value) -> Self {
         self.metadata = Some(metadata);
+        self
+    }
+
+    /// Saves the run's progress to `persister` as it executes: a checkpoint
+    /// before the first step and after every committed step, and each
+    /// task's output and [`TaskMemo::save`] entries as they happen (design
+    /// 0008 §5.1). Threads in `agentbuild-storage` set this.
+    pub fn persist(mut self, persister: Arc<dyn Persister>) -> Self {
+        self.persist = Some(Persist(persister));
         self
     }
 }
@@ -552,6 +574,8 @@ struct Run<'g> {
     cancel: CancelToken,
     deadline: Option<Deadline>,
     cancel_grace: Duration,
+    /// Saves progress as the run goes (durability `step`).
+    persist: Option<Arc<dyn Persister>>,
 }
 
 #[derive(Clone, Copy)]
@@ -619,7 +643,7 @@ impl StepProgress {
         }
     }
 
-    fn into_pending_writes(mut self, graph: &Graph) -> BTreeMap<String, PendingWrite> {
+    fn pending_writes(&self, graph: &Graph) -> BTreeMap<String, PendingWrite> {
         let ids: BTreeSet<usize> = (self.outputs.keys())
             .chain(self.memos.keys())
             .chain(self.resume.keys())
@@ -628,13 +652,13 @@ impl StepProgress {
         ids.into_iter()
             .filter_map(|id| {
                 let write = PendingWrite {
-                    output: self.outputs.remove(&id),
+                    output: self.outputs.get(&id).cloned(),
                     memo: self
                         .memos
                         .get(&id)
                         .map(TaskMemo::entries)
                         .unwrap_or_default(),
-                    resume: self.resume.remove(&id),
+                    resume: self.resume.get(&id).cloned(),
                 };
                 (!write.is_empty()).then(|| (graph.names[id].clone(), write))
             })
@@ -669,6 +693,7 @@ impl<'g> Run<'g> {
             cancel: options.cancel.clone().unwrap_or_default(),
             deadline,
             cancel_grace: options.cancel_grace,
+            persist: options.persist.as_ref().map(|p| p.0.clone()),
         }
     }
 
@@ -741,6 +766,23 @@ impl<'g> Run<'g> {
         ids.iter().map(|&id| self.graph.names[id].clone()).collect()
     }
 
+    /// Saves the point the run continues from, if it is persisted.
+    async fn save_checkpoint(
+        &self,
+        step: usize,
+        frontier: &BTreeSet<usize>,
+        pending_writes: BTreeMap<String, PendingWrite>,
+    ) -> Result<(), RunErrorKind> {
+        let Some(persist) = &self.persist else {
+            return Ok(());
+        };
+        let snapshot = self.snapshot(step, frontier, Vec::new(), pending_writes, None);
+        persist
+            .save_checkpoint(snapshot)
+            .await
+            .map_err(|source| RunErrorKind::StorageFailed { source })
+    }
+
     async fn execute(
         mut self,
         mut frontier: BTreeSet<usize>,
@@ -755,6 +797,10 @@ impl<'g> Run<'g> {
             resumed,
             metadata: options.metadata.clone(),
         });
+        let pending = progress.pending_writes(self.graph);
+        if let Err(kind) = self.save_checkpoint(step, &frontier, pending).await {
+            return Err(self.fail(step, &frontier, progress, kind, 0).await);
+        }
 
         while !frontier.is_empty() {
             // Step boundary: the only place a slow subscriber holds the run back.
@@ -801,6 +847,13 @@ impl<'g> Run<'g> {
             // Saved work (and resume values) belong to the step that just
             // committed.
             progress = StepProgress::default();
+            if !frontier.is_empty()
+                && let Err(kind) = self.save_checkpoint(step, &frontier, BTreeMap::new()).await
+            {
+                return Err(self
+                    .fail(step, &frontier, progress, kind, steps.len())
+                    .await);
+            }
         }
 
         self.emit(None, None, || EventKind::RunFinished {
@@ -970,7 +1023,17 @@ impl<'g> Run<'g> {
                 step,
                 name: self.graph.names[id].as_str().into(),
                 resume: progress.resume.get(&id).cloned(),
-                memo: progress.memos.entry(id).or_default().clone(),
+                memo: {
+                    let memo = progress.memos.entry(id).or_default();
+                    match &self.persist {
+                        Some(persist) => memo.persisted(
+                            persist.clone(),
+                            step,
+                            self.graph.names[id].as_str().into(),
+                        ),
+                        None => memo.clone(),
+                    }
+                },
                 hub: self.hub.clone(),
                 cancel: step_token.child(),
                 run_deadline: self.deadline,
@@ -1016,8 +1079,23 @@ impl<'g> Run<'g> {
                             reused: false,
                         }
                     });
+                    let saved = match &self.persist {
+                        Some(persist) => {
+                            let write = PendingWrite {
+                                output: Some(output.clone()),
+                                ..PendingWrite::default()
+                            };
+                            persist
+                                .save_task(step, self.graph.names[id].clone(), write)
+                                .await
+                        }
+                        None => Ok(()),
+                    };
                     progress.outputs.insert(id, output);
-                    continue;
+                    match saved {
+                        Ok(()) => continue,
+                        Err(source) => (id, RunErrorKind::StorageFailed { source }),
+                    }
                 }
                 Ok((id, Err(failure))) => {
                     let node = self.graph.names[id].clone();
@@ -1215,7 +1293,7 @@ impl<'g> Run<'g> {
             code: kind.code().to_string(),
             message: kind.to_string(),
         };
-        let pending_writes = progress.into_pending_writes(self.graph);
+        let pending_writes = progress.pending_writes(self.graph);
         let snapshot = self.snapshot(step, frontier, Vec::new(), pending_writes, Some(error));
         RunError {
             kind,

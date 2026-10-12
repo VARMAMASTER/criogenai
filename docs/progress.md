@@ -18,10 +18,13 @@ handoff point for whoever continues the work.
    structured output, hooks, limits, model resilience, agents as nodes and
    tools, tool features, `agent.stream()`); observability and Langfuse
    (`agentbuild-telemetry`, 0009); `anthropic_messages` (0006 §11 step 3);
-   persistence step 1 (0008 §11: `agentbuild-storage`, in-memory threads).
-   **Next:** persistence step 2: SQLite backend (sqlx), per-step commits
-   with `put_pending`, delta + keyframe format, migrations; then the memory
-   store (step 3) and Postgres (step 4).
+   persistence steps 1–2 (0008 §11–§12: `agentbuild-storage`, threads,
+   per-step saving and crash recovery, SQLite with delta + keyframe
+   checkpoints and migrations).
+   **Next:** `demos/support-chat` (a small Rust server on AgentBuild plus a
+   Next.js UI, tested by hand with real OpenAI and Gemini keys; keys stay
+   in `~/.agentbuild-keys.env`, never in the repo); then the memory store
+   (step 3) and Postgres (step 4).
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
    install the built wheel in a clean venv.
@@ -43,6 +46,48 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-12: persistence step 2: per-step saving, crash recovery, SQLite (0008 §12)
+
+- Core: new `Persister` trait and `RunOptions::persist`. The run loop saves
+  a checkpoint before the first step of every run/resume/retry and after
+  each committed step it continues from, and every finished node's output
+  and `TaskMemo::save` entry as it happens. All awaited; a failure stops
+  the run with the new run error `storage_failed` (snapshot kept, so
+  nothing is lost while the database is down). `TaskMemo::save` is new
+  (`put` + write-through); `once` uses it.
+- Storage: `CheckpointStatus::InProgress`; `Checkpointer::put_pending`
+  (fifth method) and `merge_pending`; `ThreadWriter` (the per-thread
+  `Persister`); `Durability` (`Step` default for every backend, `Exit`);
+  `Storage::connect(url)`; public `delta` module (`set` / `append` /
+  `remove`, reducer-independent); `SqliteCheckpointer` behind feature
+  `sqlite` (sqlx 0.8.6 without macros, bundled SQLite; 0.9 needs Rust 1.94,
+  above our MSRV 1.88). New storage code `storage_incompatible`.
+- Agent: threads save through `ThreadWriter`; `send` on an `in_progress`
+  head fails with `thread_interrupted`; `retry` continues failed or
+  interrupted runs; the tools node saves each finished call with
+  `memo.save` and stops before the next model call if storage fails.
+  Feature `sqlite` forwards to storage.
+- Decisions: deltas are encoded inside the SQL backend (backends still get
+  whole checkpoints; custom backends may reuse `delta`) rather than above
+  the trait; explicit `retry` instead of auto-recover in `send` (strict
+  now); step durability by default even in memory, so behaviour and
+  history do not depend on the backend. Versions per call grow (two for a
+  plain chat turn); tests updated.
+- Tests: 6 core persistence tests (order of saves, crash then retry
+  without repeating a memo'd side effect, failing checkpoint, failing task
+  write, failing memo save, resume values in the first checkpoint); a
+  shared checkpointer contract run on memory and SQLite (file and
+  `:memory:`); SQLite: reopen, delta sizes, migrations and newer schemas,
+  bad URLs and closed pools, two handles racing on one file; agent: crash
+  mid-tool-call recovered from memory and from a reopened SQLite file
+  (card charged once), database down at `send` costs no model call,
+  unsaved tool results stop the run, `Exit` durability. Total 415 with
+  `--all-features`. Example `durable_agent` (CI). Package consumer:
+  SQLite thread survives a restart.
+- Manual check with real models (keys from the user, kept outside the
+  repo): the `chat` example streams from OpenAI `gpt-5-mini` and from
+  Gemini `gemini-2.5-flash` through its OpenAI-compatible endpoint.
 
 ### 2026-10-12: persistence step 1: threads and in-memory storage (0008 §11)
 

@@ -926,6 +926,7 @@ impl AgentError {
                             | "hook_failed"
                             | "deadline_exceeded"
                             | "update_conflict"
+                            | "storage_failed"
                     )
                 ) =>
             {
@@ -1774,9 +1775,12 @@ async fn tools_step(
     let semaphore = Arc::new(Semaphore::new(limits.parallel_tool_calls));
     let mut tasks = JoinSet::new();
     let mut task_calls = HashMap::new();
+    // The first finished call whose result storage could not take.
+    let unsaved: Arc<std::sync::Mutex<Option<NodeError>>> = Arc::default();
     for call in pending {
         let semaphore = semaphore.clone();
         let memo = memo.clone();
+        let unsaved = unsaved.clone();
         let events = ctx.events().clone();
         let tool_ctx = ToolContext {
             call_id: call.call_id.clone(),
@@ -1930,7 +1934,13 @@ async fn tools_step(
                 state,
                 direct,
             };
-            memo.put(format!("call:{}", call.call_id), to_json(&saved));
+            // With durable storage this also waits until the result is
+            // stored, so not even a crash makes the call run again.
+            let key = format!("call:{}", call.call_id);
+            if let Err(error) = memo.save(key, to_json(&saved)).await {
+                let mut unsaved = unsaved.lock().unwrap_or_else(|e| e.into_inner());
+                unsaved.get_or_insert(error);
+            }
             let SavedCall {
                 message,
                 state,
@@ -1984,6 +1994,13 @@ async fn tools_step(
             state_writes.push((finished.index, finished.state));
         }
         results[finished.index] = Some(finished.message);
+    }
+    // Storage is failing: stop before the model sees results that would
+    // be lost. The results stay in memory, so a retry does not repeat the
+    // calls.
+    let unsaved = unsaved.lock().unwrap_or_else(|e| e.into_inner()).take();
+    if let Some(error) = unsaved {
+        return Err(error);
     }
     // Tool state changes, merged in call order (0002 §4.4).
     state_writes.sort_by_key(|(index, _)| *index);

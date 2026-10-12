@@ -1,102 +1,86 @@
 //! The checkpointer contract (design 0008 §11) on the in-memory backend,
 //! and thread leases.
 
+#[path = "support/contract.rs"]
+mod contract;
+
+use std::sync::Arc;
 use std::time::Duration;
 
-use agentbuild_core::{CancelToken, Snapshot, State};
+use agentbuild_core::{CancelToken, PendingWrite, Persister, State};
 use agentbuild_storage::{
     Checkpoint, CheckpointStatus, Checkpointer, InMemoryCheckpointer, OnBusy, Source, Storage,
+    ThreadWriter,
 };
+use contract::{snapshot, state};
 use serde_json::json;
 
-fn state(n: u64) -> State {
-    State::new().with("n", n)
-}
-
-fn snapshot(extra: serde_json::Value) -> Snapshot {
-    let mut value = json!({
-        "format": "agentbuild.snapshot/1",
-        "workflow_fingerprint": "f",
-        "run_id": "r",
-        "step": 2,
-        "state": {},
-        "frontier": [],
-        "join_progress": {},
-        "suspended": []
-    });
-    value
-        .as_object_mut()
-        .unwrap()
-        .extend(extra.as_object().unwrap().clone());
-    serde_json::from_value(value).unwrap()
+#[tokio::test]
+async fn the_in_memory_backend_keeps_the_contract() {
+    contract::all(&InMemoryCheckpointer::new()).await;
 }
 
 #[tokio::test]
-async fn commits_are_compare_and_set() {
-    let store = InMemoryCheckpointer::new();
-    assert!(store.load("t", None).await.unwrap().is_none());
-
-    let first = Checkpoint::new("t", 1, Source::Step, state(1));
+async fn a_thread_writer_chains_checkpoints_and_task_writes() {
+    let store: Arc<dyn Checkpointer> = Arc::new(InMemoryCheckpointer::new());
+    let first = Checkpoint::new("w", 1, Source::Step, state(1));
     store.commit(first.clone(), 0).await.unwrap();
-    // Stale writer: still thinks the thread is new.
-    let stale = Checkpoint::new("t", 1, Source::Step, state(9));
-    let err = store.commit(stale, 0).await.unwrap_err();
-    assert_eq!(err.code(), "storage_conflict");
-    assert!(err.message.contains("version 1, not 0"), "{}", err.message);
-    // Right expectation, wrong version number.
-    let skipping = Checkpoint::new("t", 3, Source::Step, state(9));
-    assert_eq!(
-        store.commit(skipping, 1).await.unwrap_err().code(),
-        "storage_conflict"
-    );
-    assert_eq!(store.load("t", None).await.unwrap().unwrap(), first);
 
-    let second = Checkpoint::new("t", 2, Source::Step, state(2)).parent(&first.id);
-    store.commit(second.clone(), 1).await.unwrap();
-    assert_eq!(store.load("t", None).await.unwrap().unwrap(), second);
+    let writer = ThreadWriter::new(store.clone(), "w", Some(&first));
     assert_eq!(
-        store.load("t", Some(&first.id)).await.unwrap().unwrap(),
-        first
+        (writer.head_id(), writer.version()),
+        (Some(first.id.clone()), 1)
     );
-    assert!(
-        store
-            .load("other", Some(&first.id))
-            .await
-            .unwrap()
-            .is_none()
-    );
-    assert!(store.load("t", Some("missing")).await.unwrap().is_none());
-}
+    // Nothing to attach task writes to before the run's first checkpoint.
+    let early = writer
+        .save_task(0, "tools".into(), PendingWrite::default())
+        .await
+        .unwrap_err();
+    assert_eq!(early.kind.as_deref(), Some("checkpoint_not_found"));
 
-#[tokio::test]
-async fn history_follows_the_heads_branch() {
-    let store = InMemoryCheckpointer::new();
-    let a = Checkpoint::new("t", 1, Source::Step, state(1));
-    let b = Checkpoint::new("t", 2, Source::Step, state(2)).parent(&a.id);
-    let fork = Checkpoint::new("t", 3, Source::Fork, state(1)).parent(&a.id);
-    for (checkpoint, expected) in [(&a, 0), (&b, 1), (&fork, 2)] {
-        store.commit(checkpoint.clone(), expected).await.unwrap();
-    }
-    let ids: Vec<String> = store
-        .history("t", 10)
+    writer
+        .save_checkpoint(snapshot(json!({"step": 0})))
+        .await
+        .unwrap();
+    let mut write = PendingWrite::default();
+    write.memo.insert("call:1".into(), json!("done"));
+    writer.save_task(0, "tools".into(), write).await.unwrap();
+    writer
+        .save_checkpoint(snapshot(json!({"step": 1})))
+        .await
+        .unwrap();
+    let done = writer
+        .commit(Source::Step, state(5), ("r", 2), None)
+        .await
+        .unwrap();
+    assert_eq!(
+        (done.version, done.status),
+        (4, CheckpointStatus::Completed)
+    );
+
+    let history = store.history("w", 10).await.unwrap();
+    let sources: Vec<Source> = history.iter().map(|c| c.source).collect();
+    assert_eq!(
+        sources,
+        [Source::Step, Source::Step, Source::Input, Source::Step]
+    );
+    let input = store
+        .load("w", Some(&history[2].id))
         .await
         .unwrap()
-        .into_iter()
-        .map(|c| c.id)
-        .collect();
-    assert_eq!(ids, [fork.id.clone(), a.id.clone()]);
-    assert_eq!(store.history("t", 1).await.unwrap().len(), 1);
-    assert!(store.history("t", 0).await.unwrap().is_empty());
-    assert!(store.history("nobody", 5).await.unwrap().is_empty());
-    // The abandoned branch is still stored.
-    assert_eq!(store.load("t", Some(&b.id)).await.unwrap().unwrap(), b);
+        .unwrap();
+    let pending = &input.snapshot.unwrap().pending_writes["tools"];
+    assert_eq!(pending.memo["call:1"], json!("done"));
+    assert_eq!(history[2].parent_id.as_deref(), Some(first.id.as_str()));
 
-    assert!(store.delete_thread("t").await.unwrap());
-    assert!(store.load("t", Some(&b.id)).await.unwrap().is_none());
-    assert!(!store.delete_thread("t").await.unwrap());
-    // A deleted thread starts again at version 1.
-    let again = Checkpoint::new("t", 1, Source::Step, state(1));
-    store.commit(again, 0).await.unwrap();
+    // Someone else moved the thread: the next write loses.
+    let other = Checkpoint::new("w", 5, Source::Manual, State::new()).parent(&done.id);
+    store.commit(other, 4).await.unwrap();
+    let err = writer
+        .save_checkpoint(snapshot(json!({})))
+        .await
+        .unwrap_err();
+    assert_eq!(err.kind.as_deref(), Some("storage_conflict"));
 }
 
 #[test]

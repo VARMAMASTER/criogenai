@@ -31,6 +31,7 @@ mod event;
 mod graph;
 mod memo;
 mod node;
+mod persist;
 mod policy;
 mod reducer;
 mod runtime;
@@ -46,6 +47,7 @@ pub use memo::TaskMemo;
 pub use node::{
     BoxFuture, Node, NodeContext, NodeOutput, Router, node_fn, node_with_context, router_fn,
 };
+pub use persist::Persister;
 pub use policy::{NodePolicy, RetryPolicy};
 pub use reducer::Reducer;
 pub use runtime::{

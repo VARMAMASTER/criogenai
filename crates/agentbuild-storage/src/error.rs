@@ -15,6 +15,8 @@ pub enum StorageErrorKind {
     CheckpointNotFound,
     /// Stored data cannot be read back.
     Corrupt,
+    /// The database was written by a newer, incompatible version.
+    Incompatible,
 }
 
 impl StorageErrorKind {
@@ -26,6 +28,7 @@ impl StorageErrorKind {
             Self::Conflict => "storage_conflict",
             Self::CheckpointNotFound => "checkpoint_not_found",
             Self::Corrupt => "storage_corrupt",
+            Self::Incompatible => "storage_incompatible",
         }
     }
 }

@@ -113,6 +113,7 @@ Details in [0005 §5](0005-core-runtime-extensions.md#5-snapshots-saved-task-wri
 | `workflow_mismatch`   | snapshot from a workflow with another fingerprint |
 | `node_timeout`        | a node attempt exceeded its policy's timeout   |
 | `deadline_exceeded`   | the run's deadline passed                      |
+| `storage_failed`      | the run's persister could not save progress (0008 §12) |
 | `cancelled`           | the run's cancel token fired                   |
 
 Every `RunError` has `code`, `step` (zero-based index of the failing step),

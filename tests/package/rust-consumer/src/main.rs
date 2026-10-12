@@ -33,6 +33,7 @@ async fn main() {
     approval_before_a_tool_runs().await;
     agents_as_nodes_and_tools().await;
     threads_keep_conversations().await;
+    sqlite_threads_survive_a_restart().await;
     println!("package smoke test: ok");
 }
 
@@ -507,18 +508,56 @@ async fn threads_keep_conversations() {
     let done = chat.approve().await.expect("approve");
     assert_eq!(done.text(), Some("Refunded, Ada."));
     assert_eq!(done.result.messages.len(), 6);
-    let history = chat.history(10).await.expect("history");
+    let history = chat.history(20).await.expect("history");
     let kinds: Vec<(Source, CheckpointStatus)> =
         history.iter().map(|c| (c.source, c.status)).collect();
+    // Newest first; each call starts with an `input` checkpoint.
+    assert_eq!(kinds[0], (Source::Step, CheckpointStatus::Completed));
+    assert!(kinds.contains(&(Source::Suspend, CheckpointStatus::Suspended)));
     assert_eq!(
-        kinds,
-        [
-            (Source::Step, CheckpointStatus::Completed),
-            (Source::Suspend, CheckpointStatus::Suspended),
-            (Source::Step, CheckpointStatus::Completed),
-        ]
+        kinds.last(),
+        Some(&(Source::Input, CheckpointStatus::InProgress))
     );
-    chat.rewind(&history[2].id).await.expect("rewind");
+    // Back to the end of the first call.
+    let first_turn = history
+        .iter()
+        .rev()
+        .find(|c| c.status == CheckpointStatus::Completed)
+        .expect("a completed call");
+    chat.rewind(&first_turn.id).await.expect("rewind");
     assert_eq!(chat.messages().await.expect("messages").len(), 2);
     println!("  threads (memory, approval across instances, rewind): ok");
+}
+
+async fn sqlite_threads_survive_a_restart() {
+    use agentbuild_agent::Agent;
+    use agentbuild_storage::{SqliteCheckpointer, Storage};
+
+    let path = std::env::temp_dir().join(format!("agentbuild-package-{}.db", std::process::id()));
+    let fast = || FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1));
+    {
+        let storage = Storage::connect(&format!("sqlite://{}", path.display()))
+            .await
+            .expect("open");
+        let agent = Agent::builder(fast().then(FakeReply::text("Hello Ada")))
+            .storage(storage)
+            .build()
+            .expect("valid agent");
+        agent.thread("t").send("I am Ada").await.expect("send");
+    }
+    let storage = Storage::new(SqliteCheckpointer::open(&path).await.expect("reopen"));
+    let agent = Agent::builder(fast().then(FakeReply::text("Your name is Ada")))
+        .storage(storage)
+        .build()
+        .expect("valid agent");
+    let reply = agent.thread("t").send("Who am I?").await.expect("send");
+    assert_eq!(reply.result.messages.len(), 4);
+    assert_eq!(reply.text(), Some("Your name is Ada"));
+    drop(agent);
+    for suffix in ["", "-wal", "-shm"] {
+        let mut file = path.clone().into_os_string();
+        file.push(suffix);
+        let _ = std::fs::remove_file(file);
+    }
+    println!("  threads in SQLite survive a restart: ok");
 }

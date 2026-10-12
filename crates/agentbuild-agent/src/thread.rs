@@ -2,15 +2,20 @@
 //!
 //! A [`Thread`] keeps an agent's transcript in the agent's
 //! [`Storage`](agentbuild_storage::Storage): every call ends in a
-//! checkpoint, and the next call starts from it. Approvals and failed runs
-//! wait in the checkpoint until someone answers or retries them.
+//! checkpoint, and the next call starts from it. With
+//! [`Durability::Step`] (the default) the run is also saved before every
+//! step and after every tool call, so an interrupted run can be continued.
+//! Approvals, failed and interrupted runs wait in the checkpoint until
+//! someone answers or retries them.
 
 use std::collections::BTreeMap;
+use std::sync::Arc;
 
 use agentbuild_core::{CancelToken, RunOptions, State};
 use agentbuild_providers::Message;
 use agentbuild_storage::{
-    Checkpoint, CheckpointMeta, CheckpointStatus, Source, StorageError, ThreadLease,
+    Checkpoint, CheckpointMeta, CheckpointStatus, Durability, Source, StorageError, ThreadLease,
+    ThreadWriter,
 };
 use serde_json::Value;
 
@@ -38,7 +43,8 @@ use crate::approval::{ApprovalRequest, Decision};
 /// let reply = chat.send("What is my name?").await.unwrap();
 /// assert_eq!(reply.text(), Some("Your name is Ada"));
 /// assert_eq!(chat.messages().await.unwrap().len(), 4);
-/// assert_eq!(reply.version, 2);
+/// // Two checkpoints per call: before the first step, and the outcome.
+/// assert_eq!(reply.version, 4);
 /// # });
 /// ```
 #[derive(Debug, Clone)]
@@ -95,8 +101,10 @@ impl Thread {
     }
 
     /// Runs one turn: the stored transcript plus `input`. Fails with
-    /// `thread_suspended` while approvals are pending, and with
-    /// `thread_busy` per the storage's [`OnBusy`](agentbuild_storage::OnBusy).
+    /// `thread_suspended` while approvals are pending, `thread_interrupted`
+    /// if the last run did not finish (continue it with
+    /// [`retry`](Self::retry)), and `thread_busy` per the storage's
+    /// [`OnBusy`](agentbuild_storage::OnBusy).
     ///
     /// A failed run is still saved, so [`retry`](Self::retry) can continue
     /// it; the next `send` starts from its state.
@@ -123,13 +131,23 @@ impl Thread {
                     ),
                 ));
             }
+            Some(head) if head.status() == CheckpointStatus::InProgress => {
+                return Err(AgentError::new(
+                    "thread_interrupted",
+                    format!(
+                        "thread `{}` has a run that did not finish (interrupted, or running in \
+                         another process): continue it with retry first",
+                        self.id
+                    ),
+                ));
+            }
             Some(head) => head.state.clone(),
             None => State::new(),
         };
         let state = next_turn(state, input.into())?;
-        let options = watch(&lease, options);
+        let (writer, options) = self.prepare(&lease, head.as_ref(), options);
         let result = self.agent.run_state(state, options).await;
-        self.commit(head.as_ref(), result).await
+        self.commit(&writer, result).await
     }
 
     /// Approves every pending call and continues the run.
@@ -196,29 +214,36 @@ impl Thread {
             )));
         };
         let decisions = decide(&approval_requests(&snapshot.suspended));
-        let options = watch(lease, options);
+        let (writer, options) = self.prepare(lease, Some(head), options);
         let result = self.agent.resume_with(snapshot, decisions, options).await;
-        self.commit(Some(head), result).await
+        self.commit(&writer, result).await
     }
 
-    /// Continues a failed run from where it stopped. Tool calls that
-    /// finished before the failure are not run again.
+    /// Continues a failed or interrupted run from where it stopped. Tool
+    /// calls that finished (and were saved) are not run again; with
+    /// [`Durability::Step`] that includes calls finished just before a
+    /// crash.
     pub async fn retry(&self) -> Result<Reply, AgentError> {
         let lease = self.lease().await?;
         let head = self.load().await?;
         let Some((head, snapshot)) = head
             .as_ref()
-            .filter(|h| h.status() == CheckpointStatus::Failed)
+            .filter(|h| {
+                matches!(
+                    h.status(),
+                    CheckpointStatus::Failed | CheckpointStatus::InProgress
+                )
+            })
             .and_then(|h| Some((h, h.snapshot.as_ref()?)))
         else {
             return Err(AgentError::resume_invalid(format!(
-                "thread `{}` has no failed run to retry",
+                "thread `{}` has no failed or interrupted run to retry",
                 self.id
             )));
         };
-        let options = watch(&lease, self.agent.run_options());
+        let (writer, options) = self.prepare(&lease, Some(head), self.agent.run_options());
         let result = self.agent.retry_with(snapshot, options).await;
-        self.commit(Some(head), result).await
+        self.commit(&writer, result).await
     }
 
     /// Cancels this thread's active run in this process. `true` if one was
@@ -323,11 +348,29 @@ impl Thread {
             .map_err(storage_error)
     }
 
+    /// A writer that continues from `head`, and `options` set up for the
+    /// run: cancellable through the lease, and saved per step if the
+    /// storage's durability says so.
+    fn prepare(
+        &self,
+        lease: &ThreadLease,
+        head: Option<&Checkpoint>,
+        options: RunOptions,
+    ) -> (ThreadWriter, RunOptions) {
+        let storage = self.agent.storage();
+        let writer = ThreadWriter::new(storage.checkpointer().clone(), &self.id, head);
+        let mut options = watch(lease, options);
+        if storage.durability_mode() == Durability::Step {
+            options = options.persist(Arc::new(writer.clone()));
+        }
+        (writer, options)
+    }
+
     /// Saves the run's outcome as the new head. Errors before the run
     /// started (no snapshot) save nothing.
     async fn commit(
         &self,
-        head: Option<&Checkpoint>,
+        writer: &ThreadWriter,
         result: Result<AgentResult, AgentError>,
     ) -> Result<Reply, AgentError> {
         if let Err(error) = &result
@@ -335,45 +378,49 @@ impl Thread {
         {
             return Err(result.unwrap_err());
         }
-        let expected = head.map_or(0, |h| h.version);
-        let version = expected + 1;
-        let mut checkpoint = match &result {
+        let saved = match &result {
             Ok(done) => match done.snapshot() {
                 Some(snapshot) => {
-                    Checkpoint::new(&self.id, version, Source::Suspend, done.run.state.clone())
-                        .run(&snapshot.run_id, snapshot.step)
-                        .snapshot(snapshot.clone())
+                    writer
+                        .commit(
+                            Source::Suspend,
+                            done.run.state.clone(),
+                            (&snapshot.run_id, snapshot.step),
+                            Some(snapshot.clone()),
+                        )
+                        .await
                 }
                 None => {
                     let step = done.run.steps.last().map_or(0, |s| s.step + 1);
-                    Checkpoint::new(&self.id, version, Source::Step, done.run.state.clone())
-                        .run(&done.run.run_id, step)
+                    writer
+                        .commit(
+                            Source::Step,
+                            done.run.state.clone(),
+                            (&done.run.run_id, step),
+                            None,
+                        )
+                        .await
                 }
             },
             Err(error) => {
                 let snapshot = error.snapshot().expect("checked above");
-                Checkpoint::new(&self.id, version, Source::Failure, snapshot.state.clone())
-                    .run(&snapshot.run_id, snapshot.step)
-                    .snapshot(snapshot.clone())
+                writer
+                    .commit(
+                        Source::Failure,
+                        snapshot.state.clone(),
+                        (&snapshot.run_id, snapshot.step),
+                        Some(snapshot.clone()),
+                    )
+                    .await
             }
         };
-        if let Some(head) = head {
-            checkpoint = checkpoint.parent(&head.id);
-        }
-        let checkpoint_id = checkpoint.id.clone();
-        let saved = self
-            .agent
-            .storage()
-            .checkpointer()
-            .commit(checkpoint, expected)
-            .await;
         match (saved, result) {
-            (Ok(()), Ok(result)) => Ok(Reply {
+            (Ok(meta), Ok(result)) => Ok(Reply {
                 result,
-                checkpoint_id,
-                version,
+                checkpoint_id: meta.id,
+                version: meta.version,
             }),
-            (Ok(()), Err(error)) => Err(error),
+            (Ok(_), Err(error)) => Err(error),
             (Err(err), result) => {
                 let mut error = storage_error(err);
                 if let Err(run) = result {

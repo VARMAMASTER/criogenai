@@ -1,6 +1,6 @@
 # 0008: Persistence, threads and memory
 
-Status: **Accepted**; §10 step 1 built (§11). Builds on [0005](0005-core-runtime-extensions.md)
+Status: **Accepted**; §10 steps 1–2 built (§11, §12). Builds on [0005](0005-core-runtime-extensions.md)
 §5 (snapshots, saved task writes, resume) and gives developers the easy
 interactive API sketched in [0007](0007-public-api.md). Research input:
 [langgraph](../research/langgraph.md) §5 (checkpointing), §6 (interrupts) and §8 (store).
@@ -250,9 +250,12 @@ special `INPUT`/`END`/`__copy__` cases ([research](../research/langgraph.md) §5
 ### 5.5 Crash recovery
 
 On restart, a thread whose head checkpoint has a non-empty frontier and no
-outcome was interrupted mid-run. `thread.recover()` (or `send`, which checks
-first) re-runs the interrupted step: finished tasks reuse their saved output,
-unfinished ones run again with their memo.
+outcome was interrupted mid-run (status `in_progress`). `thread.retry()`
+re-runs the interrupted step: finished tasks reuse their saved output,
+unfinished ones run again with their memo. `send` on such a thread fails
+with `thread_interrupted` instead of starting a new turn on top of an
+unfinished one (strict now; an automatic `recover` on `send` can be added
+later without breaking anyone, rule 4).
 
 **Honest limit.** If the process dies *after* a tool's side effect but
 *before* its memo is written, the tool runs again on recovery. For tools where
@@ -322,10 +325,12 @@ trait MemoryStore: Send + Sync {
 
 Five checkpointer methods and four store methods. LangGraph's saver has
 about 12 methods with sync and async twins
-([research](../research/langgraph.md) §5.2). Keyframes, deltas, retention and
-encryption are implemented **above** these interfaces, so a custom backend only
-stores rows. Python and TS can implement the same interfaces (async methods);
-the bridge adapts them.
+([research](../research/langgraph.md) §5.2). Backends receive whole
+checkpoints. A custom backend may store them as they are; the built-in SQL
+backends encode deltas and keyframes internally with the public
+`agentbuild_storage::delta` helpers (as built: §12). Retention and
+encryption are planned above the interface. Python and TS can implement the
+same interfaces (async methods); the bridge adapts them.
 
 ## 8. Errors (added to 0003 §9)
 
@@ -336,8 +341,11 @@ the bridge adapts them.
 | `storage_conflict` | developer | Compare-and-set lost for a reason other than `thread_busy` (e.g. external edit) |
 | `checkpoint_not_found` | developer | `rewind`/`fork` to an unknown id |
 | `workflow_mismatch` | developer | §6.3 |
-| `storage_corrupt` | internal | A delta chain cannot be replayed (checksum mismatch) |
+| `storage_corrupt` | internal | A delta chain cannot be replayed, or a row cannot be decoded |
+| `storage_incompatible` | developer | The database schema is newer than this version supports |
 | `thread_suspended` | developer | `send` on a thread that waits for approval: answer it first (`approve`, `reject`, `decide`) |
+| `thread_interrupted` | developer | `send` on a thread whose last run did not finish: continue it with `retry` first (§5.5) |
+| `storage_failed` | transient | (core run error) the run's progress could not be saved during the run; the cause's storage code is in the message and `NodeError` kind |
 
 A storage failure **during** a run fails the step (nothing committed) and the
 run reports the error with its in-memory snapshot attached, so no work is lost
@@ -391,7 +399,7 @@ works behind `Arc<dyn Checkpointer>`:
 | `history(thread, limit)` | The head's branch, newest first, as `CheckpointMeta` (no state) |
 | `delete_thread(thread)` | Removes the thread and all its checkpoints; `true` if it existed |
 
-`put_pending` (§7) arrives with per-step commits (step 2).
+`put_pending` (§7) arrived with per-step commits in step 2 (§12).
 
 **Durability in step 1 is `exit`** (§5.1): one checkpoint per call, written
 when the run completes, suspends or fails. The in-memory backend cannot
@@ -433,3 +441,102 @@ so both `thread.cancel()` and the caller's token stop the run.
 
 Not in step 1: workflow threads (`resume(values)`), `stream`, `update`,
 `fork`, `on_mismatch`, retention, encryption, the memory store.
+
+## 12. Step 2 as built
+
+Durability `step` (§5.1), crash recovery (§5.5) and the SQLite backend
+(§4). Not yet: durability `async`, history across branches, `fork`,
+`update`, `on_mismatch`, retention, encryption (later steps).
+
+**Core: `Persister`.** `agentbuild-core` gained one trait so the engine can
+save a run while it executes without knowing about storage.
+`RunOptions::persist(Arc<dyn Persister>)` turns it on:
+
+| Method | Called |
+|---|---|
+| `save_checkpoint(snapshot)` | Before the first step of every `run`, `resume` and `retry` (resume values and saved work in `pending_writes`), and after each committed step the run continues from. Not for the final outcome: the caller saves that |
+| `save_task(step, node, write)` | When a node finishes (its output), and for every `TaskMemo::save` entry, before the run goes on |
+
+Every call is awaited. An error stops the run with the new run error
+`storage_failed`; its snapshot keeps everything done so far, so nothing is
+lost while the database is down (P5, P6). `TaskMemo::save(key, value)` is
+`put` plus the write-through (and `once` uses it); a failed save returns a
+`NodeError` of kind `storage_failed` so the node stops doing side effects.
+The agent's tools node saves each finished call this way. If storage fails
+it finishes the step's calls, then fails the run before the next model call,
+with every result in the snapshot.
+
+**Checkpoint status `in_progress`.** A checkpoint whose snapshot has no
+suspended nodes and no error is a point a run continues from. After a
+crash, the head stays `in_progress`.
+
+**`Checkpointer::put_pending(thread, checkpoint, node, write)`.** The fifth
+method (§7). It merges a task write into that checkpoint's
+`pending_writes[node]` (`merge_pending`: memo entries added, `output` and
+`resume` replaced). Every later `load` returns the merged snapshot. Only
+checkpoints with a snapshot accept writes (`checkpoint_not_found`
+otherwise).
+
+**`ThreadWriter`** (in `agentbuild-storage`) is the `Persister` for one
+thread. It holds the head it last wrote: the first checkpoint of a call is
+source `input`, later ones `step`, each with `expected` = the previous
+version (compare-and-set). Task writes go to its latest checkpoint.
+`commit` then saves the outcome (`step`, `suspend` or `failure`). Custom
+code (workflow threads, SDK bridges) uses the same writer.
+
+**`Durability`** on `Storage`: `Step` (default, for every backend so
+behaviour does not depend on the backend) or `Exit` (one checkpoint per
+call, as in step 1). A simple chat turn writes two checkpoints (`input`,
+final). A turn with one tool call writes four: `input`, after the model,
+after the tools, final.
+
+**Threads.** `send` fails with `thread_interrupted` on an `in_progress`
+head; `retry` continues a `failed` or `in_progress` head. Finished tool
+calls are not repeated, including calls finished just before a crash. A
+call interrupted mid-flight runs again (§5.5's honest limit).
+
+**Deltas** (`agentbuild_storage::delta`, public so custom backends can
+reuse it). `diff(old, new)` gives `set`, `append` (a list that only grew:
+just the new elements) and `remove` operations, in key order; `apply`
+replays them (`storage_corrupt` if an append hits a non-list). It works on
+plain state, so it needs no reducers and stays correct for any reducer.
+
+**SQLite** (feature `sqlite` of `agentbuild-storage`, forwarded by
+`agentbuild-agent`; `sqlx` 0.8 without macros, SQLite bundled).
+`SqliteCheckpointer::connect(url)` / `open(path)`, or
+`Storage::connect("sqlite://file.db")` (`"memory:"` and `sqlite::memory:`
+also work). WAL journal, 5 s busy timeout, up to 8 connections (one for
+in-memory).
+
+- Tables, prefixed `agentbuild_` so they can live in an app's database:
+  `threads(thread_id, head_id, head_version, created_at_ms, updated_at_ms)`,
+  `checkpoints(id, thread_id, parent_id, version, source, status, run_id,
+  step, kind, depth, body, snapshot, created_at_ms)`,
+  `pending_writes(seq, checkpoint_id, node, write, created_at_ms)`,
+  `schema_migrations(version, applied_at_ms)`.
+- **Encoding.** `kind` is `keyframe` (body = full state) or `delta` (body =
+  operations against the parent). A delta is written when the parent is
+  fewer than `keyframe_interval` (default 25) deltas from its keyframe
+  *and* the delta is smaller than the state. `depth` counts deltas since
+  the keyframe. Loading walks the parent chain back to the keyframe in
+  one recursive query and replays. The snapshot is stored without its
+  state when it equals the checkpoint's (it always does for threads).
+  The writer caches the last state per thread (up to 256 threads), so a
+  commit does not read its parent back.
+- **Compare-and-set.** One `BEGIN IMMEDIATE` transaction: a conditional
+  `UPDATE threads … WHERE head_version = expected` (or an insert for a new
+  thread) must change exactly one row, then the checkpoint row is
+  inserted. Two handles on one file cannot fork a thread (tested); leases
+  stay per process.
+- **Migrations** run automatically on connect, in one transaction, and are
+  recorded. A database at a newer schema version is refused with
+  `storage_incompatible`.
+- **Errors.** Connection, I/O, busy and closed-pool errors are
+  `storage_unavailable`; undecodable rows are `storage_corrupt`.
+
+`history`, `delete_thread` and `put_pending` are single queries (recursive
+CTE along `parent_id`; three deletes in one transaction; `INSERT … SELECT …
+WHERE EXISTS`). Measured in the tests: a 40-turn chat with a keyframe every
+10 checkpoints stores each message about once per delta plus four
+keyframes, under a third of what full copies would need. That is a test
+assertion, not a benchmark.

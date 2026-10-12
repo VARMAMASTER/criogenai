@@ -350,6 +350,7 @@ and checked in CI, so docs and SDK mappings can't drift.
 | `missing_goto` | developer | core: goto-only node returned no target | implemented |
 | `resume_invalid` | developer | core: bad resume input | implemented |
 | `workflow_mismatch` | developer | core: snapshot from a different graph | implemented |
+| `storage_failed` | transient | core: the run's `Persister` failed (0008 §12); `details` / the `NodeError` kind carry the storage code | implemented |
 | `internal` | internal | anywhere | proposed |
 | `model_failed` | per `kind` | agent: model node | proposed |
 | `tool_failed` | developer | agent: unexpected tool exception | proposed |
@@ -359,7 +360,8 @@ and checked in CI, so docs and SDK mappings can't drift.
 | `hook_failed` | developer | agent: middleware raised | proposed |
 
 Storage codes (`thread_busy`, `storage_unavailable`, `storage_conflict`,
-`checkpoint_not_found`, `storage_corrupt`) are defined in
+`checkpoint_not_found`, `storage_corrupt`, `storage_incompatible`,
+`thread_suspended`, `thread_interrupted`) are defined in
 [0008 §8](0008-persistence-and-memory.md).
 
 Tool-result error codes (inside tool messages, not run errors): `unknown_tool`,

@@ -9,6 +9,8 @@ use serde::de::DeserializeOwned;
 use serde_json::Value;
 
 use crate::error::NodeError;
+use crate::persist::Persister;
+use crate::runtime::PendingWrite;
 
 /// Results a node saves while it runs, so work that already finished is not
 /// repeated when the same task executes again: on a retry, or when a failed
@@ -21,12 +23,47 @@ use crate::error::NodeError;
 #[derive(Debug, Clone, Default)]
 pub struct TaskMemo {
     entries: Arc<Mutex<BTreeMap<String, Value>>>,
+    /// Where [`save`](Self::save) writes through to, if the run is persisted.
+    sink: Option<Sink>,
+}
+
+/// The run's persister, and which task this memo belongs to.
+#[derive(Clone)]
+struct Sink {
+    persister: Arc<dyn Persister>,
+    step: usize,
+    node: Arc<str>,
+}
+
+impl std::fmt::Debug for Sink {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Sink({}:{})", self.step, self.node)
+    }
 }
 
 impl TaskMemo {
     pub(crate) fn from_entries(entries: BTreeMap<String, Value>) -> Self {
         Self {
             entries: Arc::new(Mutex::new(entries)),
+            sink: None,
+        }
+    }
+
+    /// A handle on the same entries whose [`save`](Self::save) also writes
+    /// to `persister`.
+    pub(crate) fn persisted(
+        &self,
+        persister: Arc<dyn Persister>,
+        step: usize,
+        node: Arc<str>,
+    ) -> Self {
+        Self {
+            entries: self.entries.clone(),
+            sink: Some(Sink {
+                persister,
+                step,
+                node,
+            }),
         }
     }
 
@@ -46,15 +83,45 @@ impl TaskMemo {
         self.lock().keys().cloned().collect()
     }
 
-    /// Saves `value` under `key` immediately (not at step commit), replacing
-    /// any earlier value.
+    /// Saves `value` under `key` in memory, replacing any earlier value. It
+    /// survives retries and failures in this process, and reaches storage
+    /// with the step's failure or suspension. Use [`save`](Self::save) for
+    /// results that must survive a crash.
     pub fn put(&self, key: impl Into<String>, value: impl Into<Value>) {
         self.lock().insert(key.into(), value.into());
     }
 
+    /// [`put`](Self::put), then waits until the run's storage has the entry
+    /// (design 0008 §5.1), so even a crash does not repeat the work. Without
+    /// persisted storage it is the same as `put`.
+    ///
+    /// On a storage error the entry is still kept in memory and the error
+    /// (kind `storage_failed`) is returned: stop doing side effects, the
+    /// run cannot be saved.
+    pub async fn save(
+        &self,
+        key: impl Into<String>,
+        value: impl Into<Value>,
+    ) -> Result<(), NodeError> {
+        let (key, value) = (key.into(), value.into());
+        self.put(key.clone(), value.clone());
+        let Some(sink) = &self.sink else {
+            return Ok(());
+        };
+        let mut write = PendingWrite::default();
+        write.memo.insert(key, value);
+        sink.persister
+            .save_task(sink.step, sink.node.to_string(), write)
+            .await
+            .map_err(|err| {
+                NodeError::new(format!("could not save memo entry: {err}"))
+                    .with_kind("storage_failed")
+            })
+    }
+
     /// Runs `f` once per task: returns the value saved under `key` if there is
-    /// one, otherwise runs `f` and saves its `Ok` result. Errors are not
-    /// saved, so a failed call runs again next time.
+    /// one, otherwise runs `f` and [`save`](Self::save)s its `Ok` result.
+    /// Errors are not saved, so a failed call runs again next time.
     ///
     /// ```
     /// # use agentbuild_core::{NodeError, TaskMemo};
@@ -86,7 +153,7 @@ impl TaskMemo {
             ))
             .with_kind("memo_type_mismatch")
         })?;
-        self.put(key, json);
+        self.save(key, json).await?;
         Ok(value)
     }
 

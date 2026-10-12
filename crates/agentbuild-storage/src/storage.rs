@@ -23,6 +23,20 @@ pub enum OnBusy {
     Interrupt,
 }
 
+/// When a thread's run is written to storage (design 0008 §5.1).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum Durability {
+    /// A checkpoint before the first step and after every step, and each
+    /// finished task (tool call) as it happens. A crash loses at most the
+    /// unfinished tasks of one step.
+    #[default]
+    Step,
+    /// One checkpoint per call, when the run completes, suspends or fails.
+    /// A crash loses the whole call.
+    Exit,
+}
+
 /// A checkpointer plus the rules for using threads. Cheap to clone; clones
 /// share the checkpointer and the thread leases.
 #[derive(Clone)]
@@ -31,6 +45,7 @@ pub struct Storage {
     leases: Arc<Leases>,
     on_busy: OnBusy,
     busy_timeout: Duration,
+    durability: Durability,
 }
 
 impl std::fmt::Debug for Storage {
@@ -38,6 +53,7 @@ impl std::fmt::Debug for Storage {
         f.debug_struct("Storage")
             .field("on_busy", &self.on_busy)
             .field("busy_timeout", &self.busy_timeout)
+            .field("durability", &self.durability)
             .finish_non_exhaustive()
     }
 }
@@ -59,6 +75,28 @@ impl Storage {
         Self::shared(Arc::new(checkpointer))
     }
 
+    /// Storage at `url`: `memory:` (in process memory), or with the
+    /// `sqlite` feature `sqlite://path/to/file.db` / `sqlite::memory:`.
+    /// Creates the database and its tables if needed.
+    pub async fn connect(url: &str) -> Result<Self, StorageError> {
+        if url == "memory:" {
+            return Ok(Self::in_memory());
+        }
+        if url.starts_with("sqlite:") {
+            #[cfg(feature = "sqlite")]
+            return Ok(Self::new(crate::SqliteCheckpointer::connect(url).await?));
+            #[cfg(not(feature = "sqlite"))]
+            return Err(StorageError::new(
+                StorageErrorKind::Unavailable,
+                "SQLite storage needs the `sqlite` feature of agentbuild-storage",
+            ));
+        }
+        Err(StorageError::new(
+            StorageErrorKind::Unavailable,
+            format!("unsupported storage URL `{url}` (expected `memory:` or `sqlite:…`)"),
+        ))
+    }
+
     /// [`new`](Self::new) with a shared checkpointer.
     pub fn shared(checkpointer: Arc<dyn Checkpointer>) -> Self {
         Self {
@@ -66,6 +104,7 @@ impl Storage {
             leases: Arc::default(),
             on_busy: OnBusy::default(),
             busy_timeout: Duration::from_secs(60),
+            durability: Durability::default(),
         }
     }
 
@@ -79,6 +118,17 @@ impl Storage {
     pub fn busy_timeout(mut self, timeout: Duration) -> Self {
         self.busy_timeout = timeout;
         self
+    }
+
+    /// Sets when runs are written. Default [`Durability::Step`].
+    pub fn durability(mut self, durability: Durability) -> Self {
+        self.durability = durability;
+        self
+    }
+
+    /// The [`durability`](Self::durability) setting.
+    pub fn durability_mode(&self) -> Durability {
+        self.durability
     }
 
     /// The checkpointer.

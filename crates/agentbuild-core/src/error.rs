@@ -300,6 +300,15 @@ pub enum RunErrorKind {
         /// The snapshot's fingerprint.
         found: String,
     },
+    /// The run's [`Persister`](crate::Persister) could not save its
+    /// progress. Nothing after the last saved point is lost from memory:
+    /// the error's snapshot has it.
+    #[error("could not save the run: {source}")]
+    StorageFailed {
+        /// The storage error (its `kind` is the storage error code, e.g.
+        /// `storage_unavailable`).
+        source: NodeError,
+    },
 }
 
 impl RunErrorKind {
@@ -319,6 +328,7 @@ impl RunErrorKind {
             Self::NodeTimeout { .. } => "node_timeout",
             Self::DeadlineExceeded { .. } => "deadline_exceeded",
             Self::Cancelled => "cancelled",
+            Self::StorageFailed { .. } => "storage_failed",
         }
     }
 }

@@ -5,13 +5,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use agentbuild_agent::{Agent, Approval, Decision, ToolError, tool_fn};
-use agentbuild_core::{BoxFuture, CancelToken};
+use agentbuild_core::{BoxFuture, CancelToken, PendingWrite};
 use agentbuild_providers::{
     FakeModel, FakeReply, Message, ModelError, ModelErrorKind, Role, ToolSpec,
 };
 use agentbuild_storage::{
-    Checkpoint, CheckpointMeta, CheckpointStatus, Checkpointer, InMemoryCheckpointer, OnBusy,
-    Source, Storage, StorageError, StorageErrorKind,
+    Checkpoint, CheckpointMeta, CheckpointStatus, Checkpointer, Durability, InMemoryCheckpointer,
+    OnBusy, Source, Storage, StorageError, StorageErrorKind,
 };
 use serde_json::{Map, Value, json};
 
@@ -71,10 +71,12 @@ async fn a_thread_remembers_the_conversation() {
     assert!(chat.head().await.unwrap().is_none());
     assert!(chat.messages().await.unwrap().is_empty());
 
+    // Each call writes an `input` checkpoint before the first step and its
+    // outcome at the end (durability `step`).
     let first = chat.send("I am Ada").await.unwrap();
-    assert_eq!((first.text(), first.version), (Some("Hello Ada"), 1));
+    assert_eq!((first.text(), first.version), (Some("Hello Ada"), 2));
     let second = chat.send("What is my name?").await.unwrap();
-    assert_eq!(second.version, 2);
+    assert_eq!(second.version, 4);
     assert_eq!(second.text(), Some("Your name is Ada"));
     // Bookkeeping is per run; the transcript carries over.
     assert_eq!(second.result.model_calls, 1);
@@ -89,16 +91,27 @@ async fn a_thread_remembers_the_conversation() {
     assert_eq!(chat.messages().await.unwrap().len(), 4);
 
     let history = chat.history(10).await.unwrap();
-    assert_eq!(sources(&history), [(2, Source::Step), (1, Source::Step)]);
+    assert_eq!(
+        sources(&history),
+        [
+            (4, Source::Step),
+            (3, Source::Input),
+            (2, Source::Step),
+            (1, Source::Input)
+        ]
+    );
     assert_eq!(history[0].id, second.checkpoint_id);
-    assert_eq!(history[0].parent_id.as_deref(), Some(&*first.checkpoint_id));
+    assert_eq!(history[0].parent_id.as_deref(), Some(&*history[1].id));
+    assert_eq!(history[1].parent_id.as_deref(), Some(&*first.checkpoint_id));
     assert_eq!(history[0].status, CheckpointStatus::Completed);
+    assert_eq!(history[1].status, CheckpointStatus::InProgress);
     assert_eq!(history[0].run_id, second.result.run.run_id);
+    assert_eq!(history[1].run_id, second.result.run.run_id);
     assert_eq!(chat.history(1).await.unwrap().len(), 1);
 
     // Another thread on the same agent starts empty.
     let other = agent.thread("user-7").send("hi").await.unwrap();
-    assert_eq!(other.version, 1);
+    assert_eq!(other.version, 2);
     assert_eq!(other.result.messages.len(), 2);
 }
 
@@ -124,11 +137,14 @@ async fn an_approval_waits_in_storage_for_another_agent_instance() {
     let not_failed = chat.retry().await.unwrap_err();
     assert_eq!(not_failed.code, "resume_invalid");
     assert!(
-        not_failed.message.contains("no failed run to retry"),
+        not_failed
+            .message
+            .contains("no failed or interrupted run to retry"),
         "{}",
         not_failed.message
     );
-    assert_eq!(chat.head().await.unwrap().unwrap().version, 1);
+    // input, the model's step, the suspension.
+    assert_eq!(chat.head().await.unwrap().unwrap().version, 3);
 
     // A new process: another agent instance on the same storage. Its model
     // script starts after the tool call.
@@ -145,12 +161,21 @@ async fn an_approval_waits_in_storage_for_another_agent_instance() {
     // Approving twice (double click) finds nothing pending.
     let again = chat.approve().await.unwrap_err();
     assert_eq!(again.code, "resume_invalid");
+    // The approval: input (with the decisions), review, tools, model.
     assert_eq!(
         sources(&chat.history(10).await.unwrap()),
-        [(2, Source::Step), (1, Source::Suspend)]
+        [
+            (7, Source::Step),
+            (6, Source::Step),
+            (5, Source::Step),
+            (4, Source::Input),
+            (3, Source::Suspend),
+            (2, Source::Step),
+            (1, Source::Input)
+        ]
     );
     assert_eq!(
-        chat.history(10).await.unwrap()[1].status,
+        chat.history(10).await.unwrap()[4].status,
         CheckpointStatus::Suspended
     );
 }
@@ -187,7 +212,7 @@ async fn reject_and_decide_answer_pending_calls() {
         .await
         .unwrap_err();
     assert_eq!(wrong.code, "resume_invalid");
-    assert_eq!(chat.head().await.unwrap().unwrap().version, 3);
+    assert_eq!(chat.head().await.unwrap().unwrap().version, 10);
     assert_eq!(chat.pending_approvals().await.unwrap().len(), 1);
 
     let mut args = Map::new();
@@ -198,7 +223,7 @@ async fn reject_and_decide_answer_pending_calls() {
         .unwrap();
     assert_eq!(edited.text(), Some("Refunded A-3."));
     assert_eq!(*log.lock().unwrap(), [r#"refund({"order":"A-3"})"#]);
-    assert_eq!(edited.version, 4);
+    assert_eq!(edited.version, 14);
 }
 
 #[tokio::test(start_paused = true)]
@@ -228,7 +253,7 @@ async fn a_failed_run_is_saved_and_retried_without_rerunning_tools() {
     let retried = chat.retry().await.unwrap();
     assert_eq!(retried.text(), Some("Found it."));
     assert_eq!(log.lock().unwrap().len(), 1, "the lookup is not run again");
-    assert_eq!(retried.version, 2);
+    assert_eq!(retried.version, 6);
     let nothing = chat.retry().await.unwrap_err();
     assert_eq!(nothing.code, "resume_invalid");
 }
@@ -278,7 +303,7 @@ async fn overlapping(storage: Storage) -> (Result<u64, String>, Result<Vec<Messa
 #[tokio::test(start_paused = true)]
 async fn a_second_send_waits_its_turn() {
     let (first, second) = overlapping(Storage::in_memory()).await;
-    assert_eq!(first, Ok(1));
+    assert_eq!(first, Ok(2));
     let second = second.unwrap();
     assert_eq!(
         texts(&second)
@@ -297,11 +322,11 @@ async fn a_second_send_waits_its_turn() {
 #[tokio::test(start_paused = true)]
 async fn busy_threads_can_reject_time_out_or_interrupt() {
     let (first, second) = overlapping(Storage::in_memory().on_busy(OnBusy::Reject)).await;
-    assert_eq!((first, second.unwrap_err()), (Ok(1), "thread_busy".into()));
+    assert_eq!((first, second.unwrap_err()), (Ok(2), "thread_busy".into()));
 
     let storage = Storage::in_memory().busy_timeout(Duration::from_millis(500));
     let (first, second) = overlapping(storage).await;
-    assert_eq!((first, second.unwrap_err()), (Ok(1), "thread_busy".into()));
+    assert_eq!((first, second.unwrap_err()), (Ok(2), "thread_busy".into()));
 
     let storage = Storage::in_memory().on_busy(OnBusy::Interrupt);
     let (first, second) = overlapping(storage).await;
@@ -354,16 +379,16 @@ async fn rewind_makes_an_older_checkpoint_the_head() {
     chat.send("q2").await.unwrap();
 
     let head = chat.rewind(&first.checkpoint_id).await.unwrap();
-    assert_eq!((head.version, head.source), (3, Source::Fork));
+    assert_eq!((head.version, head.source), (5, Source::Fork));
     assert_eq!(head.parent_id.as_deref(), Some(&*first.checkpoint_id));
     assert_eq!(chat.messages().await.unwrap().len(), 2);
     assert_eq!(
         sources(&chat.history(10).await.unwrap()),
-        [(3, Source::Fork), (1, Source::Step)]
+        [(5, Source::Fork), (2, Source::Step), (1, Source::Input)]
     );
 
     let reply = chat.send("q2, differently").await.unwrap();
-    assert_eq!(reply.version, 4);
+    assert_eq!(reply.version, 7);
     assert_eq!(
         texts(&reply.result.messages)
             .into_iter()
@@ -407,7 +432,7 @@ async fn delete_removes_the_thread() {
     assert!(chat.head().await.unwrap().is_none());
     assert!(chat.history(10).await.unwrap().is_empty());
     assert!(!chat.delete().await.unwrap());
-    assert_eq!(chat.send("hi").await.unwrap().version, 1);
+    assert_eq!(chat.send("hi").await.unwrap().version, 2);
 }
 
 /// Loads from memory but cannot write.
@@ -442,6 +467,21 @@ impl Checkpointer for ReadOnly {
     fn delete_thread<'a>(&'a self, thread: &'a str) -> BoxFuture<'a, Result<bool, StorageError>> {
         self.0.delete_thread(thread)
     }
+
+    fn put_pending<'a>(
+        &'a self,
+        _: &'a str,
+        _: &'a str,
+        _: &'a str,
+        _: PendingWrite,
+    ) -> BoxFuture<'a, Result<(), StorageError>> {
+        Box::pin(async {
+            Err(StorageError::new(
+                StorageErrorKind::Unavailable,
+                "database is down",
+            ))
+        })
+    }
 }
 
 #[tokio::test(start_paused = true)]
@@ -450,7 +490,7 @@ async fn a_failed_commit_reports_the_storage_error_with_the_run_error() {
         FakeReply::text("hi"),
         FakeReply::Error(ModelError::new(ModelErrorKind::InvalidRequest, "bad")),
     ]))
-    .storage(Storage::new(ReadOnly(InMemoryCheckpointer::new())))
+    .storage(Storage::new(ReadOnly(InMemoryCheckpointer::new())).durability(Durability::Exit))
     .build()
     .unwrap();
     let chat = agent.thread("t");

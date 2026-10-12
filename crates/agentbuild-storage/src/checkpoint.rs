@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use agentbuild_core::{BoxFuture, Snapshot, State};
+use agentbuild_core::{BoxFuture, PendingWrite, Snapshot, State};
 use serde::{Deserialize, Serialize};
 
 use crate::error::StorageError;
@@ -10,9 +10,9 @@ use crate::error::StorageError;
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum Source {
-    /// Input written before a run starts.
+    /// Written before a run (or resumed run) executes its first step.
     Input,
-    /// A committed step (in step 1: a completed run).
+    /// A committed step: the run continues from it, or completed with it.
     Step,
     /// The run suspended (e.g. waiting for approval).
     Suspend,
@@ -35,6 +35,10 @@ pub enum CheckpointStatus {
     Suspended,
     /// Failed; can be retried from its snapshot.
     Failed,
+    /// A run continues from this checkpoint. If no process is running it
+    /// (the run was interrupted, e.g. by a crash), it can be retried from
+    /// its snapshot.
+    InProgress,
 }
 
 /// The durable record of a thread's state at one point. Plain JSON.
@@ -104,12 +108,15 @@ impl Checkpoint {
         self
     }
 
-    /// Completed, suspended or failed, from the snapshot.
+    /// From the snapshot: suspended if nodes wait for input, failed if it
+    /// records an error, in progress if a run continues from it, completed
+    /// without one.
     pub fn status(&self) -> CheckpointStatus {
         match &self.snapshot {
             Some(s) if !s.suspended.is_empty() => CheckpointStatus::Suspended,
             Some(s) if s.error.is_some() => CheckpointStatus::Failed,
-            _ => CheckpointStatus::Completed,
+            Some(_) => CheckpointStatus::InProgress,
+            None => CheckpointStatus::Completed,
         }
     }
 
@@ -186,9 +193,36 @@ pub trait Checkpointer: Send + Sync + 'static {
 
     /// Removes the thread and all its checkpoints. `true` if it existed.
     fn delete_thread<'a>(&'a self, thread: &'a str) -> BoxFuture<'a, Result<bool, StorageError>>;
+
+    /// Adds work a task did to the snapshot of `checkpoint` (a checkpoint
+    /// of `thread` that has one): [`merge_pending`] of `node` and `write`.
+    /// Every later [`load`](Self::load) of the checkpoint includes it.
+    /// Fails with `checkpoint_not_found` if there is no such checkpoint.
+    fn put_pending<'a>(
+        &'a self,
+        thread: &'a str,
+        checkpoint: &'a str,
+        node: &'a str,
+        write: PendingWrite,
+    ) -> BoxFuture<'a, Result<(), StorageError>>;
 }
 
-fn now_ms() -> u64 {
+/// Merges a task write into `snapshot.pending_writes[node]`: memo entries
+/// are added (replacing the same keys), `output` and `resume` replace when
+/// set. Backends that store writes separately apply them in order with
+/// this.
+pub fn merge_pending(snapshot: &mut Snapshot, node: &str, write: PendingWrite) {
+    let entry = snapshot.pending_writes.entry(node.to_string()).or_default();
+    entry.memo.extend(write.memo);
+    if write.output.is_some() {
+        entry.output = write.output;
+    }
+    if write.resume.is_some() {
+        entry.resume = write.resume;
+    }
+}
+
+pub(crate) fn now_ms() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)

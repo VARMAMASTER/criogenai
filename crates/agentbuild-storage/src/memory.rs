@@ -1,9 +1,9 @@
 use std::collections::HashMap;
 use std::sync::{Mutex, MutexGuard};
 
-use agentbuild_core::BoxFuture;
+use agentbuild_core::{BoxFuture, PendingWrite};
 
-use crate::checkpoint::{Checkpoint, CheckpointMeta, Checkpointer};
+use crate::checkpoint::{Checkpoint, CheckpointMeta, Checkpointer, merge_pending};
 use crate::error::{StorageError, StorageErrorKind};
 
 /// Keeps checkpoints in process memory. Lost when the process exits: for
@@ -103,5 +103,30 @@ impl Checkpointer for InMemoryCheckpointer {
     fn delete_thread<'a>(&'a self, thread: &'a str) -> BoxFuture<'a, Result<bool, StorageError>> {
         let existed = self.threads().remove(thread).is_some();
         Box::pin(async move { Ok(existed) })
+    }
+
+    fn put_pending<'a>(
+        &'a self,
+        thread: &'a str,
+        checkpoint: &'a str,
+        node: &'a str,
+        write: PendingWrite,
+    ) -> BoxFuture<'a, Result<(), StorageError>> {
+        let mut threads = self.threads();
+        let snapshot = threads
+            .get_mut(thread)
+            .and_then(|t| t.checkpoints.get_mut(checkpoint))
+            .and_then(|c| c.snapshot.as_mut());
+        let result = match snapshot {
+            Some(snapshot) => {
+                merge_pending(snapshot, node, write);
+                Ok(())
+            }
+            None => Err(StorageError::new(
+                StorageErrorKind::CheckpointNotFound,
+                format!("thread `{thread}` has no checkpoint `{checkpoint}` with a run to add to"),
+            )),
+        };
+        Box::pin(async move { result })
     }
 }

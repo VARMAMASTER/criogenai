@@ -10,7 +10,7 @@ publish = false
 [dependencies]
 agentbuild-core = { path = "@AGENTBUILD_CORE_DIR@" }
 agentbuild-providers = { path = "@AGENTBUILD_PROVIDERS_DIR@" }
-agentbuild-storage = { path = "@AGENTBUILD_STORAGE_DIR@" }
+agentbuild-storage = { path = "@AGENTBUILD_STORAGE_DIR@", features = ["sqlite"] }
 agentbuild-agent = { path = "@AGENTBUILD_AGENT_DIR@" }
 agentbuild-telemetry = { path = "@AGENTBUILD_TELEMETRY_DIR@" }
 serde_json = "1"

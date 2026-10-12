@@ -20,9 +20,10 @@ jobs:
         with:
           components: rustfmt, clippy
       - run: cargo fmt --all --check
+      - run: cargo clippy --all-targets --all-features -- -D warnings
       - run: cargo clippy --all-targets -- -D warnings
-      - run: cargo test --all-targets
-      - run: cargo test --doc --workspace
+      - run: cargo test --all-targets --all-features
+      - run: cargo test --doc --workspace --all-features
       - name: without the http feature
         run: |
           cargo test -p agentbuild-providers --no-default-features
@@ -33,7 +34,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@1.88
-      - run: cargo check --all-targets
+      - run: cargo check --all-targets --all-features
 
   # Uses the crate the way a downstream project would: packaged, unpacked,
   # and depended on from a separate project. Also checks the docs build and
@@ -46,7 +47,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - run: cargo doc --no-deps
+      - run: cargo doc --no-deps --all-features
         env:
           RUSTDOCFLAGS: -D warnings
       - run: bash scripts/test-package.sh
@@ -61,3 +62,4 @@ jobs:
           cargo run -p agentbuild-core --example recover_workflow
           cargo run -p agentbuild-agent --example approval_agent -- edit
           cargo run -p agentbuild-agent --example thread_agent
+          cargo run -p agentbuild-agent --features sqlite --example durable_agent
