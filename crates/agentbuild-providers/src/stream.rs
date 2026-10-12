@@ -47,6 +47,15 @@ pub enum StreamItem {
     },
     /// Something was dropped or repaired; surfaced as a `warning` event.
     Warning(Warning),
+    /// Provider-specific fields for block `index` (e.g. citations), merged
+    /// into the block's `extras` when the message is built. Fields of the
+    /// same provider key are merged; later values win.
+    Extras {
+        /// Block position in the message.
+        index: u32,
+        /// The fields, keyed by provider.
+        extras: Extras,
+    },
 }
 
 /// New content for one block. JSON form as in 0002 §8.
@@ -129,6 +138,7 @@ pub struct Assembler {
     finish: Option<(FinishReason, Option<String>)>,
     warnings: Vec<Warning>,
     emitted: bool,
+    extras: BTreeMap<u32, Extras>,
 }
 
 #[derive(Debug)]
@@ -170,6 +180,7 @@ impl Assembler {
             finish: None,
             warnings: Vec::new(),
             emitted: false,
+            extras: BTreeMap::new(),
         }
     }
 
@@ -217,6 +228,10 @@ impl Assembler {
             }
             StreamItem::Warning(warning) => {
                 self.warnings.push(warning);
+                None
+            }
+            StreamItem::Extras { index, extras } => {
+                merge_extras(self.extras.entry(index).or_default(), extras);
                 None
             }
         }
@@ -308,8 +323,8 @@ impl Assembler {
         };
         let mut seen_ids = HashSet::new();
         let mut content = Vec::with_capacity(self.blocks.len());
-        for (_, partial) in std::mem::take(&mut self.blocks) {
-            content.push(match partial {
+        for (index, partial) in std::mem::take(&mut self.blocks) {
+            let mut block = match partial {
                 Partial::Text(text) => ContentBlock::text(text),
                 Partial::Reasoning { text, signature } => ContentBlock::Reasoning {
                     text,
@@ -328,7 +343,23 @@ impl Assembler {
                     let truncated = !ended && reason == FinishReason::Length;
                     tool_call_block(id, name, args, truncated)
                 }
-            });
+            };
+            if let Some(extras) = self.extras.remove(&index) {
+                match block.extras_mut() {
+                    Some(target) => merge_extras(target, extras),
+                    None => self.warnings.push(Warning::new(
+                        "extras_dropped",
+                        format!("block {index} cannot carry extras; dropped"),
+                    )),
+                }
+            }
+            content.push(block);
+        }
+        for index in std::mem::take(&mut self.extras).into_keys() {
+            self.warnings.push(Warning::new(
+                "extras_dropped",
+                format!("extras for block {index}, which never arrived; dropped"),
+            ));
         }
 
         let mut message = Message::with_content(Role::Assistant, content).with_id(self.message_id);
@@ -407,6 +438,19 @@ fn json_type(value: &Value) -> &'static str {
         Value::String(_) => "a string",
         Value::Array(_) => "an array",
         Value::Object(_) => "an object",
+    }
+}
+
+/// Merges `update` into `target`: objects under the same key are merged
+/// field by field, anything else is replaced.
+fn merge_extras(target: &mut Extras, update: Extras) {
+    for (key, value) in update {
+        match (target.get_mut(&key), value) {
+            (Some(Value::Object(fields)), Value::Object(more)) => fields.extend(more),
+            (_, value) => {
+                target.insert(key, value);
+            }
+        }
     }
 }
 
@@ -629,6 +673,39 @@ mod tests {
 
         let empty = Assembler::new().finish().unwrap_err();
         assert!(!empty.emitted_deltas);
+    }
+
+    #[test]
+    fn extras_are_merged_into_their_block() {
+        let note = |value: Value| {
+            let mut extras = Extras::new();
+            extras.insert("p".into(), value);
+            extras
+        };
+        let assembled = assemble(vec![
+            text(0, "cited"),
+            StreamItem::Extras {
+                index: 0,
+                extras: note(json!({"citations": [1]})),
+            },
+            StreamItem::Extras {
+                index: 0,
+                extras: note(json!({"cache": true})),
+            },
+            StreamItem::Extras {
+                index: 5,
+                extras: note(json!({})),
+            },
+            finish(FinishReason::Stop),
+        ]);
+        match &assembled.message.content[0] {
+            ContentBlock::Text { extras, .. } => {
+                assert_eq!(extras["p"], json!({"citations": [1], "cache": true}));
+            }
+            other => panic!("{other:?}"),
+        }
+        let codes: Vec<&str> = assembled.warnings.iter().map(|w| w.code.as_str()).collect();
+        assert_eq!(codes, ["extras_dropped"]);
     }
 
     #[test]

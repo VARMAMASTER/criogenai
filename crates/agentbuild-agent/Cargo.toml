@@ -27,7 +27,7 @@ default = ["http"]
 http = ["agentbuild-providers/http"]
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "test-util"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "test-util", "net", "io-util"] }
 
 [lints]
 workspace = true

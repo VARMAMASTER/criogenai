@@ -41,10 +41,11 @@ The `agentbuild-providers` crate holds the language-neutral data contracts
 for agents (design 0002): messages with ordered content blocks, tool
 definitions, the model request and response, classified model errors (rate
 limits, overload, context overflow, ... from any provider's HTTP error), and
-transcript repair. It speaks the OpenAI-compatible protocol, which covers
-OpenAI, OpenRouter, Ollama, LM Studio, vLLM and most gateways, with streaming
-and tool calls. A `FakeModel` simulates a model for tests. The Anthropic
-protocol comes later.
+transcript repair. It speaks two wire protocols, with streaming and tool
+calls: OpenAI-compatible (OpenAI, OpenRouter, Ollama, LM Studio, vLLM and
+most gateways) and Anthropic Messages (Claude, natively: reasoning
+signatures, prompt caching, citations and hosted tools survive a round
+trip). A `FakeModel` simulates a model for tests.
 
 Terms and naming conventions: [docs/glossary.md](docs/glossary.md).
 

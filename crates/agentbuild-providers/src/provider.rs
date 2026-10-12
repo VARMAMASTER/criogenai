@@ -3,12 +3,13 @@
 
 use serde_json::Value;
 
+use crate::anthropic_messages::{self, AnthropicOptions, EventDecoder};
 use crate::error::{Dispatch, ModelError};
 use crate::model::{BoxFuture, DeltaSink, Model};
 use crate::openai_chat::{self, ChunkDecoder, OpenAiQuirks};
 use crate::request::{Capabilities, ModelRequest, ModelResponse};
-use crate::sse::SseParser;
-use crate::stream::{Assembler, Warning};
+use crate::sse::{SseEvent, SseParser};
+use crate::stream::{Assembler, StreamItem, Warning};
 use crate::transport::{HttpConfig, Transport, WireRequest};
 
 /// The wire format an endpoint speaks.
@@ -17,6 +18,8 @@ use crate::transport::{HttpConfig, Transport, WireRequest};
 pub enum Protocol {
     /// OpenAI chat completions (`POST {base_url}/chat/completions`).
     OpenAiChat(OpenAiQuirks),
+    /// Anthropic Messages (`POST {base_url}/messages`).
+    AnthropicMessages(AnthropicOptions),
 }
 
 /// Where and how to reach a provider. Plain data; presets cover common
@@ -30,7 +33,8 @@ pub struct Endpoint {
     pub protocol: Protocol,
     /// Base URL without a trailing slash, e.g. `https://api.openai.com/v1`.
     pub base_url: String,
-    /// Sent as `Authorization: Bearer …` when set. Redacted from errors.
+    /// Sent as `Authorization: Bearer …` (OpenAI chat) or `x-api-key`
+    /// (Anthropic) when set. Redacted from errors.
     pub api_key: Option<String>,
     /// Extra headers.
     pub headers: Vec<(String, String)>,
@@ -90,6 +94,50 @@ impl Endpoint {
     /// A vLLM server.
     pub fn vllm(base_url: impl Into<String>, api_key: Option<String>) -> Self {
         Self::openai_compatible("vllm", base_url, api_key)
+    }
+
+    /// Any server that speaks the Anthropic Messages API.
+    pub fn anthropic_compatible(
+        name: impl Into<String>,
+        base_url: impl Into<String>,
+        api_key: Option<String>,
+    ) -> Self {
+        Self {
+            name: name.into(),
+            protocol: Protocol::AnthropicMessages(AnthropicOptions::default()),
+            base_url: base_url.into().trim_end_matches('/').to_string(),
+            api_key: api_key.filter(|k| !k.is_empty()),
+            headers: Vec::new(),
+            capabilities: Capabilities {
+                streaming: Some(true),
+                ..Capabilities::default()
+            },
+        }
+    }
+
+    /// Anthropic's API (`https://api.anthropic.com/v1`).
+    pub fn anthropic(api_key: impl Into<String>) -> Self {
+        let mut endpoint = Self::anthropic_compatible(
+            "anthropic",
+            "https://api.anthropic.com/v1",
+            Some(api_key.into()),
+        );
+        let caps = &mut endpoint.capabilities;
+        caps.tools = Some(true);
+        caps.parallel_tool_calls = Some(true);
+        caps.native_structured_output = Some(true);
+        caps.vision = Some(true);
+        caps.reasoning = Some(true);
+        caps.tool_result_images = Some(true);
+        endpoint
+    }
+
+    /// Replaces the Anthropic options (no effect on other protocols).
+    pub fn with_anthropic_options(mut self, options: AnthropicOptions) -> Self {
+        if let Protocol::AnthropicMessages(current) = &mut self.protocol {
+            *current = options;
+        }
+        self
     }
 
     /// Adds a header.
@@ -154,27 +202,56 @@ impl ProviderModel {
         stream: bool,
         warnings: &mut Vec<Warning>,
     ) -> Result<WireRequest, ModelError> {
-        let Protocol::OpenAiChat(quirks) = &self.endpoint.protocol;
-        let body = openai_chat::encode(
-            request,
-            &self.model,
-            &self.endpoint.name,
-            quirks,
-            stream,
-            warnings,
-        )?;
+        let endpoint = &self.endpoint;
+        let (path, body, betas) = match &endpoint.protocol {
+            Protocol::OpenAiChat(quirks) => {
+                let body = openai_chat::encode(
+                    request,
+                    &self.model,
+                    &endpoint.name,
+                    quirks,
+                    stream,
+                    warnings,
+                )?;
+                ("chat/completions", body, Vec::new())
+            }
+            Protocol::AnthropicMessages(options) => {
+                let wire = anthropic_messages::encode(
+                    request,
+                    &self.model,
+                    &endpoint.name,
+                    options,
+                    stream,
+                    warnings,
+                )?;
+                ("messages", wire.body, wire.betas)
+            }
+        };
         let mut wire = WireRequest::post(
-            format!("{}/chat/completions", self.endpoint.base_url),
+            format!("{}/{path}", endpoint.base_url),
             serde_json::to_vec(&body).expect("JSON values serialize"),
         )
         .header("content-type", "application/json");
         if stream {
             wire = wire.header("accept", "text/event-stream");
         }
-        if let Some(key) = &self.endpoint.api_key {
-            wire = wire.header("authorization", format!("Bearer {key}"));
+        match &endpoint.protocol {
+            Protocol::OpenAiChat(_) => {
+                if let Some(key) = &endpoint.api_key {
+                    wire = wire.header("authorization", format!("Bearer {key}"));
+                }
+            }
+            Protocol::AnthropicMessages(options) => {
+                if let Some(key) = &endpoint.api_key {
+                    wire = wire.header("x-api-key", key.clone());
+                }
+                wire = wire.header("anthropic-version", options.version.clone());
+                if !betas.is_empty() {
+                    wire = wire.header("anthropic-beta", betas.join(","));
+                }
+            }
         }
-        for (name, value) in &self.endpoint.headers {
+        for (name, value) in &endpoint.headers {
             wire = wire.header(name.clone(), value.clone());
         }
         Ok(wire)
@@ -196,7 +273,12 @@ impl ProviderModel {
         let mut warnings = Vec::new();
         let wire = self.wire(request, false, &mut warnings)?;
         let body = self.transport.send(&wire).await?;
-        let mut response = openai_chat::decode(&body, &self.endpoint.name)?;
+        let mut response = match &self.endpoint.protocol {
+            Protocol::OpenAiChat(_) => openai_chat::decode(&body, &self.endpoint.name)?,
+            Protocol::AnthropicMessages(_) => {
+                anthropic_messages::decode(&body, &self.endpoint.name)?
+            }
+        };
         warnings.append(&mut response.warnings);
         response.warnings = warnings;
         Ok(response)
@@ -211,7 +293,10 @@ impl ProviderModel {
         let wire = self.wire(request, true, &mut warnings)?;
         let mut body = self.transport.open(&wire).await?;
         let mut parser = SseParser::new();
-        let mut decoder = ChunkDecoder::default();
+        let mut decoder = match &self.endpoint.protocol {
+            Protocol::OpenAiChat(_) => Decoder::OpenAi(ChunkDecoder::default()),
+            Protocol::AnthropicMessages(_) => Decoder::Anthropic(EventDecoder::default()),
+        };
         let mut assembler = Assembler::new();
         let streaming = |error: ModelError, emitted: bool| {
             error
@@ -238,13 +323,55 @@ impl ProviderModel {
             }
         }
         let model = decoder.model().map(str::to_string);
+        let stop_sequence = decoder.stop_sequence().map(str::to_string);
         let mut response = assembler.finish()?;
         let metadata = &mut response.message.metadata;
         metadata.provider = Some(self.endpoint.name.clone());
         metadata.model = model;
+        if let Some(sequence) = stop_sequence {
+            metadata
+                .other
+                .insert("stop_sequence".into(), Value::String(sequence));
+        }
         warnings.append(&mut response.warnings);
         response.warnings = warnings;
         Ok(response)
+    }
+}
+
+/// The stream decoder of an endpoint's protocol.
+enum Decoder {
+    OpenAi(ChunkDecoder),
+    Anthropic(EventDecoder),
+}
+
+impl Decoder {
+    fn on_event(&mut self, event: &SseEvent) -> Result<Vec<StreamItem>, ModelError> {
+        match self {
+            Self::OpenAi(decoder) => decoder.on_event(event),
+            Self::Anthropic(decoder) => decoder.on_event(event),
+        }
+    }
+
+    fn is_done(&self) -> bool {
+        match self {
+            Self::OpenAi(decoder) => decoder.is_done(),
+            Self::Anthropic(decoder) => decoder.is_done(),
+        }
+    }
+
+    fn model(&self) -> Option<&str> {
+        match self {
+            Self::OpenAi(decoder) => decoder.model(),
+            Self::Anthropic(decoder) => decoder.model(),
+        }
+    }
+
+    fn stop_sequence(&self) -> Option<&str> {
+        match self {
+            Self::OpenAi(_) => None,
+            Self::Anthropic(decoder) => decoder.stop_sequence(),
+        }
     }
 }
 
@@ -282,22 +409,35 @@ impl Model for ProviderModel {
 }
 
 /// The JSON body `model` would send for `request`, for inspection and
-/// golden tests. Warnings are what would be dropped.
+/// golden tests. Warnings are what would be dropped. Headers (such as
+/// Anthropic beta flags) are not shown.
 pub fn preview_request(
     endpoint: &Endpoint,
     model: &str,
     request: &ModelRequest,
     stream: bool,
 ) -> Result<(Value, Vec<Warning>), ModelError> {
-    let Protocol::OpenAiChat(quirks) = &endpoint.protocol;
     let mut warnings = Vec::new();
-    let body = openai_chat::encode(
-        request,
-        model,
-        &endpoint.name,
-        quirks,
-        stream,
-        &mut warnings,
-    )?;
+    let body = match &endpoint.protocol {
+        Protocol::OpenAiChat(quirks) => openai_chat::encode(
+            request,
+            model,
+            &endpoint.name,
+            quirks,
+            stream,
+            &mut warnings,
+        )?,
+        Protocol::AnthropicMessages(options) => {
+            anthropic_messages::encode(
+                request,
+                model,
+                &endpoint.name,
+                options,
+                stream,
+                &mut warnings,
+            )?
+            .body
+        }
+    };
     Ok((body, warnings))
 }

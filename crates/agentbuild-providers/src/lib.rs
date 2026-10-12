@@ -7,9 +7,9 @@
 //! tests.
 //!
 //! **Status:** data types, error classification, transcript repair, the SSE
-//! parser, the stream assembler and the fake model exist. Wire protocols
-//! (OpenAI-compatible, Anthropic) and the HTTP transport are planned
-//! (0006 §11).
+//! parser, the stream assembler, the fake model, the HTTP transport and two
+//! wire protocols (OpenAI chat completions and Anthropic Messages) exist.
+//! The gateway is planned (0006 §11).
 //!
 //! ```
 //! use agentbuild_providers::{FakeModel, Message, Model, ModelRequest};
@@ -32,6 +32,8 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
+#[cfg(feature = "http")]
+mod anthropic_messages;
 mod error;
 mod fake;
 mod message;
@@ -48,6 +50,8 @@ pub mod transcript;
 #[cfg(feature = "http")]
 mod transport;
 
+#[cfg(feature = "http")]
+pub use anthropic_messages::AnthropicOptions;
 pub use error::{
     Dispatch, HttpFailure, MAX_MESSAGE_BYTES, ModelError, ModelErrorKind, classify_http,
     invalid_response, sanitize_message,

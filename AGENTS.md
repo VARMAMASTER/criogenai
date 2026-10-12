@@ -37,9 +37,9 @@ write our own implementation.
   `Capabilities`), `ModelError` with `classify_http` (0003 §4), transcript
   check/repair (0002 §6), the `Model` trait, `FakeModel`, the SSE parser,
   the stream assembler, the HTTP `Transport` (feature `http`, on by
-  default), the `openai_chat` protocol, `Endpoint` presets and
-  `ProviderModel` (OpenAI, OpenRouter, Ollama, LM Studio, vLLM, any
-  OpenAI-compatible server).
+  default), the `openai_chat` and `anthropic_messages` protocols,
+  `Endpoint` presets and `ProviderModel` (OpenAI, OpenRouter, Ollama,
+  LM Studio, vLLM, Anthropic, any OpenAI- or Anthropic-compatible server).
 - **Implemented in `agentbuild-agent` (slice 1):** the agent loop (0004):
   `model` ⇄ `tools` workflow, Rust tools (`tool_fn`), argument validation,
   concurrent calls in call order, timeouts, limits, model retries, events,
@@ -58,14 +58,13 @@ write our own implementation.
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 339 across the four crates, plus the package test.
-- **Next:** `anthropic_messages` (0006 §11 step 3), persistence (0008),
+- Tests: 371 across the four crates, plus the package test.
+- **Next:** persistence (0008: in-memory, then SQLite, then Postgres),
   the Python SDK (Phase 2). See `docs/progress.md`. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
-- **Not started:** the Anthropic protocol, gateway, Python SDK,
-  TypeScript SDK, persistence. Do not
+- **Not started:** gateway, Python SDK, TypeScript SDK, persistence. Do not
   describe these as existing anywhere.
 
 ## Commands
@@ -86,6 +85,8 @@ cargo run -p agentbuild-agent --example approval_agent -- edit   # or approve, r
 cargo run -p agentbuild-telemetry --example langfuse
 # Real model, manual only (needs a server; default: Ollama on localhost):
 AGENTBUILD_MODEL=llama3.2 cargo run -p agentbuild-providers --example chat -- "hi"
+# Claude (needs ANTHROPIC_API_KEY):
+AGENTBUILD_PROTOCOL=anthropic AGENTBUILD_MODEL=claude-haiku-5-5 cargo run -p agentbuild-providers --example chat -- "hi"
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 bash scripts/test-package.sh     # package the crate, use it from a separate project
 ```

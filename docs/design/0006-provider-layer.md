@@ -1,11 +1,12 @@
 # 0006: Provider layer and embeddable gateway
 
-Status: **Approved; foundation in progress.** Built so far in
+Status: **Approved; §11 steps 1–3 built.** Built so far in
 `crates/agentbuild-providers`: the 0002 types, `ModelError` and the HTTP
 error classifier (§6), the `Model` trait (§3), a `FakeModel` for tests, the
 incremental SSE parser, the stream assembler (§5), the HTTP transport, the
-`openai_chat` protocol with endpoint presets (§4) and `ProviderModel`. Next:
-the agent loop (0004) on top of `Model`; then `anthropic_messages`.
+`openai_chat` and `anthropic_messages` protocols with endpoint presets (§4)
+and `ProviderModel`. Next: §11 step 4 (catalog subset, capability
+resolution), then the gateway.
 
 `openai_chat` as built: `OpenAiQuirks` (`max_tokens_field`, `stream_usage`,
 `parallel_tool_calls`, `reasoning_effort`, `system_role`, `reasoning_echo`);
@@ -18,6 +19,51 @@ repair and argument parsing are identical in both modes. `ModelResponse`
 carries `warnings` (encode drops plus decode repairs). `Model::stream(request,
 on_delta)` has a default (one delta per text block from `invoke`).
 `preview_request` shows the exact body without sending it.
+
+`anthropic_messages` as built (2026-10-12): `Protocol::AnthropicMessages(
+AnthropicOptions)` with `version` (`anthropic-version`, default
+`2023-06-01`), `default_max_tokens` (8,192; the API requires `max_tokens`)
+and `betas`; presets `Endpoint::{anthropic, anthropic_compatible}`
+(`x-api-key` auth, `POST {base_url}/messages`). Before building, the current
+API was checked against Anthropic's documentation; three rows of research
+§10.6 changed:
+
+- **Reasoning.** `Reasoning::Effort` → `thinking: {type: "adaptive"}` plus
+  `output_config.effort` (newer models reject the old form);
+  `Reasoning::Budget` → `thinking: {type: "enabled", budget_tokens}` for
+  older models (`max_tokens` must exceed it: `invalid_request` before
+  sending). With reasoning on and no `max_tokens`, room is added to the
+  default (effort: 2,048 / 8,192 / 24,576; budget: the budget).
+- **Structured output.** Native output is `output_config.format:
+  {type: "json_schema", schema}`, no beta flag. The `anthropic` preset
+  declares native structured output, so agents use it (newer models
+  reject forced tool choice).
+- **Files.** `file_id` sources need no beta flag.
+
+Other decisions: only leading system messages are sent (as `system`
+blocks); a later one is `invalid_request`. Consecutive turns of one role are
+merged, so tool results and a following user message form one user turn,
+results first. Reasoning blocks are sent back exactly as received
+(signature, redacted data, empty text); reasoning without a signature
+(another provider's) is dropped with `reasoning_dropped`. Block `extras.
+anthropic` fields (`cache_control`, `citations`) are copied onto the wire
+block both ways; `ContentBlock::with_extra` sets them. `extras.anthropic` on
+the request is merged into the body last, except `betas` (header) and
+`tools` (hosted tool definitions, appended). Hosted tool blocks
+(`server_tool_use`, `*_tool_result`, unknown types) become `provider` blocks
+and are never run; streamed hosted inputs are reassembled. Usage: our
+`input_tokens` = Anthropic `input_tokens` + cache reads + cache writes;
+`output_tokens_details.thinking_tokens` → `reasoning_tokens`. Stop reasons:
+`end_turn`/`stop_sequence` → `stop` (the sequence is kept in metadata),
+`max_tokens`/`model_context_window_exceeded` → `length`, `tool_use` →
+`tool_calls`, `refusal` → `content_filter`, others (`pause_turn`) → `other`.
+Streaming: the wire `index` is our block index; a finished tool call's end
+is held until the next block or the stop reason, so a call cut by
+`max_tokens` is `truncated`; `ping` and unknown events are ignored; an
+`error` event is classified with its type standing in for the HTTP status
+(`api_error` → 500 → `server`, `overloaded_error` → 529, ...). The assembler
+gained `StreamItem::Extras` (fields merged into a block at the end), used
+for streamed citations.
 
 A live check against a local Ollama found that its OpenAI endpoint answers an
 unknown model with 404 and in-band type `api_error`; generic in-band types

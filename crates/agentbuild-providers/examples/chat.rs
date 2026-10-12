@@ -1,10 +1,14 @@
-//! Streams one answer from a real OpenAI-compatible server.
+//! Streams one answer from a real model server.
 //!
 //! Defaults to Ollama on this machine. Settings come from the environment:
 //!
-//! - `AGENTBUILD_BASE_URL` (default `http://localhost:11434/v1`)
-//! - `AGENTBUILD_MODEL` (default `llama3.2`)
-//! - `AGENTBUILD_API_KEY` (optional)
+//! - `AGENTBUILD_PROTOCOL`: `openai` (default, any OpenAI-compatible server)
+//!   or `anthropic`
+//! - `AGENTBUILD_BASE_URL` (default `http://localhost:11434/v1`, or
+//!   `https://api.anthropic.com/v1` for `anthropic`)
+//! - `AGENTBUILD_MODEL` (default `llama3.2`; set it for `anthropic`)
+//! - `AGENTBUILD_API_KEY` (optional; for `anthropic` also read from
+//!   `ANTHROPIC_API_KEY`)
 //!
 //! Run with: `cargo run -p agentbuild-providers --example chat -- "Why is the sky blue?"`
 //!
@@ -19,10 +23,18 @@ use agentbuild_providers::{
 
 #[tokio::main]
 async fn main() {
-    let base_url =
-        std::env::var("AGENTBUILD_BASE_URL").unwrap_or_else(|_| "http://localhost:11434/v1".into());
+    let anthropic = std::env::var("AGENTBUILD_PROTOCOL").is_ok_and(|p| p == "anthropic");
+    let default_url = if anthropic {
+        "https://api.anthropic.com/v1"
+    } else {
+        "http://localhost:11434/v1"
+    };
+    let base_url = std::env::var("AGENTBUILD_BASE_URL").unwrap_or_else(|_| default_url.into());
     let model_name = std::env::var("AGENTBUILD_MODEL").unwrap_or_else(|_| "llama3.2".into());
-    let api_key = std::env::var("AGENTBUILD_API_KEY").ok();
+    let mut api_key = std::env::var("AGENTBUILD_API_KEY").ok();
+    if anthropic && api_key.is_none() {
+        api_key = std::env::var("ANTHROPIC_API_KEY").ok();
+    }
     let question = std::env::args().skip(1).collect::<Vec<_>>().join(" ");
     let question = if question.is_empty() {
         "Say hello in one sentence.".to_string()
@@ -30,7 +42,11 @@ async fn main() {
         question
     };
 
-    let endpoint = Endpoint::openai_compatible("local", base_url, api_key);
+    let endpoint = if anthropic {
+        Endpoint::anthropic_compatible("anthropic", base_url, api_key)
+    } else {
+        Endpoint::openai_compatible("local", base_url, api_key)
+    };
     let model = ProviderModel::new(endpoint, model_name).expect("HTTP client");
     let request = ModelRequest::new(vec![Message::user(question)]);
 

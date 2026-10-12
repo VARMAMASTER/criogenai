@@ -17,9 +17,9 @@ handoff point for whoever continues the work.
 4. **Done:** the whole agent list of 0004 (loop, tools, approval,
    structured output, hooks, limits, model resilience, agents as nodes and
    tools, tool features, `agent.stream()`); observability and Langfuse
-   (`agentbuild-telemetry`, 0009). **Next:** `anthropic_messages` (0006 §11
-   step 3), then persistence (0008: in-memory → SQLite → Postgres,
-   threads, memory store).
+   (`agentbuild-telemetry`, 0009); `anthropic_messages` (0006 §11 step 3).
+   **Next:** persistence (0008: in-memory → SQLite → Postgres, threads,
+   memory store).
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
    install the built wheel in a clean venv.
@@ -41,6 +41,31 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-12: providers: `anthropic_messages` (0006 §11 step 3)
+
+- `Protocol::AnthropicMessages(AnthropicOptions)`, presets
+  `Endpoint::{anthropic, anthropic_compatible}`. Encode, decode and stream
+  decoding; blocks map one to one and in order (signed and redacted
+  reasoning, citations, `cache_control`, hosted-tool blocks round-trip).
+- Checked against Anthropic's current docs before building. Changes from
+  research §10.6: reasoning effort → `thinking.adaptive` +
+  `output_config.effort` (newer models reject `budget_tokens`; a budget
+  still maps to `thinking.enabled`); native output is
+  `output_config.format` (no beta); files need no beta. Details in 0006.
+- New public API: `ContentBlock::with_extra` / `extras` (e.g. prompt
+  caching), `StreamItem::Extras` (fields merged into a block, used for
+  streamed citations), `AnthropicOptions` builder.
+- Tests: 30 in `tests/anthropic_messages.rs` (golden bodies per mapping
+  row, decode, streaming, errors, a decoded answer sent back unchanged) and
+  an agent test that runs two parallel tool calls over the Anthropic wire
+  against a scripted server (`agentbuild-agent/tests/anthropic_wire.rs`;
+  the scripted server now serves several connections). 30 mutation checks:
+  29 caught after adding three tests, one equivalent (a redundant call,
+  removed).
+- `scripts/test-package.sh` now restores `Cargo.lock` (the package
+  patches added `[[patch.unused]]` entries). Example `chat` takes
+  `AGENTBUILD_PROTOCOL=anthropic`. No live call: no Anthropic key here.
 
 ### 2026-10-12: agent slice 9: `agent.stream()`; the agent list is complete
 

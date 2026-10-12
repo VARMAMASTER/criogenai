@@ -485,6 +485,53 @@ impl ContentBlock {
         }
     }
 
+    /// Sets provider-specific fields under `provider`, merged with fields
+    /// already there. For example, Anthropic prompt caching:
+    /// `ContentBlock::text(prompt).with_extra("anthropic",
+    /// json!({"cache_control": {"type": "ephemeral"}}))`. Provider blocks have
+    /// no extras; for them this does nothing.
+    pub fn with_extra(mut self, provider: impl Into<String>, fields: Value) -> Self {
+        if let Some(extras) = self.extras_mut() {
+            let provider = provider.into();
+            match (extras.get_mut(&provider), fields) {
+                (Some(Value::Object(current)), Value::Object(more)) => current.extend(more),
+                (_, fields) => {
+                    extras.insert(provider, fields);
+                }
+            }
+        }
+        self
+    }
+
+    /// The block's provider-specific fields (`None` for provider blocks).
+    pub fn extras(&self) -> Option<&Extras> {
+        match self {
+            Self::Text { extras, .. }
+            | Self::Reasoning { extras, .. }
+            | Self::Image { extras, .. }
+            | Self::Audio { extras, .. }
+            | Self::File { extras, .. }
+            | Self::Json { extras, .. }
+            | Self::ToolCall { extras, .. }
+            | Self::InvalidToolCall { extras, .. } => Some(extras),
+            Self::Provider { .. } => None,
+        }
+    }
+
+    pub(crate) fn extras_mut(&mut self) -> Option<&mut Extras> {
+        match self {
+            Self::Text { extras, .. }
+            | Self::Reasoning { extras, .. }
+            | Self::Image { extras, .. }
+            | Self::Audio { extras, .. }
+            | Self::File { extras, .. }
+            | Self::Json { extras, .. }
+            | Self::ToolCall { extras, .. }
+            | Self::InvalidToolCall { extras, .. } => Some(extras),
+            Self::Provider { .. } => None,
+        }
+    }
+
     /// The block's JSON `type`.
     pub fn type_name(&self) -> &'static str {
         match self {

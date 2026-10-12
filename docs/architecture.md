@@ -194,7 +194,8 @@ feature. Without `http` the crate is pure data and logic.
 | `stream.rs` | `StreamItem`, `BlockDelta`, `Assembler` → `message_delta` + final message (0002 §8) |
 | `transport.rs` | `Transport`, `HttpConfig`, `WireRequest`, `Body`: HTTP with connect / first-byte / idle / total timeouts and dispatch tracking (feature `http`) |
 | `openai_chat.rs` | `OpenAiQuirks`; encode 0002 → chat-completions JSON, decode responses and stream chunks (feature `http`) |
-| `provider.rs` | `Endpoint` + presets (OpenAI, OpenRouter, Ollama, LM Studio, vLLM, any compatible), `Protocol`, `ProviderModel`, `preview_request` (feature `http`) |
+| `anthropic_messages.rs` | `AnthropicOptions`; encode 0002 → Messages JSON (system blocks, merged turns, signed reasoning, `cache_control`, adaptive thinking), decode responses and stream events (feature `http`) |
+| `provider.rs` | `Endpoint` + presets (OpenAI, OpenRouter, Ollama, LM Studio, vLLM, Anthropic, any compatible), `Protocol`, `ProviderModel`, `preview_request` (feature `http`) |
 | `model.rs` | `Model` trait: `provider`, `model`, `capabilities`, `invoke` |
 | `fake.rs` | `FakeModel`: simulated 2–3 s replies, scripted tool calls, failures |
 

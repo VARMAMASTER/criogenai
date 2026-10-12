@@ -19,7 +19,10 @@ cd "$root"
 crates=(agentbuild-core agentbuild-providers agentbuild-agent agentbuild-telemetry)
 template="$root/tests/package/rust-consumer/Cargo.toml.in"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"' EXIT
+# The patches below make cargo record `[[patch.unused]]` entries in the
+# workspace lockfile; put the original back so they never get committed.
+cp "$root/Cargo.lock" "$work/Cargo.lock.orig"
+trap 'cp "$work/Cargo.lock.orig" "$root/Cargo.lock"; rm -rf "$work"' EXIT
 cp -r "$root/tests/package/rust-consumer/." "$work/"
 rm "$work/Cargo.toml.in"
 cp "$template" "$work/Cargo.toml"

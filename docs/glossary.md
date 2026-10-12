@@ -65,9 +65,12 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Usage** | Token counts; `input_tokens` includes cached tokens. | `Usage` |
 | **Finish reason** | Why the model stopped: `stop`, `tool_calls`, `length`, `content_filter`, `error`, `other`. | `FinishReason` |
 | **Provider** | The company or server behind a model (`openai`, `ollama`). | `ModelError::provider` |
-| **Protocol** | A wire format (`openai_chat`; `anthropic_messages` planned). One protocol serves many providers. | `Protocol` |
+| **Protocol** | A wire format (`openai_chat`, `anthropic_messages`). One protocol serves many providers. | `Protocol` |
 | **Endpoint** | Where and how to reach a provider: protocol, base URL, key, headers, quirks. Presets exist. | `Endpoint::ollama()` etc. |
 | **Quirks** | The small differences between servers that speak the same protocol. | `OpenAiQuirks` |
+| **Protocol options** | Per-endpoint settings of a protocol (Anthropic: API version, default `max_tokens`, beta flags). | `AnthropicOptions` |
+| **Extras** | Provider-specific fields on a block or request, keyed by provider (`extras.anthropic.cache_control`). Copied to the wire as they are. | `ContentBlock::with_extra`, `ModelRequest::extras` |
+| **Hosted tool** | A tool the provider runs (web search). Its blocks come back as `provider` blocks and are never run locally. | `ToolKind::Hosted`, `ContentBlock::Provider` |
 | **Provider model** | Endpoint + model name + HTTP transport, as a `Model`. | `ProviderModel` |
 | **Transport** | The HTTP layer: timeouts (connect, first byte, idle, total). Never retries. | `Transport` |
 | **Model error** | A classified failure with a **kind** (`rate_limited`, `context_overflow`, ...) and a **category**: `transient` (time may fix it) or `provider_fatal`. | `ModelError`, `ModelErrorKind` |

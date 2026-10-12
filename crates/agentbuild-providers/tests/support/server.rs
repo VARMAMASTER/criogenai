@@ -69,45 +69,61 @@ pub fn sse_data(data: &str) -> Step {
 /// Serves one connection with `script`. Returns the base URL
 /// (`http://127.0.0.1:<port>/v1`) and the received request.
 pub async fn serve(script: Vec<Step>) -> (String, JoinHandle<Received>) {
+    let (base, handle) = serve_each(vec![script]).await;
+    let handle = tokio::spawn(async move { handle.await.unwrap().pop().unwrap() });
+    (base, handle)
+}
+
+/// Serves one connection per script, in order (one request per
+/// connection). Returns the base URL and the received requests.
+pub async fn serve_each(scripts: Vec<Vec<Step>>) -> (String, JoinHandle<Vec<Received>>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let base = format!("http://{}/v1", listener.local_addr().unwrap());
     let handle = tokio::spawn(async move {
-        let (mut socket, _) = listener.accept().await.unwrap();
-        let mut buffer = Vec::new();
-        let mut chunk = [0u8; 4096];
-        let head_end = loop {
-            let n = socket.read(&mut chunk).await.unwrap();
-            buffer.extend_from_slice(&chunk[..n]);
-            if let Some(i) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
-                break i + 4;
-            }
-        };
-        let head = String::from_utf8_lossy(&buffer[..head_end]).to_string();
-        let length = head
-            .lines()
-            .find_map(|l| {
-                let (name, value) = l.split_once(':')?;
-                name.eq_ignore_ascii_case("content-length")
-                    .then(|| value.trim().parse::<usize>().ok())?
-            })
-            .unwrap_or(0);
-        while buffer.len() < head_end + length {
-            let n = socket.read(&mut chunk).await.unwrap();
-            buffer.extend_from_slice(&chunk[..n]);
+        let mut received = Vec::new();
+        for script in scripts {
+            let (socket, _) = listener.accept().await.unwrap();
+            received.push(answer(socket, script).await);
         }
-        let body = buffer[head_end..head_end + length].to_vec();
-        for step in script {
-            match step {
-                Step::Send(bytes) => {
-                    if socket.write_all(&bytes).await.is_err() {
-                        break; // the client gave up
-                    }
-                    let _ = socket.flush().await;
-                }
-                Step::Wait(d) => tokio::time::sleep(d).await,
-            }
-        }
-        Received { head, body }
+        received
     });
     (base, handle)
+}
+
+async fn answer(mut socket: tokio::net::TcpStream, script: Vec<Step>) -> Received {
+    let mut buffer = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let head_end = loop {
+        let n = socket.read(&mut chunk).await.unwrap();
+        buffer.extend_from_slice(&chunk[..n]);
+        if let Some(i) = buffer.windows(4).position(|w| w == b"\r\n\r\n") {
+            break i + 4;
+        }
+    };
+    let head = String::from_utf8_lossy(&buffer[..head_end]).to_string();
+    let length = head
+        .lines()
+        .find_map(|l| {
+            let (name, value) = l.split_once(':')?;
+            name.eq_ignore_ascii_case("content-length")
+                .then(|| value.trim().parse::<usize>().ok())?
+        })
+        .unwrap_or(0);
+    while buffer.len() < head_end + length {
+        let n = socket.read(&mut chunk).await.unwrap();
+        buffer.extend_from_slice(&chunk[..n]);
+    }
+    let body = buffer[head_end..head_end + length].to_vec();
+    for step in script {
+        match step {
+            Step::Send(bytes) => {
+                if socket.write_all(&bytes).await.is_err() {
+                    break; // the client gave up
+                }
+                let _ = socket.flush().await;
+            }
+            Step::Wait(d) => tokio::time::sleep(d).await,
+        }
+    }
+    Received { head, body }
 }

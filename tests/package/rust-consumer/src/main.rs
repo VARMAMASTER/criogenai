@@ -27,6 +27,7 @@ async fn main() {
     validation_reports_every_issue();
     model_inside_a_workflow_node().await;
     provider_errors_and_transcripts();
+    anthropic_request_body();
     agent_with_tools().await;
     telemetry_never_breaks_a_run().await;
     approval_before_a_tool_runs().await;
@@ -290,6 +291,37 @@ fn provider_errors_and_transcripts() {
         Some(ToolStatus::Cancelled)
     );
     println!("  provider error classification, transcript repair: ok");
+}
+
+/// The Anthropic protocol: the exact body, without sending it.
+fn anthropic_request_body() {
+    use agentbuild_providers::{
+        AnthropicOptions, ContentBlock, Endpoint, Reasoning, ReasoningEffort, Role, Settings,
+        preview_request,
+    };
+    let endpoint = Endpoint::anthropic("sk-ant-unused")
+        .with_anthropic_options(AnthropicOptions::default().default_max_tokens(2000));
+    let system = Message::with_content(
+        Role::System,
+        vec![
+            ContentBlock::text("You are a careful assistant.")
+                .with_extra("anthropic", json!({"cache_control": {"type": "ephemeral"}})),
+        ],
+    );
+    let mut settings = Settings::default();
+    settings.reasoning = Some(Reasoning::Effort {
+        effort: ReasoningEffort::Low,
+    });
+    let request =
+        ModelRequest::new(vec![system, Message::user("hi")]).with_settings(settings);
+    let (body, warnings) = preview_request(&endpoint, "claude-test", &request, true).unwrap();
+    assert!(warnings.is_empty());
+    assert_eq!(body["system"][0]["cache_control"]["type"], "ephemeral");
+    assert_eq!(body["thinking"]["type"], "adaptive");
+    assert_eq!(body["output_config"]["effort"], "low");
+    assert_eq!(body["max_tokens"], 2000 + 2048);
+    assert_eq!(body["stream"], true);
+    println!("  anthropic request body (cache, adaptive thinking): ok");
 }
 
 /// The agent crate: a model ⇄ tools loop with a validated tool.

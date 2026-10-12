@@ -14,9 +14,15 @@ providers share, the same JSON in Rust, Python and TypeScript:
 - transcript repair: every tool call gets exactly one result
 - the `Model` trait, and `FakeModel` for tests (simulated 2–3 s replies,
   scripted tool calls and failures)
+- `ProviderModel`: a model reached over HTTP (feature `http`, on by
+  default) with streaming, through one of two protocols:
+  - OpenAI chat completions: OpenAI, OpenRouter, Ollama, LM Studio, vLLM
+    and other compatible servers (`Endpoint::openai`, `Endpoint::ollama`,
+    ...)
+  - Anthropic Messages: `Endpoint::anthropic`, `Endpoint::anthropic_compatible`
 
-> **Early development.** Wire protocols (OpenAI-compatible, Anthropic), the
-> HTTP transport and streaming are planned, not built.
+> **Early development.** The API may change. Not yet published to
+> crates.io. The gateway (design 0006 §7) is planned, not built.
 
 ## Example
 
