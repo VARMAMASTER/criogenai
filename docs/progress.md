@@ -21,10 +21,8 @@ handoff point for whoever continues the work.
    persistence steps 1–2 (0008 §11–§12: `agentbuild-storage`, threads,
    per-step saving and crash recovery, SQLite with delta + keyframe
    checkpoints and migrations).
-   **Next:** `demos/support-chat` (a small Rust server on AgentBuild plus a
-   Next.js UI, tested by hand with real OpenAI and Gemini keys; keys stay
-   in `~/.agentbuild-keys.env`, never in the repo); then the memory store
-   (step 3) and Postgres (step 4).
+   Demo app `demos/support-chat` built and tested by hand with real models.
+   **Next:** the memory store (step 3) and Postgres (step 4).
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
    install the built wheel in a clean venv.
@@ -46,6 +44,28 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-13: demo app `demos/support-chat`, tested with real models
+
+- Rust server (axum 0.8, AgentBuild agent with `lookup_order`,
+  `check_stock` and approval-gated `issue_refund`; threads in SQLite;
+  OpenAI `gpt-5-mini` and Gemini `gemini-2.5-flash` via its
+  OpenAI-compatible endpoint, chosen per request) and a Next.js 16.3.6 /
+  React 19.3 UI (approve/reject cards, checkpoint list with rewind,
+  "continue the run" after a crash). Not a workspace member; not in CI.
+- Tested by hand against the real APIs: order lookup with tool calls
+  (OpenAI); refund suspended for approval (Gemini); server restarted while
+  waiting, then approved with OpenAI: the approval survived, the
+  conversation switched model, the refund was paid once, a second approve
+  got `resume_invalid`; server killed mid-run after three tool calls:
+  `send` refused with `thread_interrupted`, `retry` (Gemini) answered
+  without re-running any tool; in the browser (Playwright): suggestion
+  click, approval card, reject with a reason (no payment; the model
+  offered a replacement).
+- Keys from the user are kept in `~/.agentbuild-keys.env` (outside the
+  repo); the server reads them at startup and never logs them. Next.js 16
+  writes `AGENTS.md`/`CLAUDE.md` into the app folder by default; disabled
+  with `agentRules: false`.
 
 ### 2026-10-12: persistence step 2: per-step saving, crash recovery, SQLite (0008 §12)
 

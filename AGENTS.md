@@ -70,9 +70,11 @@ write our own implementation.
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
 - Tests: 415 across the five crates (with `--all-features`), plus the
   package test.
-- **Next:** the `demos/support-chat` app (Rust server + Next.js UI, real
-  models, manual only), then persistence step 3 (memory store + agent
-  `Memory`), step 4 (Postgres); then the Python SDK (Phase 2). See `docs/progress.md`. The user will build their
+- **Demo app:** `demos/support-chat` (Rust server on AgentBuild + Next.js
+  UI; real OpenAI/Gemini models, manual only, not in CI or the workspace).
+  Keys live in `~/.agentbuild-keys.env`, never in the repo.
+- **Next:** persistence step 3 (memory store + agent `Memory`), step 4
+  (Postgres); then the Python SDK (Phase 2). See `docs/progress.md`. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.

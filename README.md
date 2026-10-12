@@ -99,6 +99,16 @@ cargo run -p agentbuild-core --example recover_workflow                # retry a
 cargo run -p agentbuild-agent --example approval_agent -- edit         # a doctor edits an order before it runs
 cargo run -p agentbuild-agent --example thread_agent                   # a conversation and an approval kept in a thread
 cargo run -p agentbuild-agent --features sqlite --example durable_agent # a run killed mid-step, continued from SQLite
+```
+
+A complete demo app, [demos/support-chat](demos/support-chat): a support agent
+on a small Rust server (threads in SQLite, refund approvals, crash recovery,
+OpenAI or Gemini per message) with a Next.js chat UI. It calls real models,
+so it is run by hand:
+
+```sh
+cd demos/support-chat/server && cargo run      # keys from ~/.agentbuild-keys.env
+cd demos/support-chat/web && npm install && npm run dev
 bash scripts/test-package.sh                                           # test the packaged crates as dependencies
 cargo run -p agentbuild-providers --example chat -- "hi"               # real model via Ollama (or AGENTBUILD_BASE_URL)
 ```

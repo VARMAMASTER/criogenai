@@ -1,0 +1,20 @@
+# A demo app on AgentBuild: a support agent behind an HTTP API, with
+# threads in SQLite and human approval for refunds. Uses real models (OpenAI
+# or Gemini), so it is run by hand, never in CI. Not a workspace member.
+[package]
+name = "support-chat-server"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+agentbuild-agent = { path = "../../../crates/agentbuild-agent", features = ["sqlite"] }
+agentbuild-providers = { path = "../../../crates/agentbuild-providers" }
+agentbuild-storage = { path = "../../../crates/agentbuild-storage", features = ["sqlite"] }
+axum = "0.8.4"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1.45", features = ["macros", "rt-multi-thread", "net", "time", "signal"] }
+
+# Stand-alone: never part of the AgentBuild workspace.
+[workspace]
