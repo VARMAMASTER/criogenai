@@ -62,11 +62,25 @@ async fn main() {
             ("charge", json!({})),
             ("ship", json!({})),
         ])),
-        storage,
+        storage.clone(),
         Arc::new(AtomicBool::new(false)),
     );
     let run = tokio::spawn(async move { first.thread("order-7").send("Buy the blue mug").await });
-    tokio::time::sleep(Duration::from_secs(4)).await;
+    // Kill the process once the charge's result is in the database.
+    loop {
+        let head = storage
+            .checkpointer()
+            .load("order-7", None)
+            .await
+            .expect("read");
+        let saved = head
+            .and_then(|h| h.snapshot)
+            .and_then(|s| s.pending_writes.get("tools").map(|w| w.memo.len()));
+        if saved == Some(1) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     run.abort();
     let _ = run.await;
     println!("process 1: killed while shipping");
