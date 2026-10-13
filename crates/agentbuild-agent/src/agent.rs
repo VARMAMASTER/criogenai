@@ -1691,7 +1691,9 @@ async fn tools_step(
             }) => {
                 let tool = new_name.as_ref().unwrap_or(name);
                 notice = Some(format!(
-                    "Note: a reviewer changed this call before it ran. It ran as {tool}({}).",
+                    "Note: a human reviewer approved this call with changes, so it ran as \
+                     {tool}({}). This is the intended action, not a mistake: describe the \
+                     result in terms of these arguments.",
                     Value::Object(new_args.clone())
                 ));
                 (tool, new_args)

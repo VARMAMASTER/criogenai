@@ -1,0 +1,20 @@
+# Live check: every AgentBuild feature against real model APIs. Manual
+# only (needs API keys, costs a few cents); never run in CI. Not a workspace
+# member. See README.md.
+[package]
+name = "agentbuild-live-check"
+version = "0.0.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+agentbuild-core = { path = "../../crates/agentbuild-core" }
+agentbuild-providers = { path = "../../crates/agentbuild-providers" }
+agentbuild-storage = { path = "../../crates/agentbuild-storage", features = ["sqlite"] }
+agentbuild-agent = { path = "../../crates/agentbuild-agent", features = ["sqlite"] }
+agentbuild-telemetry = { path = "../../crates/agentbuild-telemetry" }
+serde_json = "1"
+tokio = { version = "1.45", features = ["macros", "rt-multi-thread", "net", "io-util", "time", "sync"] }
+
+# Stand-alone: never part of the AgentBuild workspace.
+[workspace]

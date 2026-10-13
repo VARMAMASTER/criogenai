@@ -69,6 +69,16 @@ A live check against a local Ollama found that its OpenAI endpoint answers an
 unknown model with 404 and in-band type `api_error`; generic in-band types
 (`api_error`, `server_error`) therefore no longer override the HTTP status.
 
+The live check (`tests/live`, 2026-10-13) found that Gemini's
+OpenAI-compatible endpoint wraps errors in a list
+(`[{"error": {"code": 400, "status": "INVALID_ARGUMENT", "message"}}]`) and
+reports a bad API key as HTTP 400 "Please pass a valid API key". The
+classifier now reads the list shape, Google's `status` and
+`details[].reason` codes (`API_KEY_INVALID`, `UNAUTHENTICATED`,
+`PERMISSION_DENIED`, `RESOURCE_EXHAUSTED`, `DEADLINE_EXCEEDED`), and treats a
+400 whose message says the key is invalid as `auth`. Without this a bad
+Gemini key was `invalid_request`, so a fallback on `auth` never fired.
+
 Transport as built: `Transport` (reqwest 0.13, rustls with the OS trust
 store via the platform verifier, HTTP/2, `HTTP(S)_PROXY`), behind the default
 feature `http`. `send` returns a whole 2xx body; `open` returns a `Body`

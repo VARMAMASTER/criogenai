@@ -107,6 +107,8 @@ AGENTBUILD_MODEL=llama3.2 cargo run -p agentbuild-providers --example chat -- "h
 AGENTBUILD_PROTOCOL=anthropic AGENTBUILD_MODEL=claude-haiku-5-5 cargo run -p agentbuild-providers --example chat -- "hi"
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 bash scripts/test-package.sh     # package the crate, use it from a separate project
+# Every feature against real models, manual only (keys in ~/.agentbuild-keys.env):
+cd tests/live && cargo run       # or: cargo run -- gemini; LIVE_ONLY=approval cargo run
 ```
 
 On the original Windows dev machine, Rust lives in `~/.cargo/bin`. A shell that

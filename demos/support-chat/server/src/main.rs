@@ -61,9 +61,10 @@ fn main() {
 }
 
 async fn serve() {
-    let storage = Storage::connect(&std::env::var("SUPPORT_DB").unwrap_or("sqlite://support.db".into()))
-        .await
-        .unwrap_or_else(|err| panic!("cannot open the database: {err}"));
+    let storage =
+        Storage::connect(&std::env::var("SUPPORT_DB").unwrap_or("sqlite://support.db".into()))
+            .await
+            .unwrap_or_else(|err| panic!("cannot open the database: {err}"));
     let refunds = Refunds::default();
 
     let mut providers = BTreeMap::new();
@@ -118,7 +119,10 @@ async fn serve() {
         .route("/api/threads/{id}/retry", post(retry))
         .route("/api/threads/{id}/rewind", post(rewind))
         .with_state(app);
-    let port: u16 = std::env::var("PORT").ok().and_then(|p| p.parse().ok()).unwrap_or(8787);
+    let port: u16 = std::env::var("PORT")
+        .ok()
+        .and_then(|p| p.parse().ok())
+        .unwrap_or(8787);
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     let listener = tokio::net::TcpListener::bind(addr).await.expect("bind");
     println!("support-chat server on http://{addr}");
@@ -205,7 +209,9 @@ fn build_agent(model: ProviderModel, storage: &Storage, refunds: &Refunds) -> Ag
             "Refund ${} for order {}: {}",
             args.get("amount").map(Value::to_string).unwrap_or_default(),
             args.get("order_id").and_then(Value::as_str).unwrap_or("?"),
-            args.get("reason").and_then(Value::as_str).unwrap_or("no reason given"),
+            args.get("reason")
+                .and_then(Value::as_str)
+                .unwrap_or("no reason given"),
         )
     };
     Agent::builder(model)

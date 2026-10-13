@@ -82,7 +82,7 @@ then generic and identical for all providers.
 
 Status: **implemented** in `agentbuild-providers` (`ModelErrorKind`,
 `ModelError`, `classify_http` for HTTP failures in the shapes of OpenAI,
-Anthropic, Ollama, vLLM and llama.cpp, `Retry-After` in all three forms,
+Anthropic, Ollama, vLLM, llama.cpp and Google (Gemini), `Retry-After` in all three forms,
 message sanitization). Transport failures (`network`, `timeout`,
 `dispatch=not_sent`) are classified when the HTTP transport exists.
 

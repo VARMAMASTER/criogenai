@@ -201,3 +201,23 @@ async fn two_handles_on_one_file_cannot_fork_a_thread() {
         b.load("t", None).await.unwrap()
     );
 }
+
+#[tokio::test]
+async fn storage_can_be_opened_and_used_from_spawned_tasks() {
+    let db = TempDb::new();
+    let url = db.url();
+    let storage = tokio::spawn(async move { Storage::connect(&url).await.unwrap() })
+        .await
+        .unwrap();
+    let path = db.0.clone();
+    let store = tokio::spawn(async move { SqliteCheckpointer::open(path).await.unwrap() })
+        .await
+        .unwrap();
+    let first = Checkpoint::new("t", 1, Source::Step, state(1));
+    let checkpointer = storage.checkpointer().clone();
+    let commit = first.clone();
+    tokio::spawn(async move { checkpointer.commit(commit, 0).await.unwrap() })
+        .await
+        .unwrap();
+    assert_eq!(store.load("t", None).await.unwrap().unwrap(), first);
+}

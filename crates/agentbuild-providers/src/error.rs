@@ -256,7 +256,7 @@ pub fn classify_http(failure: &HttpFailure<'_>, now: SystemTime) -> ModelError {
     let inband = InBand::parse(failure.body);
     let text = inband.message.as_deref().unwrap_or(failure.body);
     let lower = text.to_ascii_lowercase();
-    let codes: Vec<String> = [&inband.code, &inband.kind]
+    let codes: Vec<String> = [&inband.code, &inband.reason, &inband.kind]
         .into_iter()
         .flatten()
         .map(|c| c.to_ascii_lowercase())
@@ -298,19 +298,26 @@ pub fn invalid_response(detail: impl AsRef<str>) -> ModelError {
 
 /// The in-band error object, in the shapes providers use:
 /// `{"error": {"type", "code", "message"}}` (OpenAI, Anthropic, llama.cpp),
-/// `{"error": "text"}` (Ollama), `{"object": "error", "message", "type"}` (vLLM).
+/// `{"error": "text"}` (Ollama), `{"object": "error", "message", "type"}` (vLLM),
+/// and Google's `[{"error": {"code": 400, "status", "message", "details":
+/// [{"reason"}]}}]` (Gemini's OpenAI-compatible endpoint wraps it in a list).
 #[derive(Default)]
 struct InBand {
     code: Option<String>,
     kind: Option<String>,
+    /// Google's `details[].reason` (e.g. `API_KEY_INVALID`).
+    reason: Option<String>,
     message: Option<String>,
 }
 
 impl InBand {
     fn parse(body: &str) -> Self {
-        let Ok(value) = serde_json::from_str::<Value>(body) else {
+        let Ok(mut value) = serde_json::from_str::<Value>(body) else {
             return Self::default();
         };
+        if let Value::Array(items) = &mut value {
+            value = items.first().cloned().unwrap_or(Value::Null);
+        }
         let string = |v: Option<&Value>| v.and_then(Value::as_str).map(str::to_string);
         match value.get("error") {
             Some(Value::String(message)) => Self {
@@ -319,12 +326,19 @@ impl InBand {
             },
             Some(error @ Value::Object(_)) => Self {
                 code: string(error.get("code")),
-                kind: string(error.get("type")),
+                // Google puts its canonical code (`UNAUTHENTICATED`, …) in
+                // `status`.
+                kind: string(error.get("type")).or_else(|| string(error.get("status"))),
+                reason: error
+                    .get("details")
+                    .and_then(Value::as_array)
+                    .and_then(|details| details.iter().find_map(|d| string(d.get("reason")))),
                 message: string(error.get("message")),
             },
             _ => Self {
                 code: string(value.get("code")),
                 kind: string(value.get("type")).filter(|t| t != "error"),
+                reason: None,
                 message: string(value.get("message")).or_else(|| string(value.get("detail"))),
             },
         }
@@ -345,6 +359,13 @@ fn kind_from_code(code: &str) -> Option<ModelErrorKind> {
         "authentication_error" | "invalid_api_key" => Auth,
         "permission_error" => Permission,
         "timeout_error" => Timeout,
+        // Google: `details[].reason`, then canonical `status` codes. Google
+        // reports a bad key as HTTP 400 `INVALID_ARGUMENT` with reason
+        // `API_KEY_INVALID`.
+        "api_key_invalid" | "api_key_expired" | "unauthenticated" => Auth,
+        "permission_denied" | "api_key_service_blocked" => Permission,
+        "resource_exhausted" | "rate_limit_exceeded_per_minute" => RateLimited,
+        "deadline_exceeded" => Timeout,
         // Generic codes such as `api_error` or `server_error` say nothing the
         // status does not: Ollama sends `api_error` with a 404 for an unknown
         // model, which must not become a (retried) server error.
@@ -360,6 +381,16 @@ const CONTEXT_OVERFLOW_TEXT: &[&str] = &[
     "context window",
     "input is too long",
     "too many tokens",
+];
+
+/// Bad keys some providers report as HTTP 400 (Gemini: "Please pass a
+/// valid API key", `INVALID_ARGUMENT`).
+const AUTH_TEXT: &[&str] = &[
+    "pass a valid api key",
+    "api key not valid",
+    "api_key_invalid",
+    "invalid api key",
+    "incorrect api key",
 ];
 
 const CONTENT_FILTER_TEXT: &[&str] = &[
@@ -383,6 +414,7 @@ fn kind_from_status(status: u16, lower: &str) -> ModelErrorKind {
         402 => QuotaExhausted,
         403 => Permission,
         404 => NotFound,
+        400 if contains(AUTH_TEXT) => Auth,
         400 | 413 | 422 if contains(CONTEXT_OVERFLOW_TEXT) => ContextOverflow,
         400 | 413 | 422 if contains(CONTENT_FILTER_TEXT) => ContentFilter,
         400 | 413 | 422 => InvalidRequest,
@@ -541,6 +573,45 @@ mod tests {
         ] {
             assert_eq!(classify(status, "").kind, kind, "status {status}");
         }
+    }
+
+    #[test]
+    fn google_errors_are_read_from_their_list_shape() {
+        // What Gemini's OpenAI-compatible endpoint returned for a bad key.
+        let bad_key = r#"[{
+          "error": {
+            "code": 400,
+            "message": "API key not valid. Please pass a valid API key.",
+            "status": "INVALID_ARGUMENT",
+            "details": [{
+              "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+              "reason": "API_KEY_INVALID",
+              "domain": "googleapis.com"
+            }]
+          }
+        }]"#;
+        let error = classify(400, bad_key);
+        assert_eq!(error.kind, ModelErrorKind::Auth);
+        assert_eq!(
+            error.message,
+            "API key not valid. Please pass a valid API key."
+        );
+
+        // What it actually returns today: no `details`, only the text.
+        let plain = r#"[{"error": {"code": 400, "message": "Please pass a valid API key", "status": "INVALID_ARGUMENT"}}]"#;
+        assert_eq!(classify(400, plain).kind, ModelErrorKind::Auth);
+
+        let quota = r#"[{"error": {"code": 429, "message": "Quota exceeded", "status": "RESOURCE_EXHAUSTED"}}]"#;
+        assert_eq!(classify(429, quota).kind, ModelErrorKind::RateLimited);
+        let denied = r#"{"error": {"code": 403, "message": "no", "status": "PERMISSION_DENIED"}}"#;
+        assert_eq!(classify(403, denied).kind, ModelErrorKind::Permission);
+        // A plain bad request stays one, and its text is still checked.
+        let invalid = r#"[{"error": {"code": 400, "message": "The input token count exceeds the maximum number of tokens allowed, too many tokens", "status": "INVALID_ARGUMENT"}}]"#;
+        assert_eq!(classify(400, invalid).kind, ModelErrorKind::ContextOverflow);
+        let other =
+            r#"[{"error": {"code": 400, "message": "bad field", "status": "INVALID_ARGUMENT"}}]"#;
+        assert_eq!(classify(400, other).kind, ModelErrorKind::InvalidRequest);
+        assert_eq!(classify(400, "[]").kind, ModelErrorKind::InvalidRequest);
     }
 
     #[test]

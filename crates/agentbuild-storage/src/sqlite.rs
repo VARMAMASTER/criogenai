@@ -195,10 +195,17 @@ impl SqliteCheckpointer {
             ));
         }
         for (index, migration) in MIGRATIONS.iter().enumerate().skip(current as usize) {
-            sqlx::raw_sql(migration)
-                .execute(&mut *tx)
-                .await
-                .map_err(sql_error)?;
+            // One statement at a time: `raw_sql`'s future is not `Send` for
+            // every lifetime, which would stop callers from opening storage
+            // inside `tokio::spawn`. Migrations have no `;` inside literals.
+            for statement in migration.split(';').map(str::trim) {
+                if !statement.is_empty() {
+                    sqlx::query(statement)
+                        .execute(&mut *tx)
+                        .await
+                        .map_err(sql_error)?;
+                }
+            }
             sqlx::query(
                 "INSERT INTO agentbuild_schema_migrations (version, applied_at_ms) VALUES (?, ?)",
             )

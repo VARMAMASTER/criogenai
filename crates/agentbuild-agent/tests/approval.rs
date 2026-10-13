@@ -139,7 +139,7 @@ async fn edit_runs_the_changed_call_and_tells_the_model() {
     assert!(
         results[0]
             .2
-            .starts_with("Note: a reviewer changed this call before it ran. It ran as send_email({\"to\":\"cfo@example.com\"}).")
+            .starts_with("Note: a human reviewer approved this call with changes, so it ran as send_email({\"to\":\"cfo@example.com\"}).")
     );
     // The original call stays in the transcript, unchanged.
     let call = done.messages[1].tool_calls().next().unwrap();

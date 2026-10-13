@@ -45,6 +45,31 @@ handoff point for whoever continues the work.
 
 ## Log
 
+### 2026-10-13: live check of every feature with real models; fixes it found
+
+- New `tests/live`: a stand-alone program (not in the workspace or CI) that
+  runs 23 checks per provider against real APIs: chat, streaming, one and
+  several tool calls, tool errors, argument validation, structured output
+  (native and tool), approval (approve, reject, edit), `agent.stream`,
+  thread memory, SQLite reopen, crash mid-tool with `retry`, agent as a
+  tool, hooks, limits, fallback, error classification, an LLM workflow with
+  a router, OTLP telemetry, deadlines. Result: 46/46 pass (OpenAI
+  `gpt-5-mini`, Gemini `gemini-2.5-flash`).
+- Fixed, found by it:
+  - `SqliteCheckpointer::connect` / `Storage::connect("sqlite:…")` could not
+    be awaited inside `tokio::spawn` (sqlx's `raw_sql` future is not `Send`
+    for every lifetime). Migrations now run statement by statement; a test
+    opens and uses storage from spawned tasks.
+  - Gemini errors (list-wrapped, Google `status` / `details[].reason`) were
+    not parsed, and a bad Gemini key was `invalid_request`, so fallback on
+    `auth` never fired. Now `auth` (0006 §3 note).
+  - The note an edited tool call returns to the model made gpt-5-mini tell
+    the user the email went "to the wrong address". Reworded: the reviewer
+    approved the call with changes; it is the intended action.
+- Earlier the same day: the SQLite crash test and `durable_agent` waited a
+  fixed time before killing the run, which failed once on a slow CI disk;
+  both now wait until the charge is stored.
+
 ### 2026-10-13: demo app `demos/support-chat`, tested with real models
 
 - Rust server (axum 0.8, AgentBuild agent with `lookup_order`,
