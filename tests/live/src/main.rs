@@ -1,11 +1,14 @@
 //! Live check: exercises every AgentBuild feature against real model APIs
 //! and prints a PASS/FAIL table per provider.
 //!
-//! Usage: `cargo run -- [openai] [gemini]` (default: every provider with a
-//! key). Keys come from `OPENAI_API_KEY` / `GEMINI_API_KEY`, or from the
+//! Usage: `cargo run -- [openai] [gemini] [ollama]` (default: every provider
+//! with a key; `ollama` only when named or `OLLAMA_MODEL` is set). Keys come from `OPENAI_API_KEY` / `GEMINI_API_KEY`, or from the
 //! file in `AGENTBUILD_KEYS_FILE` (default `~/.agentbuild-keys.env`).
 //! Models: `OPENAI_MODEL` (default `gpt-5-mini`), `GEMINI_MODEL` (default
-//! `gemini-2.5-flash`).
+//! `gemini-2.5-flash`), `OLLAMA_MODEL` (default: the first model Ollama
+//! lists; `OLLAMA_URL` default `http://localhost:11434`). Checks that need
+//! tool calling are skipped for an Ollama model without the `tools`
+//! capability.
 //!
 //! Real models answer differently each time; the checks look for facts that
 //! any correct answer contains (a number, a name, a tool call), not exact
@@ -37,6 +40,10 @@ struct Provider {
     name: &'static str,
     model: String,
     endpoint: Endpoint,
+    /// Whether the model can call tools.
+    tools: bool,
+    /// Whether the server checks API keys (Ollama does not).
+    keys: bool,
 }
 
 impl Provider {
@@ -64,6 +71,8 @@ fn main() {
             name: "openai",
             model: std::env::var("OPENAI_MODEL").unwrap_or("gpt-5-mini".into()),
             endpoint: Endpoint::openai(key),
+            tools: true,
+            keys: true,
         });
     }
     if let Ok(key) = std::env::var("GEMINI_API_KEY") {
@@ -75,14 +84,29 @@ fn main() {
                 "https://generativelanguage.googleapis.com/v1beta/openai",
                 Some(key),
             ),
+            tools: true,
+            keys: true,
         });
+    }
+    let runtime = tokio::runtime::Runtime::new().expect("runtime");
+    if wanted.iter().any(|w| w == "ollama") || std::env::var_os("OLLAMA_MODEL").is_some() {
+        let base = std::env::var("OLLAMA_URL").unwrap_or("http://localhost:11434".into());
+        match runtime.block_on(ollama_model(&base)) {
+            Ok((model, tools)) => providers.push(Provider {
+                name: "ollama",
+                model,
+                endpoint: Endpoint::openai_compatible("ollama", format!("{base}/v1"), None),
+                tools,
+                keys: false,
+            }),
+            Err(why) => eprintln!("ollama: {why}"),
+        }
     }
     providers.retain(|p| wanted.is_empty() || wanted.iter().any(|w| w == p.name));
     if providers.is_empty() {
         eprintln!("no provider: set OPENAI_API_KEY and/or GEMINI_API_KEY");
         std::process::exit(2);
     }
-    let runtime = tokio::runtime::Runtime::new().expect("runtime");
     let failed = runtime.block_on(async {
         let mut failed = 0;
         for provider in &providers {
@@ -99,19 +123,19 @@ async fn run_all(p: &Provider) -> usize {
         ("chat: plain answer and usage", Box::pin(chat(p))),
         ("streaming: text arrives in pieces", Box::pin(streaming(p))),
         (
-            "tools: one call, answer uses the result",
+            "tools: one call, answer uses the result [tools]",
             Box::pin(one_tool(p)),
         ),
         (
-            "tools: several calls in one turn",
+            "tools: several calls in one turn [tools]",
             Box::pin(parallel_tools(p)),
         ),
         (
-            "tools: error result, model tries again",
+            "tools: error result, model tries again [tools]",
             Box::pin(tool_error_recovery(p)),
         ),
         (
-            "tools: argument validation",
+            "tools: argument validation [tools]",
             Box::pin(argument_validation(p)),
         ),
         (
@@ -119,23 +143,23 @@ async fn run_all(p: &Provider) -> usize {
             Box::pin(structured(p, OutputStrategy::Native)),
         ),
         (
-            "output: final_output tool",
+            "output: final_output tool [tools]",
             Box::pin(structured(p, OutputStrategy::Tool)),
         ),
         (
-            "approval: approve runs the tool",
+            "approval: approve runs the tool [tools]",
             Box::pin(approval(p, "approve")),
         ),
         (
-            "approval: reject skips the tool",
+            "approval: reject skips the tool [tools]",
             Box::pin(approval(p, "reject")),
         ),
         (
-            "approval: edit changes the arguments",
+            "approval: edit changes the arguments [tools]",
             Box::pin(approval(p, "edit")),
         ),
         (
-            "agent.stream: text and tool events",
+            "agent.stream: text and tool events [tools]",
             Box::pin(agent_stream(p)),
         ),
         ("threads: memory across turns", Box::pin(thread_memory(p))),
@@ -144,20 +168,29 @@ async fn run_all(p: &Provider) -> usize {
             Box::pin(sqlite_reopen(p)),
         ),
         (
-            "threads: crash mid-tool, retry",
+            "threads: crash mid-tool, retry [tools]",
             Box::pin(crash_recovery(p)),
         ),
-        ("agents: agent as a tool", Box::pin(agent_as_tool(p))),
-        ("hooks: before_model and wrap_tool", Box::pin(hooks(p))),
-        ("limits: model-call limit ends the run", Box::pin(limits(p))),
-        ("resilience: fallback model", Box::pin(fallback(p))),
         (
-            "errors: bad key is classified as auth",
+            "agents: agent as a tool [tools]",
+            Box::pin(agent_as_tool(p)),
+        ),
+        (
+            "hooks: before_model and wrap_tool [tools]",
+            Box::pin(hooks(p)),
+        ),
+        (
+            "limits: model-call limit ends the run [tools]",
+            Box::pin(limits(p)),
+        ),
+        ("resilience: fallback model [keys]", Box::pin(fallback(p))),
+        (
+            "errors: bad key is classified as auth [keys]",
             Box::pin(bad_key(p)),
         ),
         ("workflow: LLM nodes with a router", Box::pin(workflow(p))),
         (
-            "telemetry: spans exported over OTLP",
+            "telemetry: spans exported over OTLP [tools]",
             Box::pin(telemetry(p)),
         ),
         ("deadline: run stops in time", Box::pin(deadline(p))),
@@ -167,6 +200,19 @@ async fn run_all(p: &Provider) -> usize {
     let mut failed = 0;
     for (name, check) in checks {
         if !name.contains(only.as_str()) {
+            continue;
+        }
+        let needs_tools = name.ends_with(" [tools]");
+        let needs_keys = name.ends_with(" [keys]");
+        let name = name
+            .trim_end_matches(" [tools]")
+            .trim_end_matches(" [keys]");
+        if needs_tools && !p.tools {
+            println!("SKIP {name:<42}         the model cannot call tools");
+            continue;
+        }
+        if needs_keys && !p.keys {
+            println!("SKIP {name:<42}         the server does not check API keys");
             continue;
         }
         let started = Instant::now();
@@ -1115,4 +1161,71 @@ fn load_keys_file() {
             }
         }
     }
+}
+
+/// The Ollama model to test (`OLLAMA_MODEL`, else the first one installed)
+/// and whether it can call tools (its `tools` capability).
+async fn ollama_model(base: &str) -> Result<(String, bool), String> {
+    let model = match std::env::var("OLLAMA_MODEL") {
+        Ok(model) => model,
+        Err(_) => {
+            let tags = http_json(base, "GET", "/api/tags", None).await?;
+            tags["models"][0]["name"]
+                .as_str()
+                .ok_or("no model installed in Ollama")?
+                .to_string()
+        }
+    };
+    let show = http_json(base, "POST", "/api/show", Some(json!({"model": model}))).await?;
+    let tools = show["capabilities"]
+        .as_array()
+        .is_some_and(|c| c.iter().any(|c| c == "tools"));
+    Ok((model, tools))
+}
+
+/// A one-shot HTTP/1.1 JSON request over a plain TCP connection.
+async fn http_json(
+    base: &str,
+    method: &str,
+    path: &str,
+    body: Option<Value>,
+) -> Result<Value, String> {
+    let host = base
+        .strip_prefix("http://")
+        .ok_or("only http:// URLs are supported")?
+        .trim_end_matches('/');
+    let mut socket = tokio::net::TcpStream::connect(host)
+        .await
+        .map_err(|e| format!("cannot reach {base}: {e}"))?;
+    let body = body.map(|b| b.to_string()).unwrap_or_default();
+    let request = format!(
+        "{method} {path} HTTP/1.1\r\nhost: {host}\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        body.len()
+    );
+    socket.write_all(request.as_bytes()).await.map_err(err)?;
+    let mut response = Vec::new();
+    socket.read_to_end(&mut response).await.map_err(err)?;
+    let text = String::from_utf8_lossy(&response);
+    let (head, body) = text.split_once("\r\n\r\n").ok_or("bad HTTP response")?;
+    let body = if head.to_lowercase().contains("transfer-encoding: chunked") {
+        dechunk(body)
+    } else {
+        body.to_string()
+    };
+    serde_json::from_str(&body).map_err(|e| format!("{path}: {e}"))
+}
+
+fn dechunk(mut body: &str) -> String {
+    let mut out = String::new();
+    while let Some((size, rest)) = body.split_once("\r\n") {
+        let Ok(size) = usize::from_str_radix(size.trim(), 16) else {
+            break;
+        };
+        if size == 0 || rest.len() < size {
+            break;
+        }
+        out.push_str(&rest[..size]);
+        body = rest[size..].trim_start_matches("\r\n");
+    }
+    out
 }

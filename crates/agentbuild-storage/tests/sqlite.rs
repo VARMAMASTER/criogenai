@@ -221,3 +221,140 @@ async fn storage_can_be_opened_and_used_from_spawned_tasks() {
         .unwrap();
     assert_eq!(store.load("t", None).await.unwrap().unwrap(), first);
 }
+
+/// A small deterministic generator (xorshift), so failures reproduce.
+struct Rng(u64);
+
+impl Rng {
+    fn below(&mut self, n: u64) -> u64 {
+        self.0 ^= self.0 << 13;
+        self.0 ^= self.0 >> 7;
+        self.0 ^= self.0 << 17;
+        self.0 % n
+    }
+}
+
+#[tokio::test]
+async fn random_histories_load_back_exactly() {
+    let db = TempDb::new();
+    let store = db.open().await.keyframe_interval(4);
+    for seed in 1..=20u64 {
+        let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+        let thread = format!("t{seed}");
+        let mut state = serde_json::Map::new();
+        let mut written: Vec<Checkpoint> = Vec::new();
+        for version in 1..=30u64 {
+            for _ in 0..1 + rng.below(3) {
+                let key = format!("k{}", rng.below(4));
+                match rng.below(5) {
+                    0..=2 => {
+                        let mut list = match state.remove(&key) {
+                            Some(serde_json::Value::Array(list)) => list,
+                            _ => Vec::new(),
+                        };
+                        list.push(json!({"n": rng.below(100), "text": "x".repeat(rng.below(40) as usize)}));
+                        state.insert(key, serde_json::Value::Array(list));
+                    }
+                    3 => {
+                        state.insert(key, json!(rng.below(10)));
+                    }
+                    _ => {
+                        state.remove(&key);
+                    }
+                }
+            }
+            // Branch now and then: the parent is an older checkpoint.
+            let parent = match written.len() {
+                0 => None,
+                n if rng.below(6) == 0 => Some(written[rng.below(n as u64) as usize].id.clone()),
+                n => Some(written[n - 1].id.clone()),
+            };
+            let mut checkpoint =
+                Checkpoint::new(&thread, version, Source::Step, State::from(state.clone()));
+            if let Some(parent) = parent {
+                checkpoint = checkpoint.parent(parent);
+            }
+            store.commit(checkpoint.clone(), version - 1).await.unwrap();
+            written.push(checkpoint);
+        }
+        for checkpoint in &written {
+            let loaded = store.load(&thread, Some(&checkpoint.id)).await.unwrap();
+            assert_eq!(
+                loaded.as_ref(),
+                Some(checkpoint),
+                "seed {seed} v{}",
+                checkpoint.version
+            );
+        }
+    }
+    // A fresh handle (no cache) reads the same.
+    drop(store);
+    let store = db.open().await;
+    let head = store.load("t7", None).await.unwrap().unwrap();
+    assert_eq!(head.version, 30);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn many_writers_on_one_file_never_fork_or_lose_a_commit() {
+    let db = TempDb::new();
+    // Two handles: as two processes would have.
+    let handles = [
+        std::sync::Arc::new(db.open().await),
+        std::sync::Arc::new(db.open().await),
+    ];
+    let mut tasks = Vec::new();
+    for writer in 0..8u64 {
+        let store = handles[(writer % 2) as usize].clone();
+        tasks.push(tokio::spawn(async move {
+            let mut done = 0;
+            let mut conflicts = 0;
+            while done < 15 {
+                let head = store.load("shared", None).await.unwrap();
+                let (expected, parent) = head.map_or((0, None), |h| (h.version, Some(h.id)));
+                let mut checkpoint = Checkpoint::new(
+                    "shared",
+                    expected + 1,
+                    Source::Step,
+                    State::new().with("writer", writer).with("n", done),
+                );
+                if let Some(parent) = parent {
+                    checkpoint = checkpoint.parent(parent);
+                }
+                match store.commit(checkpoint, expected).await {
+                    Ok(()) => done += 1,
+                    Err(err) if err.code() == "storage_conflict" => conflicts += 1,
+                    Err(err) => panic!("writer {writer}: {err}"),
+                }
+            }
+            conflicts
+        }));
+    }
+    let mut conflicts = 0;
+    for task in tasks {
+        conflicts += task.await.unwrap();
+    }
+    // Every commit landed exactly once, on one linear branch.
+    let history = handles[0].history("shared", 1000).await.unwrap();
+    assert_eq!(history.len(), 8 * 15);
+    let versions: Vec<u64> = history.iter().rev().map(|c| c.version).collect();
+    assert_eq!(versions, (1..=120).collect::<Vec<_>>());
+    for pair in history.windows(2) {
+        assert_eq!(pair[0].parent_id.as_deref(), Some(pair[1].id.as_str()));
+    }
+    // Each writer's 15 commits are all there, in order.
+    let mut seen = std::collections::BTreeMap::<u64, Vec<u64>>::new();
+    for meta in history.iter().rev() {
+        let checkpoint = handles[1]
+            .load("shared", Some(&meta.id))
+            .await
+            .unwrap()
+            .unwrap();
+        let writer = checkpoint.state.get("writer").unwrap().as_u64().unwrap();
+        let n = checkpoint.state.get("n").unwrap().as_u64().unwrap();
+        seen.entry(writer).or_default().push(n);
+    }
+    for (writer, ns) in seen {
+        assert_eq!(ns, (0..15).collect::<Vec<_>>(), "writer {writer}");
+    }
+    println!("{conflicts} lost compare-and-set races were retried");
+}

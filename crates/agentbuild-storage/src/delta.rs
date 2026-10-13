@@ -136,6 +136,102 @@ mod tests {
         }
     }
 
+    /// A small deterministic generator (xorshift), so failures reproduce.
+    struct Rng(u64);
+
+    impl Rng {
+        fn next(&mut self) -> u64 {
+            self.0 ^= self.0 << 13;
+            self.0 ^= self.0 >> 7;
+            self.0 ^= self.0 << 17;
+            self.0
+        }
+        fn below(&mut self, n: u64) -> u64 {
+            self.next() % n
+        }
+        fn value(&mut self, depth: u32) -> Value {
+            match self.below(if depth > 2 { 4 } else { 6 }) {
+                0 => Value::Null,
+                1 => json!(self.below(1000)),
+                2 => json!(format!("s{}", self.below(50))),
+                3 => json!(self.below(2) == 1),
+                4 => Value::Array((0..self.below(4)).map(|_| self.value(depth + 1)).collect()),
+                _ => {
+                    let mut map = serde_json::Map::new();
+                    for _ in 0..self.below(4) {
+                        map.insert(format!("k{}", self.below(5)), self.value(depth + 1));
+                    }
+                    Value::Object(map)
+                }
+            }
+        }
+    }
+
+    /// Changes a state the way runs do: append to lists (most often), set,
+    /// remove, rewrite or shrink a list.
+    fn mutate(rng: &mut Rng, state: &State) -> State {
+        let mut map = state.clone().into_map();
+        for _ in 0..1 + rng.below(3) {
+            let key = format!("key{}", rng.below(6));
+            match rng.below(6) {
+                0..=2 => {
+                    let mut list = match map.remove(&key) {
+                        Some(Value::Array(list)) => list,
+                        _ => Vec::new(),
+                    };
+                    for _ in 0..1 + rng.below(3) {
+                        list.push(rng.value(0));
+                    }
+                    map.insert(key, Value::Array(list));
+                }
+                3 => {
+                    map.insert(key, rng.value(0));
+                }
+                4 => {
+                    map.remove(&key);
+                }
+                _ => {
+                    if let Some(Value::Array(list)) = map.get_mut(&key) {
+                        let keep = rng.below(list.len() as u64 + 1) as usize;
+                        list.truncate(keep);
+                        if rng.below(2) == 1 {
+                            list.push(rng.value(0));
+                        }
+                    }
+                }
+            }
+        }
+        State::from(map)
+    }
+
+    #[test]
+    fn random_histories_replay_exactly() {
+        for seed in 1..=200u64 {
+            let mut rng = Rng(seed.wrapping_mul(0x9E37_79B9_7F4A_7C15) | 1);
+            let mut keyframe = State::new();
+            let mut replayed = State::new();
+            let mut state = State::new();
+            for _ in 0..40 {
+                let next = mutate(&mut rng, &state);
+                let ops = diff(&state, &next);
+                // Ops survive storage as JSON.
+                let stored: Vec<DeltaOp> =
+                    serde_json::from_str(&serde_json::to_string(&ops).unwrap()).unwrap();
+                assert_eq!(stored, ops, "seed {seed}");
+                replayed = apply(replayed, &stored).unwrap();
+                assert_eq!(replayed, next, "seed {seed}");
+                // Deltas between equal states are empty; applying one delta
+                // to its own base gives the new state.
+                assert!(diff(&next, &next).is_empty());
+                assert_eq!(apply(state.clone(), &ops).unwrap(), next, "seed {seed}");
+                state = next;
+            }
+            // A chain from an empty keyframe ends at the same state.
+            keyframe = apply(keyframe, &diff(&State::new(), &state)).unwrap();
+            assert_eq!(keyframe, state, "seed {seed}");
+        }
+    }
+
     #[test]
     fn appending_to_a_non_list_is_corrupt() {
         let ops = [DeltaOp::Append {

@@ -334,3 +334,82 @@ async fn durability_exit_writes_one_checkpoint_per_call() {
     assert_eq!(history.len(), 1);
     assert_eq!(history[0].source, Source::Step);
 }
+
+#[cfg(feature = "sqlite")]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn many_conversations_at_once_on_one_sqlite_file() {
+    use agentbuild_storage::SqliteCheckpointer;
+
+    let path = std::env::temp_dir().join(format!("agentbuild-stress-{}.db", uuid_like()));
+    let storage = Storage::new(SqliteCheckpointer::open(&path).await.unwrap());
+    // Answers "[fake-llm] reply to: <prompt>" after 5–20 ms.
+    let model = Arc::new(FakeModel::with_delay(
+        Duration::from_millis(5),
+        Duration::from_millis(20),
+    ));
+    let agent = Agent::builder_shared(model)
+        .storage(storage.clone())
+        .build()
+        .unwrap();
+
+    // 20 conversations, 3 turns each, all at once.
+    let mut tasks = Vec::new();
+    for user in 0..20 {
+        let chat = agent.thread(format!("user-{user}"));
+        tasks.push(tokio::spawn(async move {
+            for turn in 0..3 {
+                chat.send(format!("user {user} turn {turn}")).await.unwrap();
+            }
+            chat.messages().await.unwrap()
+        }));
+    }
+    for (user, task) in tasks.into_iter().enumerate() {
+        let messages = task.await.unwrap();
+        assert_eq!(messages.len(), 6, "user {user}");
+        // Each conversation holds only its own messages, in order.
+        for (turn, pair) in messages.chunks(2).enumerate() {
+            let asked = format!("user {user} turn {turn}");
+            assert_eq!(pair[0].text(), asked);
+            assert!(pair[1].text().ends_with(&asked), "{}", pair[1].text());
+        }
+    }
+
+    // Five messages to one conversation at the same moment: they queue
+    // (OnBusy::Wait) and all land, none lost or duplicated.
+    let mut sends = Vec::new();
+    for n in 0..5 {
+        let chat = agent.thread("busy");
+        sends.push(tokio::spawn(
+            async move { chat.send(format!("msg {n}")).await },
+        ));
+    }
+    for send in sends {
+        send.await.unwrap().unwrap();
+    }
+    let messages = agent.thread("busy").messages().await.unwrap();
+    assert_eq!(messages.len(), 10);
+    let mut asked: Vec<String> = messages.iter().step_by(2).map(|m| m.text()).collect();
+    asked.sort();
+    assert_eq!(
+        asked,
+        (0..5).map(|n| format!("msg {n}")).collect::<Vec<_>>()
+    );
+
+    // Reopened from the file, everything is still there.
+    drop(agent);
+    drop(storage);
+    let storage = Storage::new(SqliteCheckpointer::open(&path).await.unwrap());
+    let head = storage
+        .checkpointer()
+        .load("user-13", None)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(head.status(), CheckpointStatus::Completed);
+    drop(storage);
+    for suffix in ["", "-wal", "-shm"] {
+        let mut file = path.clone().into_os_string();
+        file.push(suffix);
+        let _ = std::fs::remove_file(file);
+    }
+}

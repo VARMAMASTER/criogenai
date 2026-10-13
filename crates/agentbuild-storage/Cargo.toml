@@ -32,7 +32,7 @@ default = []
 sqlite = ["dep:sqlx"]
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["rt", "macros", "time", "sync", "test-util"] }
+tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "sync", "test-util"] }
 
 [lints]
 workspace = true
