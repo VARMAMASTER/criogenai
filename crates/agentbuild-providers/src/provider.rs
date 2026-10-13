@@ -288,7 +288,9 @@ impl ProviderModel {
         let wire = self.wire(request, false, &mut warnings)?;
         let body = self.transport.send(&wire).await?;
         let mut response = match &self.endpoint.protocol {
-            Protocol::OpenAiChat(_) => openai_chat::decode(&body, &self.endpoint.name)?,
+            Protocol::OpenAiChat(quirks) => {
+                openai_chat::decode(&body, &self.endpoint.name, quirks.think_tags)?
+            }
             Protocol::AnthropicMessages(_) => {
                 anthropic_messages::decode(&body, &self.endpoint.name)?
             }
@@ -308,7 +310,7 @@ impl ProviderModel {
         let mut body = self.transport.open(&wire).await?;
         let mut parser = SseParser::new();
         let mut decoder = match &self.endpoint.protocol {
-            Protocol::OpenAiChat(_) => Decoder::OpenAi(ChunkDecoder::default()),
+            Protocol::OpenAiChat(quirks) => Decoder::OpenAi(ChunkDecoder::new(quirks.think_tags)),
             Protocol::AnthropicMessages(_) => Decoder::Anthropic(EventDecoder::default()),
         };
         let mut assembler = Assembler::new();

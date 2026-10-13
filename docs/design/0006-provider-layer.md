@@ -79,6 +79,15 @@ classifier now reads the list shape, Google's `status` and
 400 whose message says the key is invalid as `auth`. Without this a bad
 Gemini key was `invalid_request`, so a fallback on `auth` never fired.
 
+The live check against Ollama 0.6 with DeepSeek-R1 found the model's
+reasoning printed inside the answer as `<think>…</think>` (servers without a
+reasoning parser do this). `openai_chat` now moves `<think>` reasoning at
+the start of the answer into a reasoning block, in whole and streamed
+responses (tags may be cut anywhere across chunks; partial tags are held
+back until decided). Only a leading block is read: a `<think>` later in the
+text stays text. An unclosed block (cut by `max_tokens`) stays reasoning.
+`OpenAiQuirks::think_tags` (default on) turns it off.
+
 Transport as built: `Transport` (reqwest 0.13, rustls with the OS trust
 store via the platform verifier, HTTP/2, `HTTP(S)_PROXY`), behind the default
 feature `http`. `send` returns a whole 2xx body; `open` returns a `Body`

@@ -19,6 +19,7 @@ use crate::request::{
 };
 use crate::sse::SseEvent;
 use crate::stream::{Assembler, BlockDelta, StreamItem, Warning};
+use crate::think::{self, Part, ThinkSplitter};
 use crate::tool::ToolKind;
 
 /// Differences between OpenAI-compatible servers.
@@ -41,6 +42,10 @@ pub struct OpenAiQuirks {
     /// Assistant-message field to send earlier reasoning back in (e.g.
     /// `reasoning_content`), for servers that want it. `None` drops it.
     pub reasoning_echo: Option<String>,
+    /// Read `<think>…</think>` at the start of the answer text as
+    /// reasoning (reasoning models on servers without a reasoning parser,
+    /// e.g. DeepSeek-R1 on Ollama 0.6). Default on.
+    pub think_tags: bool,
 }
 
 impl Default for OpenAiQuirks {
@@ -53,6 +58,7 @@ impl Default for OpenAiQuirks {
             reasoning_effort: false,
             system_role: "system".into(),
             reasoning_echo: None,
+            think_tags: true,
         }
     }
 }
@@ -448,7 +454,11 @@ fn flush_images(messages: &mut Vec<Value>, images: &mut Vec<Value>, warnings: &m
 // ---------- decode ----------
 
 /// Decodes a complete (non-streamed) response body.
-pub(crate) fn decode(body: &[u8], provider: &str) -> Result<ModelResponse, ModelError> {
+pub(crate) fn decode(
+    body: &[u8],
+    provider: &str,
+    think_tags: bool,
+) -> Result<ModelResponse, ModelError> {
     let value: Value = serde_json::from_slice(body)
         .map_err(|err| invalid_response(format!("body is not JSON: {err}")))?;
     if value.get("choices").is_none()
@@ -484,10 +494,26 @@ pub(crate) fn decode(body: &[u8], provider: &str) -> Result<ModelResponse, Model
     if let Some(text) = message.get("content").and_then(Value::as_str)
         && !text.is_empty()
     {
-        assembler.push(StreamItem::Delta {
-            index: next(),
-            delta: BlockDelta::Text { text: text.into() },
-        });
+        let (thought, text) = if think_tags {
+            think::split(text)
+        } else {
+            (None, text.to_string())
+        };
+        if let Some(thought) = thought {
+            assembler.push(StreamItem::Delta {
+                index: next(),
+                delta: BlockDelta::Reasoning {
+                    text: Some(thought),
+                    signature: None,
+                },
+            });
+        }
+        if !text.is_empty() {
+            assembler.push(StreamItem::Delta {
+                index: next(),
+                delta: BlockDelta::Text { text },
+            });
+        }
     }
     let refused = message.get("refusal").and_then(Value::as_str);
     if let Some(refusal) = refused {
@@ -554,9 +580,59 @@ pub(crate) struct ChunkDecoder {
     calls: HashMap<String, u32>,
     last_call: Option<u32>,
     finished: Option<FinishReason>,
+    /// Splits `<think>` reasoning out of the answer text, if enabled.
+    think: Option<ThinkSplitter>,
 }
 
 impl ChunkDecoder {
+    /// A decoder; `think_tags` as in [`OpenAiQuirks::think_tags`].
+    pub(crate) fn new(think_tags: bool) -> Self {
+        Self {
+            think: think_tags.then(ThinkSplitter::default),
+            ..Self::default()
+        }
+    }
+
+    /// Adds answer text, or reasoning split out of it.
+    fn push_part(&mut self, items: &mut Vec<StreamItem>, part: Part, text: String) {
+        let slot = match part {
+            Part::Reasoning => self.reasoning,
+            Part::Text => self.text,
+        };
+        let index = match slot {
+            Some(index) => index,
+            None => {
+                let index = self.allocate();
+                match part {
+                    Part::Reasoning => self.reasoning = Some(index),
+                    Part::Text => self.text = Some(index),
+                }
+                index
+            }
+        };
+        items.push(StreamItem::Delta {
+            index,
+            delta: match part {
+                Part::Reasoning => BlockDelta::Reasoning {
+                    text: Some(text),
+                    signature: None,
+                },
+                Part::Text => BlockDelta::Text { text },
+            },
+        });
+    }
+
+    /// Decides text the `<think>` splitter still holds (end of the answer).
+    fn flush_think(&mut self, items: &mut Vec<StreamItem>) {
+        let parts = self
+            .think
+            .as_mut()
+            .map(ThinkSplitter::finish)
+            .unwrap_or_default();
+        for (part, text) in parts {
+            self.push_part(items, part, text);
+        }
+    }
     /// `[DONE]` was received.
     pub(crate) fn is_done(&self) -> bool {
         self.done
@@ -577,6 +653,7 @@ impl ChunkDecoder {
         let data = event.data.trim();
         if data == "[DONE]" {
             self.done = true;
+            self.flush_think(&mut items);
             return Ok(items);
         }
         if data.is_empty() {
@@ -611,37 +688,18 @@ impl ChunkDecoder {
         };
         let delta = choice.get("delta").unwrap_or(&Value::Null);
         if let Some(text) = reasoning_text(delta) {
-            let index = match self.reasoning {
-                Some(index) => index,
-                None => {
-                    let index = self.allocate();
-                    self.reasoning = Some(index);
-                    index
-                }
-            };
-            items.push(StreamItem::Delta {
-                index,
-                delta: BlockDelta::Reasoning {
-                    text: Some(text.to_string()),
-                    signature: None,
-                },
-            });
+            self.push_part(&mut items, Part::Reasoning, text.to_string());
         }
         if let Some(text) = delta.get("content").and_then(Value::as_str)
             && !text.is_empty()
         {
-            let index = match self.text {
-                Some(index) => index,
-                None => {
-                    let index = self.allocate();
-                    self.text = Some(index);
-                    index
-                }
+            let parts = match &mut self.think {
+                Some(splitter) => splitter.push(text),
+                None => vec![(Part::Text, text.to_string())],
             };
-            items.push(StreamItem::Delta {
-                index,
-                delta: BlockDelta::Text { text: text.into() },
-            });
+            for (part, text) in parts {
+                self.push_part(&mut items, part, text);
+            }
         }
         if let Some(refusal) = delta.get("refusal").and_then(Value::as_str) {
             let index = self.allocate();
@@ -699,6 +757,7 @@ impl ChunkDecoder {
             });
         }
         if let Some(raw) = choice.get("finish_reason").filter(|r| !r.is_null()) {
+            self.flush_think(&mut items);
             let (reason, raw) = finish_reason(Some(raw));
             let reason = self.finished.unwrap_or(reason);
             self.finished = Some(reason);

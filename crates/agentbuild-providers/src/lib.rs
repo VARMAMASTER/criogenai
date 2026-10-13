@@ -45,6 +45,8 @@ mod provider;
 mod request;
 mod sse;
 mod stream;
+#[cfg(feature = "http")]
+mod think;
 mod tool;
 pub mod transcript;
 #[cfg(feature = "http")]

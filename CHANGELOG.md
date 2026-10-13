@@ -41,6 +41,9 @@ First release, planned as 0.1.0 (Rust crates only).
 - Classified model errors from any provider (rate limit, overload, context
   overflow, auth, quota, …), `Retry-After` support, API keys redacted from
   messages. Endpoint presets including `Endpoint::gemini`.
+- Reasoning printed inline as `<think>…</think>` (reasoning models on
+  servers without a reasoning parser, e.g. Ollama 0.6) becomes a reasoning
+  block, also when streamed (`OpenAiQuirks::think_tags`, on by default).
 - `FakeModel` for tests: scripted replies, realistic delays, errors.
 
 ### agentbuild-agent: agents

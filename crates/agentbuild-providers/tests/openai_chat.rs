@@ -591,3 +591,104 @@ async fn presets_point_at_the_right_servers() {
     let trailing = Endpoint::vllm("http://gpu:8000/v1/", None);
     assert_eq!(trailing.base_url, "http://gpu:8000/v1");
 }
+
+fn reasoning_of(message: &Message) -> Option<String> {
+    message.content.iter().find_map(|block| match block {
+        ContentBlock::Reasoning { text, .. } => text.clone(),
+        _ => None,
+    })
+}
+
+#[tokio::test]
+async fn think_tags_become_reasoning_in_whole_and_streamed_answers() {
+    // Whole answer (DeepSeek-R1 on Ollama 0.6 puts its reasoning inline).
+    let (base, _server) = serve(vec![json_response(
+        200,
+        r#"{"choices": [{"message": {"role": "assistant",
+            "content": "<think>\nThe user wants 2+2.\n</think>\n\nIt is 4."},
+            "finish_reason": "stop"}]}"#,
+    )])
+    .await;
+    let response = model_at(&base, None)
+        .invoke(&ModelRequest::new(vec![Message::user("2+2?")]))
+        .await
+        .unwrap();
+    assert_eq!(response.message.text(), "It is 4.");
+    assert_eq!(
+        reasoning_of(&response.message).as_deref(),
+        Some("\nThe user wants 2+2.\n")
+    );
+
+    // Streamed, with the tags cut across chunks.
+    let pieces = [
+        "<th",
+        "ink>\nThe user",
+        " wants 2+2.\n</",
+        "think",
+        ">\n\nIt",
+        " is 4.",
+    ];
+    let mut steps = vec![sse_head()];
+    for piece in pieces {
+        steps.push(sse_data(
+            &json!({"choices": [{"index": 0, "delta": {"content": piece}}]}).to_string(),
+        ));
+    }
+    steps.push(sse_data(
+        r#"{"choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}"#,
+    ));
+    steps.push(Step::send("data: [DONE]\n\n"));
+    let (base, _server) = serve(steps).await;
+    let request = ModelRequest::new(vec![Message::user("2+2?")]);
+    let (result, deltas) = stream(&base, &request).await;
+    let response = result.unwrap();
+    let streamed_text: String = deltas
+        .iter()
+        .map(|d| match &d.delta {
+            BlockDelta::Text { text } => text.as_str(),
+            _ => "",
+        })
+        .collect();
+    let streamed_reasoning: String = deltas
+        .iter()
+        .map(|d| match &d.delta {
+            BlockDelta::Reasoning {
+                text: Some(text), ..
+            } => text.as_str(),
+            _ => "",
+        })
+        .collect();
+    assert_eq!(streamed_text, "It is 4.", "no tag reaches the answer");
+    assert_eq!(streamed_reasoning, "\nThe user wants 2+2.\n");
+    assert_eq!(response.message.text(), "It is 4.");
+    assert_eq!(
+        reasoning_of(&response.message).as_deref(),
+        Some("\nThe user wants 2+2.\n")
+    );
+    // The reasoning block comes first, then the answer.
+    assert!(matches!(
+        response.message.content[0],
+        ContentBlock::Reasoning { .. }
+    ));
+}
+
+#[tokio::test]
+async fn think_tags_can_be_left_in_the_text() {
+    let (base, _server) = serve(vec![json_response(
+        200,
+        r#"{"choices": [{"message": {"role": "assistant",
+            "content": "<think>x</think>Answer"}, "finish_reason": "stop"}]}"#,
+    )])
+    .await;
+    let mut quirks = agentbuild_providers::OpenAiQuirks::default();
+    quirks.think_tags = false;
+    let mut endpoint = Endpoint::openai_compatible("local", base, None);
+    endpoint.protocol = agentbuild_providers::Protocol::OpenAiChat(quirks);
+    let model = ProviderModel::new(endpoint, "m").unwrap();
+    let response = model
+        .invoke(&ModelRequest::new(vec![Message::user("hi")]))
+        .await
+        .unwrap();
+    assert_eq!(response.message.text(), "<think>x</think>Answer");
+    assert_eq!(reasoning_of(&response.message), None);
+}

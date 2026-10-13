@@ -72,9 +72,11 @@ handoff point for whoever continues the work.
   has no tool support).
 - Still waiting on the user: package names (npm `agentbuild` is taken),
   making the repo public, scope of the first release, name check.
-- Found, not yet fixed: reasoning models served without a reasoning parser
+- Fixed after that: reasoning models served without a reasoning parser
   (Ollama 0.6, some vLLM/llama.cpp setups) put `<think>…</think>` inside
-  the answer text.
+  the answer text. `openai_chat` now splits a leading `<think>` block into
+  a reasoning block, whole and streamed (0006 note; unit tests cut the
+  stream at every character; checked live on Ollama).
 
 ### 2026-10-13: live check of every feature with real models; fixes it found
 
