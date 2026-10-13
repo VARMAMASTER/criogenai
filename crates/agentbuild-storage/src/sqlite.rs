@@ -74,6 +74,10 @@ const CACHE_LIMIT: usize = 256;
 /// at most `interval - 1` deltas.
 ///
 /// Tables (prefixed `agentbuild_`) are created on first use.
+///
+/// Needs Tokio's real clock: under a paused test clock (`start_paused`) the
+/// connection pool's timeout fires at once. Tests on paused time should use
+/// [`InMemoryCheckpointer`](crate::InMemoryCheckpointer).
 pub struct SqliteCheckpointer {
     pool: SqlitePool,
     keyframe_interval: u32,

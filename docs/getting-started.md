@@ -1,0 +1,294 @@
+# Getting started
+
+This guide builds up from a one-node workflow to an agent that calls tools,
+asks a person before doing something risky, and keeps conversations in a
+SQLite file. Every Rust example on this page is compiled and run by the
+test suite, so it matches the current API.
+
+AgentBuild is Rust-only today; Python and TypeScript SDKs are planned
+([design 0007](design/0007-public-api.md)).
+
+## Add the crates
+
+Until the first release is on crates.io, depend on the repository:
+
+```toml
+[dependencies]
+agentbuild-core = { git = "https://github.com/VARMAMASTER/agentbuild" }
+agentbuild-providers = { git = "https://github.com/VARMAMASTER/agentbuild" }
+agentbuild-agent = { git = "https://github.com/VARMAMASTER/agentbuild", features = ["sqlite"] }
+agentbuild-storage = { git = "https://github.com/VARMAMASTER/agentbuild", features = ["sqlite"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+| Crate | What it gives you |
+|---|---|
+| `agentbuild-core` | The workflow engine: nodes, edges, routers, state, suspend/resume, retries |
+| `agentbuild-providers` | Messages, tools and models: OpenAI-compatible servers, Anthropic, Gemini, Ollama, vLLM, LM Studio |
+| `agentbuild-agent` | Agents: the model ⇄ tools loop, approvals, structured output, hooks, threads |
+| `agentbuild-storage` | Where threads live: in memory, or SQLite with the `sqlite` feature |
+| `agentbuild-telemetry` | OpenTelemetry / Langfuse export |
+
+Rust 1.88 or newer.
+
+## 1. A workflow
+
+A workflow is a graph of async nodes. Each node reads the shared state and
+returns the keys it changes.
+
+```rust
+use agentbuild_core::{END, State, Update, WorkflowBuilder, node_fn};
+
+# tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
+let mut builder = WorkflowBuilder::new();
+builder
+    .add_node("greet", node_fn(|state| async move {
+        let name = state.get("name").and_then(|v| v.as_str()).unwrap_or("world");
+        Ok(Update::new().set("greeting", format!("Hello, {name}!")))
+    }))
+    .set_entry("greet")
+    .add_edge("greet", END);
+
+let workflow = builder.build().unwrap(); // every graph problem is reported here
+let output = workflow.run(State::new().with("name", "Ada")).await.unwrap();
+assert_eq!(output.state.get("greeting").unwrap(), "Hello, Ada!");
+# });
+```
+
+Workflows also do branching with routers, parallel nodes and joins, loops,
+per-node timeouts and retries, cancellation, live events and pausing for a
+person. See [the core crate](../crates/agentbuild-core/README.md) and
+[the execution model](design/0001-execution-model.md).
+
+## 2. An agent with a tool
+
+An agent is a model plus tools, run as a loop: the model answers or asks for
+tool calls, the tools run (concurrently, with validated arguments), and the
+results go back to the model.
+
+With a real model:
+
+```rust,no_run
+use agentbuild_agent::{Agent, ToolError, tool_fn};
+use agentbuild_providers::{Endpoint, ProviderModel, ToolSpec};
+use serde_json::json;
+
+# async fn demo() -> Result<(), Box<dyn std::error::Error>> {
+let model = ProviderModel::new(Endpoint::openai(std::env::var("OPENAI_API_KEY")?), "gpt-5-mini")?;
+// Or: Endpoint::anthropic(key), Endpoint::gemini(key), Endpoint::ollama(),
+//     Endpoint::vllm(url, key), Endpoint::openai_compatible(name, url, key).
+
+let weather = tool_fn(
+    ToolSpec::new(
+        "get_weather",
+        "Current temperature in a city, in Celsius.",
+        json!({
+            "type": "object",
+            "properties": {"city": {"type": "string"}},
+            "required": ["city"]
+        }),
+    ),
+    |args, _ctx| async move { Ok::<_, ToolError>(json!({"city": args["city"], "celsius": 17})) },
+);
+
+let agent = Agent::builder(model)
+    .instructions("You are a helpful travel assistant.")
+    .tool(weather)
+    .build()?;
+let result = agent.run("How warm is it in Paris?").await?;
+println!("{}", result.text().unwrap_or_default());
+# Ok(()) }
+```
+
+The same agent with `FakeModel`, which plays back scripted replies. Use it
+in tests: no network, no cost, exact behaviour.
+
+```rust
+use agentbuild_agent::{Agent, ToolError, tool_fn};
+use agentbuild_providers::{FakeModel, FakeReply, ToolSpec};
+use serde_json::json;
+
+# tokio::runtime::Builder::new_current_thread().enable_time().start_paused(true).build().unwrap().block_on(async {
+let model = FakeModel::new()
+    .then(FakeReply::tool_call("get_weather", json!({"city": "Paris"})))
+    .then(FakeReply::text("It is 17 °C in Paris."));
+let weather = tool_fn(
+    ToolSpec::new("get_weather", "Current temperature", json!({
+        "type": "object",
+        "properties": {"city": {"type": "string"}},
+        "required": ["city"]
+    })),
+    |args, _ctx| async move { Ok::<_, ToolError>(json!({"city": args["city"], "celsius": 17})) },
+);
+let agent = Agent::builder(model).tool(weather).build().unwrap();
+
+let result = agent.run("How warm is it in Paris?").await.unwrap();
+assert_eq!(result.text(), Some("It is 17 °C in Paris."));
+assert_eq!((result.model_calls, result.tool_calls), (2, 1));
+# });
+```
+
+Bad arguments never reach your tool: they are checked against the schema and
+sent back to the model to fix. A `ToolError` becomes a result the model can
+react to; `ToolError::fatal` stops the run.
+
+## 3. Ask a person first
+
+Gate risky tools with an `Approval`. The run pauses before **any** call of
+that turn runs, and returns the requests. Continue with a decision per call:
+approve, reject (with a reason the model sees), edit the arguments, or
+respond in the tool's place.
+
+```rust
+use agentbuild_agent::{Agent, Approval, Decision, ToolError, tool_fn};
+use agentbuild_providers::{FakeModel, FakeReply, ToolSpec};
+use serde_json::json;
+
+# tokio::runtime::Builder::new_current_thread().enable_time().start_paused(true).build().unwrap().block_on(async {
+let model = FakeModel::new()
+    .then(FakeReply::tool_call("refund", json!({"order": "A-1001", "amount": 24})))
+    .then(FakeReply::text("Your refund is on its way."));
+let refund = tool_fn(
+    ToolSpec::new("refund", "Refund an order", json!({"type": "object"})),
+    |_args, _ctx| async { Ok::<_, ToolError>("refunded") },
+);
+let agent = Agent::builder(model)
+    .tool(refund)
+    .approval(Approval::new().tool("refund"))
+    .build()
+    .unwrap();
+
+let paused = agent.run("My mug arrived broken").await.unwrap();
+assert!(paused.is_suspended()); // nothing was refunded yet
+let request = &paused.approval_requests()[0];
+assert_eq!(request.args["amount"], 24);
+
+// Later, possibly in another process: the snapshot is plain JSON.
+let decisions = [(request.call_id.clone(), Decision::approve())];
+let done = agent.resume(paused.snapshot().unwrap(), decisions).await.unwrap();
+assert_eq!(done.text(), Some("Your refund is on its way."));
+# });
+```
+
+## 4. Conversations that survive restarts
+
+A **thread** is one conversation. Each call saves checkpoints to the agent's
+storage: before every step and after every tool call. So:
+
+- the next message continues the conversation;
+- a pending approval waits in storage until anyone calls `approve()`, from
+  any process;
+- if the process dies mid-run, `retry()` continues where it stopped, and
+  finished tool calls are not run again.
+
+```rust
+use std::time::Duration;
+
+use agentbuild_agent::Agent;
+use agentbuild_providers::{FakeModel, FakeReply};
+use agentbuild_storage::Storage;
+
+# tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
+// A file in real use: Storage::connect("sqlite://agent.db"). Tables are
+// created on first use.
+let storage = Storage::connect("sqlite::memory:").await.unwrap();
+// Answers at once (FakeModel::new() waits 2–3 s per call, like a real model).
+let model = FakeModel::with_delay(Duration::ZERO, Duration::ZERO)
+    .then(FakeReply::text("Nice to meet you, Ada."))
+    .then(FakeReply::text("Your name is Ada."));
+let agent = Agent::builder(model).storage(storage).build().unwrap();
+
+let chat = agent.thread("user-42");
+chat.send("Hi, I am Ada").await.unwrap();
+let reply = chat.send("What is my name?").await.unwrap();
+assert_eq!(reply.text(), Some("Your name is Ada."));
+assert_eq!(chat.messages().await.unwrap().len(), 4);
+
+// Every checkpoint is listed, newest first; `chat.rewind(id)` goes back.
+let history = chat.history(10).await.unwrap();
+assert_eq!(history.len(), 4);
+# });
+```
+
+A thread waiting for approval answers `chat.approve()`, `chat.reject(reason)`
+or `chat.decide(decisions)`. A thread whose last run failed or was
+interrupted answers `chat.retry()`; `send` refuses until then
+(`thread_interrupted`). Two `send`s on one thread queue up by default.
+
+Testing tip: SQLite storage needs Tokio's real clock. Under a paused test
+clock (`start_paused`), the database pool's connection timeout fires at
+once; use `Storage::in_memory()` there, or real time with a fast
+`FakeModel` as above.
+
+## 5. Show progress as it happens
+
+`agent.stream(input)` yields typed events for a UI: text as it is written,
+tool calls starting and finishing, approvals needed.
+
+```rust
+use agentbuild_agent::{Agent, AgentEvent};
+use agentbuild_providers::{FakeModel, FakeReply};
+
+# tokio::runtime::Builder::new_current_thread().enable_time().start_paused(true).build().unwrap().block_on(async {
+let agent = Agent::builder(FakeModel::new().then(FakeReply::text("Hello!")))
+    .build()
+    .unwrap();
+let mut stream = agent.stream("Say hello");
+let mut text = String::new();
+while let Some(event) = stream.next().await {
+    if let AgentEvent::Text { text: piece, .. } = event {
+        text.push_str(&piece);
+    }
+}
+let result = stream.finish().await.unwrap();
+assert_eq!(text, "Hello!");
+assert_eq!(result.text(), Some("Hello!"));
+# });
+```
+
+## 6. Structured output
+
+Make the run end with JSON matching a schema. Invalid answers go back to the
+model with the validation errors. A model with a JSON mode (OpenAI, Gemini)
+answers in it; others call a reserved `final_output` tool. AgentBuild picks
+from the model's capabilities, or you choose with `output_with`.
+
+```rust
+use agentbuild_agent::Agent;
+use agentbuild_providers::{FakeModel, FakeReply};
+use serde_json::json;
+
+# tokio::runtime::Builder::new_current_thread().enable_time().start_paused(true).build().unwrap().block_on(async {
+// FakeModel has no JSON mode, so it answers through the `final_output` tool.
+let model = FakeModel::new().then(FakeReply::tool_call(
+    "final_output",
+    json!({"city": "Paris", "celsius": 17}),
+));
+let agent = Agent::builder(model)
+    .output(json!({
+        "type": "object",
+        "properties": {"city": {"type": "string"}, "celsius": {"type": "number"}},
+        "required": ["city", "celsius"]
+    }))
+    .build()
+    .unwrap();
+let result = agent.run("Weather in Paris as JSON").await.unwrap();
+assert_eq!(result.output, Some(json!({"city": "Paris", "celsius": 17})));
+# });
+```
+
+## Where next
+
+- **More agent features:** hooks around every model and tool call, limits
+  and token budgets, fallback models, agents as tools of other agents: the
+  [agent crate](../crates/agentbuild-agent/README.md).
+- **Tracing:** send every run to Langfuse or any OpenTelemetry backend:
+  [agentbuild-telemetry](../crates/agentbuild-telemetry/README.md).
+- **Examples you can run:** `cargo run -p agentbuild-agent --example
+  approval_agent -- edit`, `thread_agent`, and `durable_agent` (a run killed
+  mid-step and continued from SQLite, with `--features sqlite`).
+- **A complete app:** [demos/support-chat](../demos/support-chat), a Rust
+  server and a Next.js chat UI with approvals and crash recovery.
+- **How it works:** [architecture](architecture.md), [glossary](glossary.md),
+  and the design documents in [docs/design](design/).

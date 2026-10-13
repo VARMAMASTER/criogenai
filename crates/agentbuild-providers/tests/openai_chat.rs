@@ -572,6 +572,15 @@ async fn in_band_error_mid_stream_is_classified() {
 #[tokio::test]
 async fn presets_point_at_the_right_servers() {
     assert_eq!(Endpoint::ollama().base_url, "http://localhost:11434/v1");
+    let gemini = Endpoint::gemini("key");
+    assert_eq!(
+        (gemini.name.as_str(), gemini.base_url.as_str()),
+        (
+            "gemini",
+            "https://generativelanguage.googleapis.com/v1beta/openai"
+        )
+    );
+    assert_eq!(gemini.api_key.as_deref(), Some("key"));
     assert_eq!(Endpoint::ollama().api_key, None);
     assert_eq!(Endpoint::lmstudio().base_url, "http://localhost:1234/v1");
     assert_eq!(Endpoint::openai("k").base_url, "https://api.openai.com/v1");

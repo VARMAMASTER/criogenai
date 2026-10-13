@@ -68,8 +68,12 @@ write our own implementation.
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 415 across the five crates (with `--all-features`), plus the
-  package test.
+- Tests: 428 across the five crates (with `--all-features`; includes the
+  getting-started guide's examples), plus the package test. Release prep:
+  `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`,
+  `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
+  (manual; dry run unless "publish"). Crates still have `publish = false`
+  until the user confirms the names.
 - **Demo app:** `demos/support-chat` (Rust server on AgentBuild + Next.js
   UI; real OpenAI/Gemini models, manual only, not in CI or the workspace).
   Keys live in `~/.agentbuild-keys.env`, never in the repo.
@@ -107,6 +111,7 @@ AGENTBUILD_MODEL=llama3.2 cargo run -p agentbuild-providers --example chat -- "h
 AGENTBUILD_PROTOCOL=anthropic AGENTBUILD_MODEL=claude-haiku-5-5 cargo run -p agentbuild-providers --example chat -- "hi"
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 bash scripts/test-package.sh     # package the crate, use it from a separate project
+cargo deny --all-features check  # advisories, licenses, sources (deny.toml)
 # Every feature against real models, manual only (keys in ~/.agentbuild-keys.env):
 cd tests/live && cargo run       # or: cargo run -- gemini; LIVE_ONLY=approval cargo run
 ```

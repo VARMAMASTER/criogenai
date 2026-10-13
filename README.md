@@ -1,18 +1,22 @@
 # AgentBuild
 
-An AI agent orchestration framework with a Rust execution runtime and
-(planned) first-class Python and TypeScript SDKs.
+An AI agent orchestration framework with a Rust execution runtime.
 
-AgentBuild is for **building AI agents and workflows** in Python or TypeScript,
-on a fast Rust engine. It includes an embeddable **LLM gateway** that is also
-usable on its own. The planned developer API is sketched in
-[docs/design/0007-public-api.md](docs/design/0007-public-api.md).
+Today AgentBuild is a set of **Rust crates** for building AI agents and
+workflows: a workflow engine, a model layer (OpenAI-compatible servers,
+Anthropic, Gemini, Ollama and other self-hosted models), agents with tools
+and human approval, conversations stored in memory or SQLite with crash
+recovery, and OpenTelemetry export.
 
-> **Status: early development.** The Rust crates exist: the execution core,
-> the provider layer (OpenAI-compatible and Anthropic protocols), agents,
-> telemetry, and threads stored in memory or SQLite. There are no Python
-> or TypeScript packages yet and no Postgres backend. Nothing has been
-> published.
+**Planned, not built yet:** Python and TypeScript SDKs on the same Rust
+engine (sketched in [docs/design/0007-public-api.md](docs/design/0007-public-api.md)),
+a Postgres backend, a long-term memory store, and an embeddable LLM
+gateway. There are no performance claims until benchmarks are in this
+repository.
+
+> **Status: early development (0.1, unreleased).** The API may change
+> between 0.x releases. Nothing has been published yet. To get started,
+> read [docs/getting-started.md](docs/getting-started.md).
 
 ## What works today
 
@@ -143,15 +147,17 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 
 | Phase | Scope                                                         | Status      |
 |-------|---------------------------------------------------------------|-------------|
-| 1     | Rust execution core                                           | In progress |
+| 1     | Rust execution core                                           | Done (0.1)  |
 | 2     | Python SDK (PyO3 + maturin)                                   | Planned     |
 | 3     | TypeScript SDK (NAPI-RS)                                      | Planned     |
-| 4     | Agents, tools, providers (loop, tools, OpenAI protocol: done) | In progress |
-| 5     | Persistence (snapshots, threads, SQLite, crash recovery: done) | In progress |
-| 6     | Docs, templates, publishing, benchmarks                       | Planned     |
+| 4     | Agents, tools, model providers (LLM gateway: planned)         | Done (0.1)  |
+| 5     | Persistence (threads, SQLite, crash recovery: done; Postgres, memory store: planned) | In progress |
+| 6     | Docs, publishing, benchmarks                                  | In progress |
 
 ## Documentation
 
+- [Getting started](docs/getting-started.md): a first workflow, agent, approval and conversation
+- [Changelog](CHANGELOG.md), [Contributing](CONTRIBUTING.md), [Security](SECURITY.md)
 - [Architecture](docs/architecture.md): how the system is put together and how a run executes
 - [Execution model](docs/design/0001-execution-model.md): exact runtime semantics
 - [Progress log](docs/progress.md): status, decisions, next steps
@@ -167,6 +173,9 @@ crates/agentbuild-storage/     Threads, checkpoints, storage backends
 crates/agentbuild-telemetry/   OpenTelemetry and Langfuse export
 docs/design/                   Design decisions and contracts
 docs/research/                 Studies of existing frameworks
+demos/support-chat/            Demo app: Rust server + Next.js UI (real models, manual)
+tests/package/                 Uses the packaged crates from a separate project (CI)
+tests/live/                    Every feature against real models (manual)
 ```
 
 ## License

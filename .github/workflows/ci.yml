@@ -36,6 +36,17 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.88
       - run: cargo check --all-targets --all-features
 
+  # Known vulnerabilities (RustSec), licenses and sources of every
+  # dependency, including optional ones (deny.toml).
+  dependencies:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          arguments: --all-features
+          command: check
+
   # Projects outside the workspace that call real models by hand (the live
   # check and the demo server): CI only checks that they build and lint.
   standalone:

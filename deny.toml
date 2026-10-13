@@ -1,0 +1,41 @@
+# cargo-deny: checks every dependency (all features) for known security
+# advisories, licenses we can ship under MIT OR Apache-2.0, and crates
+# from unknown sources. Run: `cargo deny --all-features check` (the flag
+# makes it include optional dependencies such as SQLite).
+
+[graph]
+all-features = true
+
+[advisories]
+# RustSec advisory database. Vulnerabilities always fail; unmaintained or
+# yanked crates are reported for the workspace's own dependency tree.
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+# Permissive licenses only: anything here can ship inside an MIT OR
+# Apache-2.0 project, including in commercial products.
+allow = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-3-Clause",
+    "ISC",
+    "Unicode-3.0",
+    "Zlib",
+    "CDLA-Permissive-2.0",
+]
+confidence-threshold = 0.9
+
+[bans]
+multiple-versions = "allow"
+wildcards = "deny"
+# Path dependencies between our own crates carry versions, so they are not
+# wildcards; private demo and test projects are not checked.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

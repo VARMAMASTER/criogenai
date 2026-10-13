@@ -67,6 +67,12 @@
 #[doc = include_str!("../README.md")]
 struct ReadmeDoctests;
 
+// Compiles and runs every example in docs/getting-started.md (it uses
+// SQLite, so only with the `sqlite` feature; CI tests with all features).
+#[cfg(all(doctest, feature = "sqlite"))]
+#[doc = include_str!("../../../docs/getting-started.md")]
+struct GettingStartedDoctests;
+
 mod agent;
 mod approval;
 mod hooks;

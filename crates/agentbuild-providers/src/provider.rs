@@ -81,6 +81,20 @@ impl Endpoint {
         )
     }
 
+    /// Google Gemini, through its OpenAI-compatible endpoint
+    /// (`https://generativelanguage.googleapis.com/v1beta/openai`). Models
+    /// such as `gemini-2.5-flash`. Tool calls, streaming and JSON output
+    /// work (checked live in `tests/live`).
+    pub fn gemini(api_key: impl Into<String>) -> Self {
+        let mut endpoint = Self::openai_compatible(
+            "gemini",
+            "https://generativelanguage.googleapis.com/v1beta/openai",
+            Some(api_key.into()),
+        );
+        endpoint.capabilities.tools = Some(true);
+        endpoint
+    }
+
     /// Ollama on this machine (`http://localhost:11434/v1`), no key.
     pub fn ollama() -> Self {
         Self::openai_compatible("ollama", "http://localhost:11434/v1", None)

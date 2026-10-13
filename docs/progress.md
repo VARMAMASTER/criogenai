@@ -45,6 +45,37 @@ handoff point for whoever continues the work.
 
 ## Log
 
+### 2026-10-13: release preparation (0.1.0, Rust crates)
+
+- README rewritten to say what is built and what is planned (it claimed a
+  gateway and Python/TypeScript use, and called the engine "fast" without
+  benchmarks). Roadmap rows updated.
+- `docs/getting-started.md`: workflow, agent with a tool (real model and
+  `FakeModel`), approval, SQLite threads, streaming, structured output.
+  Every Rust block runs as a doctest of `agentbuild-agent` (with the
+  `sqlite` feature). Writing it found two traps, now documented: SQLite
+  storage under Tokio's paused clock times out at once; structured output
+  with a model without JSON mode answers through `final_output`.
+- `Endpoint::gemini(key)` preset (verified live).
+- `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`.
+- `deny.toml` + CI job `dependencies` (cargo-deny 0.20 with all features:
+  no advisories, permissive licenses only, crates.io only).
+- docs.rs builds all features; `release.yml` (manual: tests, package
+  test, then optionally publish in dependency order, tag and GitHub
+  release).
+- More tests: randomized delta histories (8,000 changes) and SQLite
+  histories with branches; 8 concurrent writers on two handles of one
+  file (no fork, no lost commit; 24–64 contested races retried per run);
+  20 conversations at once plus 5 simultaneous sends on one thread.
+  Ollama added to the live check (deepseek-r1:1.5b: chat, streaming,
+  threads, SQLite, workflow, deadline pass; tool checks skipped, the model
+  has no tool support).
+- Still waiting on the user: package names (npm `agentbuild` is taken),
+  making the repo public, scope of the first release, name check.
+- Found, not yet fixed: reasoning models served without a reasoning parser
+  (Ollama 0.6, some vLLM/llama.cpp setups) put `<think>…</think>` inside
+  the answer text.
+
 ### 2026-10-13: live check of every feature with real models; fixes it found
 
 - New `tests/live`: a stand-alone program (not in the workspace or CI) that

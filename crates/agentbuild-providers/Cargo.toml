@@ -12,6 +12,10 @@ repository.workspace = true
 # Not published until the package name is confirmed.
 publish = false
 
+# docs.rs documents every feature (e.g. SQLite storage).
+[package.metadata.docs.rs]
+all-features = true
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true
