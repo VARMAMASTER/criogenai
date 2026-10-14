@@ -15,9 +15,13 @@ Threads, checkpoints and storage backends for
   `step`), so an interrupted run continues without repeating finished work
 - backends: in memory, and SQLite (feature `sqlite`), which stores only
   what changed per checkpoint plus a full copy every 25
+- long-term memory: a `MemoryStore` of JSON items under namespaces such as
+  `users/42`, with keyword search, time to live, and deleting everything
+  in a namespace; in memory or in the same SQLite database
 
 **Status:** the contract, the in-memory and SQLite backends, per-step
-saving. Postgres, the long-term memory store and retention are planned.
+saving, the memory store. Postgres, vector search and retention are
+planned.
 
 Most code uses this through agents (`agent.thread("user-42")`, see
 `agentbuild-agent`). The contract underneath:

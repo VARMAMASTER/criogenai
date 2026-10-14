@@ -15,7 +15,7 @@ use agentbuild_providers::{
     ModelRequest, OutputSpec, OutputStrategy, Role, ToolIssue, ToolResultError, ToolSpec,
     ToolStatus, Usage, transcript, validate_tools,
 };
-use agentbuild_storage::Storage;
+use agentbuild_storage::{MemoryStore, Storage};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use tokio::sync::Semaphore;
@@ -23,6 +23,7 @@ use tokio::task::JoinSet;
 
 use crate::approval::{APPROVAL_INTERRUPT, Approval, ApprovalRequest, Decision, check_decisions};
 use crate::hooks::{Hook, HookContext, ModelNext, Outcome, ToolCallRequest, ToolNext};
+use crate::memory::{self, Memory};
 use crate::output::{FINAL_OUTPUT_TOOL, OutputConfig};
 use crate::resilience::{CallEnv, ModelChain};
 use crate::schema;
@@ -264,6 +265,7 @@ pub struct AgentBuilder {
     tool_retry: RetryPolicy,
     app: Option<Arc<dyn std::any::Any + Send + Sync>>,
     storage: Option<Storage>,
+    memory: Option<Memory>,
 }
 
 impl std::fmt::Debug for AgentBuilder {
@@ -399,8 +401,26 @@ impl AgentBuilder {
         self
     }
 
+    /// Gives the agent long-term memory in its storage's memory store
+    /// (design 0008 §2.3): facts recalled before each model call, and the
+    /// `remember`, `forget` and `search_memory` tools. See [`Memory`].
+    pub fn memory(mut self, memory: Memory) -> Self {
+        self.memory = Some(memory);
+        self
+    }
+
     /// Validates the tools and limits and compiles the agent's workflow.
-    pub fn build(self) -> Result<Agent, AgentBuildError> {
+    pub fn build(mut self) -> Result<Agent, AgentBuildError> {
+        let storage = self.storage.take().unwrap_or_default();
+        if let Some(memory) = &self.memory
+            && memory.has_tools()
+        {
+            self.tools.extend(memory.tool_list());
+        }
+        let memory: Option<Arc<(Memory, Arc<dyn MemoryStore>)>> = self
+            .memory
+            .take()
+            .map(|config| Arc::new((config, storage.memory().clone())));
         let specs: Vec<ToolSpec> = self.tools.iter().map(|t| t.spec().clone()).collect();
         validate_tools(&specs).map_err(AgentBuildError::Tools)?;
         if let Some(approval) = &self.approval {
@@ -472,6 +492,7 @@ impl AgentBuilder {
             approval: approval.clone(),
             output: output.clone(),
             hooks: hooks.clone(),
+            memory: memory.clone(),
         }));
         let tools_node = ToolsNode(Arc::new(ToolsInner {
             tools,
@@ -481,6 +502,7 @@ impl AgentBuilder {
             per_tool,
             retry: self.tool_retry,
             app: self.app,
+            memory,
         }));
 
         let mut builder = WorkflowBuilder::new();
@@ -517,7 +539,7 @@ impl AgentBuilder {
             max_steps,
             schemas,
             hooks,
-            storage: self.storage.unwrap_or_default(),
+            storage,
         })
     }
 }
@@ -552,31 +574,68 @@ impl std::fmt::Debug for Agent {
     }
 }
 
-/// What an agent run starts from.
+/// What an agent run starts from: messages, plus optional values for the
+/// run's state (e.g. the user a [`Memory`] is kept for).
 #[derive(Debug, Clone)]
-pub struct AgentInput(Vec<Message>);
+pub struct AgentInput {
+    messages: Vec<Message>,
+    values: Map<String, Value>,
+}
+
+impl AgentInput {
+    /// Sets state key `key` for the run (for a thread: from this turn on).
+    /// Hooks, [`Memory`] and the final state see it; the model does not.
+    /// The agent's own keys (`messages`, `agent`, `hooks`) are refused when
+    /// the run starts (`invalid_input`).
+    pub fn with(mut self, key: impl Into<String>, value: impl Into<Value>) -> Self {
+        self.values.insert(key.into(), value.into());
+        self
+    }
+
+    /// Refuses values for the agent's own keys.
+    pub(crate) fn check(&self) -> Result<(), AgentError> {
+        match self
+            .values
+            .keys()
+            .find(|k| [MESSAGES, AGENT, HOOKS].contains(&k.as_str()))
+        {
+            Some(key) => Err(AgentError::new(
+                "invalid_input",
+                format!("`{key}` belongs to the agent; input values cannot set it"),
+            )),
+            None => Ok(()),
+        }
+    }
+
+    pub(crate) fn into_parts(self) -> (Vec<Message>, Map<String, Value>) {
+        (self.messages, self.values)
+    }
+}
 
 impl From<&str> for AgentInput {
     fn from(text: &str) -> Self {
-        Self(vec![Message::user(text)])
+        vec![Message::user(text)].into()
     }
 }
 
 impl From<String> for AgentInput {
     fn from(text: String) -> Self {
-        Self(vec![Message::user(text)])
+        vec![Message::user(text)].into()
     }
 }
 
 impl From<Message> for AgentInput {
     fn from(message: Message) -> Self {
-        Self(vec![message])
+        vec![message].into()
     }
 }
 
 impl From<Vec<Message>> for AgentInput {
     fn from(messages: Vec<Message>) -> Self {
-        Self(messages)
+        Self {
+            messages,
+            values: Map::new(),
+        }
     }
 }
 
@@ -603,6 +662,7 @@ impl Agent {
             tool_retry: RetryPolicy::new(),
             app: None,
             storage: None,
+            memory: None,
         }
     }
 
@@ -621,13 +681,16 @@ impl Agent {
         &self.storage
     }
 
-    /// The initial state for a run starting from `input`.
+    /// The initial state for a run starting from `input`: its messages
+    /// and values ([`AgentInput::with`]).
     pub fn initial_state(input: impl Into<AgentInput>) -> State {
-        let messages = input.into().0;
-        State::new().with(
+        let (messages, values) = input.into().into_parts();
+        let mut state = State::from(values);
+        state.insert(
             MESSAGES,
             serde_json::to_value(messages).expect("messages serialize"),
-        )
+        );
+        state
     }
 
     /// Run options with the step limit derived from [`Limits`].
@@ -668,6 +731,8 @@ impl Agent {
                 run_error: None,
             });
         }
+        let input = input.into();
+        input.check()?;
         let mut state = Self::initial_state(input);
         if depth > 0 {
             let book = Bookkeeping {
@@ -1062,6 +1127,7 @@ struct ModelInner {
     approval: Option<Arc<Approval>>,
     output: Option<Arc<OutputConfig>>,
     hooks: Arc<[Arc<dyn Hook>]>,
+    memory: Option<Arc<(Memory, Arc<dyn MemoryStore>)>>,
 }
 
 struct ModelNode(Arc<ModelInner>);
@@ -1164,9 +1230,21 @@ async fn model_step(
         }
     }
 
-    let mut request_messages = Vec::with_capacity(transcript.len() + 1);
+    let mut request_messages = Vec::with_capacity(transcript.len() + 2);
     if let Some(instructions) = &inner.instructions {
         request_messages.push(Message::system(instructions.clone()).with_id("msg_instructions"));
+    }
+    // Long-term memory: recalled facts, for this call only (0008 §13).
+    if let Some(scoped) = memory::scope(inner.memory.as_deref(), &state)?
+        && let Some((config, _)) = inner.memory.as_deref()
+        && let Some((message, keys)) = config.recall_message(&scoped, &transcript).await?
+    {
+        // Keys only: values may be personal data.
+        events.emit(
+            "memory_recalled",
+            json!({"namespace": scoped.namespace().path(), "keys": keys}),
+        );
+        request_messages.push(message);
     }
     request_messages.extend(transcript.iter().cloned());
     let mut tools = inner.specs.clone();
@@ -1443,6 +1521,7 @@ struct ToolsInner {
     per_tool: HashMap<String, Arc<Semaphore>>,
     retry: RetryPolicy,
     app: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    memory: Option<Arc<(Memory, Arc<dyn MemoryStore>)>>,
 }
 
 /// A finished call as saved in the tools task's memo, so a retried step
@@ -1576,6 +1655,7 @@ async fn tools_step(
         .collect();
 
     let memo = ctx.memo().clone();
+    let memory = memory::scope(inner.memory.as_deref(), &state)?;
     let limits = &inner.limits;
     let mut direct_outputs: Vec<(usize, Value)> = Vec::new();
     let mut state_writes: Vec<(usize, Map<String, Value>)> = Vec::new();
@@ -1791,6 +1871,7 @@ async fn tools_step(
             events: events.clone(),
             depth: book.depth,
             app: inner.app.clone(),
+            memory: memory.clone(),
         };
         let timeout = call
             .tool

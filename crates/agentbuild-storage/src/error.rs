@@ -17,6 +17,9 @@ pub enum StorageErrorKind {
     Corrupt,
     /// The database was written by a newer, incompatible version.
     Incompatible,
+    /// A value, key or namespace that storage does not accept (for example
+    /// a memory item over the size limit).
+    InvalidValue,
 }
 
 impl StorageErrorKind {
@@ -29,6 +32,7 @@ impl StorageErrorKind {
             Self::CheckpointNotFound => "checkpoint_not_found",
             Self::Corrupt => "storage_corrupt",
             Self::Incompatible => "storage_incompatible",
+            Self::InvalidValue => "invalid_value",
         }
     }
 }

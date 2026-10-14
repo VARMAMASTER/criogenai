@@ -278,6 +278,56 @@ assert_eq!(result.output, Some(json!({"city": "Paris", "celsius": 17})));
 # });
 ```
 
+## 7. Remember users across conversations
+
+Threads remember one conversation. **Long-term memory** keeps facts about a
+user (or a patient, a customer, any namespace) across all of their
+conversations, in the same storage. Each run works in one namespace,
+chosen from a value you pass with the input; a run without it fails rather
+than seeing someone else's facts.
+
+```rust
+use std::sync::Arc;
+use std::time::Duration;
+
+use agentbuild_agent::{Agent, AgentInput, Memory, REMEMBER_TOOL};
+use agentbuild_providers::{FakeModel, FakeReply};
+use agentbuild_storage::{Namespace, Storage};
+use serde_json::json;
+
+# tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
+let storage = Storage::connect("sqlite::memory:").await.unwrap();
+let model = Arc::new(
+    FakeModel::with_delay(Duration::ZERO, Duration::ZERO)
+        // The model saves a fact with the `remember` tool...
+        .then(FakeReply::tool_call(REMEMBER_TOOL, json!({"key": "diet", "value": "vegetarian"})))
+        .then(FakeReply::text("Noted!"))
+        .then(FakeReply::text("How about a lentil curry?")),
+);
+let agent = Agent::builder_shared(model.clone())
+    .storage(storage.clone())
+    // Memory per user: users/<user_id>.
+    .memory(Memory::by_state("user_id", Namespace::parse("users").unwrap()))
+    .build()
+    .unwrap();
+
+agent.thread("monday").send(AgentInput::from("I'm vegetarian").with("user_id", "42")).await.unwrap();
+// ...and a later conversation recalls it before the model is called.
+agent.thread("friday").send(AgentInput::from("Dinner ideas for my diet?").with("user_id", "42")).await.unwrap();
+assert!(model.requests()[2].messages[0].text().contains("- diet: vegetarian"));
+
+// Apps read and write memory directly too, e.g. to delete everything about
+// a user.
+let user = Namespace::parse("users/42").unwrap();
+assert_eq!(storage.memory().delete_namespace(&user).await.unwrap(), 1);
+# });
+```
+
+Recall adds the best-matching facts (then the newest) to the model request
+only; they are not stored in the transcript. Search is by keywords for
+now. `Memory::shared(namespace)` gives every run the same memory, and
+`.recall(0)` or `.tools(false)` turn either half off.
+
 ## Where next
 
 - **More agent features:** hooks around every model and tool call, limits

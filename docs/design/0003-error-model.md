@@ -346,7 +346,9 @@ and checked in CI, so docs and SDK mappings can't drift.
 | `node_timeout` | developer | core: node attempt exceeded its policy timeout | implemented |
 | `deadline_exceeded` | policy | core: run deadline (also cuts backoff short) | implemented |
 | `cancelled` | cancellation | core: `CancelToken::cancel` (an outcome in the SDKs, `RunError` in Rust) | implemented |
-| `invalid_value` | developer | core: a write a reducer cannot apply; bridge: JSON conversion | implemented (core) |
+| `invalid_value` | developer | core: a write a reducer cannot apply; storage: a memory key, value or namespace it does not accept (0008 §13); bridge: JSON conversion | implemented (core, storage) |
+| `invalid_state` | developer | agent: the state is not an agent's (bad `messages`), or `Memory` cannot resolve the run's namespace (0008 §13) | implemented |
+| `invalid_input` | developer | agent: `AgentInput::with` names one of the agent's own keys (0008 §13) | implemented |
 | `missing_goto` | developer | core: goto-only node returned no target | implemented |
 | `resume_invalid` | developer | core: bad resume input | implemented |
 | `workflow_mismatch` | developer | core: snapshot from a different graph | implemented |

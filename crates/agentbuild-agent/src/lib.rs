@@ -33,6 +33,10 @@
 //!   storage (design 0008): [`Thread::send`], [`Thread::approve`],
 //!   [`Thread::history`], [`Thread::rewind`].
 //!
+//! - [`Memory`] gives an agent long-term memory: facts kept per user (or
+//!   any namespace) across threads, recalled before each model call, with
+//!   `remember` / `forget` / `search_memory` tools.
+//!
 //! **Status:** everything in design 0004 is built, except per-run app
 //! context and forwarding nested agents' events (planned with the SDKs).
 //!
@@ -76,6 +80,7 @@ struct GettingStartedDoctests;
 mod agent;
 mod approval;
 mod hooks;
+mod memory;
 mod nested;
 mod output;
 mod resilience;
@@ -94,6 +99,7 @@ pub use approval::{
 pub use hooks::{
     Hook, HookAction, HookContext, HookError, ModelNext, Outcome, ToolCallRequest, ToolNext,
 };
+pub use memory::{FORGET_TOOL, Memory, REMEMBER_TOOL, SEARCH_MEMORY_TOOL};
 pub use nested::{AGENT_APPROVAL_INTERRUPT, AgentNode, AgentTool};
 pub use output::FINAL_OUTPUT_TOOL;
 pub use schema::validate as validate_arguments;

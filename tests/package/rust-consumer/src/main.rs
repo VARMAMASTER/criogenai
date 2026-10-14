@@ -34,6 +34,7 @@ async fn main() {
     agents_as_nodes_and_tools().await;
     threads_keep_conversations().await;
     sqlite_threads_survive_a_restart().await;
+    long_term_memory_per_user().await;
     println!("package smoke test: ok");
 }
 
@@ -560,4 +561,55 @@ async fn sqlite_threads_survive_a_restart() {
         let _ = std::fs::remove_file(file);
     }
     println!("  threads in SQLite survive a restart: ok");
+}
+
+async fn long_term_memory_per_user() {
+    use agentbuild_agent::{Agent, AgentInput, Memory, REMEMBER_TOOL};
+    use agentbuild_storage::{Namespace, SearchQuery, SqliteMemoryStore, Storage};
+
+    let storage = Storage::in_memory()
+        .with_memory(SqliteMemoryStore::connect("sqlite::memory:").await.expect("open"));
+    let users = Namespace::parse("users").expect("valid");
+    let model = Arc::new(
+        FakeModel::with_delay(Duration::ZERO, Duration::ZERO)
+            .then(FakeReply::tool_call(
+                REMEMBER_TOOL,
+                json!({"key": "diet", "value": "vegetarian"}),
+            ))
+            .then(FakeReply::text("Noted."))
+            .then(FakeReply::text("Try the lentil soup.")),
+    );
+    let agent = Agent::builder_shared(model.clone())
+        .storage(storage.clone())
+        .memory(Memory::by_state("user_id", users.clone()))
+        .build()
+        .expect("valid agent");
+    agent
+        .run(AgentInput::from("I am vegetarian").with("user_id", "42"))
+        .await
+        .expect("run");
+    agent
+        .run(AgentInput::from("What should I eat for my diet?").with("user_id", "42"))
+        .await
+        .expect("run");
+    let recalled = &model.requests()[2].messages[0];
+    assert!(recalled.text().contains("- diet: vegetarian"));
+    // No user, no memory: the run fails instead of sharing one.
+    assert_eq!(agent.run("hi").await.unwrap_err().code, "invalid_state");
+
+    let found = storage
+        .memory()
+        .search(&users, &SearchQuery::new().text("vegetarian"))
+        .await
+        .expect("search");
+    assert_eq!(found.len(), 1);
+    assert_eq!(
+        storage
+            .memory()
+            .delete_namespace(&users.child("42").expect("valid"))
+            .await
+            .expect("delete"),
+        1
+    );
+    println!("  long-term memory per user (recall, tools, SQLite store): ok");
 }

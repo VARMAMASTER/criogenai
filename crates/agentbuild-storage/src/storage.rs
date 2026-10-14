@@ -8,6 +8,7 @@ use tokio::sync::OwnedMutexGuard;
 use crate::checkpoint::Checkpointer;
 use crate::error::{StorageError, StorageErrorKind};
 use crate::memory::InMemoryCheckpointer;
+use crate::store::{InMemoryStore, MemoryStore};
 
 /// What a second operation on a busy thread does (design 0008 §5.2).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -37,11 +38,12 @@ pub enum Durability {
     Exit,
 }
 
-/// A checkpointer plus the rules for using threads. Cheap to clone; clones
-/// share the checkpointer and the thread leases.
+/// A checkpointer and a memory store, plus the rules for using threads.
+/// Cheap to clone; clones share the backends and the thread leases.
 #[derive(Clone)]
 pub struct Storage {
     checkpointer: Arc<dyn Checkpointer>,
+    memory: Arc<dyn MemoryStore>,
     leases: Arc<Leases>,
     on_busy: OnBusy,
     busy_timeout: Duration,
@@ -65,26 +67,33 @@ impl Default for Storage {
 }
 
 impl Storage {
-    /// Storage in process memory ([`InMemoryCheckpointer`]).
+    /// Storage in process memory ([`InMemoryCheckpointer`],
+    /// [`InMemoryStore`]).
     pub fn in_memory() -> Self {
         Self::new(InMemoryCheckpointer::new())
     }
 
-    /// Storage on `checkpointer`.
+    /// Storage on `checkpointer`, with an in-memory memory store (replace
+    /// it with [`with_memory`](Self::with_memory)).
     pub fn new(checkpointer: impl Checkpointer) -> Self {
         Self::shared(Arc::new(checkpointer))
     }
 
     /// Storage at `url`: `memory:` (in process memory), or with the
     /// `sqlite` feature `sqlite://path/to/file.db` / `sqlite::memory:`.
-    /// Creates the database and its tables if needed.
+    /// Creates the database and its tables if needed. Threads and memory
+    /// share the database.
     pub async fn connect(url: &str) -> Result<Self, StorageError> {
         if url == "memory:" {
             return Ok(Self::in_memory());
         }
         if url.starts_with("sqlite:") {
             #[cfg(feature = "sqlite")]
-            return Ok(Self::new(crate::SqliteCheckpointer::connect(url).await?));
+            return {
+                let checkpointer = crate::SqliteCheckpointer::connect(url).await?;
+                let memory = checkpointer.memory_store();
+                Ok(Self::new(checkpointer).with_memory(memory))
+            };
             #[cfg(not(feature = "sqlite"))]
             return Err(StorageError::new(
                 StorageErrorKind::Unavailable,
@@ -101,11 +110,23 @@ impl Storage {
     pub fn shared(checkpointer: Arc<dyn Checkpointer>) -> Self {
         Self {
             checkpointer,
+            memory: Arc::new(InMemoryStore::new()),
             leases: Arc::default(),
             on_busy: OnBusy::default(),
             busy_timeout: Duration::from_secs(60),
             durability: Durability::default(),
         }
+    }
+
+    /// Uses `store` for long-term memory.
+    pub fn with_memory(self, store: impl MemoryStore) -> Self {
+        self.with_shared_memory(Arc::new(store))
+    }
+
+    /// [`with_memory`](Self::with_memory) with a shared store.
+    pub fn with_shared_memory(mut self, store: Arc<dyn MemoryStore>) -> Self {
+        self.memory = store;
+        self
     }
 
     /// Sets what an operation on a busy thread does. Default [`OnBusy::Wait`].
@@ -134,6 +155,11 @@ impl Storage {
     /// The checkpointer.
     pub fn checkpointer(&self) -> &Arc<dyn Checkpointer> {
         &self.checkpointer
+    }
+
+    /// The long-term memory store.
+    pub fn memory(&self) -> &Arc<dyn MemoryStore> {
+        &self.memory
     }
 
     /// Takes the thread for one operation, following

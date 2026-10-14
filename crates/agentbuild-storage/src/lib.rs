@@ -4,17 +4,19 @@
 //! share state. Each run ends in a [`Checkpoint`] (plain JSON) written
 //! through a [`Checkpointer`] with compare-and-set, so two writers cannot
 //! silently fork a thread. [`Storage`] bundles a checkpointer with the
-//! rules for busy threads ([`OnBusy`]).
+//! rules for busy threads ([`OnBusy`]), and a [`MemoryStore`] for
+//! long-term memory: facts that outlive a thread, kept under a
+//! [`Namespace`] such as `users/42`.
 //!
 //! Agents use this through `agentbuild_agent::Agent::thread`.
 //!
 //! Runs are saved as they go ([`Durability::Step`], via [`ThreadWriter`]),
 //! so a run interrupted by a crash continues where it stopped.
 //!
-//! **Status:** steps 1–2 of design 0008: the contract, the in-memory
-//! backend and, with the `sqlite` feature, `SqliteCheckpointer` (delta
-//! checkpoints with keyframes, migrations). Postgres, the memory store and
-//! retention are planned.
+//! **Status:** steps 1–3 of design 0008: the contract, the in-memory
+//! backends and, with the `sqlite` feature, `SqliteCheckpointer` (delta
+//! checkpoints with keyframes, migrations) and `SqliteMemoryStore`
+//! (keyword search). Postgres, vector search and retention are planned.
 //!
 //! ```
 //! use agentbuild_core::State;
@@ -42,6 +44,7 @@ mod memory;
 #[cfg(feature = "sqlite")]
 mod sqlite;
 mod storage;
+mod store;
 mod writer;
 
 pub use checkpoint::{
@@ -50,8 +53,12 @@ pub use checkpoint::{
 pub use error::{StorageError, StorageErrorKind};
 pub use memory::InMemoryCheckpointer;
 #[cfg(feature = "sqlite")]
-pub use sqlite::SqliteCheckpointer;
+pub use sqlite::{SqliteCheckpointer, SqliteMemoryStore};
 pub use storage::{Durability, OnBusy, Storage, ThreadLease};
+pub use store::{
+    InMemoryStore, MAX_KEY_BYTES, MAX_VALUE_BYTES, MemoryItem, MemoryStore, Namespace,
+    ScopedMemory, SearchQuery,
+};
 pub use writer::ThreadWriter;
 
 // Compiles and runs the README's example with the doctests.

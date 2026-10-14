@@ -1,5 +1,10 @@
-//! SQLite storage (design 0008 §4, §12): delta checkpoints with keyframes,
-//! compare-and-set commits and automatic migrations.
+//! SQLite storage (design 0008 §4, §12, §13): delta checkpoints with
+//! keyframes, compare-and-set commits, automatic migrations, and the memory
+//! store.
+
+mod memory;
+
+pub use memory::SqliteMemoryStore;
 
 use std::collections::HashMap;
 use std::str::FromStr;
@@ -54,6 +59,20 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX agentbuild_pending_writes_checkpoint
         ON agentbuild_pending_writes (checkpoint_id, seq);",
+    // 2: long-term memory. `search_text` holds the item's words as
+    // ` word word … ` for keyword search.
+    "CREATE TABLE agentbuild_memory (
+        namespace TEXT NOT NULL,
+        key TEXT NOT NULL,
+        value TEXT NOT NULL,
+        search_text TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL,
+        updated_at_ms INTEGER NOT NULL,
+        expires_at_ms INTEGER,
+        PRIMARY KEY (namespace, key)
+    );
+    CREATE INDEX agentbuild_memory_expires
+        ON agentbuild_memory (expires_at_ms) WHERE expires_at_ms IS NOT NULL",
 ];
 
 /// Default for [`SqliteCheckpointer::keyframe_interval`].
@@ -152,6 +171,11 @@ impl SqliteCheckpointer {
     pub fn keyframe_interval(mut self, interval: u32) -> Self {
         self.keyframe_interval = interval.max(1);
         self
+    }
+
+    /// The memory store in the same database (same connections).
+    pub fn memory_store(&self) -> SqliteMemoryStore {
+        SqliteMemoryStore::new(self.pool.clone())
     }
 
     /// The schema version the database is at.

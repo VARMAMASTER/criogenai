@@ -1,6 +1,6 @@
 # 0008: Persistence, threads and memory
 
-Status: **Accepted**; §10 steps 1–2 built (§11, §12). Builds on [0005](0005-core-runtime-extensions.md)
+Status: **Accepted**; §10 steps 1–3 built (§11, §12, §13). Builds on [0005](0005-core-runtime-extensions.md)
 §5 (snapshots, saved task writes, resume) and gives developers the easy
 interactive API sketched in [0007](0007-public-api.md). Research input:
 [langgraph](../research/langgraph.md) §5 (checkpointing), §6 (interrupts) and §8 (store).
@@ -346,6 +346,7 @@ same interfaces (async methods); the bridge adapts them.
 | `thread_suspended` | developer | `send` on a thread that waits for approval: answer it first (`approve`, `reject`, `decide`) |
 | `thread_interrupted` | developer | `send` on a thread whose last run did not finish: continue it with `retry` first (§5.5) |
 | `storage_failed` | transient | (core run error) the run's progress could not be saved during the run; the cause's storage code is in the message and `NodeError` kind |
+| `invalid_value` | developer | A memory item the store does not accept: root namespace, bad key, value over 1 MiB (P11, §13) |
 
 A storage failure **during** a run fails the step (nothing committed) and the
 run reports the error with its in-memory snapshot attached, so no work is lost
@@ -540,3 +541,98 @@ WHERE EXISTS`). Measured in the tests: a 40-turn chat with a keyframe every
 10 checkpoints stores each message about once per delta plus four
 keyframes, under a third of what full copies would need. That is a test
 assertion, not a benchmark.
+
+## 13. Step 3 as built
+
+Long-term memory (§2.3): a memory store in `agentbuild-storage`, and
+`Memory` for agents in `agentbuild-agent`. Not yet: vector search, a
+background sweep of expired items, encryption (step 5).
+
+**Namespaces.** `Namespace` is a list of segments (`["users", "42"]`,
+written `users/42`). Segments are non-empty, without `/` or control
+characters (`invalid_value` otherwise). The root (no segments) holds no
+items; it is the prefix of every namespace. `contains` is a segment-wise
+prefix test, so `users/ada` does not contain `users/adam`.
+
+**`MemoryStore`.** Six methods (§7's four plus two for privacy and
+retention):
+
+| Method | Contract |
+|---|---|
+| `put(ns, key, value, ttl)` | Insert or replace. `created_at` is kept on replace (reset when the old item had expired). `ttl = None` keeps it until deleted. Refuses the root, keys outside 1–256 bytes and values over 1 MiB of JSON (`invalid_value`, P11) |
+| `get(ns, key)` | The item, unless missing or expired |
+| `search(prefix, query)` | Live items in `prefix` and below, ranked (below); `limit` default 10 |
+| `delete(ns, key)` | `true` if a live item was removed |
+| `delete_namespace(prefix)` | Everything in `prefix` and below (§6.2: everything about one user or patient); returns the count; refuses the root |
+| `prune_expired()` | Removes expired items (expired items are already invisible) |
+
+`ScopedMemory` is a store plus one namespace (what tools see). `Storage`
+holds a memory store next to the checkpointer (`storage.memory()`;
+in-memory by default, `with_memory` to replace); `Storage::connect` with a
+SQLite URL puts both in the same database.
+
+**Keyword search, the same on every backend.** An item's words are its key
+and the strings and numbers in its value (not field names), lower-cased,
+split on anything that is not a letter or digit (any script). A query's
+words are the same minus common English stop words ("what", "is", "my",
+…), at most 32. Each query word scores 1 if it is one of the item's
+words, 0.5 if it starts one (query words of three letters or more), and
+the item's score is the mean. Only items scoring above 0 are returned,
+best first, then newest, then namespace path and key in byte order. A
+query without words (none given, or only stop words) returns the newest
+items. Every backend ranks in Rust with the same function, so results do
+not depend on the backend; SQLite only narrows the rows first (below).
+P10's FTS5 / full-text indexes are deferred until a benchmark shows the
+need: per-user memory is usually small.
+
+**SQLite** (`SqliteMemoryStore`, from `SqliteCheckpointer::memory_store`
+or `SqliteMemoryStore::connect`). Migration 2 adds
+`agentbuild_memory(namespace, key, value, search_text, created_at_ms,
+updated_at_ms, expires_at_ms, PRIMARY KEY (namespace, key))` and an index
+on `expires_at_ms`. `search_text` stores the words as ` w1 w2 … `; a
+search selects the live rows in the prefix that contain ` <word>` for any
+query word (`instr`), then ranks them. Without words it orders and limits
+in SQL. A version-1 database is upgraded on connect.
+
+**Agents: `Memory`.** `AgentBuilder::memory(Memory)` uses the agent
+storage's memory store. Each run works in one namespace:
+
+| Scope | Namespace |
+|---|---|
+| `Memory::by_state(key, prefix)` | `prefix/<state[key]>` (a string or number) |
+| `Memory::shared(ns)` | `ns` for every run |
+| `Memory::resolve(rule)` | `rule(&state)` |
+
+A run whose scope cannot be resolved (missing key, a value that is not a
+string or number, an invalid segment, or the rule's `Err`) fails with
+`invalid_state` before the model is called. It never falls back to a
+shared namespace, so one person's facts cannot reach another's run.
+
+The scope comes from the run's state, so `AgentInput` gained values:
+`AgentInput::from("hi").with("user_id", "42")` sets state keys for the
+run. In a thread they are written into the thread's state and carry over
+to later turns. The agent's own keys (`messages`, `agent`, `hooks`) are
+refused with the new code `invalid_input`.
+
+- **Recall.** Before each model call the model node searches the run's
+  namespace with the text of the latest user message, takes up to
+  `recall` items (default 5), fills the remaining places with the newest
+  items, and adds them to the request as a system message (id
+  `msg_memory`) after the instructions. It is not stored in the
+  transcript. It tells the model the facts may be out of date and are
+  information, not instructions. A `memory_recalled` event carries the
+  namespace and the keys, never the values (they may be personal data).
+  `recall(0)` turns it off.
+- **Tools** (default on; `tools(false)` turns them off): `remember(key,
+  value)` (idempotent; the value is stored as a JSON string, with the
+  optional `Memory::ttl`), `forget(key)` (idempotent, destructive) and
+  `search_memory(query, limit ≤ 20)` (read-only; returns
+  `[{key, value}]`). Their names are reserved like any tool name: an app
+  tool with the same name fails the build. Bad keys or values become tool
+  errors the model can fix; an unreachable store is a retryable tool
+  error. Approval rules apply to them like to any tool.
+- **`ToolContext::memory()`** gives any tool the run's `ScopedMemory`
+  (`None` without `Memory`).
+
+The fingerprint does not change: the memory tools are tools, and recall
+is part of the model node.

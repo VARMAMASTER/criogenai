@@ -10,8 +10,8 @@ recovery, and OpenTelemetry export.
 
 **Planned, not built yet:** Python and TypeScript SDKs on the same Rust
 engine (sketched in [docs/design/0007-public-api.md](docs/design/0007-public-api.md)),
-a Postgres backend, a long-term memory store, and an embeddable LLM
-gateway. There are no performance claims until benchmarks are in this
+a Postgres backend, semantic (vector) memory search, and an embeddable
+LLM gateway. There are no performance claims until benchmarks are in this
 repository.
 
 > **Status: early development (0.1, unreleased).** The API may change
@@ -78,7 +78,13 @@ Storage is in memory by default or a SQLite file (feature `sqlite`:
 and every tool call, so a run killed mid-way continues with
 `thread.retry()` without repeating finished tool calls. SQLite stores only
 what changed per step (plus a full copy every 25), so a long chat stores
-each message about once. Postgres and long-term memory are next.
+each message about once. Postgres is next.
+
+Agents also get **long-term memory**: facts kept per user (or per patient,
+or any namespace) across conversations, in the same storage.
+`Memory::by_state("user_id", users)` recalls matching facts before each
+model call and gives the model `remember` / `forget` / `search_memory`
+tools. Search is by keywords for now; semantic search is planned.
 
 The `agentbuild-telemetry` crate sends every run to
 [Langfuse](https://langfuse.com) or any OpenTelemetry backend: runs are
@@ -151,7 +157,7 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 | 2     | Python SDK (PyO3 + maturin)                                   | Planned     |
 | 3     | TypeScript SDK (NAPI-RS)                                      | Planned     |
 | 4     | Agents, tools, model providers (LLM gateway: planned)         | Done (0.1)  |
-| 5     | Persistence (threads, SQLite, crash recovery: done; Postgres, memory store: planned) | In progress |
+| 5     | Persistence (threads, SQLite, crash recovery, long-term memory: done; Postgres, vector search: planned) | In progress |
 | 6     | Docs, publishing, benchmarks                                  | In progress |
 
 ## Documentation

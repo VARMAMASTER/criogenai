@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use agentbuild_core::{CancelToken, EventSink};
 use agentbuild_providers::{BoxFuture, ContentBlock, ToolSpec};
+use agentbuild_storage::ScopedMemory;
 use serde_json::{Map, Value};
 
 /// A tool an agent can call. Most code uses [`tool_fn`].
@@ -37,6 +38,7 @@ pub struct ToolContext {
     /// How deep this call is in agents calling agents (0 = top level).
     pub(crate) depth: u32,
     pub(crate) app: Option<Arc<dyn Any + Send + Sync>>,
+    pub(crate) memory: Option<ScopedMemory>,
 }
 
 impl ToolContext {
@@ -50,6 +52,12 @@ impl ToolContext {
     /// (a database client, an HTTP client, settings), if they are a `T`.
     pub fn context<T: Any + Send + Sync>(&self) -> Option<&T> {
         self.app.as_deref().and_then(|app| app.downcast_ref::<T>())
+    }
+
+    /// The run's long-term memory (its namespace only), if the agent has
+    /// [`Memory`](crate::Memory).
+    pub fn memory(&self) -> Option<&ScopedMemory> {
+        self.memory.as_ref()
     }
 
     /// Fires when the run is cancelled or the call times out.

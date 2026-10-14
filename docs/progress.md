@@ -22,7 +22,9 @@ handoff point for whoever continues the work.
    per-step saving and crash recovery, SQLite with delta + keyframe
    checkpoints and migrations).
    Demo app `demos/support-chat` built and tested by hand with real models.
-   **Next:** the memory store (step 3) and Postgres (step 4).
+   Persistence step 3 (0008 §13): memory store and agent `Memory`.
+   **Next:** Postgres (step 4), then vector search, retention and
+   encryption (step 5).
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
    install the built wheel in a clean venv.
@@ -44,6 +46,39 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-14: long-term memory (0008 step 3)
+
+- `agentbuild-storage`: `MemoryStore` (put / get / search / delete /
+  `delete_namespace` / `prune_expired`), `Namespace` (segment paths,
+  checked), `MemoryItem`, `SearchQuery`, `ScopedMemory`, `InMemoryStore`,
+  `SqliteMemoryStore` (migration 2, `agentbuild_memory`; same database as
+  threads via `Storage::connect`). `Storage::memory()` / `with_memory`.
+  New storage kind `invalid_value` (root namespace, bad key, value over
+  1 MiB).
+- Keyword search ranks in Rust with one function for every backend
+  (whole word 1, word start 0.5, mean over the query's words minus stop
+  words; ties newest, then path and key), so results do not depend on the
+  backend. SQLite only narrows rows with `instr`. FTS5 deferred until a
+  benchmark needs it.
+- `agentbuild-agent`: `Memory` (`by_state`, `shared`, `resolve`;
+  `recall(n)` default 5, `tools(bool)`, `ttl`), `AgentBuilder::memory`,
+  `ToolContext::memory()`, tools `remember` / `forget` / `search_memory`.
+  Recall goes into the request as a system message `msg_memory` after the
+  instructions, never into the transcript; the `memory_recalled` event
+  has keys only (no values: personal data). A run whose namespace cannot
+  be resolved fails with `invalid_state` before any model call; there is
+  no fallback to a shared namespace (Axon: one patient's facts must never
+  reach another's run).
+- `AgentInput::with(key, value)`: run state values (new; needed so the
+  scope can come from the run). In threads they carry over to later
+  turns. The agent's own keys are refused (`invalid_input`, new code in
+  0003).
+- Tests: 5 storage contract/unit tests (both backends, upgrade from a
+  version-1 database), 4 store unit tests, 9 agent tests (recall order and
+  isolation per user, limits and switches, missing scope, the tools with a
+  bad key, TTL, threads, reserved keys, custom tools, SQLite across
+  restarts), the `Memory` doctest. Package consumer extended.
 
 ### 2026-10-14: CI runs locally
 

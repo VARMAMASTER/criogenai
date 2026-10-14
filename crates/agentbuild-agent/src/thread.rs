@@ -438,6 +438,8 @@ impl Thread {
 /// The state a new turn starts from: the stored state without the last
 /// run's bookkeeping, plus the input messages.
 fn next_turn(state: State, input: AgentInput) -> Result<State, AgentError> {
+    input.check()?;
+    let (new_messages, values) = input.into_parts();
     let mut map = state.into_map();
     map.remove(AGENT);
     map.remove(HOOKS);
@@ -451,9 +453,10 @@ fn next_turn(state: State, input: AgentInput) -> Result<State, AgentError> {
             ));
         }
     };
-    if let Some(Value::Array(new)) = Agent::initial_state(input).get(MESSAGES) {
+    if let Some(Value::Array(new)) = Agent::initial_state(new_messages).get(MESSAGES) {
         messages.extend(new.iter().cloned());
     }
+    map.extend(values);
     map.insert(MESSAGES.to_string(), Value::Array(messages));
     Ok(State::from(map))
 }

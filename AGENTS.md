@@ -57,19 +57,26 @@ write our own implementation.
   The 0004 agent list is complete. Threads (0008 §11): `agent.thread(id)`
   with `send`, `approve`/`reject`/`decide`, `retry`, `cancel`, `history`,
   `rewind`, `delete`.
-- **Implemented in `agentbuild-storage` (0008 steps 1–2):** `Checkpoint`,
+- **Implemented in `agentbuild-storage` (0008 steps 1–3):** `Checkpoint`,
   the `Checkpointer` trait (compare-and-set commit, `put_pending`),
   `InMemoryCheckpointer`, `SqliteCheckpointer` (feature `sqlite`, sqlx
   0.8: delta + keyframe checkpoints, migrations), `ThreadWriter`,
   `Storage` with per-thread leases, `OnBusy` (wait, reject, interrupt) and
   `Durability` (`Step` default: saved per step and per tool call via core's
   `Persister` / `RunOptions::persist`; `Exit`). Crash recovery:
-  `thread.retry()` on an `in_progress` head.
+  `thread.retry()` on an `in_progress` head. Long-term memory (0008
+  §13): `MemoryStore` (`InMemoryStore`, `SqliteMemoryStore`; keyword
+  search ranked the same on every backend, TTL, `delete_namespace`),
+  `Namespace`, `ScopedMemory`, `Storage::memory()`. Agents:
+  `AgentBuilder::memory(Memory::by_state("user_id", users))` recalls
+  facts before each model call and adds `remember` / `forget` /
+  `search_memory`; `AgentInput::with(key, value)` sets run state;
+  `ToolContext::memory()`.
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 435 across the five crates (with `--all-features`; includes the
+- Tests: 455 across the five crates (with `--all-features`; includes the
   getting-started guide's examples), plus the package test. Release prep:
   `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`,
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
@@ -78,13 +85,13 @@ write our own implementation.
 - **Demo app:** `demos/support-chat` (Rust server on AgentBuild + Next.js
   UI; real OpenAI/Gemini models, manual only, not in CI or the workspace).
   Keys live in `~/.agentbuild-keys.env`, never in the repo.
-- **Next:** persistence step 3 (memory store + agent `Memory`), step 4
-  (Postgres); then the Python SDK (Phase 2). See `docs/progress.md`. The user will build their
+- **Next:** persistence step 4 (Postgres), step 5 (vector search,
+  retention, encryption); then the Python SDK (Phase 2). See `docs/progress.md`. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
 - **Not started:** gateway, Python SDK, TypeScript SDK, the Postgres
-  backend, the long-term memory store. Do not describe
+  backend, vector (semantic) memory search, encryption at rest. Do not describe
   these as existing anywhere.
 
 ## Commands

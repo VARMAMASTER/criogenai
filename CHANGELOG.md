@@ -58,6 +58,10 @@ First release, planned as 0.1.0 (Rust crates only).
 - Threads (`agent.thread(id)`): conversations kept in storage, with
   approvals that wait in storage, `retry` after failures or crashes,
   history and rewind.
+- Long-term memory (`Memory`): facts kept per user or any namespace
+  across conversations, recalled before each model call, with `remember`,
+  `forget` and `search_memory` tools; a run without its user fails
+  instead of sharing memory. `AgentInput::with` sets run state values.
 
 ### agentbuild-storage: where threads live
 
@@ -66,6 +70,9 @@ First release, planned as 0.1.0 (Rust crates only).
   `exit`.
 - In-memory backend; SQLite backend (feature `sqlite`) with delta +
   keyframe checkpoints, automatic migrations and crash recovery.
+- Memory store: JSON items under namespaces, keyword search ranked the
+  same on every backend, time to live, deleting a whole namespace; in
+  memory or in the same SQLite database.
 
 ### agentbuild-telemetry: tracing
 

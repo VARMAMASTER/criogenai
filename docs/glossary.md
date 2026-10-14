@@ -114,6 +114,10 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Durability** | When a run is written: `step` (before every step and after every task; a crash loses at most unfinished tasks) or `exit` (once per call). | `Durability`, `Persister`, `RunOptions::persist`, `ThreadWriter` |
 | **Keyframe / delta** | How SQL backends store checkpoints: a delta holds only the changes since the parent (`set`, `append`, `remove`); a keyframe the full state, every 25 checkpoints. | `agentbuild_storage::delta` |
 | **Interrupted run** | A thread whose head is `in_progress` while no process runs it (e.g. after a crash). `retry` continues it; `send` refuses with `thread_interrupted`. | `Thread::retry` |
+| **Long-term memory** | Facts that outlive a thread (a user's preferences, a patient's allergies), kept in a memory store under a namespace. Recalled before model calls; written by apps or the model's `remember` tool (design 0008 §13). | `MemoryStore`, `MemoryItem`, `Memory` |
+| **Namespace** | Where memory items live: a path of segments such as `users/42`. A search covers a namespace and those inside it. | `Namespace`, `ScopedMemory` |
+| **Recall** | Adding the run's best-matching (then newest) memory items to a model request as a system message, without storing them in the transcript. | `Memory::recall` |
+| **Input values** | State keys set for one run (or a thread from that turn on) next to the input messages, e.g. the user a memory is kept for. | `AgentInput::with` |
 | **Rewind** | Making an older checkpoint the thread's head again (a new `fork` checkpoint); later steps run again. | `Thread::rewind` |
 | **Gateway** | The HTTP server that exposes the provider layer to other apps (design 0006 §7). |
 
