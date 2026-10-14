@@ -16,8 +16,11 @@ RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 bash scripts/test-package.sh      # uses the packaged crates from a separate project
 ```
 
-CI runs all of these on Linux, Windows and macOS, plus a build on Rust
-1.88, every example, and a license and advisory check (`cargo deny`).
+`bash scripts/ci-local.sh` runs the whole pipeline on your machine: all of
+the above, a build on Rust 1.88, every example, and a license and advisory
+check (`cargo deny`). For now this local run is the CI: GitHub Actions does
+not run on push (the workflow can still be started by hand, and covers
+Linux, Windows and macOS).
 
 Optional, needs API keys and costs a few cents: `cd tests/live && cargo run`
 checks every feature against real models (see `tests/live/README.md`).

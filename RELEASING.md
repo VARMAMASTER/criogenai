@@ -17,7 +17,10 @@ All crates share one version and are released together.
 
 ## Every release
 
-1. Make sure `main` is green in CI.
+1. Make sure `main` passes `bash scripts/ci-local.sh`. Running the CI
+   workflow by hand (GitHub → Actions → **CI** → *Run workflow*) adds Linux
+   and macOS; it uses paid Actions minutes while the repository is private
+   (free once it is public).
 2. Run the live check against real models (`tests/live`, see its README)
    and the demo app by hand; note anything new in the changelog.
 3. Set the version in the workspace `Cargo.toml` (`[workspace.package]

@@ -1,9 +1,11 @@
 name: CI
 
+# Manual only for now: the pipeline runs locally before each push
+# (scripts/ci-local.sh). To run it on GitHub again, add back
+#   push: { branches: [main] }
+#   pull_request:
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 env:
   CARGO_TERM_COLOR: always

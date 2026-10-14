@@ -20,7 +20,8 @@ write our own implementation.
 
 - **Implemented:** `crates/agentbuild-core`. Superstep engine with static
   edges, async routers, joins, cycles, concurrent nodes, atomic steps, stable
-  error codes. CI is green on Linux, Windows, macOS and MSRV 1.88.
+  error codes. CI was last green on GitHub on Linux, Windows, macOS and
+  MSRV 1.88 at `3ca76cc` (2026-10-13).
 - **Design approved** (user gave full decision freedom, 2026-10-11):
   `docs/design/0002`–`0008` cover messages and tools, errors, the agent loop,
   core extensions, the provider layer and gateway, the public API, and
@@ -68,7 +69,7 @@ write our own implementation.
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 428 across the five crates (with `--all-features`; includes the
+- Tests: 435 across the five crates (with `--all-features`; includes the
   getting-started guide's examples), plus the package test. Release prep:
   `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`,
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
@@ -112,6 +113,7 @@ AGENTBUILD_PROTOCOL=anthropic AGENTBUILD_MODEL=claude-haiku-5-5 cargo run -p age
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 bash scripts/test-package.sh     # package the crate, use it from a separate project
 cargo deny --all-features check  # advisories, licenses, sources (deny.toml)
+bash scripts/ci-local.sh         # the whole CI pipeline, locally (--quick: rust step only)
 # Every feature against real models, manual only (keys in ~/.agentbuild-keys.env):
 cd tests/live && cargo run       # or: cargo run -- gemini; LIVE_ONLY=approval cargo run
 ```
@@ -184,6 +186,13 @@ git-ignored. REA is not registered as an MCP server in any agent config.
    run a consumer script against it.
 
 ## Git and GitHub
+
+- **CI runs locally (decided 2026-10-14, for the next few months).** GitHub
+  Actions does not run on push; `ci.yml` is manual only. Before every push,
+  run `bash scripts/ci-local.sh` and push only when it passes. It needs the
+  1.88 toolchain and `cargo-deny` (both installed on the dev machine; it
+  skips and says so if they are missing). Local runs cover Windows only;
+  start the CI workflow by hand before a release for Linux and macOS.
 
 - Remote: `https://github.com/VARMAMASTER/agentbuild` (private). The `main` branch is protected by
   convention: commit only when the user asks.

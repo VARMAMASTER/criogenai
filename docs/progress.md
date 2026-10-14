@@ -45,6 +45,21 @@ handoff point for whoever continues the work.
 
 ## Log
 
+### 2026-10-14: CI runs locally
+
+- Decision (user, for the next few months): GitHub Actions no longer runs
+  on push or pull requests; `.github/workflows/ci.yml` is manual only
+  (`workflow_dispatch`). Code is still pushed to GitHub.
+- `scripts/ci-local.sh` runs the same jobs on the dev machine: `rust` (fmt,
+  clippy with all and default features, tests, doctests, no-`http` tests),
+  `msrv` (`cargo +1.88 check`), `deps` (`cargo deny`), `standalone` (live
+  check and demo server lint), `package` (docs, package test, examples).
+  `--quick` runs only `rust`; step names run single steps. It stops at the
+  first failure. Rust 1.88 (minimal profile) and cargo-deny 0.20.2 are
+  installed on the dev machine for it.
+- Lost coverage: Linux and macOS. Before a release, start the CI workflow
+  by hand (`RELEASING.md`). Last green GitHub run: `3ca76cc`.
+
 ### 2026-10-13: release preparation (0.1.0, Rust crates)
 
 - README rewritten to say what is built and what is planned (it claimed a
