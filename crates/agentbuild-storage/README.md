@@ -20,10 +20,17 @@ Threads, checkpoints and storage backends for
 - long-term memory: a `MemoryStore` of JSON items under namespaces such as
   `users/42`, with keyword search, time to live, and deleting everything
   in a namespace; in memory or in the same SQLite or Postgres database
+- retention: delete threads idle for a time, keep only the last N
+  checkpoints of each thread, remove expired memory (`Storage::prune`, or
+  a background pruner)
+- encryption at rest (feature `encryption`): conversations, snapshots,
+  task results and memory are stored encrypted (AES-256-GCM, a key per
+  row), with key rotation; a database that is encrypted refuses to open
+  without its keys
 
 **Status:** the contract, the in-memory, SQLite and Postgres backends,
-per-step saving, the memory store. Vector search, retention and
-encryption at rest are planned.
+per-step saving, the memory store, retention, encryption at rest. Vector
+search is planned.
 
 Most code uses this through agents (`agent.thread("user-42")`, see
 `agentbuild-agent`). The contract underneath:
@@ -50,4 +57,18 @@ assert_eq!(store.history("chat-1", 10).await.unwrap().len(), 1);
 With the `sqlite` feature, `Storage::connect("sqlite://agent.db")` opens
 (or creates) a database file; tables are created on first use.
 
-A custom backend implements the five methods of `Checkpointer`.
+Encrypted, with retention (features `sqlite` and `encryption`):
+
+```rust,ignore
+// AGENTBUILD_ENCRYPTION_KEYS="k1:<64 hex digits>"  (openssl rand -hex 32)
+let keys = Keyring::from_env("AGENTBUILD_ENCRYPTION_KEYS")?;
+let storage = Storage::connect_encrypted("sqlite://agent.db", keys)
+    .await?
+    .retention(Retention::new().thread_ttl(Duration::from_secs(30 * 86_400)));
+let _pruner = storage.spawn_pruner(Duration::from_secs(3600));
+```
+
+Thread ids, namespaces and timestamps stay readable: use opaque ids, not
+names or record numbers.
+
+A custom backend implements the seven methods of `Checkpointer`.

@@ -1,11 +1,12 @@
-//! SQLite storage (design 0008 §4, §12, §13): delta checkpoints with
-//! keyframes, compare-and-set commits, automatic migrations, and the memory
-//! store.
+//! SQLite storage (design 0008 §4, §12, §13, §15): delta checkpoints with
+//! keyframes, compare-and-set commits, automatic migrations, the memory
+//! store, retention and encryption at rest.
 
 mod memory;
 
 pub use memory::SqliteMemoryStore;
 
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::time::Duration;
 
@@ -15,11 +16,14 @@ use sqlx::sqlite::{
 };
 use sqlx::{Row, Sqlite, Transaction};
 
-use crate::checkpoint::{Checkpoint, CheckpointMeta, Checkpointer, now_ms};
-use crate::error::{StorageError, StorageErrorKind};
+use crate::checkpoint::{
+    Checkpoint, CheckpointMeta, Checkpointer, ThreadInfo, ThreadQuery, now_ms, prune_plan,
+};
+use crate::crypto::Sealer;
+use crate::error::{StorageError, StorageErrorKind, corrupt};
 use crate::sql::{
-    KEYFRAME_INTERVAL, StateCache, conflict, decode_snapshot, encode, encode_error, enum_text,
-    parse, parse_enum, rebuild,
+    KEYFRAME_INTERVAL, StateCache, body_aad, conflict, decode_snapshot, encode, encode_error,
+    enum_text, open_chain, parse, parse_enum, rebuild, snapshot_aad, write_aad,
 };
 
 /// Schema changes, in order. Each runs once, in a transaction, and is
@@ -73,7 +77,29 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX agentbuild_memory_expires
         ON agentbuild_memory (expires_at_ms) WHERE expires_at_ms IS NOT NULL",
+    // 3: settings (whether the database is encrypted, key checks), and
+    // finding idle threads for retention.
+    "CREATE TABLE agentbuild_settings (
+        name TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+    );
+    CREATE INDEX agentbuild_threads_updated ON agentbuild_threads (updated_at_ms)",
 ];
+
+/// Checkpoint `?1` of thread `?2` and its ancestors up to the nearest
+/// keyframe, keyframe first.
+const CHAIN: &str = "WITH RECURSIVE chain (id, parent_id, kind, depth, body, n) AS (
+        SELECT id, parent_id, kind, depth, body, 0
+            FROM agentbuild_checkpoints WHERE id = ?1 AND thread_id = ?2
+        UNION ALL
+        SELECT c.id, c.parent_id, c.kind, c.depth, c.body, chain.n + 1
+            FROM agentbuild_checkpoints c JOIN chain ON c.id = chain.parent_id
+            WHERE chain.kind = 'delta'
+    )
+    SELECT id, kind, depth, body FROM chain ORDER BY n DESC";
+
+/// Rows deleted or rewritten per statement or batch.
+const BATCH: usize = 200;
 
 /// Checkpoints in a SQLite database file. Survives restarts; for local apps
 /// and single-machine services. Several processes may share the file:
@@ -86,7 +112,11 @@ const MIGRATIONS: &[&str] = &[
 /// long chat stores each message once, and loading reads one keyframe plus
 /// at most `interval - 1` deltas.
 ///
-/// Tables (prefixed `agentbuild_`) are created on first use.
+/// Tables (prefixed `agentbuild_`) are created on first use. Deleted rows
+/// are overwritten in the file (`secure_delete`), not left in free pages.
+/// With [`connect_encrypted`](Self::connect_encrypted) (feature
+/// `encryption`) the columns holding content are encrypted (design 0008
+/// §15.2).
 ///
 /// Needs Tokio's real clock: under a paused test clock (`start_paused`) the
 /// connection pool's timeout fires at once. Tests on paused time should use
@@ -95,12 +125,14 @@ pub struct SqliteCheckpointer {
     pool: SqlitePool,
     keyframe_interval: u32,
     cache: StateCache,
+    sealer: Sealer,
 }
 
 impl std::fmt::Debug for SqliteCheckpointer {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SqliteCheckpointer")
             .field("keyframe_interval", &self.keyframe_interval)
+            .field("encrypted", &self.sealer.is_on())
             .finish_non_exhaustive()
     }
 }
@@ -109,8 +141,23 @@ impl SqliteCheckpointer {
     /// Opens (or creates) the database at `url`: `sqlite://path/to/file.db`,
     /// `sqlite:file.db`, or `sqlite::memory:` (one private in-memory
     /// database, lost when this value is dropped). Applies pending
-    /// migrations.
+    /// migrations. Fails with `encryption_key_missing` if the database is
+    /// encrypted.
     pub async fn connect(url: &str) -> Result<Self, StorageError> {
+        Self::open_with(url, Sealer::default()).await
+    }
+
+    /// [`connect`](Self::connect) with encryption at rest: new content is
+    /// encrypted with the active key of `keys`; rows written with its older
+    /// keys (or before encryption was on) still read. Fails with
+    /// `encryption_key_invalid` if the database knows a key's id with other
+    /// bytes.
+    #[cfg(feature = "encryption")]
+    pub async fn connect_encrypted(url: &str, keys: crate::Keyring) -> Result<Self, StorageError> {
+        Self::open_with(url, Sealer::new(Some(keys))).await
+    }
+
+    async fn open_with(url: &str, sealer: Sealer) -> Result<Self, StorageError> {
         let in_memory = url.contains(":memory:") || url.contains("mode=memory");
         let options = SqliteConnectOptions::from_str(url)
             .map_err(|err| {
@@ -122,7 +169,9 @@ impl SqliteCheckpointer {
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
             .busy_timeout(Duration::from_secs(5))
-            .foreign_keys(true);
+            .foreign_keys(true)
+            // Deleted content is overwritten, not left in free pages.
+            .pragma("secure_delete", "ON");
         let pool = if in_memory {
             // Every connection to `:memory:` is a separate database: keep
             // exactly one, forever.
@@ -141,8 +190,10 @@ impl SqliteCheckpointer {
             pool,
             keyframe_interval: KEYFRAME_INTERVAL,
             cache: StateCache::default(),
+            sealer,
         };
         checkpointer.migrate().await?;
+        checkpointer.check_settings().await?;
         Ok(checkpointer)
     }
 
@@ -158,9 +209,9 @@ impl SqliteCheckpointer {
         self
     }
 
-    /// The memory store in the same database (same connections).
+    /// The memory store in the same database (same connections and keys).
     pub fn memory_store(&self) -> SqliteMemoryStore {
-        SqliteMemoryStore::new(self.pool.clone())
+        SqliteMemoryStore::new(self.pool.clone(), self.sealer.clone())
     }
 
     /// The schema version the database is at.
@@ -231,6 +282,39 @@ impl SqliteCheckpointer {
         tx.commit().await.map_err(sql_error)
     }
 
+    /// Compares the database's encryption settings with the keys, and
+    /// records new key ids (design 0008 §15.2).
+    async fn check_settings(&self) -> Result<(), StorageError> {
+        let add = self.sealer.check_settings(&self.settings().await?)?;
+        if add.is_empty() {
+            return Ok(());
+        }
+        for (name, value) in add {
+            sqlx::query(
+                "INSERT INTO agentbuild_settings (name, value) VALUES (?, ?)
+                    ON CONFLICT (name) DO NOTHING",
+            )
+            .bind(name)
+            .bind(value)
+            .execute(&self.pool)
+            .await
+            .map_err(sql_error)?;
+        }
+        // Another process may have recorded the same key id first.
+        self.sealer
+            .check_settings(&self.settings().await?)
+            .map(drop)
+    }
+
+    async fn settings(&self) -> Result<HashMap<String, String>, StorageError> {
+        let rows: Vec<(String, String)> =
+            sqlx::query_as("SELECT name, value FROM agentbuild_settings")
+                .fetch_all(&self.pool)
+                .await
+                .map_err(sql_error)?;
+        Ok(rows.into_iter().collect())
+    }
+
     /// A write transaction that holds the write lock from the start, so it
     /// waits (busy timeout) instead of failing on a concurrent writer.
     async fn begin(&self) -> Result<Transaction<'static, Sqlite>, StorageError> {
@@ -249,36 +333,37 @@ impl SqliteCheckpointer {
         if let Some(cached) = self.cache.get(thread, id) {
             return Ok(Some(cached));
         }
-        // The checkpoint and its ancestors up to the nearest keyframe.
-        let rows = sqlx::query(
-            "WITH RECURSIVE chain (id, parent_id, kind, depth, body, n) AS (
-                SELECT id, parent_id, kind, depth, body, 0
-                    FROM agentbuild_checkpoints WHERE id = ?1 AND thread_id = ?2
-                UNION ALL
-                SELECT c.id, c.parent_id, c.kind, c.depth, c.body, chain.n + 1
-                    FROM agentbuild_checkpoints c JOIN chain ON c.id = chain.parent_id
-                    WHERE chain.kind = 'delta'
-            )
-            SELECT id, kind, depth, body FROM chain ORDER BY n DESC",
-        )
-        .bind(id)
-        .bind(thread)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(sql_error)?;
+        let rows = sqlx::query(CHAIN)
+            .bind(id)
+            .bind(thread)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(sql_error)?;
+        self.rebuild_rows(thread, id, &rows)
+    }
+
+    /// The state and depth of checkpoint `id` from its [`CHAIN`] rows.
+    fn rebuild_rows(
+        &self,
+        thread: &str,
+        id: &str,
+        rows: &[SqliteRow],
+    ) -> Result<Option<(State, u32)>, StorageError> {
         let Some(last) = rows.last() else {
             return Ok(None);
         };
         let depth = get::<i64>(last, "depth")? as u32;
-        let chain = rows
+        let rows = rows
             .iter()
-            .map(|row| Ok((get(row, "kind")?, get(row, "body")?)))
+            .map(|row| Ok((get(row, "id")?, get(row, "kind")?, get(row, "body")?)))
             .collect::<Result<Vec<_>, StorageError>>()?;
+        let chain = open_chain(&self.sealer, thread, rows)?;
         Ok(Some((rebuild(id, &chain)?, depth)))
     }
 
     async fn pending_writes(
         &self,
+        thread: &str,
         checkpoint: &str,
     ) -> Result<Vec<(String, PendingWrite)>, StorageError> {
         let rows = sqlx::query(
@@ -291,10 +376,13 @@ impl SqliteCheckpointer {
         .map_err(sql_error)?;
         rows.iter()
             .map(|row| {
-                Ok((
-                    get(row, "node")?,
-                    parse(&get::<String>(row, "write")?, "task write")?,
-                ))
+                let node: String = get(row, "node")?;
+                let write = self.sealer.open(
+                    &write_aad(thread, checkpoint, &node),
+                    get(row, "write")?,
+                    "task write",
+                )?;
+                Ok((node, parse(&write, "task write")?))
             })
             .collect()
     }
@@ -336,11 +424,16 @@ impl SqliteCheckpointer {
             return Ok(None);
         };
         let snapshot = match get::<Option<String>>(&row, "snapshot")? {
-            Some(text) => Some(decode_snapshot(
-                &text,
-                &state,
-                self.pending_writes(&id).await?,
-            )?),
+            Some(stored) => {
+                let text = self
+                    .sealer
+                    .open(&snapshot_aad(thread, &id), stored, "snapshot")?;
+                Some(decode_snapshot(
+                    &text,
+                    &state,
+                    self.pending_writes(thread, &id).await?,
+                )?)
+            }
             None => None,
         };
         let checkpoint = Checkpoint {
@@ -378,6 +471,12 @@ impl SqliteCheckpointer {
             None => None,
         };
         let encoded = encode(&checkpoint, parent.as_ref(), self.keyframe_interval)?;
+        let body = self
+            .sealer
+            .seal(&body_aad(&thread, &checkpoint.id), encoded.body)?;
+        let snapshot = self
+            .sealer
+            .seal_opt(&snapshot_aad(&thread, &checkpoint.id), encoded.snapshot)?;
 
         let now = now_ms() as i64;
         let mut tx = self.begin().await?;
@@ -438,8 +537,8 @@ impl SqliteCheckpointer {
         .bind(checkpoint.step as i64)
         .bind(encoded.kind)
         .bind(encoded.depth as i64)
-        .bind(encoded.body)
-        .bind(encoded.snapshot)
+        .bind(body)
+        .bind(snapshot)
         .bind(checkpoint.created_at_ms as i64)
         .execute(&mut *tx)
         .await
@@ -473,7 +572,7 @@ impl SqliteCheckpointer {
                 ORDER BY branch.n",
         )
         .bind(thread)
-        .bind(limit as i64)
+        .bind(limit.min(i64::MAX as usize) as i64)
         .fetch_all(&self.pool)
         .await
         .map_err(sql_error)?;
@@ -528,6 +627,9 @@ impl SqliteCheckpointer {
         write: PendingWrite,
     ) -> Result<(), StorageError> {
         let write = serde_json::to_string(&write).map_err(encode_error)?;
+        let write = self
+            .sealer
+            .seal(&write_aad(thread, checkpoint, node), write)?;
         let added = sqlx::query(
             "INSERT INTO agentbuild_pending_writes (checkpoint_id, node, write, created_at_ms)
                 SELECT ?1, ?2, ?3, ?4 WHERE EXISTS (
@@ -552,6 +654,198 @@ impl SqliteCheckpointer {
         }
         Ok(())
     }
+
+    async fn list_threads(&self, query: &ThreadQuery) -> Result<Vec<ThreadInfo>, StorageError> {
+        let rows = sqlx::query(
+            "SELECT thread_id, head_version, created_at_ms, updated_at_ms
+                FROM agentbuild_threads
+                WHERE (?1 IS NULL OR thread_id > ?1)
+                    AND (?2 IS NULL OR updated_at_ms < ?2)
+                    AND (?3 IS NULL OR updated_at_ms >= ?3)
+                ORDER BY thread_id LIMIT ?4",
+        )
+        .bind(&query.after)
+        .bind(query.updated_before.map(clamp))
+        .bind(query.updated_after.map(clamp))
+        .bind(query.limit.min(i64::MAX as usize) as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(sql_error)?;
+        rows.iter()
+            .map(|row| {
+                Ok(ThreadInfo {
+                    thread_id: get(row, "thread_id")?,
+                    version: get::<i64>(row, "head_version")? as u64,
+                    created_at_ms: get::<i64>(row, "created_at_ms")? as u64,
+                    updated_at_ms: get::<i64>(row, "updated_at_ms")? as u64,
+                })
+            })
+            .collect()
+    }
+
+    /// [`Checkpointer::prune_thread`], in one transaction (design 0008
+    /// §15.1).
+    async fn prune(&self, thread: &str, keep: Option<usize>) -> Result<u64, StorageError> {
+        let mut tx = self.begin().await?;
+        let head: Option<String> =
+            sqlx::query_scalar("SELECT head_id FROM agentbuild_threads WHERE thread_id = ?")
+                .bind(thread)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(sql_error)?;
+        let Some(head) = head else {
+            return Ok(0);
+        };
+        let links: Vec<(String, Option<String>)> =
+            sqlx::query_as("SELECT id, parent_id FROM agentbuild_checkpoints WHERE thread_id = ?")
+                .bind(thread)
+                .fetch_all(&mut *tx)
+                .await
+                .map_err(sql_error)?;
+        let (kept, deleted) = prune_plan(&head, &links, keep);
+        if deleted.is_empty() {
+            return Ok(0);
+        }
+        // The oldest kept checkpoint becomes the start of history: a
+        // keyframe if it was a delta on a deleted ancestor.
+        if let Some(oldest) = kept.last() {
+            let rows = sqlx::query(CHAIN)
+                .bind(oldest)
+                .bind(thread)
+                .fetch_all(&mut *tx)
+                .await
+                .map_err(sql_error)?;
+            if rows.len() > 1 {
+                let (state, _) = self
+                    .rebuild_rows(thread, oldest, &rows)?
+                    .ok_or_else(|| corrupt(format!("checkpoint `{oldest}` has no rows")))?;
+                let body = serde_json::to_string(&state).map_err(encode_error)?;
+                let body = self.sealer.seal(&body_aad(thread, oldest), body)?;
+                sqlx::query(
+                    "UPDATE agentbuild_checkpoints SET kind = 'keyframe', depth = 0, body = ?
+                        WHERE id = ?",
+                )
+                .bind(body)
+                .bind(oldest)
+                .execute(&mut *tx)
+                .await
+                .map_err(sql_error)?;
+            }
+            sqlx::query("UPDATE agentbuild_checkpoints SET parent_id = NULL WHERE id = ?")
+                .bind(oldest)
+                .execute(&mut *tx)
+                .await
+                .map_err(sql_error)?;
+        }
+        for chunk in deleted.chunks(BATCH) {
+            let marks = vec!["?"; chunk.len()].join(", ");
+            for table in [
+                format!("DELETE FROM agentbuild_pending_writes WHERE checkpoint_id IN ({marks})"),
+                format!("DELETE FROM agentbuild_checkpoints WHERE id IN ({marks})"),
+            ] {
+                let mut statement = sqlx::query(&table);
+                for id in chunk {
+                    statement = statement.bind(id);
+                }
+                statement.execute(&mut *tx).await.map_err(sql_error)?;
+            }
+        }
+        tx.commit().await.map_err(sql_error)?;
+        self.cache.forget(thread);
+        Ok(deleted.len() as u64)
+    }
+
+    /// Rewrites every row that is plain or encrypted with an older key, with
+    /// the active key (design 0008 §15.2). Each rewrite is compare-and-set
+    /// on the old text, so a concurrent write wins. Fails with
+    /// `encryption_key_missing` without keys.
+    #[cfg(feature = "encryption")]
+    pub async fn reencrypt(&self) -> Result<crate::ReencryptReport, StorageError> {
+        let Some(prefix) = self.sealer.active_prefix() else {
+            return Err(crate::crypto::key_missing(
+                "reencrypt needs keys: open the storage with `connect_encrypted`",
+            ));
+        };
+        let mut report = crate::ReencryptReport::default();
+        for column in ["body", "snapshot"] {
+            let aad = if column == "body" {
+                body_aad
+            } else {
+                snapshot_aad
+            };
+            let mut after = String::new();
+            loop {
+                let rows: Vec<(String, String, String)> = sqlx::query_as(&format!(
+                    "SELECT id, thread_id, {column} FROM agentbuild_checkpoints
+                        WHERE id > ?1 AND {column} IS NOT NULL
+                            AND substr({column}, 1, length(?2)) <> ?2
+                        ORDER BY id LIMIT ?3"
+                ))
+                .bind(&after)
+                .bind(&prefix)
+                .bind(BATCH as i64)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(sql_error)?;
+                let Some(last) = rows.last() else { break };
+                after = last.0.clone();
+                for (id, thread, stored) in rows {
+                    let aad = aad(&thread, &id);
+                    let plain = self.sealer.open(&aad, stored.clone(), column)?;
+                    let sealed = self.sealer.seal(&aad, plain)?;
+                    report.checkpoints += sqlx::query(&format!(
+                        "UPDATE agentbuild_checkpoints SET {column} = ?1
+                            WHERE id = ?2 AND {column} = ?3"
+                    ))
+                    .bind(sealed)
+                    .bind(&id)
+                    .bind(stored)
+                    .execute(&self.pool)
+                    .await
+                    .map_err(sql_error)?
+                    .rows_affected();
+                }
+            }
+        }
+        let mut after = 0i64;
+        loop {
+            let rows: Vec<(i64, String, String, String, String)> = sqlx::query_as(
+                "SELECT w.seq, w.checkpoint_id, c.thread_id, w.node, w.write
+                    FROM agentbuild_pending_writes w
+                    JOIN agentbuild_checkpoints c ON c.id = w.checkpoint_id
+                    WHERE w.seq > ?1 AND substr(w.write, 1, length(?2)) <> ?2
+                    ORDER BY w.seq LIMIT ?3",
+            )
+            .bind(after)
+            .bind(&prefix)
+            .bind(BATCH as i64)
+            .fetch_all(&self.pool)
+            .await
+            .map_err(sql_error)?;
+            let Some(last) = rows.last() else { break };
+            after = last.0;
+            for (seq, checkpoint, thread, node, stored) in rows {
+                let aad = write_aad(&thread, &checkpoint, &node);
+                let plain = self.sealer.open(&aad, stored, "task write")?;
+                let sealed = self.sealer.seal(&aad, plain)?;
+                report.task_writes +=
+                    sqlx::query("UPDATE agentbuild_pending_writes SET write = ? WHERE seq = ?")
+                        .bind(sealed)
+                        .bind(seq)
+                        .execute(&self.pool)
+                        .await
+                        .map_err(sql_error)?
+                        .rows_affected();
+            }
+        }
+        report.memory_items = self.memory_store().reencrypt(&prefix).await?;
+        Ok(report)
+    }
+}
+
+/// A time for an `INTEGER` column.
+fn clamp(ms: u64) -> i64 {
+    ms.min(i64::MAX as u64) as i64
 }
 
 impl Checkpointer for SqliteCheckpointer {
@@ -591,6 +885,28 @@ impl Checkpointer for SqliteCheckpointer {
         write: PendingWrite,
     ) -> BoxFuture<'a, Result<(), StorageError>> {
         Box::pin(self.add_pending(thread, checkpoint, node, write))
+    }
+
+    fn threads<'a>(
+        &'a self,
+        query: &'a ThreadQuery,
+    ) -> BoxFuture<'a, Result<Vec<ThreadInfo>, StorageError>> {
+        Box::pin(self.list_threads(query))
+    }
+
+    fn prune_thread<'a>(
+        &'a self,
+        thread: &'a str,
+        keep: Option<usize>,
+    ) -> BoxFuture<'a, Result<u64, StorageError>> {
+        Box::pin(self.prune(thread, keep))
+    }
+}
+
+impl crate::storage::Reencrypt for SqliteCheckpointer {
+    #[cfg(feature = "encryption")]
+    fn reencrypt(&self) -> BoxFuture<'_, Result<crate::ReencryptReport, StorageError>> {
+        Box::pin(SqliteCheckpointer::reencrypt(self))
     }
 }
 

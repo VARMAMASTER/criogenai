@@ -10,7 +10,7 @@ use agentbuild_core::{BoxFuture, PendingWrite};
 use agentbuild_providers::{FakeModel, FakeReply, ToolSpec};
 use agentbuild_storage::{
     Checkpoint, CheckpointMeta, CheckpointStatus, Checkpointer, Durability, InMemoryCheckpointer,
-    Source, Storage, StorageError, StorageErrorKind,
+    Source, Storage, StorageError, StorageErrorKind, ThreadInfo, ThreadQuery,
 };
 use serde_json::json;
 
@@ -246,6 +246,21 @@ impl Checkpointer for Down {
     ) -> BoxFuture<'a, Result<(), StorageError>> {
         Box::pin(async { Err(down()) })
     }
+
+    fn threads<'a>(
+        &'a self,
+        query: &'a ThreadQuery,
+    ) -> BoxFuture<'a, Result<Vec<ThreadInfo>, StorageError>> {
+        self.0.threads(query)
+    }
+
+    fn prune_thread<'a>(
+        &'a self,
+        thread: &'a str,
+        keep: Option<usize>,
+    ) -> BoxFuture<'a, Result<u64, StorageError>> {
+        self.0.prune_thread(thread, keep)
+    }
 }
 
 #[tokio::test(start_paused = true)]
@@ -313,6 +328,21 @@ impl Checkpointer for TasksDown {
             return Box::pin(async { Err(down()) });
         }
         self.inner.put_pending(thread, checkpoint, node, write)
+    }
+
+    fn threads<'a>(
+        &'a self,
+        query: &'a ThreadQuery,
+    ) -> BoxFuture<'a, Result<Vec<ThreadInfo>, StorageError>> {
+        self.inner.threads(query)
+    }
+
+    fn prune_thread<'a>(
+        &'a self,
+        thread: &'a str,
+        keep: Option<usize>,
+    ) -> BoxFuture<'a, Result<u64, StorageError>> {
+        self.inner.prune_thread(thread, keep)
     }
 }
 

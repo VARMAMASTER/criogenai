@@ -3,7 +3,10 @@ use std::sync::{Mutex, MutexGuard};
 
 use agentbuild_core::{BoxFuture, PendingWrite};
 
-use crate::checkpoint::{Checkpoint, CheckpointMeta, Checkpointer, merge_pending};
+use crate::checkpoint::{
+    Checkpoint, CheckpointMeta, Checkpointer, ThreadInfo, ThreadQuery, merge_pending, now_ms,
+    prune_plan,
+};
 use crate::error::{StorageError, StorageErrorKind};
 
 /// Keeps checkpoints in process memory. Lost when the process exits: for
@@ -17,6 +20,8 @@ pub struct InMemoryCheckpointer {
 struct Thread {
     head: Option<String>,
     version: u64,
+    created_at_ms: u64,
+    updated_at_ms: u64,
     checkpoints: HashMap<String, Checkpoint>,
 }
 
@@ -71,7 +76,14 @@ impl Checkpointer for InMemoryCheckpointer {
                 ),
             ))
         } else {
-            let thread = threads.entry(checkpoint.thread_id.clone()).or_default();
+            let now = now_ms();
+            let thread = threads
+                .entry(checkpoint.thread_id.clone())
+                .or_insert_with(|| Thread {
+                    created_at_ms: now,
+                    ..Thread::default()
+                });
+            thread.updated_at_ms = now;
             thread.head = Some(checkpoint.id.clone());
             thread.version = checkpoint.version;
             thread.checkpoints.insert(checkpoint.id.clone(), checkpoint);
@@ -128,5 +140,67 @@ impl Checkpointer for InMemoryCheckpointer {
             )),
         };
         Box::pin(async move { result })
+    }
+
+    fn threads<'a>(
+        &'a self,
+        query: &'a ThreadQuery,
+    ) -> BoxFuture<'a, Result<Vec<ThreadInfo>, StorageError>> {
+        let threads = self.threads();
+        let mut found: Vec<ThreadInfo> = threads
+            .iter()
+            .filter(|(id, t)| {
+                query
+                    .after
+                    .as_deref()
+                    .is_none_or(|after| id.as_str() > after)
+                    && query.updated_before.is_none_or(|ms| t.updated_at_ms < ms)
+                    && query.updated_after.is_none_or(|ms| t.updated_at_ms >= ms)
+            })
+            .map(|(id, t)| ThreadInfo {
+                thread_id: id.clone(),
+                version: t.version,
+                created_at_ms: t.created_at_ms,
+                updated_at_ms: t.updated_at_ms,
+            })
+            .collect();
+        found.sort_by(|a, b| a.thread_id.cmp(&b.thread_id));
+        found.truncate(query.limit);
+        Box::pin(async move { Ok(found) })
+    }
+
+    fn prune_thread<'a>(
+        &'a self,
+        thread: &'a str,
+        keep: Option<usize>,
+    ) -> BoxFuture<'a, Result<u64, StorageError>> {
+        let mut threads = self.threads();
+        let mut removed = 0;
+        if let Some(t) = threads.get_mut(thread)
+            && let Some(head) = t.head.clone()
+        {
+            let links: Vec<(String, Option<String>)> = t
+                .checkpoints
+                .values()
+                .map(|c| (c.id.clone(), c.parent_id.clone()))
+                .collect();
+            let (kept, deleted) = prune_plan(&head, &links, keep);
+            if !deleted.is_empty() {
+                for id in &deleted {
+                    t.checkpoints.remove(id);
+                }
+                // History ends at the oldest kept checkpoint.
+                if let Some(oldest) = kept.last().and_then(|id| t.checkpoints.get_mut(id))
+                    && oldest
+                        .parent_id
+                        .as_ref()
+                        .is_some_and(|parent| deleted.contains(parent))
+                {
+                    oldest.parent_id = None;
+                }
+                removed = deleted.len() as u64;
+            }
+        }
+        Box::pin(async move { Ok(removed) })
     }
 }

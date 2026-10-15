@@ -34,6 +34,8 @@ http = ["agentbuild-providers/http"]
 sqlite = ["agentbuild-storage/sqlite"]
 # Postgres thread storage (agentbuild-storage's `postgres`).
 postgres = ["agentbuild-storage/postgres"]
+# Encryption at rest (agentbuild-storage's `encryption`).
+encryption = ["agentbuild-storage/encryption"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "test-util", "net", "io-util"] }

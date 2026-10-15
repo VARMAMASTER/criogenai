@@ -77,6 +77,21 @@ First release, planned as 0.1.0 (Rust crates only).
   on a server (PostgreSQL 13+), TLS, and thread locks across processes
   (`ThreadLocks`): `OnBusy` wait, reject and interrupt hold between
   servers, and a crashed server's threads are freed.
+- Retention: `Retention` (idle threads expire, threads keep their last N
+  checkpoints, abandoned branches go), applied by `Storage::prune` or a
+  background `Storage::spawn_pruner`; expired memory is removed too.
+  `Checkpointer` gains `threads` (list, paged) and `prune_thread`.
+- Encryption at rest (feature `encryption`): `Keyring`,
+  `Storage::connect_encrypted`, `Storage::reencrypt` (rotation, or
+  encrypting an existing database). Checkpoint bodies, snapshots, task
+  writes, memory values and memory keys are encrypted with AES-256-GCM
+  (a key per row, derived with HKDF); rows cannot be moved between
+  places. An encrypted database refuses to open without its keys
+  (`encryption_key_missing`) or with a wrong key
+  (`encryption_key_invalid`).
+- SQLite overwrites deleted rows in the file (`secure_delete`).
+- Schema version 3 (`agentbuild_settings`, an index for idle threads);
+  applied automatically.
 
 ### agentbuild-telemetry: tracing
 

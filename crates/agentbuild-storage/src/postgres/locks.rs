@@ -9,7 +9,9 @@ use super::sql_error;
 use crate::error::{StorageError, StorageErrorKind};
 use crate::locks::{HeldLock, InterruptHandler, ThreadLocks};
 
-/// The channel interrupts are sent on; the payload is the thread's lock key.
+/// The channel interrupts are sent on; the payload is `<lock key>:<pid>`,
+/// the server process that holds the lock, so only the holder acts on it
+/// (a process still waiting for the lock may hear it too).
 const INTERRUPT_CHANNEL: &str = "agentbuild_interrupt";
 
 /// A thread's lock key, computed by the server so every process (any
@@ -75,12 +77,24 @@ impl PostgresThreadLocks {
     }
 
     async fn notify(&self, thread: &str) -> Result<(), StorageError> {
-        sqlx::query(&format!("SELECT pg_notify($2, ({LOCK_KEY})::TEXT)"))
-            .bind(thread)
-            .bind(INTERRUPT_CHANNEL)
-            .execute(&self.pool)
-            .await
-            .map_err(sql_error)?;
+        // A bigint advisory lock shows in `pg_locks` as its high half
+        // (`classid`) and low half (`objid`), with `objsubid` 1. No holder:
+        // nothing to interrupt.
+        sqlx::query(&format!(
+            "WITH k AS (SELECT {LOCK_KEY} AS key)
+            SELECT pg_notify($2, k.key::TEXT || ':' || l.pid::TEXT)
+                FROM k JOIN pg_locks l
+                    ON l.locktype = 'advisory' AND l.granted AND l.objsubid = 1
+                    AND l.classid::BIGINT = (k.key >> 32) & 4294967295
+                    AND l.objid::BIGINT = k.key & 4294967295
+                    AND l.database = (SELECT oid FROM pg_database
+                        WHERE datname = current_database())"
+        ))
+        .bind(thread)
+        .bind(INTERRUPT_CHANNEL)
+        .execute(&self.pool)
+        .await
+        .map_err(sql_error)?;
         Ok(())
     }
 }
@@ -110,6 +124,23 @@ async fn hold(
             return;
         }
     };
+    // Listen first: an interrupt sent as soon as the lock is taken is not
+    // missed. Interrupts name the holder's server process.
+    let pid: Result<i32, _> = match listener.listen(INTERRUPT_CHANNEL).await {
+        Ok(()) => {
+            sqlx::query_scalar("SELECT pg_backend_pid()")
+                .fetch_one(&mut listener)
+                .await
+        }
+        Err(err) => Err(err),
+    };
+    let pid = match pid {
+        Ok(pid) => pid,
+        Err(err) => {
+            let _ = ready.send(Err(sql_error(err)));
+            return;
+        }
+    };
     let key = match lock(&mut listener, &thread, deadline).await {
         Ok(Some(key)) => key,
         Ok(None) => {
@@ -121,18 +152,12 @@ async fn hold(
             return;
         }
     };
-    // Listen before reporting, so no interrupt is missed.
-    if let Err(err) = listener.listen(INTERRUPT_CHANNEL).await {
-        unlock(&mut listener).await;
-        let _ = ready.send(Err(sql_error(err)));
-        return;
-    }
     if ready.send(Ok(true)).is_err() {
         // The caller stopped waiting.
         unlock(&mut listener).await;
         return;
     }
-    let wanted = key.to_string();
+    let wanted = format!("{key}:{pid}");
     loop {
         tokio::select! {
             _ = &mut released => break,

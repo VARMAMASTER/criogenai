@@ -36,6 +36,7 @@ async fn main() {
     sqlite_threads_survive_a_restart().await;
     long_term_memory_per_user().await;
     postgres_threads_across_processes().await;
+    encrypted_storage_with_retention().await;
     println!("package smoke test: ok");
 }
 
@@ -650,7 +651,51 @@ async fn postgres_threads_across_processes() {
     assert_eq!(second.result.messages.len(), 4);
     assert!(b.thread(&thread).delete().await.expect("delete"));
     let store = PostgresCheckpointer::connect(&url).await.expect("connect");
-    assert_eq!(store.schema_version().await.expect("version"), 2);
+    assert_eq!(store.schema_version().await.expect("version"), 3);
     store.close().await;
     println!("  Postgres threads across processes: ok");
+}
+
+async fn encrypted_storage_with_retention() {
+    use agentbuild_agent::Agent;
+    use agentbuild_storage::{EncryptionKey, Keyring, Retention, Storage, ThreadQuery};
+
+    let path = std::env::temp_dir().join(format!("agentbuild-package-enc-{}.db", std::process::id()));
+    let url = format!("sqlite://{}", path.display());
+    let keys = || Keyring::parse(&format!("k1:{}", "5a".repeat(32))).expect("keys");
+    let storage = Storage::connect_encrypted(&url, keys())
+        .await
+        .expect("open")
+        .retention(Retention::new().keep_checkpoints(1));
+    let fast = FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
+        .then(FakeReply::text("Noted, Augusta Lovelace"));
+    let agent = Agent::builder(fast)
+        .storage(storage.clone())
+        .build()
+        .expect("valid agent");
+    agent.thread("t").send("My name is Augusta Lovelace").await.expect("send");
+    let threads = storage.checkpointer().threads(&ThreadQuery::new()).await.expect("list");
+    assert_eq!(threads.len(), 1);
+    let report = storage.prune().await.expect("prune");
+    assert!(report.checkpoints_deleted >= 1);
+    assert_eq!(agent.thread("t").history(10).await.expect("history").len(), 1);
+    drop(agent);
+    // The name is not in the file, and the file needs its keys.
+    let bytes = std::fs::read(&path).unwrap_or_default();
+    assert!(!String::from_utf8_lossy(&bytes).contains("Lovelace"));
+    let err = Storage::connect(&url).await.expect_err("encrypted");
+    assert_eq!(err.code(), "encryption_key_missing");
+    let other = Keyring::new(EncryptionKey::new("k2", &[1; 32]).expect("key"))
+        .with_previous(EncryptionKey::from_hex("k1", &"5a".repeat(32)).expect("key"))
+        .expect("keys");
+    let rotated = Storage::connect_encrypted(&url, other).await.expect("rotate");
+    assert!(rotated.reencrypt().await.expect("reencrypt").checkpoints >= 1);
+    drop(rotated);
+    drop(storage);
+    for suffix in ["", "-wal", "-shm"] {
+        let mut file = path.clone().into_os_string();
+        file.push(suffix);
+        let _ = std::fs::remove_file(file);
+    }
+    println!("  encrypted storage with retention: ok");
 }

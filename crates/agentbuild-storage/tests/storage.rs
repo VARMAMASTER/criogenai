@@ -197,3 +197,26 @@ async fn a_finished_runs_token_is_not_cancelled_for_the_next_holder() {
     assert!(!old.is_cancelled());
     drop(next);
 }
+
+#[tokio::test(start_paused = true)]
+async fn an_interrupt_before_the_run_registers_still_stops_it() {
+    let storage = Storage::in_memory().busy_timeout(Duration::from_secs(5));
+    // The holder has the lease but has not registered its run yet.
+    let held = storage.lease("t").await.unwrap();
+    let interrupting = {
+        let storage = storage.clone().on_busy(OnBusy::Interrupt);
+        tokio::spawn(async move { storage.lease("t").await.map(drop) })
+    };
+    tokio::task::yield_now().await;
+    let token = CancelToken::new();
+    held.set_cancel(token.clone());
+    assert!(token.is_cancelled(), "the interrupt was remembered");
+    drop(held);
+    interrupting.await.unwrap().unwrap();
+
+    // The next lease starts clean.
+    let next = storage.lease("t").await.unwrap();
+    let fresh = CancelToken::new();
+    next.set_cancel(fresh.clone());
+    assert!(!fresh.is_cancelled());
+}

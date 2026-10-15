@@ -9,7 +9,24 @@ use crate::checkpoint::Checkpointer;
 use crate::error::{StorageError, StorageErrorKind};
 use crate::locks::{HeldLock, InterruptHandler, ThreadLocks};
 use crate::memory::InMemoryCheckpointer;
+use crate::retention::Retention;
 use crate::store::{InMemoryStore, MemoryStore};
+
+#[cfg(feature = "encryption")]
+type Keyring = crate::Keyring;
+/// Without the `encryption` feature there are never keys.
+#[cfg(not(feature = "encryption"))]
+type Keyring = std::convert::Infallible;
+
+/// A backend that can rewrite its rows with the active key
+/// ([`Storage::reencrypt`]).
+#[allow(dead_code)]
+pub(crate) trait Reencrypt: Send + Sync {
+    #[cfg(feature = "encryption")]
+    fn reencrypt(
+        &self,
+    ) -> agentbuild_core::BoxFuture<'_, Result<crate::ReencryptReport, StorageError>>;
+}
 
 /// What a second operation on a busy thread does (design 0008 §5.2). Holds
 /// across processes when the storage has [`ThreadLocks`] (Postgres);
@@ -45,13 +62,16 @@ pub enum Durability {
 /// Cheap to clone; clones share the backends and the thread leases.
 #[derive(Clone)]
 pub struct Storage {
-    checkpointer: Arc<dyn Checkpointer>,
-    memory: Arc<dyn MemoryStore>,
+    pub(crate) checkpointer: Arc<dyn Checkpointer>,
+    pub(crate) memory: Arc<dyn MemoryStore>,
     locks: Option<Arc<dyn ThreadLocks>>,
     leases: Arc<Leases>,
     on_busy: OnBusy,
     busy_timeout: Duration,
     durability: Durability,
+    pub(crate) retention: Retention,
+    #[cfg_attr(not(feature = "encryption"), allow(dead_code))]
+    rekey: Option<Arc<dyn Reencrypt>>,
 }
 
 impl std::fmt::Debug for Storage {
@@ -61,6 +81,7 @@ impl std::fmt::Debug for Storage {
             .field("busy_timeout", &self.busy_timeout)
             .field("durability", &self.durability)
             .field("across_processes", &self.locks.is_some())
+            .field("retention", &self.retention)
             .finish_non_exhaustive()
     }
 }
@@ -90,15 +111,54 @@ impl Storage {
     /// locks across processes included). Creates the tables if needed.
     /// Threads and memory share the database.
     pub async fn connect(url: &str) -> Result<Self, StorageError> {
+        Self::open(url, None).await
+    }
+
+    /// [`connect`](Self::connect) with encryption at rest (feature
+    /// `encryption`, design 0008 §15.2): content in the database is
+    /// encrypted with the active key of `keys`. `memory:` keeps nothing at
+    /// rest and encrypts nothing.
+    #[cfg(feature = "encryption")]
+    pub async fn connect_encrypted(url: &str, keys: crate::Keyring) -> Result<Self, StorageError> {
+        Self::open(url, Some(keys)).await
+    }
+
+    /// Rewrites every stored row that is plain or encrypted with an older
+    /// key, with the active key, so older keys can be retired (design 0008
+    /// §15.2). Fails with `encryption_key_missing` unless the storage was
+    /// opened with [`connect_encrypted`](Self::connect_encrypted) on a
+    /// database.
+    #[cfg(feature = "encryption")]
+    pub async fn reencrypt(&self) -> Result<crate::ReencryptReport, StorageError> {
+        match &self.rekey {
+            Some(rekey) => rekey.reencrypt().await,
+            None => Err(crate::crypto::key_missing(
+                "reencrypt needs a database opened with `Storage::connect_encrypted`",
+            )),
+        }
+    }
+
+    async fn open(url: &str, keys: Option<Keyring>) -> Result<Self, StorageError> {
+        // Used only by the SQL backends.
+        let _ = &keys;
         if url == "memory:" {
             return Ok(Self::in_memory());
         }
         if url.starts_with("sqlite:") {
             #[cfg(feature = "sqlite")]
             return {
+                #[cfg(feature = "encryption")]
+                let checkpointer = match keys {
+                    Some(keys) => crate::SqliteCheckpointer::connect_encrypted(url, keys).await?,
+                    None => crate::SqliteCheckpointer::connect(url).await?,
+                };
+                #[cfg(not(feature = "encryption"))]
                 let checkpointer = crate::SqliteCheckpointer::connect(url).await?;
                 let memory = checkpointer.memory_store();
-                Ok(Self::new(checkpointer).with_memory(memory))
+                let checkpointer = Arc::new(checkpointer);
+                let mut storage = Self::shared(checkpointer.clone()).with_memory(memory);
+                storage.rekey = Some(checkpointer);
+                Ok(storage)
             };
             #[cfg(not(feature = "sqlite"))]
             return Err(StorageError::new(
@@ -109,12 +169,21 @@ impl Storage {
         if url.starts_with("postgres://") || url.starts_with("postgresql://") {
             #[cfg(feature = "postgres")]
             return {
-                let checkpointer = crate::PostgresCheckpointer::connect(url).await?;
+                #[allow(unused_mut)]
+                let mut options = crate::PostgresOptions::new();
+                #[cfg(feature = "encryption")]
+                if let Some(keys) = keys {
+                    options = options.encryption(keys);
+                }
+                let checkpointer = crate::PostgresCheckpointer::connect_with(url, options).await?;
                 let memory = checkpointer.memory_store();
                 let locks = checkpointer.thread_locks();
-                Ok(Self::new(checkpointer)
+                let checkpointer = Arc::new(checkpointer);
+                let mut storage = Self::shared(checkpointer.clone())
                     .with_memory(memory)
-                    .with_locks(locks))
+                    .with_locks(locks);
+                storage.rekey = Some(checkpointer);
+                Ok(storage)
             };
             #[cfg(not(feature = "postgres"))]
             return Err(StorageError::new(
@@ -143,6 +212,8 @@ impl Storage {
             on_busy: OnBusy::default(),
             busy_timeout: Duration::from_secs(60),
             durability: Durability::default(),
+            retention: Retention::default(),
+            rekey: None,
         }
     }
 
@@ -226,14 +297,14 @@ impl Storage {
         slot: &Arc<Slot>,
         started: tokio::time::Instant,
     ) -> Result<HeldLock, StorageError> {
-        // Another process interrupts: cancel the run registered here. Weak:
-        // the lease table forgets slots nobody holds.
+        // Another process interrupts: cancel this lease's run, even if it
+        // registers its token only later. Weak: the lease table forgets
+        // slots nobody holds.
         let weak = Arc::downgrade(slot);
+        let generation = slot.generation();
         let on_interrupt: InterruptHandler = Arc::new(move || {
-            if let Some(slot) = weak.upgrade()
-                && let Some(token) = lock_slot(&slot.active).as_ref()
-            {
-                token.cancel();
+            if let Some(slot) = weak.upgrade() {
+                slot.interrupt(generation);
             }
         });
         let remaining = || self.busy_timeout.saturating_sub(started.elapsed());
@@ -264,6 +335,9 @@ impl Storage {
     async fn local_lease(&self, thread: &str) -> Result<ThreadLease, StorageError> {
         let slot = self.leases.slot(thread);
         let lock = slot.lock.clone();
+        // Read before trying: if the lock is taken, its holder's lease has
+        // this generation for as long as it holds it.
+        let generation = slot.generation();
         let guard = match (lock.clone().try_lock_owned().ok(), self.on_busy) {
             (Some(guard), _) => guard,
             (None, OnBusy::Reject) => {
@@ -272,10 +346,8 @@ impl Storage {
                 return Err(busy(thread, "another run is active"));
             }
             (None, on_busy) => {
-                if on_busy == OnBusy::Interrupt
-                    && let Some(token) = lock_slot(&slot.active).as_ref()
-                {
-                    token.cancel();
+                if on_busy == OnBusy::Interrupt {
+                    slot.interrupt(generation);
                 }
                 match tokio::time::timeout(self.busy_timeout, lock.lock_owned()).await {
                     Ok(guard) => guard,
@@ -309,7 +381,7 @@ impl Storage {
         let slot = self.leases.existing(thread);
         let token = slot
             .as_ref()
-            .and_then(|slot| lock_slot(&slot.active).clone());
+            .and_then(|slot| lock_slot(&slot.run).token.clone());
         if let Some(token) = &token {
             token.cancel();
         }
@@ -355,7 +427,12 @@ impl ThreadLease {
     /// [`Storage::cancel`] and [`OnBusy::Interrupt`].
     pub fn set_cancel(&self, token: CancelToken) {
         if let Some(slot) = &self.slot {
-            *lock_slot(&slot.active) = Some(token);
+            let mut run = lock_slot(&slot.run);
+            // Interrupted before the run registered: stop it at once.
+            if run.interrupted {
+                token.cancel();
+            }
+            run.token = Some(token);
         }
     }
 }
@@ -363,7 +440,11 @@ impl ThreadLease {
 impl Drop for ThreadLease {
     fn drop(&mut self) {
         if let Some(slot) = &self.slot {
-            *lock_slot(&slot.active) = None;
+            let mut run = lock_slot(&slot.run);
+            run.token = None;
+            run.interrupted = false;
+            // Late interrupts meant for this lease are ignored.
+            run.generation += 1;
         }
         // Other processes first: a local waiter then finds it free sooner.
         self.remote = None;
@@ -380,7 +461,36 @@ struct Leases(Mutex<HashMap<String, Arc<Slot>>>);
 #[derive(Debug, Default)]
 struct Slot {
     lock: Arc<tokio::sync::Mutex<()>>,
-    active: Mutex<Option<CancelToken>>,
+    run: Mutex<Run>,
+}
+
+/// The run of the lease that holds a slot.
+#[derive(Debug, Default)]
+struct Run {
+    /// Its cancel token, once registered.
+    token: Option<CancelToken>,
+    /// Counts leases: one more each time a lease ends.
+    generation: u64,
+    /// Interrupted before it registered its token.
+    interrupted: bool,
+}
+
+impl Slot {
+    fn generation(&self) -> u64 {
+        lock_slot(&self.run).generation
+    }
+
+    /// Interrupts the run of the lease with `generation`, if it still
+    /// holds the slot: now, or when it registers its token.
+    fn interrupt(&self, generation: u64) {
+        let mut run = lock_slot(&self.run);
+        if run.generation == generation {
+            match &run.token {
+                Some(token) => token.cancel(),
+                None => run.interrupted = true,
+            }
+        }
+    }
 }
 
 impl Leases {

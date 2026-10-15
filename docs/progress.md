@@ -24,14 +24,33 @@ handoff point for whoever continues the work.
    Demo app `demos/support-chat` built and tested by hand with real models.
    Persistence step 3 (0008 §13): memory store and agent `Memory`.
    Persistence step 4 (0008 §14): Postgres and thread locks across
-   processes.
-   **Next:** vector search, retention and encryption at rest (step 5).
+   processes. Step 5 (0008 §15): retention and encryption at rest.
+   **Next:** the roadmap tasks below.
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
    install the built wheel in a clean venv.
 6. Still open from the old plan: the 0003 run-error catalog generated from the
    Rust enums and checked in CI; JSON Schemas for the 0002 types for the SDKs
    (needs a schema generator dependency; decide when the SDKs start).
+
+## Roadmap tasks
+
+Started 2026-10-15 at the user's request: ten tasks, one at a time, each
+with a full cycle (spec, implementation, tests, review, local CI, commit
+and push). A task is marked done only when all of that is verified.
+
+| # | Task | Spec | Status |
+|---|---|---|---|
+| 1 | Retention and encryption at rest | 0008 §15 | Done |
+| 2 | Vector (semantic) memory search | 0008 step 6 | Next |
+| 3 | Audit trail | (to write) | Planned |
+| 4 | `thread.stream` | (to write) | Planned |
+| 5 | Python SDK | (to write) | Planned |
+| 6 | TypeScript SDK | (to write) | Planned |
+| 7 | LLM gateway | 0006 | Planned |
+| 8 | Error catalog and JSON Schemas | (to write) | Planned |
+| 9 | Workflow threads | (to write) | Planned |
+| 10 | Benchmarks | (to write) | Planned |
 
 ## Open decisions
 
@@ -47,6 +66,44 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-15: retention and encryption at rest (0008 step 5, task 1)
+
+- Design 0008 §15. Retention: `Retention` (`thread_ttl`,
+  `keep_checkpoints`, `drop_branches`), `Storage::prune` and
+  `spawn_pruner` (incremental after the first pass). Expired threads are
+  leased with `Reject` first, so a thread a run holds (in any process on
+  Postgres) is skipped. Shortening rewrites the oldest kept checkpoint
+  as a keyframe in the same transaction (Postgres locks the thread row).
+  `Checkpointer` has seven methods now (`threads`, `prune_thread`).
+- Encryption: feature `encryption` (aws-lc-rs, already in the tree for
+  TLS; base64, already there via sqlx). Format `enc:v1:<id>:<base64>`
+  with a per-row HKDF-derived AES-256-GCM key and the row's identity as
+  additional data. Memory keys become HMAC tags; keyword search decrypts
+  the prefix's items and ranks in Rust. Migration 3 adds
+  `agentbuild_settings`: an encrypted database refuses to open without
+  keys, and a wrong key fails at connect. `reencrypt` rotates keys and
+  encrypts databases written before. SQLite: `secure_delete` on.
+- Fixed two races in interrupts across processes (found by the local CI
+  under load): the lock task listened only after taking the lock, and an
+  interrupt that came before the run registered its cancel token was
+  lost. Now it listens first, interrupts name the holder's server process
+  (`pg_locks`), and a lease remembers an early interrupt (with a
+  generation, so it never reaches the next lease). New tests:
+  `an_interrupt_before_the_run_registers_still_stops_it`,
+  `an_interrupt_reaches_only_the_holder_even_before_its_run_registers`.
+  The agent test that overlapped two runs by a fixed 150 ms now starts the
+  second run once the first one's model call is under way.
+- Windows: aws-lc-sys needs `prebuilt-nasm` when built without rustls
+  (storage alone), so the dependency enables it.
+- Tests: contract (thread listing, pruning with an abandoned branch and
+  deltas) on all three backends; retention rules and the background
+  pruner; encryption on SQLite and Postgres (nothing readable in any
+  content column, wrong or missing keys, rotation, `reencrypt`, a moved
+  row refused, turning it on later); deleted rows gone from the SQLite
+  file (fails without `secure_delete`); an agent conversation with
+  remembered facts leaves no readable trace in the file or its WAL (fails
+  on plain storage), then continues after retention.
 
 ### 2026-10-15: Postgres (0008 step 4)
 

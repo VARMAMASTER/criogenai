@@ -1,6 +1,6 @@
 # 0008: Persistence, threads and memory
 
-Status: **Accepted**; §10 steps 1–4 built (§11–§14). Builds on [0005](0005-core-runtime-extensions.md)
+Status: **Accepted**; §10 steps 1–4 built (§11–§14); step 5 (retention, encryption at rest) built (§15). Builds on [0005](0005-core-runtime-extensions.md)
 §5 (snapshots, saved task writes, resume) and gives developers the easy
 interactive API sketched in [0007](0007-public-api.md). Research input:
 [langgraph](../research/langgraph.md) §5 (checkpointing), §6 (interrupts) and §8 (store).
@@ -274,7 +274,7 @@ idempotency keys (payments, email providers), or to check in your own database.
 `storage.retention(keep_checkpoints=50, keep_branches=False, thread_ttl="30d")`
 prunes old checkpoints, never deleting the latest keyframe chain. Expired
 threads and memory items are removed by a background sweep, or by calling
-`storage.prune()` (for serverless deployments).
+`storage.prune()` (for serverless deployments). As built: §15.1.
 
 ### 6.2 Privacy
 
@@ -285,6 +285,7 @@ threads and memory items are removed by a background sweep, or by calling
 - Optional encryption at rest:
   `Storage(…, encrypt=Key.from_env("AGENTBUILD_KEY"))` encrypts `body`,
   `value` and pending writes (AES-GCM, key id stored per row for rotation).
+  As built: §15.2 (also snapshots and memory keys).
 
 ### 6.3 Schema evolution
 
@@ -330,8 +331,9 @@ about 12 methods with sync and async twins
 ([research](../research/langgraph.md) §5.2). Backends receive whole
 checkpoints. A custom backend may store them as they are; the built-in SQL
 backends encode deltas and keyframes internally with the public
-`agentbuild_storage::delta` helpers (as built: §12). Retention and
-encryption are planned above the interface. Python and TS can implement the
+`agentbuild_storage::delta` helpers (as built: §12). Encryption is
+inside the SQL backends, after encoding (deltas need the plain state);
+retention adds two methods (§15.1). Python and TS can implement the
 same interfaces (async methods); the bridge adapts them.
 
 ## 8. Errors (added to 0003 §9)
@@ -348,7 +350,9 @@ same interfaces (async methods); the bridge adapts them.
 | `thread_suspended` | developer | `send` on a thread that waits for approval: answer it first (`approve`, `reject`, `decide`) |
 | `thread_interrupted` | developer | `send` on a thread whose last run did not finish: continue it with `retry` first (§5.5) |
 | `storage_failed` | transient | (core run error) the run's progress could not be saved during the run; the cause's storage code is in the message and `NodeError` kind |
-| `invalid_value` | developer | A memory item the store does not accept: root namespace, bad key, value over 1 MiB (P11, §13); text Postgres cannot store, e.g. a NUL character (§14) |
+| `invalid_value` | developer | A memory item the store does not accept: root namespace, bad key, value over 1 MiB (P11, §13); text Postgres cannot store, e.g. a NUL character (§14); a malformed encryption key (§15.2) |
+| `encryption_key_missing` | developer | Encrypted data but no key for it: an encrypted database opened without keys, a row whose key id is not in the keyring (§15.3) |
+| `encryption_key_invalid` | developer | A key whose id the database knows does not match it (§15.3) |
 
 A storage failure **during** a run fails the step (nothing committed) and the
 run reports the error with its in-memory snapshot attached, so no work is lost
@@ -378,7 +382,8 @@ even if the database was down.
 2. SQLite backend (delta + keyframe format, compare-and-set, migrations).
 3. Memory store (keyword search) + agent `Memory` hook and tools.
 4. Postgres backend, `on_busy="wait"` across processes.
-5. Vector search (`sqlite-vec`, `pgvector`), retention, encryption.
+5. Retention, encryption at rest (built: §15).
+6. Vector search (`sqlite-vec`, `pgvector`).
 
 ## 11. Step 1 as built
 
@@ -699,8 +704,15 @@ connection from start to end:
 1. It takes the lock: `pg_try_advisory_lock`, or `pg_advisory_lock` with
    `lock_timeout` set to the time left. The server ends the wait, so the
    connection is never dropped mid-query.
-2. It runs `LISTEN agentbuild_interrupt`. An interrupt is
-   `pg_notify('agentbuild_interrupt', <key>)`.
+2. It runs `LISTEN agentbuild_interrupt` (before taking the lock, so an
+   interrupt sent the moment it is taken is not missed). An interrupt is
+   `pg_notify('agentbuild_interrupt', '<key>:<pid>')`, where `pid` is the
+   server process holding the lock (from `pg_locks`): a process still
+   waiting for the lock hears it too, and ignores it. An interrupt that
+   arrives before the run registered its cancel token is kept for that
+   lease and cancels the token when it is registered (the same for
+   interrupts within a process); a lease generation keeps a late
+   interrupt from reaching the next lease.
 3. It holds the lock until the lease is dropped, then runs
    `pg_advisory_unlock_all()` and returns the connection to the pool.
 
@@ -756,3 +768,158 @@ client does not trust is refused.
 - The GitHub workflow has a Postgres 13/18 job (manual, like the rest).
 
 No performance claims: there is no benchmark yet.
+
+## 15. Step 5 as built: retention and encryption at rest
+
+Step 5 of §10 is split: retention and encryption are built here; vector
+search is step 6. Both follow §6.1 and §6.2, with the changes below.
+
+### 15.1 Retention
+
+```rust
+let storage = Storage::connect(url).await?.retention(
+    Retention::new()
+        .thread_ttl(Duration::from_secs(30 * 24 * 3600)) // idle threads go
+        .keep_checkpoints(50),                            // per thread
+);
+let report = storage.prune().await?;                     // once (cron, serverless)
+let pruner = storage.spawn_pruner(Duration::from_secs(3600)); // or in the background
+```
+
+| Rule | Effect |
+|---|---|
+| `thread_ttl(d)` | A thread whose last commit is `d` or more ago is deleted like `thread.delete()`: every checkpoint and task write. Threads waiting for approval count as idle |
+| `keep_checkpoints(n)` | Each thread keeps the head and its `n - 1` ancestors (minimum 1). Older checkpoints and abandoned branches (from `rewind`) are deleted |
+| `drop_branches()` | Abandoned branches are deleted; the head's branch is kept whole |
+| (always) | Expired memory items are removed (`MemoryStore::prune_expired`) |
+
+**Keeping a shortened thread loadable.** Deltas need their keyframe
+(§4.1). If the oldest kept checkpoint is a delta, it is rewritten as a
+keyframe with the same state before anything older is deleted, and its
+parent link is cleared: history ends there, and `rewind` to a deleted
+checkpoint fails with `checkpoint_not_found`. Both happen in one
+transaction that locks the thread's row, so loads and commits on the
+thread see either the old chain or the new one. Checkpoints after it keep
+their stored depth, which can only make the next keyframe come early.
+
+**Busy threads.** `prune` takes each expired thread's lease with
+`OnBusy::Reject` (across processes on Postgres), checks the thread is
+still idle, and skips threads in use; the report counts them. Shortening
+needs no lease: it never touches the head or anything a commit reads.
+
+**The contract** gains two methods, so the checkpointer has seven:
+
+```rust
+fn threads(&self, query: &ThreadQuery) -> Vec<ThreadInfo>;       // paged by id
+fn prune_thread(&self, thread: &str, keep: Option<usize>) -> u64; // checkpoints removed
+```
+
+`ThreadQuery` filters by `updated_before` / `updated_after` (Unix ms,
+exclusive / inclusive) and pages with `after` (a thread id) and `limit`,
+in thread id order. `ThreadInfo` is the id, head version and timestamps.
+`prune_thread` keeps only the head's branch, at most `keep` checkpoints
+of it (`None`: all of it).
+
+**The background pruner** (`spawn_pruner`) runs `prune` every interval
+in a Tokio task until its handle is dropped. After the first full pass it
+shortens only threads committed since the previous pass, so a quiet
+database costs a few queries per pass. `Pruner::last()` has the latest
+report or error. Several processes may each run one; the work is
+idempotent.
+
+### 15.2 Encryption at rest
+
+```rust
+// AGENTBUILD_ENCRYPTION_KEYS="k2:<64 hex digits>,k1:<64 hex digits>"
+let keys = Keyring::from_env("AGENTBUILD_ENCRYPTION_KEYS")?; // the first is active
+let storage = Storage::connect_encrypted(url, keys).await?;
+```
+
+Feature `encryption` of `agentbuild-storage` (forwarded by
+`agentbuild-agent`). For the SQL backends; the in-memory ones keep
+nothing at rest, so `connect_encrypted("memory:", …)` is allowed and
+encrypts nothing.
+
+**What is encrypted.** Every column that holds content: checkpoint
+`body` (deltas, keyframes) and `snapshot` (including approval requests
+and tool arguments), task writes, memory values, and memory **keys** (a
+model chooses them with `remember`, e.g. `allergy_penicillin`).
+
+**What stays readable**, because lookups and retention need it: thread
+ids, checkpoint ids, run ids, versions, steps, sources, statuses, node
+names, timestamps, and memory namespaces. Apps must use opaque ids
+(`patients/7f3a…`, not a name or a medical record number) in thread ids
+and namespaces.
+
+**Format.** An encrypted column is the text
+`enc:v1:<key id>:<base64>` (JSON text never starts with `e`, so plain
+and encrypted rows are told apart). The bytes are a 16-byte salt, a
+12-byte nonce, the ciphertext and a 16-byte tag.
+
+- Each row gets its own AES-256-GCM key, derived with HKDF-SHA256 from
+  the key and the row's random salt. No AES-GCM key is used twice, so
+  the usual limit for random nonces (2^32 messages per key) does not
+  apply.
+- The additional data names the row (for example the thread, the
+  checkpoint id and the column), so a row copied into another row's
+  place fails to decrypt (`storage_corrupt`).
+- A memory key is stored as `~` plus an HMAC-SHA256 of the namespace and
+  key (with a second key derived from the encryption key); the key itself
+  is inside the encrypted value. `get`, `put` and `delete` look up the
+  tag of every key in the keyring, so rows written with an older key are
+  found.
+- Keyword search cannot run in SQL on encrypted rows. It reads the live
+  items of the namespace prefix, decrypts them and ranks them as usual
+  (§13): fine for one user's or patient's memory, slower for a search
+  over many namespaces.
+
+The cryptography is aws-lc-rs, already in the tree for TLS, which also
+has a FIPS-validated build.
+
+**Keys.** A `Keyring` holds an active key and older ones, each 32 bytes
+with an id (1–32 characters of `A-Z a-z 0-9 _ . -`). The active key
+encrypts; the key a row names decrypts it. Key bytes are never printed
+(`Debug` shows ids).
+
+**The database remembers it is encrypted.** Migration 3 adds
+`agentbuild_settings(name, value)`. Opening with keys records
+`encryption = on` and, per key id, a check value encrypted with that
+key. Then:
+
+| Opened with | Result |
+|---|---|
+| no keys, database encrypted | fails at connect with `encryption_key_missing`: an app started without its key never writes plain text into an encrypted database |
+| a key whose id the database knows, but other bytes | fails at connect with `encryption_key_invalid` |
+| keys, but a row names a key id not in the keyring | that read fails with `encryption_key_missing` |
+
+**Rotation, and turning it on later.** Put the new key first in the
+keyring (it becomes active) and keep the old ones. New writes use the new
+key; old rows still read. `reencrypt()` rewrites every row that is plain
+or uses an older key, in batches; afterwards old keys can be removed. A
+concurrent write wins over the rewrite of the same row (each rewrite is
+compare-and-set on the old text). The same call encrypts a database
+written before encryption was turned on. Old plain copies can survive
+where the rewrite does not reach (backups, the Postgres WAL, dead rows
+until `VACUUM`): turn encryption on for a new database where possible.
+
+**Deleting really deletes (SQLite).** The SQLite backend turns on
+`secure_delete`, so deleted rows (`thread.delete()`, retention, a
+namespace erased for one patient) are overwritten in the file rather
+than left in free pages. Postgres keeps dead rows until `VACUUM`.
+
+### 15.3 Errors
+
+| Code | Category | When |
+|---|---|---|
+| `encryption_key_missing` | developer | An encrypted database opened without keys; a row encrypted with a key id that is not in the keyring; `reencrypt` without keys |
+| `encryption_key_invalid` | developer | A key whose id the database knows does not match it |
+
+`storage_corrupt` also covers an encrypted row that does not decrypt
+with its key (changed or moved).
+
+### 15.4 Not built
+
+- Vector search (step 6).
+- Encrypting ids, namespaces or timestamps (see "What stays readable").
+- Key management services: a `Keyring` is built from bytes or the
+  environment; fetching keys from a KMS is up to the app.

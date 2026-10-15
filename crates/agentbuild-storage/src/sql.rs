@@ -10,9 +10,10 @@ use agentbuild_core::{PendingWrite, Snapshot, State};
 use serde_json::Value;
 
 use crate::checkpoint::{Checkpoint, merge_pending};
+use crate::crypto::{PREFIX, Sealer, aad};
 use crate::delta::{self, DeltaOp};
 use crate::error::{StorageError, StorageErrorKind};
-use crate::store::{MemoryItem, Namespace};
+use crate::store::{MemoryItem, Namespace, search_text};
 
 /// Default keyframe interval: the full state at least every 25 checkpoints.
 pub(crate) const KEYFRAME_INTERVAL: u32 = 25;
@@ -151,6 +152,102 @@ pub(crate) fn decode_snapshot(
         merge_pending(&mut snapshot, &node, write);
     }
     Ok(snapshot)
+}
+
+/// The additional data of a checkpoint's `body` (design 0008 §15.2).
+pub(crate) fn body_aad(thread: &str, id: &str) -> String {
+    aad(&["checkpoint", thread, id, "body"])
+}
+
+/// The additional data of a checkpoint's `snapshot`.
+pub(crate) fn snapshot_aad(thread: &str, id: &str) -> String {
+    aad(&["checkpoint", thread, id, "snapshot"])
+}
+
+/// The additional data of a task write.
+pub(crate) fn write_aad(thread: &str, checkpoint: &str, node: &str) -> String {
+    aad(&["write", thread, checkpoint, node])
+}
+
+/// The additional data of a memory value, by the stored key column.
+pub(crate) fn memory_aad(namespace: &str, key_column: &str) -> String {
+    aad(&["memory", namespace, key_column])
+}
+
+/// `(kind, body)` from rows `(id, kind, stored body)` of a chain, opened.
+pub(crate) fn open_chain(
+    sealer: &Sealer,
+    thread: &str,
+    rows: Vec<(String, String, String)>,
+) -> Result<Vec<(String, String)>, StorageError> {
+    rows.into_iter()
+        .map(|(id, kind, body)| {
+            let body = sealer.open(&body_aad(thread, &id), body, "checkpoint body")?;
+            Ok((kind, body))
+        })
+        .collect()
+}
+
+/// A memory item as stored: `(key column, value column, search text)`.
+/// With encryption the key column is the key's tag, the value holds
+/// `[key, value]` encrypted, and the search text is empty (search decrypts).
+pub(crate) fn encode_memory(
+    sealer: &Sealer,
+    namespace: &str,
+    key: &str,
+    text: String,
+    value: &Value,
+) -> Result<(String, String, String), StorageError> {
+    if !sealer.is_on() {
+        return Ok((key.to_string(), text, search_text(key, value)));
+    }
+    let column = sealer.memory_keys(namespace, key).swap_remove(0);
+    let both = serde_json::to_string(&(key, value)).map_err(encode_error)?;
+    let sealed = sealer.seal(&memory_aad(namespace, &column), both)?;
+    Ok((column, sealed, String::new()))
+}
+
+/// A memory item and its search text from its columns (plain or
+/// encrypted).
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn decode_memory(
+    sealer: &Sealer,
+    namespace: &str,
+    key_column: String,
+    value_column: String,
+    search: String,
+    created_at_ms: i64,
+    updated_at_ms: i64,
+    expires_at_ms: Option<i64>,
+) -> Result<(MemoryItem, String), StorageError> {
+    if !value_column.starts_with(PREFIX) {
+        let item = memory_item(
+            namespace,
+            key_column,
+            &value_column,
+            created_at_ms,
+            updated_at_ms,
+            expires_at_ms,
+        )?;
+        return Ok((item, search));
+    }
+    let both = sealer.open(
+        &memory_aad(namespace, &key_column),
+        value_column,
+        "memory value",
+    )?;
+    let (key, value): (String, Value) = parse(&both, "memory value")?;
+    let search = search_text(&key, &value);
+    let mut item = memory_item(
+        namespace,
+        key,
+        "null",
+        created_at_ms,
+        updated_at_ms,
+        expires_at_ms,
+    )?;
+    item.value = value;
+    Ok((item, search))
 }
 
 /// A memory item from its columns.

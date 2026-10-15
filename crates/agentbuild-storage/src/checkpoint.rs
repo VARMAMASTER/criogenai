@@ -158,6 +158,79 @@ pub struct CheckpointMeta {
     pub created_at_ms: u64,
 }
 
+/// Which threads [`Checkpointer::threads`] lists: in thread id order,
+/// optionally only those last committed in a time window (Unix
+/// milliseconds), one page at a time.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct ThreadQuery {
+    /// Only threads last committed before this time (exclusive).
+    pub updated_before: Option<u64>,
+    /// Only threads last committed at or after this time.
+    pub updated_after: Option<u64>,
+    /// Only threads whose id sorts after this one (the last id of the
+    /// previous page).
+    pub after: Option<String>,
+    /// The most threads to return. Default 100.
+    pub limit: usize,
+}
+
+impl Default for ThreadQuery {
+    fn default() -> Self {
+        Self {
+            updated_before: None,
+            updated_after: None,
+            after: None,
+            limit: 100,
+        }
+    }
+}
+
+impl ThreadQuery {
+    /// Every thread, 100 at a time.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Only threads last committed before `ms` (exclusive).
+    pub fn updated_before(mut self, ms: u64) -> Self {
+        self.updated_before = Some(ms);
+        self
+    }
+
+    /// Only threads last committed at or after `ms`.
+    pub fn updated_after(mut self, ms: u64) -> Self {
+        self.updated_after = Some(ms);
+        self
+    }
+
+    /// The page after the thread `id`.
+    pub fn after(mut self, id: impl Into<String>) -> Self {
+        self.after = Some(id.into());
+        self
+    }
+
+    /// At most `limit` threads.
+    pub fn limit(mut self, limit: usize) -> Self {
+        self.limit = limit;
+        self
+    }
+}
+
+/// A thread in [`Checkpointer::threads`].
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct ThreadInfo {
+    /// The thread's id.
+    pub thread_id: String,
+    /// The head's version.
+    pub version: u64,
+    /// When its first checkpoint was committed (Unix milliseconds).
+    pub created_at_ms: u64,
+    /// When its last checkpoint was committed.
+    pub updated_at_ms: u64,
+}
+
 /// Where checkpoints are kept (design 0008 §7). Backends only store and
 /// return records; threads, leases and resume logic live above this trait.
 ///
@@ -205,6 +278,55 @@ pub trait Checkpointer: Send + Sync + 'static {
         node: &'a str,
         write: PendingWrite,
     ) -> BoxFuture<'a, Result<(), StorageError>>;
+
+    /// Threads matching `query`, in thread id order (for retention and for
+    /// listing threads).
+    fn threads<'a>(
+        &'a self,
+        query: &'a ThreadQuery,
+    ) -> BoxFuture<'a, Result<Vec<ThreadInfo>, StorageError>>;
+
+    /// Shortens the thread: keeps only the head's branch, at most `keep`
+    /// checkpoints of it (`None`: all of it; at least the head). Abandoned
+    /// branches and older checkpoints are deleted with their task writes.
+    /// The oldest kept checkpoint loads as before and its parent is cleared
+    /// (design 0008 §15.1). Returns how many checkpoints were deleted.
+    fn prune_thread<'a>(
+        &'a self,
+        thread: &'a str,
+        keep: Option<usize>,
+    ) -> BoxFuture<'a, Result<u64, StorageError>>;
+}
+
+/// What [`Checkpointer::prune_thread`] does to a thread with `checkpoints`
+/// (`(id, parent_id)`) and `head`: the ids kept (newest first) and the ids
+/// deleted. Nothing is deleted if every checkpoint is kept.
+pub(crate) fn prune_plan(
+    head: &str,
+    checkpoints: &[(String, Option<String>)],
+    keep: Option<usize>,
+) -> (Vec<String>, Vec<String>) {
+    let parents: std::collections::HashMap<&str, Option<&str>> = checkpoints
+        .iter()
+        .map(|(id, parent)| (id.as_str(), parent.as_deref()))
+        .collect();
+    let limit = keep.unwrap_or(usize::MAX).max(1);
+    let mut kept = Vec::new();
+    let mut next = Some(head);
+    while let Some(id) = next.filter(|_| kept.len() < limit) {
+        let Some(parent) = parents.get(id) else {
+            break;
+        };
+        kept.push(id.to_string());
+        next = *parent;
+    }
+    let keep_set: std::collections::HashSet<&str> = kept.iter().map(String::as_str).collect();
+    let deleted = checkpoints
+        .iter()
+        .filter(|(id, _)| !keep_set.contains(id.as_str()))
+        .map(|(id, _)| id.clone())
+        .collect();
+    (kept, deleted)
 }
 
 /// Merges a task write into `snapshot.pending_writes[node]`: memo entries

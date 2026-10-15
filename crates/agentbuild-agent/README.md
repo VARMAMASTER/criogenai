@@ -17,7 +17,7 @@ with tools, run as a loop on the AgentBuild workflow engine.
   `agent.stream()` for UIs
 - threads: `agent.thread("user-42").send(...)` keeps the conversation in
   storage (in memory, SQLite with the `sqlite` feature, or Postgres with
-  `postgres`); pending
+  `postgres`; encrypted at rest with `encryption`); pending
   approvals and failed runs wait there for `approve()` or `retry()` from
   any agent instance
 - long-term memory: `Memory::by_state("user_id", users)` keeps facts per

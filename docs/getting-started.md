@@ -225,6 +225,26 @@ database. The busy-thread rules hold across processes: a second `send`
 waits even when another server runs the first. Use a direct connection,
 or PgBouncer in session mode.
 
+**Patient data, or anything else sensitive?** Turn on the `encryption`
+feature and open storage with keys:
+
+```rust,ignore
+// AGENTBUILD_ENCRYPTION_KEYS="k1:<64 hex digits>"  (openssl rand -hex 32)
+let keys = Keyring::from_env("AGENTBUILD_ENCRYPTION_KEYS")?;
+let storage = Storage::connect_encrypted("sqlite://agent.db", keys)
+    .await?
+    .retention(Retention::new().thread_ttl(Duration::from_secs(30 * 86_400)));
+```
+
+Messages, approval requests, tool results and remembered facts are then
+encrypted in the database. Once encrypted, the database refuses to open
+without its keys, so an app started without them never writes plain text
+into it. Thread ids and memory namespaces stay readable: use opaque ids.
+To rotate, put a new key first (`k2:…,k1:…`) and call
+`storage.reencrypt()`. Retention deletes threads idle for 30 days when
+`storage.prune()` runs (from a cron job) or in the background with
+`storage.spawn_pruner(every)`.
+
 Testing tip: SQLite storage needs Tokio's real clock. Under a paused test
 clock (`start_paused`), the database pool's connection timeout fires at
 once; use `Storage::in_memory()` there, or real time with a fast

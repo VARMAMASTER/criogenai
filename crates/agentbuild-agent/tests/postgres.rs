@@ -33,13 +33,17 @@ fn unique(name: &str) -> String {
     format!("{name}-{nanos}-{}", std::process::id())
 }
 
-/// A process with an agent whose model answers after 400 ms.
-async fn process(url: &str, on_busy: OnBusy) -> Agent {
-    let model = FakeModel::with_delay(Duration::from_millis(400), Duration::from_millis(400));
-    Agent::builder(model)
+/// A process with an agent whose model answers after 2 s.
+async fn process(url: &str, on_busy: OnBusy) -> (Agent, Arc<FakeModel>) {
+    let model = Arc::new(FakeModel::with_delay(
+        Duration::from_secs(2),
+        Duration::from_secs(2),
+    ));
+    let agent = Agent::builder_shared(model.clone())
         .storage(Storage::connect(url).await.unwrap().on_busy(on_busy))
         .build()
-        .unwrap()
+        .unwrap();
+    (agent, model)
 }
 
 /// Process A sends "one"; while it runs, process B sends "two".
@@ -47,13 +51,22 @@ async fn overlapping(
     url: &str,
     second: OnBusy,
 ) -> (Result<u64, String>, Result<Vec<(Role, String)>, String>) {
-    let (a, b) = (process(url, OnBusy::Wait).await, process(url, second).await);
+    let ((a, model), (b, _)) = (process(url, OnBusy::Wait).await, process(url, second).await);
     let thread = unique("chat");
     let first = {
         let chat = a.thread(&thread);
         tokio::spawn(async move { chat.send("one").await })
     };
-    tokio::time::sleep(Duration::from_millis(150)).await;
+    // B starts once A's run is under way (its model call takes 2 s), however
+    // loaded the machine is.
+    let started = tokio::time::Instant::now();
+    while model.requests().is_empty() {
+        assert!(
+            started.elapsed() < Duration::from_secs(30),
+            "A never started"
+        );
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
     let second = b.thread(&thread).send("two").await;
     let first = first.await.unwrap();
     b.thread(&thread).delete().await.unwrap();

@@ -57,7 +57,7 @@ write our own implementation.
   The 0004 agent list is complete. Threads (0008 §11): `agent.thread(id)`
   with `send`, `approve`/`reject`/`decide`, `retry`, `cancel`, `history`,
   `rewind`, `delete`.
-- **Implemented in `agentbuild-storage` (0008 steps 1–4):** `Checkpoint`,
+- **Implemented in `agentbuild-storage` (0008 steps 1–5):** `Checkpoint`,
   the `Checkpointer` trait (compare-and-set commit, `put_pending`),
   `InMemoryCheckpointer`, `SqliteCheckpointer` (feature `sqlite`, sqlx
   0.8: delta + keyframe checkpoints, migrations), `ThreadWriter`,
@@ -77,12 +77,18 @@ write our own implementation.
   processes, using session advisory locks plus `LISTEN` for interrupts.
   The tests need a server: `scripts/with-postgres.sh`, which starts a
   throwaway one from the portable binaries that `scripts/get-postgres.sh`
-  downloads.
+  downloads. Step 5 (§15): `Retention` (`thread_ttl`,
+  `keep_checkpoints`, `drop_branches`) applied by `Storage::prune` or
+  `spawn_pruner`; `Checkpointer::threads` / `prune_thread`. Encryption
+  at rest (feature `encryption`): `Keyring`, `Storage::connect_encrypted`,
+  `reencrypt`; AES-256-GCM per-row keys (HKDF), memory keys as HMAC tags,
+  `agentbuild_settings` refuses opening an encrypted database without
+  its keys. SQLite runs with `secure_delete`.
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 471 across the five crates (with `--all-features`; includes the
+- Tests: 491 across the five crates (with `--all-features`; includes the
   getting-started guide's examples), plus the package test. Release prep:
   `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`,
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
@@ -91,14 +97,15 @@ write our own implementation.
 - **Demo app:** `demos/support-chat` (Rust server on AgentBuild + Next.js
   UI; real OpenAI/Gemini models, manual only, not in CI or the workspace).
   Keys live in `~/.agentbuild-keys.env`, never in the repo.
-- **Next:** persistence step 5 (vector search, retention, encryption at
-  rest); then the Python SDK (Phase 2). See `docs/progress.md`. The user will build their
+- **Next:** the 10-task roadmap in `docs/progress.md` ("Roadmap
+  tasks"), one full cycle each: vector search, audit trail,
+  `thread.stream`, Python SDK, TypeScript SDK, gateway, error catalog
+  and JSON Schemas, workflow threads, benchmarks. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
 - **Not started:** gateway, Python SDK, TypeScript SDK, vector
-  (semantic) memory search, encryption at rest, retention. Do not describe
-  these as existing anywhere.
+  (semantic) memory search. Do not describe these as existing anywhere.
 
 ## Commands
 

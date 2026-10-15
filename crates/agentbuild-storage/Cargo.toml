@@ -21,14 +21,22 @@ agentbuild-core = { path = "../agentbuild-core", version = "0.1.0" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-# `sync`: the per-thread leases; `time`: `busy_timeout`.
-tokio = { workspace = true, features = ["sync", "time"] }
+# `sync`: the per-thread leases; `time`: `busy_timeout`; `rt`: the
+# background pruner (`Storage::spawn_pruner`).
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
 # Checkpoint ids (v7: ordered by creation time).
 uuid.workspace = true
 # The SQL backends (features `sqlite`, `postgres`): async, one crate for
 # both. No macros (queries are plain strings, checked by tests); SQLite
 # itself is compiled in (bundled), so there is nothing to install.
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio"], optional = true }
+# Encryption at rest (feature `encryption`): AES-256-GCM, HKDF and HMAC from
+# aws-lc-rs, the library rustls already uses for TLS (no second crypto
+# library; a FIPS-validated build exists). base64 for the stored text; sqlx
+# already depends on it. `prebuilt-nasm`: builds on Windows without NASM (as
+# rustls does).
+aws-lc-rs = { version = "1.18", optional = true, default-features = false, features = ["aws-lc-sys", "prebuilt-nasm"] }
+base64 = { version = "0.22", optional = true }
 
 [features]
 default = []
@@ -36,9 +44,12 @@ default = []
 sqlite = ["dep:sqlx", "sqlx/sqlite"]
 # Postgres storage (`PostgresCheckpointer`, `Storage::connect("postgres://…")`).
 # TLS with rustls on aws-lc-rs, the provider reqwest already uses (no second
-# crypto library). Tokio `rt` and `macros`: each cross-process thread lock
+# crypto library). Tokio `macros`: each cross-process thread lock
 # is held by a task that also listens for interrupts.
-postgres = ["dep:sqlx", "sqlx/postgres", "sqlx/tls-rustls-aws-lc-rs", "tokio/rt", "tokio/macros"]
+postgres = ["dep:sqlx", "sqlx/postgres", "sqlx/tls-rustls-aws-lc-rs", "tokio/macros"]
+# Encryption at rest for the SQL backends (`Keyring`,
+# `Storage::connect_encrypted`; design 0008 §15.2).
+encryption = ["dep:aws-lc-rs", "dep:base64"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "sync", "test-util"] }

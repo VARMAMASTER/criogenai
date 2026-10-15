@@ -11,7 +11,7 @@ use agentbuild_providers::{
 };
 use agentbuild_storage::{
     Checkpoint, CheckpointMeta, CheckpointStatus, Checkpointer, Durability, InMemoryCheckpointer,
-    OnBusy, Source, Storage, StorageError, StorageErrorKind,
+    OnBusy, Source, Storage, StorageError, StorageErrorKind, ThreadInfo, ThreadQuery,
 };
 use serde_json::{Map, Value, json};
 
@@ -481,6 +481,21 @@ impl Checkpointer for ReadOnly {
                 "database is down",
             ))
         })
+    }
+
+    fn threads<'a>(
+        &'a self,
+        query: &'a ThreadQuery,
+    ) -> BoxFuture<'a, Result<Vec<ThreadInfo>, StorageError>> {
+        self.0.threads(query)
+    }
+
+    fn prune_thread<'a>(
+        &'a self,
+        thread: &'a str,
+        keep: Option<usize>,
+    ) -> BoxFuture<'a, Result<u64, StorageError>> {
+        self.0.prune_thread(thread, keep)
     }
 }
 

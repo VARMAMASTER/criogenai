@@ -13,12 +13,14 @@
 //! Runs are saved as they go ([`Durability::Step`], via [`ThreadWriter`]),
 //! so a run interrupted by a crash continues where it stopped.
 //!
-//! **Status:** steps 1–4 of design 0008: the contract, the in-memory
+//! **Status:** steps 1–5 of design 0008: the contract, the in-memory
 //! backends; with the `sqlite` feature, `SqliteCheckpointer` (delta
 //! checkpoints with keyframes, migrations) and `SqliteMemoryStore`
 //! (keyword search); with the `postgres` feature, the same on Postgres
-//! plus [`ThreadLocks`] across processes. Vector search, retention and
-//! encryption at rest are planned.
+//! plus [`ThreadLocks`] across processes. [`Retention`] deletes idle
+//! threads and shortens long ones; with the `encryption` feature, the SQL
+//! backends encrypt content at rest (`Storage::connect_encrypted`).
+//! Vector search is planned.
 //!
 //! ```
 //! use agentbuild_core::State;
@@ -40,12 +42,16 @@
 //! ```
 
 mod checkpoint;
+// Without a SQL backend only the keys are used.
+#[cfg_attr(not(any(feature = "sqlite", feature = "postgres")), allow(dead_code))]
+mod crypto;
 pub mod delta;
 mod error;
 mod locks;
 mod memory;
 #[cfg(feature = "postgres")]
 mod postgres;
+mod retention;
 #[cfg(any(feature = "sqlite", feature = "postgres"))]
 mod sql;
 #[cfg(feature = "sqlite")]
@@ -55,8 +61,11 @@ mod store;
 mod writer;
 
 pub use checkpoint::{
-    Checkpoint, CheckpointMeta, CheckpointStatus, Checkpointer, Source, merge_pending,
+    Checkpoint, CheckpointMeta, CheckpointStatus, Checkpointer, Source, ThreadInfo, ThreadQuery,
+    merge_pending,
 };
+#[cfg(feature = "encryption")]
+pub use crypto::{EncryptionKey, Keyring, ReencryptReport};
 pub use error::{StorageError, StorageErrorKind};
 pub use locks::{HeldLock, InterruptHandler, ThreadLocks};
 pub use memory::InMemoryCheckpointer;
@@ -64,6 +73,7 @@ pub use memory::InMemoryCheckpointer;
 pub use postgres::{
     PostgresCheckpointer, PostgresMemoryStore, PostgresOptions, PostgresThreadLocks,
 };
+pub use retention::{PruneReport, Pruner, Retention};
 #[cfg(feature = "sqlite")]
 pub use sqlite::{SqliteCheckpointer, SqliteMemoryStore};
 pub use storage::{Durability, OnBusy, Storage, ThreadLease};

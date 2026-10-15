@@ -20,6 +20,11 @@ pub enum StorageErrorKind {
     /// A value, key or namespace that storage does not accept (for example
     /// a memory item over the size limit).
     InvalidValue,
+    /// Encrypted data, but no key for it: an encrypted database opened
+    /// without keys, or a row encrypted with a key id not in the keyring.
+    EncryptionKeyMissing,
+    /// A key whose id the database knows does not match it.
+    EncryptionKeyInvalid,
 }
 
 impl StorageErrorKind {
@@ -33,6 +38,8 @@ impl StorageErrorKind {
             Self::Corrupt => "storage_corrupt",
             Self::Incompatible => "storage_incompatible",
             Self::InvalidValue => "invalid_value",
+            Self::EncryptionKeyMissing => "encryption_key_missing",
+            Self::EncryptionKeyInvalid => "encryption_key_invalid",
         }
     }
 }
@@ -66,4 +73,13 @@ impl fmt::Display for StorageError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}: {}", self.code(), self.message)
     }
+}
+
+/// Stored data that cannot be read back (`storage_corrupt`).
+#[cfg_attr(
+    not(any(feature = "sqlite", feature = "postgres", feature = "encryption")),
+    allow(dead_code)
+)]
+pub(crate) fn corrupt(message: impl Into<String>) -> StorageError {
+    StorageError::new(StorageErrorKind::Corrupt, message)
 }

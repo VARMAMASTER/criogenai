@@ -294,18 +294,18 @@ mod sqlite {
         checkpointer.close().await;
         // Back to how version 1 left the file.
         let pool = sqlx::SqlitePool::connect(&url).await.unwrap();
-        sqlx::query("DROP TABLE agentbuild_memory")
-            .execute(&pool)
-            .await
-            .unwrap();
-        sqlx::query("DELETE FROM agentbuild_schema_migrations WHERE version = 2")
-            .execute(&pool)
-            .await
-            .unwrap();
+        for statement in [
+            "DROP TABLE agentbuild_memory",
+            "DROP TABLE agentbuild_settings",
+            "DROP INDEX agentbuild_threads_updated",
+            "DELETE FROM agentbuild_schema_migrations WHERE version >= 2",
+        ] {
+            sqlx::query(statement).execute(&pool).await.unwrap();
+        }
         pool.close().await;
 
         let checkpointer = SqliteCheckpointer::connect(&url).await.unwrap();
-        assert_eq!(checkpointer.schema_version().await.unwrap(), 2);
+        assert_eq!(checkpointer.schema_version().await.unwrap(), 3);
         let store = checkpointer.memory_store();
         store
             .put(&ns("users/ada"), "diet", json!("vegan"), None)

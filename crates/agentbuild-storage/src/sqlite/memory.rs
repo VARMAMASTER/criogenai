@@ -6,28 +6,34 @@ use sqlx::sqlite::{SqlitePool, SqliteRow};
 
 use super::{get, sql_error};
 use crate::checkpoint::now_ms;
+use crate::crypto::Sealer;
 use crate::error::StorageError;
-use crate::sql::memory_item;
+use crate::sql::{decode_memory, encode_memory};
 use crate::store::{
-    MemoryItem, MemoryStore, Namespace, SearchQuery, check_prefix, check_put, expiry, query_terms,
-    rank, search_text,
+    MemoryItem, MemoryStore, Namespace, SearchQuery, check_prefix, check_put, expiry, is_live,
+    query_terms, rank,
 };
 
 /// Long-term memory in a SQLite database (table `agentbuild_memory`).
 /// Usually from [`SqliteCheckpointer::memory_store`](crate::SqliteCheckpointer::memory_store)
 /// or [`Storage::connect`](crate::Storage::connect), sharing the database
-/// with threads.
+/// (and encryption keys) with threads.
 ///
 /// Keyword search narrows the rows in SQL (items containing any query word)
-/// and ranks them as every backend does (see [`MemoryStore`]).
+/// and ranks them as every backend does (see [`MemoryStore`]). With
+/// encryption it reads and decrypts the live items of the prefix instead
+/// (design 0008 §15.2).
 #[derive(Clone)]
 pub struct SqliteMemoryStore {
     pool: SqlitePool,
+    sealer: Sealer,
 }
 
 impl std::fmt::Debug for SqliteMemoryStore {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("SqliteMemoryStore").finish_non_exhaustive()
+        f.debug_struct("SqliteMemoryStore")
+            .field("encrypted", &self.sealer.is_on())
+            .finish_non_exhaustive()
     }
 }
 
@@ -35,9 +41,18 @@ impl std::fmt::Debug for SqliteMemoryStore {
 /// plus `/`); the root matches everything.
 const IN_PREFIX: &str = "(?1 = '' OR namespace = ?1 OR substr(namespace, 1, length(?2)) = ?2)";
 
+const COLUMNS: &str =
+    "namespace, key, value, search_text, created_at_ms, updated_at_ms, expires_at_ms";
+
+/// `key IN (?n, ?n+1, …)` for `count` keys starting at parameter `first`.
+fn key_in(first: usize, count: usize) -> String {
+    let marks: Vec<String> = (first..first + count).map(|i| format!("?{i}")).collect();
+    format!("key IN ({})", marks.join(", "))
+}
+
 impl SqliteMemoryStore {
-    pub(crate) fn new(pool: SqlitePool) -> Self {
-        Self { pool }
+    pub(crate) fn new(pool: SqlitePool, sealer: Sealer) -> Self {
+        Self { pool, sealer }
     }
 
     /// Opens (or creates) the database at `url` (as
@@ -57,32 +72,88 @@ impl SqliteMemoryStore {
     ) -> Result<(), StorageError> {
         let text = check_put(namespace, key, &value)?;
         let now = now_ms();
-        // Overwriting an expired item starts a new one (new created_at).
+        let path = namespace.path();
+        let (column, stored, search) = encode_memory(&self.sealer, &path, key, text, &value)?;
+        let expires = expiry(now, ttl).map(|at| at.min(i64::MAX as u64) as i64);
+        if !self.sealer.is_on() {
+            // Overwriting an expired item starts a new one (new created_at).
+            sqlx::query(
+                "INSERT INTO agentbuild_memory
+                    (namespace, key, value, search_text, created_at_ms, updated_at_ms,
+                     expires_at_ms)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6)
+                 ON CONFLICT (namespace, key) DO UPDATE SET
+                    value = excluded.value,
+                    search_text = excluded.search_text,
+                    created_at_ms = CASE
+                        WHEN agentbuild_memory.expires_at_ms IS NOT NULL
+                            AND agentbuild_memory.expires_at_ms <= excluded.updated_at_ms
+                        THEN excluded.created_at_ms
+                        ELSE agentbuild_memory.created_at_ms END,
+                    updated_at_ms = excluded.updated_at_ms,
+                    expires_at_ms = excluded.expires_at_ms",
+            )
+            .bind(path)
+            .bind(column)
+            .bind(stored)
+            .bind(search)
+            .bind(now as i64)
+            .bind(expires)
+            .execute(&self.pool)
+            .await
+            .map_err(sql_error)?;
+            return Ok(());
+        }
+        // Encrypted: the item may be stored under another key's tag (or
+        // plain, from before encryption): replace every form of it, keeping
+        // the first write's time while the item is live.
+        let forms = self.sealer.memory_keys(&path, key);
+        let mut tx = self
+            .pool
+            .begin_with("BEGIN IMMEDIATE")
+            .await
+            .map_err(sql_error)?;
+        let sql = format!(
+            "SELECT created_at_ms, expires_at_ms FROM agentbuild_memory
+                WHERE namespace = ?1 AND {}",
+            key_in(2, forms.len())
+        );
+        let mut select = sqlx::query_as::<_, (i64, Option<i64>)>(&sql).bind(&path);
+        for form in &forms {
+            select = select.bind(form);
+        }
+        let found = select.fetch_all(&mut *tx).await.map_err(sql_error)?;
+        let created = found
+            .iter()
+            .filter(|(_, expires)| is_live(expires.map(|at| at as u64), now))
+            .map(|(created, _)| *created)
+            .min()
+            .unwrap_or(now as i64);
+        let sql = format!(
+            "DELETE FROM agentbuild_memory WHERE namespace = ?1 AND {}",
+            key_in(2, forms.len())
+        );
+        let mut delete = sqlx::query(&sql).bind(&path);
+        for form in &forms {
+            delete = delete.bind(form);
+        }
+        delete.execute(&mut *tx).await.map_err(sql_error)?;
         sqlx::query(
             "INSERT INTO agentbuild_memory
                 (namespace, key, value, search_text, created_at_ms, updated_at_ms, expires_at_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?5, ?6)
-             ON CONFLICT (namespace, key) DO UPDATE SET
-                value = excluded.value,
-                search_text = excluded.search_text,
-                created_at_ms = CASE
-                    WHEN agentbuild_memory.expires_at_ms IS NOT NULL
-                        AND agentbuild_memory.expires_at_ms <= excluded.updated_at_ms
-                    THEN excluded.created_at_ms
-                    ELSE agentbuild_memory.created_at_ms END,
-                updated_at_ms = excluded.updated_at_ms,
-                expires_at_ms = excluded.expires_at_ms",
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
         )
-        .bind(namespace.path())
-        .bind(key)
-        .bind(text)
-        .bind(search_text(key, &value))
+        .bind(&path)
+        .bind(column)
+        .bind(stored)
+        .bind(search)
+        .bind(created)
         .bind(now as i64)
-        .bind(expiry(now, ttl).map(|at| at.min(i64::MAX as u64) as i64))
-        .execute(&self.pool)
+        .bind(expires)
+        .execute(&mut *tx)
         .await
         .map_err(sql_error)?;
-        Ok(())
+        tx.commit().await.map_err(sql_error)
     }
 
     async fn get_item(
@@ -90,19 +161,20 @@ impl SqliteMemoryStore {
         namespace: &Namespace,
         key: &str,
     ) -> Result<Option<MemoryItem>, StorageError> {
-        let row = sqlx::query(
-            "SELECT namespace, key, value, search_text, created_at_ms, updated_at_ms, expires_at_ms
-             FROM agentbuild_memory
-             WHERE namespace = ?1 AND key = ?2
-                AND (expires_at_ms IS NULL OR expires_at_ms > ?3)",
-        )
-        .bind(namespace.path())
-        .bind(key)
-        .bind(now_ms() as i64)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(sql_error)?;
-        row.map(|row| read_item(&row).map(|(item, _)| item))
+        let path = namespace.path();
+        let forms = self.sealer.memory_keys(&path, key);
+        let sql = format!(
+            "SELECT {COLUMNS} FROM agentbuild_memory
+             WHERE namespace = ?1 AND (expires_at_ms IS NULL OR expires_at_ms > ?2) AND {}
+             ORDER BY updated_at_ms DESC LIMIT 1",
+            key_in(3, forms.len())
+        );
+        let mut select = sqlx::query(&sql).bind(&path).bind(now_ms() as i64);
+        for form in &forms {
+            select = select.bind(form);
+        }
+        let row = select.fetch_optional(&self.pool).await.map_err(sql_error)?;
+        row.map(|row| self.read_item(&row).map(|(item, _)| item))
             .transpose()
     }
 
@@ -113,13 +185,15 @@ impl SqliteMemoryStore {
     ) -> Result<Vec<MemoryItem>, StorageError> {
         let terms = query_terms(query);
         let mut sql = format!(
-            "SELECT namespace, key, value, search_text, created_at_ms, updated_at_ms, expires_at_ms
-             FROM agentbuild_memory
+            "SELECT {COLUMNS} FROM agentbuild_memory
              WHERE {IN_PREFIX} AND (expires_at_ms IS NULL OR expires_at_ms > ?3)"
         );
-        if terms.is_empty() {
+        // Encrypted rows have no searchable text: read them all and rank
+        // them after decrypting.
+        let narrow = !self.sealer.is_on();
+        if terms.is_empty() && narrow {
             sql.push_str(" ORDER BY updated_at_ms DESC, namespace, key LIMIT ?4");
-        } else {
+        } else if narrow {
             // Rows containing any query word (or a word starting with it);
             // all of them are ranked below.
             let any: Vec<String> = (0..terms.len())
@@ -132,30 +206,37 @@ impl SqliteMemoryStore {
             .bind(path.clone())
             .bind(format!("{path}/"))
             .bind(now_ms() as i64);
-        if terms.is_empty() {
+        if narrow && terms.is_empty() {
             select = select.bind(query.limit.min(i64::MAX as usize) as i64);
-        } else {
+        } else if narrow {
             for term in &terms {
                 select = select.bind(format!(" {term}"));
             }
         }
         let rows = select.fetch_all(&self.pool).await.map_err(sql_error)?;
-        let candidates = rows.iter().map(read_item).collect::<Result<Vec<_>, _>>()?;
+        let candidates = rows
+            .iter()
+            .map(|row| self.read_item(row))
+            .collect::<Result<Vec<_>, _>>()?;
         Ok(rank(candidates, &terms, query.limit))
     }
 
     async fn delete_item(&self, namespace: &Namespace, key: &str) -> Result<bool, StorageError> {
-        let live: Option<bool> = sqlx::query_scalar(
-            "DELETE FROM agentbuild_memory WHERE namespace = ?1 AND key = ?2
-             RETURNING expires_at_ms IS NULL OR expires_at_ms > ?3",
-        )
-        .bind(namespace.path())
-        .bind(key)
-        .bind(now_ms() as i64)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(sql_error)?;
-        Ok(live.unwrap_or(false))
+        let path = namespace.path();
+        let forms = self.sealer.memory_keys(&path, key);
+        let sql = format!(
+            "DELETE FROM agentbuild_memory WHERE namespace = ?1 AND {}
+             RETURNING expires_at_ms IS NULL OR expires_at_ms > ?2",
+            key_in(3, forms.len())
+        );
+        let mut delete = sqlx::query_scalar::<_, bool>(&sql)
+            .bind(&path)
+            .bind(now_ms() as i64);
+        for form in &forms {
+            delete = delete.bind(form);
+        }
+        let live = delete.fetch_all(&self.pool).await.map_err(sql_error)?;
+        Ok(live.into_iter().any(|live| live))
     }
 
     async fn delete_prefix(&self, prefix: &Namespace) -> Result<u64, StorageError> {
@@ -181,19 +262,93 @@ impl SqliteMemoryStore {
         .map_err(sql_error)?;
         Ok(done.rows_affected())
     }
-}
 
-/// An item and its search text.
-fn read_item(row: &SqliteRow) -> Result<(MemoryItem, String), StorageError> {
-    let item = memory_item(
-        &get::<String>(row, "namespace")?,
-        get(row, "key")?,
-        &get::<String>(row, "value")?,
-        get(row, "created_at_ms")?,
-        get(row, "updated_at_ms")?,
-        get(row, "expires_at_ms")?,
-    )?;
-    Ok((item, get(row, "search_text")?))
+    /// Rewrites items not encrypted with the active key (`prefix` is
+    /// `enc:v1:<active id>:`). A concurrent `put` of the same item wins.
+    #[cfg(feature = "encryption")]
+    pub(crate) async fn reencrypt(&self, prefix: &str) -> Result<u64, StorageError> {
+        let mut done = 0;
+        let mut after = (String::new(), String::new());
+        loop {
+            let sql = format!(
+                "SELECT {COLUMNS} FROM agentbuild_memory
+                    WHERE (namespace, key) > (?1, ?2) AND substr(value, 1, length(?3)) <> ?3
+                    ORDER BY namespace, key LIMIT ?4"
+            );
+            let rows = sqlx::query(&sql)
+                .bind(&after.0)
+                .bind(&after.1)
+                .bind(prefix)
+                .bind(super::BATCH as i64)
+                .fetch_all(&self.pool)
+                .await
+                .map_err(sql_error)?;
+            let Some(last) = rows.last() else {
+                return Ok(done);
+            };
+            after = (get(last, "namespace")?, get(last, "key")?);
+            for row in &rows {
+                let path: String = get(row, "namespace")?;
+                let old_key: String = get(row, "key")?;
+                let old_value: String = get(row, "value")?;
+                let (item, _) = self.read_item(row)?;
+                let text = serde_json::to_string(&item.value).map_err(crate::sql::encode_error)?;
+                let (column, stored, search) =
+                    encode_memory(&self.sealer, &path, &item.key, text, &item.value)?;
+                let mut tx = self
+                    .pool
+                    .begin_with("BEGIN IMMEDIATE")
+                    .await
+                    .map_err(sql_error)?;
+                let removed = sqlx::query(
+                    "DELETE FROM agentbuild_memory WHERE namespace = ? AND key = ? AND value = ?",
+                )
+                .bind(&path)
+                .bind(&old_key)
+                .bind(&old_value)
+                .execute(&mut *tx)
+                .await
+                .map_err(sql_error)?
+                .rows_affected();
+                if removed == 1 {
+                    // A newer write under the new tag wins.
+                    done += sqlx::query(
+                        "INSERT INTO agentbuild_memory
+                            (namespace, key, value, search_text, created_at_ms, updated_at_ms,
+                             expires_at_ms)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)
+                         ON CONFLICT (namespace, key) DO NOTHING",
+                    )
+                    .bind(&path)
+                    .bind(column)
+                    .bind(stored)
+                    .bind(search)
+                    .bind(item.created_at_ms as i64)
+                    .bind(item.updated_at_ms as i64)
+                    .bind(item.expires_at_ms.map(|at| at as i64))
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(sql_error)?
+                    .rows_affected();
+                }
+                tx.commit().await.map_err(sql_error)?;
+            }
+        }
+    }
+
+    /// An item and its search text (decrypted if needed).
+    fn read_item(&self, row: &SqliteRow) -> Result<(MemoryItem, String), StorageError> {
+        decode_memory(
+            &self.sealer,
+            &get::<String>(row, "namespace")?,
+            get(row, "key")?,
+            get(row, "value")?,
+            get(row, "search_text")?,
+            get(row, "created_at_ms")?,
+            get(row, "updated_at_ms")?,
+            get(row, "expires_at_ms")?,
+        )
+    }
 }
 
 impl MemoryStore for SqliteMemoryStore {

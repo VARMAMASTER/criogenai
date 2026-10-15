@@ -141,7 +141,7 @@ async fn migrations_run_once_even_when_processes_start_together() {
     .await;
     for store in &opened {
         let store = store.as_ref().unwrap();
-        assert_eq!(store.schema_version().await.unwrap(), 2);
+        assert_eq!(store.schema_version().await.unwrap(), 3);
     }
     for store in opened {
         store.unwrap().close().await;
@@ -151,7 +151,7 @@ async fn migrations_run_once_even_when_processes_start_together() {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(applied, 2);
+    assert_eq!(applied, 3);
     sqlx::query("INSERT INTO agentbuild_schema_migrations VALUES (99, 0)")
         .execute(&pool)
         .await
@@ -434,5 +434,72 @@ async fn a_lost_connection_frees_the_thread() {
     waiting.await.unwrap().unwrap();
     drop(held);
     pool.close().await;
+    db.remove().await;
+}
+
+#[tokio::test]
+async fn retention_skips_threads_another_process_holds() {
+    let Some(db) = TestDb::create().await else {
+        return;
+    };
+    let a = Storage::connect(&db.url).await.unwrap();
+    let b = Storage::connect(&db.url).await.unwrap().retention(
+        agentbuild_storage::Retention::new()
+            .thread_ttl(Duration::ZERO)
+            .keep_checkpoints(1),
+    );
+    for thread in ["held", "idle"] {
+        let first = Checkpoint::new(thread, 1, Source::Step, state(1));
+        let second = Checkpoint::new(thread, 2, Source::Step, state(2)).parent(&first.id);
+        a.checkpointer().commit(first, 0).await.unwrap();
+        a.checkpointer().commit(second, 1).await.unwrap();
+    }
+    let lease = a.lease("held").await.unwrap();
+    let report = b.prune().await.unwrap();
+    assert_eq!(report.threads_deleted, 1);
+    assert_eq!(report.threads_busy, 1);
+    // Shortened all the same: that needs no lease.
+    assert_eq!(report.checkpoints_deleted, 1);
+    assert_eq!(a.checkpointer().history("held", 10).await.unwrap().len(), 1);
+    assert!(a.checkpointer().load("idle", None).await.unwrap().is_none());
+    drop(lease);
+    assert_eq!(b.prune().await.unwrap().threads_deleted, 1);
+    db.remove().await;
+}
+
+#[tokio::test]
+async fn an_interrupt_reaches_only_the_holder_even_before_its_run_registers() {
+    let Some(db) = TestDb::create().await else {
+        return;
+    };
+    let connect = || async {
+        Storage::connect(&db.url)
+            .await
+            .unwrap()
+            .busy_timeout(Duration::from_secs(20))
+    };
+    let (holder, waiter) = (connect().await, connect().await);
+    let interrupter = connect().await.on_busy(OnBusy::Interrupt);
+    // The holder has the thread but has not registered its run yet.
+    let held = holder.lease("t").await.unwrap();
+    // A process waits its turn (it listens for interrupts too).
+    let waiting = tokio::spawn(async move {
+        let lease = waiter.lease("t").await.unwrap();
+        let token = CancelToken::new();
+        lease.set_cancel(token.clone());
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        assert!(!token.is_cancelled(), "the waiter was interrupted");
+        drop(lease);
+    });
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    let interrupting = tokio::spawn(async move { interrupter.lease("t").await.map(drop) });
+    // Wait until the interrupt was sent and heard.
+    tokio::time::sleep(Duration::from_millis(500)).await;
+    let token = CancelToken::new();
+    held.set_cancel(token.clone());
+    assert!(token.is_cancelled(), "the holder missed the interrupt");
+    drop(held);
+    waiting.await.unwrap();
+    interrupting.await.unwrap().unwrap();
     db.remove().await;
 }

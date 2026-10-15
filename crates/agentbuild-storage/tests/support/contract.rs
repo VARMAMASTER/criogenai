@@ -2,7 +2,7 @@
 //! tests run these.
 
 use agentbuild_core::{NodeOutput, PendingWrite, Snapshot, State, Update};
-use agentbuild_storage::{Checkpoint, CheckpointStatus, Checkpointer, Source};
+use agentbuild_storage::{Checkpoint, CheckpointStatus, Checkpointer, Source, ThreadQuery};
 use serde_json::json;
 
 pub fn state(n: u64) -> State {
@@ -32,6 +32,8 @@ pub async fn all(store: &dyn Checkpointer) {
     history_follows_the_heads_branch(store).await;
     snapshots_and_task_writes_round_trip(store).await;
     long_threads_round_trip(store).await;
+    threads_are_listed_in_pages(store).await;
+    pruning_keeps_the_head_branch_loadable(store).await;
 }
 
 pub async fn commits_are_compare_and_set(store: &dyn Checkpointer) {
@@ -231,4 +233,167 @@ pub async fn long_threads_round_trip(store: &dyn Checkpointer) {
         assert_eq!(&loaded, checkpoint, "version {}", checkpoint.version);
     }
     assert_eq!(store.history("long", 100).await.unwrap().len(), 60);
+}
+
+pub async fn threads_are_listed_in_pages(store: &dyn Checkpointer) {
+    let before = now() - 1;
+    for id in ["list-c", "list-a", "list-b"] {
+        let first = Checkpoint::new(id, 1, Source::Step, state(1));
+        store.commit(first, 0).await.unwrap();
+    }
+    let listed = |query: ThreadQuery| async move {
+        store
+            .threads(&query)
+            .await
+            .unwrap()
+            .into_iter()
+            .filter(|t| t.thread_id.starts_with("list-"))
+            .collect::<Vec<_>>()
+    };
+    let all = listed(ThreadQuery::new()).await;
+    let ids: Vec<&str> = all.iter().map(|t| t.thread_id.as_str()).collect();
+    assert_eq!(ids, ["list-a", "list-b", "list-c"]);
+    for thread in &all {
+        assert_eq!(thread.version, 1);
+        assert!(thread.created_at_ms >= before && thread.updated_at_ms >= thread.created_at_ms);
+    }
+    // Pages in id order.
+    let page = listed(ThreadQuery::new().after("list-a").limit(1)).await;
+    assert_eq!(page[0].thread_id, "list-b");
+    assert_eq!(page.len(), 1);
+    assert!(listed(ThreadQuery::new().limit(0)).await.is_empty());
+    // Time windows.
+    let later = now() + 3_600_000;
+    assert_eq!(
+        listed(ThreadQuery::new().updated_before(later)).await.len(),
+        3
+    );
+    assert!(
+        listed(ThreadQuery::new().updated_before(before))
+            .await
+            .is_empty()
+    );
+    assert!(
+        listed(ThreadQuery::new().updated_after(later))
+            .await
+            .is_empty()
+    );
+    assert_eq!(
+        listed(ThreadQuery::new().updated_after(before)).await.len(),
+        3
+    );
+    assert!(
+        listed(ThreadQuery::new().updated_before(u64::MAX))
+            .await
+            .len()
+            == 3
+    );
+
+    // A commit moves the version and the time.
+    let head = store.load("list-a", None).await.unwrap().unwrap();
+    let next = Checkpoint::new("list-a", 2, Source::Step, state(2)).parent(&head.id);
+    store.commit(next, 1).await.unwrap();
+    let a = &listed(ThreadQuery::new()).await[0];
+    assert_eq!(a.version, 2);
+    assert!(a.updated_at_ms >= all[0].updated_at_ms);
+    for id in ["list-a", "list-b", "list-c"] {
+        store.delete_thread(id).await.unwrap();
+    }
+}
+
+/// A thread of growing chat states (deltas on SQL backends) with an
+/// abandoned branch; pruning keeps what is left loadable, unchanged.
+pub async fn pruning_keeps_the_head_branch_loadable(store: &dyn Checkpointer) {
+    let thread = "prune";
+    let chat = |n: u64| {
+        let messages: Vec<serde_json::Value> = (1..=n)
+            .map(|i| json!({"role": "user", "text": format!("message number {i}")}))
+            .collect();
+        State::new().with("messages", messages).with("n", n)
+    };
+    let mut made: Vec<Checkpoint> = Vec::new();
+    let mut commit = |checkpoint: Checkpoint| {
+        made.push(checkpoint.clone());
+        async move {
+            let version = checkpoint.version;
+            store.commit(checkpoint, version - 1).await.unwrap();
+        }
+    };
+    // c1 … c6, then a rewind to c4: c7 (a fork of c4) and c8.
+    let mut parent: Option<String> = None;
+    let mut ids = Vec::new();
+    for version in 1..=6 {
+        let mut checkpoint = Checkpoint::new(thread, version, Source::Step, chat(version));
+        if let Some(parent) = &parent {
+            checkpoint = checkpoint.parent(parent);
+        }
+        if version == 3 {
+            checkpoint = checkpoint.run("r", 1).snapshot(snapshot(json!({})));
+        }
+        parent = Some(checkpoint.id.clone());
+        ids.push(checkpoint.id.clone());
+        commit(checkpoint).await;
+    }
+    store
+        .put_pending(thread, &ids[2], "tools", PendingWrite::default())
+        .await
+        .unwrap();
+    let fork = Checkpoint::new(thread, 7, Source::Fork, chat(4)).parent(&ids[3]);
+    ids.push(fork.id.clone());
+    commit(fork).await;
+    let last = Checkpoint::new(thread, 8, Source::Step, chat(9)).parent(&ids[6]);
+    ids.push(last.id.clone());
+    commit(last).await;
+    let original = |id: &str| made.iter().find(|c| c.id == id).unwrap().clone();
+
+    // Abandoned branch only.
+    assert_eq!(store.prune_thread(thread, None).await.unwrap(), 2);
+    for gone in &ids[4..6] {
+        assert!(store.load(thread, Some(gone)).await.unwrap().is_none());
+    }
+    assert_eq!(store.history(thread, 100).await.unwrap().len(), 6);
+    assert_eq!(store.prune_thread(thread, None).await.unwrap(), 0);
+
+    // The last three: c8, c7, c4. c4 loads with its state; history ends there.
+    assert_eq!(store.prune_thread(thread, Some(3)).await.unwrap(), 3);
+    let history: Vec<String> = store
+        .history(thread, 100)
+        .await
+        .unwrap()
+        .into_iter()
+        .map(|c| c.id)
+        .collect();
+    assert_eq!(history, [ids[7].clone(), ids[6].clone(), ids[3].clone()]);
+    let oldest = store.load(thread, Some(&ids[3])).await.unwrap().unwrap();
+    assert_eq!(oldest.state, original(&ids[3]).state);
+    assert_eq!(oldest.parent_id, None);
+    for kept in &ids[6..] {
+        assert_eq!(
+            store.load(thread, Some(kept)).await.unwrap().unwrap(),
+            original(kept)
+        );
+    }
+    for gone in &ids[..3] {
+        assert!(store.load(thread, Some(gone)).await.unwrap().is_none());
+    }
+
+    // The thread goes on as before.
+    let next = Checkpoint::new(thread, 9, Source::Step, chat(10)).parent(&ids[7]);
+    store.commit(next.clone(), 8).await.unwrap();
+    assert_eq!(store.load(thread, None).await.unwrap().unwrap(), next);
+    // At least the head is kept.
+    assert_eq!(store.prune_thread(thread, Some(0)).await.unwrap(), 3);
+    let head = store.load(thread, None).await.unwrap().unwrap();
+    assert_eq!(head.state, next.state);
+    assert_eq!(head.parent_id, None);
+    assert_eq!(store.history(thread, 10).await.unwrap().len(), 1);
+    assert_eq!(store.prune_thread("nobody", Some(1)).await.unwrap(), 0);
+    assert!(store.delete_thread(thread).await.unwrap());
+}
+
+fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_millis() as u64
 }

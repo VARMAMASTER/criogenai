@@ -525,7 +525,8 @@ flowchart TB
    (`agentbuild-storage`: contract, in-memory, SQLite and Postgres
    backends, per-step saving and crash recovery, agent threads, the
    long-term memory store and agent `Memory`, thread locks across
-   processes); vector search, retention and encryption are next.
+   processes). Step 5 (retention, encryption at rest) is built too;
+   vector search is next.
 4. **Subgraphs and multi-agent handoffs.** After the agent loop ships;
    `as_tool()` covers the first use case.
 
