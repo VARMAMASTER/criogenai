@@ -14,14 +14,14 @@ use std::sync::Arc;
 use agentbuild_core::{CancelToken, RunOptions, State};
 use agentbuild_providers::Message;
 use agentbuild_storage::{
-    Checkpoint, CheckpointMeta, CheckpointStatus, Durability, Source, StorageError, ThreadLease,
-    ThreadWriter,
+    AuditEvent, Checkpoint, CheckpointMeta, CheckpointStatus, Durability, Source, StorageError,
+    ThreadLease, ThreadWriter,
 };
 use serde_json::Value;
 
 use crate::agent::{
     AGENT, Agent, AgentError, AgentInput, AgentResult, HOOKS, MESSAGES, approval_requests,
-    read_messages,
+    read_messages, with_audit_context,
 };
 use crate::approval::{ApprovalRequest, Decision};
 
@@ -51,6 +51,7 @@ use crate::approval::{ApprovalRequest, Decision};
 pub struct Thread {
     agent: Agent,
     id: String,
+    actor: Option<String>,
 }
 
 /// The result of a [`Thread`] call that did not fail.
@@ -90,6 +91,7 @@ impl Agent {
         Thread {
             agent: self.clone(),
             id: id.into(),
+            actor: None,
         }
     }
 }
@@ -98,6 +100,32 @@ impl Thread {
     /// The thread's id.
     pub fn id(&self) -> &str {
         &self.id
+    }
+
+    /// Who acts through this handle (e.g. `user:dr-rao`), for the audit
+    /// trail (design 0010): its records name this actor. The app
+    /// authenticates; this only names.
+    pub fn actor(mut self, actor: impl Into<String>) -> Self {
+        self.actor = Some(actor.into());
+        self
+    }
+
+    /// The [`actor`](Self::actor), if set.
+    pub fn actor_name(&self) -> Option<&str> {
+        self.actor.as_deref()
+    }
+
+    /// Records `event` with this thread and actor (design 0010).
+    async fn record(&self, event: AuditEvent) -> Result<(), AgentError> {
+        self.agent
+            .storage()
+            .record(
+                event
+                    .thread(Some(self.id.clone()))
+                    .actor(self.actor.clone()),
+            )
+            .await
+            .map_err(storage_error)
     }
 
     /// Runs one turn: the stored transcript plus `input`. Fails with
@@ -147,7 +175,7 @@ impl Thread {
         let state = next_turn(state, input.into())?;
         let (writer, options) = self.prepare(&lease, head.as_ref(), options);
         let result = self.agent.run_state(state, options).await;
-        self.commit(&writer, result).await
+        self.commit(&writer, result, "send").await
     }
 
     /// Approves every pending call and continues the run.
@@ -213,10 +241,32 @@ impl Thread {
                 self.id
             )));
         };
-        let decisions = decide(&approval_requests(&snapshot.suspended));
+        let requests = approval_requests(&snapshot.suspended);
+        let decisions = decide(&requests);
+        // Recorded before any decided call runs; invalid decisions are
+        // refused first and never recorded.
+        self.agent.check_decisions(&requests, &decisions)?;
+        if self.agent.storage().audit().is_some() {
+            for request in &requests {
+                let kind = decisions[&request.call_id].kind();
+                self.record(
+                    AuditEvent::new("approval.decided")
+                        .run(Some(snapshot.run_id.clone()))
+                        .subject(&request.tool)
+                        .outcome(
+                            serde_json::to_value(kind)
+                                .ok()
+                                .and_then(|v| v.as_str().map(str::to_string))
+                                .unwrap_or_default(),
+                        )
+                        .detail("call_id", request.call_id.clone()),
+                )
+                .await?;
+            }
+        }
         let (writer, options) = self.prepare(lease, Some(head), options);
         let result = self.agent.resume_with(snapshot, decisions, options).await;
-        self.commit(&writer, result).await
+        self.commit(&writer, result, "decide").await
     }
 
     /// Continues a failed or interrupted run from where it stopped. Tool
@@ -243,7 +293,7 @@ impl Thread {
         };
         let (writer, options) = self.prepare(&lease, Some(head), self.agent.run_options());
         let result = self.agent.retry_with(snapshot, options).await;
-        self.commit(&writer, result).await
+        self.commit(&writer, result, "retry").await
     }
 
     /// Cancels this thread's active run in this process. `true` if one was
@@ -316,6 +366,13 @@ impl Thread {
             .commit(checkpoint, expected)
             .await
             .map_err(storage_error)?;
+        self.record(
+            AuditEvent::new("thread.rewound")
+                .subject(checkpoint_id)
+                .outcome("ok")
+                .detail("version", meta.version),
+        )
+        .await?;
         Ok(meta)
     }
 
@@ -323,12 +380,20 @@ impl Thread {
     /// `on_busy`). `true` if it existed.
     pub async fn delete(&self) -> Result<bool, AgentError> {
         let _lease = self.lease().await?;
-        self.agent
+        let existed = self
+            .agent
             .storage()
             .checkpointer()
             .delete_thread(&self.id)
             .await
-            .map_err(storage_error)
+            .map_err(storage_error)?;
+        self.record(AuditEvent::new("thread.deleted").outcome(if existed {
+            "deleted"
+        } else {
+            "not_found"
+        }))
+        .await?;
+        Ok(existed)
     }
 
     async fn lease(&self) -> Result<ThreadLease, AgentError> {
@@ -359,7 +424,10 @@ impl Thread {
     ) -> (ThreadWriter, RunOptions) {
         let storage = self.agent.storage();
         let writer = ThreadWriter::new(storage.checkpointer().clone(), &self.id, head);
-        let mut options = watch(lease, options);
+        let mut options = watch(
+            lease,
+            with_audit_context(options, &self.id, self.actor.as_deref()),
+        );
         if storage.durability_mode() == Durability::Step {
             options = options.persist(Arc::new(writer.clone()));
         }
@@ -369,6 +437,66 @@ impl Thread {
     /// Saves the run's outcome as the new head. Errors before the run
     /// started (no snapshot) save nothing.
     async fn commit(
+        &self,
+        writer: &ThreadWriter,
+        result: Result<AgentResult, AgentError>,
+        operation: &str,
+    ) -> Result<Reply, AgentError> {
+        let reply = self.save(writer, result).await;
+        self.record_outcome(&reply, operation).await?;
+        reply
+    }
+
+    /// Records how a run ended, and the approvals it waits for (design
+    /// 0010 §2). A record that cannot be written fails the call with
+    /// `audit_failed`; the run itself is already saved.
+    async fn record_outcome(
+        &self,
+        reply: &Result<Reply, AgentError>,
+        operation: &str,
+    ) -> Result<(), AgentError> {
+        if self.agent.storage().audit().is_none() {
+            return Ok(());
+        }
+        let (run_id, outcome) = match reply {
+            Ok(reply) => (
+                Some(reply.result.run.run_id.clone()),
+                if reply.needs_approval() {
+                    "suspended".to_string()
+                } else {
+                    "completed".to_string()
+                },
+            ),
+            Err(error) => (
+                error.snapshot().map(|s| s.run_id.clone()),
+                error.code.clone(),
+            ),
+        };
+        let mut event = AuditEvent::new("run.finished")
+            .run(run_id.clone())
+            .subject(operation)
+            .outcome(outcome);
+        if let Ok(reply) = reply {
+            event = event.detail("version", reply.version);
+        }
+        self.record(event).await?;
+        if let Ok(reply) = reply {
+            for request in reply.approvals() {
+                self.record(
+                    AuditEvent::new("approval.requested")
+                        .run(run_id.clone())
+                        .subject(request.tool)
+                        .outcome("pending")
+                        .detail("call_id", request.call_id),
+                )
+                .await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Saves the run's outcome as the new head.
+    async fn save(
         &self,
         writer: &ThreadWriter,
         result: Result<AgentResult, AgentError>,

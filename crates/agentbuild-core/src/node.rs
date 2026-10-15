@@ -32,9 +32,16 @@ pub struct NodeContext {
     pub(crate) cancel: CancelToken,
     pub(crate) deadline: Option<Instant>,
     pub(crate) memo: TaskMemo,
+    pub(crate) metadata: Option<Arc<Value>>,
 }
 
 impl NodeContext {
+    /// The run's [`RunOptions::metadata`](crate::RunOptions::metadata), if
+    /// any: who started it, for whom (an audit trail's actor, a tenant).
+    pub fn metadata(&self) -> Option<&Value> {
+        self.metadata.as_deref()
+    }
+
     /// The run this execution belongs to (a time-ordered UUID). Stable across
     /// suspend and resume.
     pub fn run_id(&self) -> &str {

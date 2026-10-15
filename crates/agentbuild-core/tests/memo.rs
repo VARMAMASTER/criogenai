@@ -711,3 +711,34 @@ async fn retry_needs_values_for_suspended_nodes() {
     let err = wf.retry(paused.snapshot().unwrap()).await.unwrap_err();
     assert_eq!(err.code(), "resume_invalid");
 }
+
+#[tokio::test]
+async fn nodes_see_the_runs_metadata() {
+    use agentbuild_core::{
+        END, NodeOutput, RunOptions, State, Update, WorkflowBuilder, node_with_context,
+    };
+    use serde_json::json;
+
+    let workflow = WorkflowBuilder::new()
+        .add_node(
+            "who",
+            node_with_context(|ctx, _state| async move {
+                let actor = ctx
+                    .metadata()
+                    .and_then(|m| m.get("actor"))
+                    .cloned()
+                    .unwrap_or(json!(null));
+                Ok(NodeOutput::from(Update::new().set("actor", actor)))
+            }),
+        )
+        .set_entry("who")
+        .add_edge("who", END)
+        .build()
+        .unwrap();
+    let options = RunOptions::default().metadata(json!({"actor": "dr-rao"}));
+    assert_eq!(options.metadata_value(), Some(&json!({"actor": "dr-rao"})));
+    let output = workflow.run_with(State::new(), options).await.unwrap();
+    assert_eq!(output.state.get("actor"), Some(&json!("dr-rao")));
+    let output = workflow.run(State::new()).await.unwrap();
+    assert_eq!(output.state.get("actor"), Some(&json!(null)));
+}

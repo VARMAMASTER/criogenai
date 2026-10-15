@@ -44,6 +44,7 @@ struct NodeContext {
     deadline: Option<Instant>,
     events: EventSink,        // emit(custom event); never blocks the node (§6.3)
     memo: TaskMemo,           // task-scoped saved results, survive retry/resume (§5.1)
+    metadata: Option<Value>,  // RunOptions::metadata (added for 0010: who, for whom)
 }
 ```
 

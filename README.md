@@ -6,7 +6,8 @@ Today AgentBuild is a set of **Rust crates** for building AI agents and
 workflows: a workflow engine, a model layer (OpenAI-compatible servers,
 Anthropic, Gemini, Ollama and other self-hosted models), agents with tools
 and human approval, conversations stored in memory, SQLite or Postgres
-with crash recovery, and OpenTelemetry export.
+with crash recovery, encryption at rest and an audit trail, and
+OpenTelemetry export.
 
 **Planned, not built yet:** Python and TypeScript SDKs on the same Rust
 engine (sketched in [docs/design/0007-public-api.md](docs/design/0007-public-api.md)),

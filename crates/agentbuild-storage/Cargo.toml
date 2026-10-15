@@ -26,6 +26,8 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time"] }
 # Checkpoint ids (v7: ordered by creation time).
 uuid.workspace = true
+# The audit trail's hash chain (SHA-256). sqlx already depends on it.
+sha2 = "0.10"
 # The SQL backends (features `sqlite`, `postgres`): async, one crate for
 # both. No macros (queries are plain strings, checked by tests); SQLite
 # itself is compiled in (bundled), so there is nothing to install.

@@ -75,7 +75,7 @@ step_postgres() {
   # REQUIRE: the tests fail instead of skipping if the server is missing.
   AGENTBUILD_REQUIRE_POSTGRES=1 run bash scripts/with-postgres.sh \
     cargo test -p agentbuild-storage -p agentbuild-agent --all-features \
-    --test postgres --test memory_store --test durable --test encryption --test retention
+    --test postgres --test memory_store --test durable --test encryption --test retention --test audit
 }
 
 step_msrv() {

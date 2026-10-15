@@ -25,6 +25,9 @@ pub enum StorageErrorKind {
     EncryptionKeyMissing,
     /// A key whose id the database knows does not match it.
     EncryptionKeyInvalid,
+    /// An audit record could not be written, so the action it describes
+    /// failed (design 0010 §4). Transient.
+    AuditFailed,
 }
 
 impl StorageErrorKind {
@@ -40,6 +43,7 @@ impl StorageErrorKind {
             Self::InvalidValue => "invalid_value",
             Self::EncryptionKeyMissing => "encryption_key_missing",
             Self::EncryptionKeyInvalid => "encryption_key_invalid",
+            Self::AuditFailed => "audit_failed",
         }
     }
 }

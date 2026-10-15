@@ -15,6 +15,10 @@ with tools, run as a loop on the AgentBuild workflow engine.
 - human approval of tool calls (approve, edit, reject, respond), structured
   output, hooks around model and tool calls, agents as nodes and as tools,
   `agent.stream()` for UIs
+- audit trail: with `Storage::with_audit`, runs, model and tool calls,
+  approvals (who decided, before the call runs), rewinds, deletions and
+  memory writes are recorded; `agent.thread(id).actor("user:dr-rao")`
+  names who acts
 - threads: `agent.thread("user-42").send(...)` keeps the conversation in
   storage (in memory, SQLite with the `sqlite` feature, or Postgres with
   `postgres`; encrypted at rest with `encryption`); pending

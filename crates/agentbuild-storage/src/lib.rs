@@ -41,6 +41,7 @@
 //! # });
 //! ```
 
+mod audit;
 mod checkpoint;
 // Without a SQL backend only the keys are used.
 #[cfg_attr(not(any(feature = "sqlite", feature = "postgres")), allow(dead_code))]
@@ -60,6 +61,10 @@ mod storage;
 mod store;
 mod writer;
 
+pub use audit::{
+    AuditEvent, AuditLog, AuditQuery, AuditRecord, AuditVerification, GENESIS_HASH,
+    InMemoryAuditLog, sha256_hex,
+};
 pub use checkpoint::{
     Checkpoint, CheckpointMeta, CheckpointStatus, Checkpointer, Source, ThreadInfo, ThreadQuery,
     merge_pending,
@@ -71,11 +76,12 @@ pub use locks::{HeldLock, InterruptHandler, ThreadLocks};
 pub use memory::InMemoryCheckpointer;
 #[cfg(feature = "postgres")]
 pub use postgres::{
-    PostgresCheckpointer, PostgresMemoryStore, PostgresOptions, PostgresThreadLocks,
+    PostgresAuditLog, PostgresCheckpointer, PostgresMemoryStore, PostgresOptions,
+    PostgresThreadLocks,
 };
 pub use retention::{PruneReport, Pruner, Retention};
 #[cfg(feature = "sqlite")]
-pub use sqlite::{SqliteCheckpointer, SqliteMemoryStore};
+pub use sqlite::{SqliteAuditLog, SqliteCheckpointer, SqliteMemoryStore};
 pub use storage::{Durability, OnBusy, Storage, ThreadLease};
 pub use store::{
     Embedding, InMemoryStore, MAX_DIMENSIONS, MAX_KEY_BYTES, MAX_VALUE_BYTES, MemoryItem,

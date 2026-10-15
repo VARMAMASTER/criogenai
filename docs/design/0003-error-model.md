@@ -353,6 +353,7 @@ and checked in CI, so docs and SDK mappings can't drift.
 | `resume_invalid` | developer | core: bad resume input | implemented |
 | `workflow_mismatch` | developer | core: snapshot from a different graph | implemented |
 | `storage_failed` | transient | core: the run's `Persister` failed (0008 §12); `details` / the `NodeError` kind carry the storage code | implemented |
+| `audit_failed` | transient | an audit record could not be written, so the action failed (0010 §4) | implemented |
 | `internal` | internal | anywhere | proposed |
 | `model_failed` | per `kind` | agent: model node | proposed |
 | `tool_failed` | developer | agent: unexpected tool exception | proposed |

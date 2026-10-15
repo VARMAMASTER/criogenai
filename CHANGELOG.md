@@ -46,6 +46,18 @@ First release, planned as 0.1.0 (Rust crates only).
   block, also when streamed (`OpenAiQuirks::think_tags`, on by default).
 - `FakeModel` for tests: scripted replies, realistic delays, errors.
 
+### Audit trail (design 0010)
+
+- `AuditLog` with in-memory, SQLite and Postgres backends (schema version
+  5): records chained by SHA-256, `verify` reports the first changed or
+  missing record, `head` for anchoring elsewhere. `Storage::with_audit`
+  keeps it in the same database.
+- Agents record model and tool calls, runs, approval requests and
+  decisions (before the decided calls run), rewinds, deletions and memory
+  writes, with the actor from `Thread::actor`. Records hold no content
+  (memory keys as hashes). Fail closed: `audit_failed`.
+- Core: `NodeContext::metadata` exposes `RunOptions::metadata` to nodes.
+
 ### agentbuild-agent: agents
 
 - The model ⇄ tools loop: argument validation against JSON Schema,

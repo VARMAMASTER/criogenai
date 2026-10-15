@@ -43,8 +43,8 @@ and push). A task is marked done only when all of that is verified.
 |---|---|---|---|
 | 1 | Retention and encryption at rest | 0008 §15 | Done |
 | 2 | Vector (semantic) memory search | 0008 §16 | Done |
-| 3 | Audit trail | (to write) | Next |
-| 4 | `thread.stream` | (to write) | Planned |
+| 3 | Audit trail | 0010 | Done |
+| 4 | `thread.stream` | (to write) | Next |
 | 5 | Python SDK | (to write) | Planned |
 | 6 | TypeScript SDK | (to write) | Planned |
 | 7 | LLM gateway | 0006 | Planned |
@@ -66,6 +66,28 @@ and push). A task is marked done only when all of that is verified.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-16: audit trail (design 0010, task 3)
+
+- New design 0010. Storage: `AuditLog` (in-memory, SQLite, Postgres;
+  migration 5), records chained by SHA-256 over canonical JSON (keys
+  sorted by us, so serde_json's `preserve_order` in a downstream build
+  cannot change hashes), `verify` (paged), `head`. Appends serialize per
+  database (SQLite write lock, Postgres advisory transaction lock).
+  `Storage::with_audit` / `with_audit_log` / `record`; prune and
+  reencrypt record themselves.
+- Agents: model and tool calls recorded in the nodes (tool calls before
+  their result is saved, so a failed record makes the step fail and a
+  retry records the call); thread operations record outcomes, approval
+  requests, decisions (validated first, recorded before the calls run),
+  rewinds and deletions; `Thread::actor`. Memory keys only as SHA-256.
+  Core gained `NodeContext::metadata` for the audit context.
+- Fix found by the tests: `audit_failed` was reported as `node_failed`
+  (not in the agent's pass-through list).
+- Tests: the log contract on three backends, tamper detection by raw SQL
+  (edit, deletion), 3 processes × 30 appends into one chain (SQLite,
+  Postgres), fail closed in storage and agents, full approval story with
+  two actors and no content in any record.
 
 ### 2026-10-15: semantic memory search (0008 step 6, task 2)
 

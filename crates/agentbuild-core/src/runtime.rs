@@ -145,6 +145,11 @@ impl RunOptions {
         self
     }
 
+    /// The [`metadata`](Self::metadata), if set.
+    pub fn metadata_value(&self) -> Option<&Value> {
+        self.metadata.as_ref()
+    }
+
     /// Saves the run's progress to `persister` as it executes: a checkpoint
     /// before the first step and after every committed step, and each
     /// task's output and [`TaskMemo::save`] entries as they happen (design
@@ -576,6 +581,8 @@ struct Run<'g> {
     cancel_grace: Duration,
     /// Saves progress as the run goes (durability `step`).
     persist: Option<Arc<dyn Persister>>,
+    /// [`RunOptions::metadata`], for nodes.
+    metadata: Option<Arc<Value>>,
 }
 
 #[derive(Clone, Copy)]
@@ -694,6 +701,7 @@ impl<'g> Run<'g> {
             deadline,
             cancel_grace: options.cancel_grace,
             persist: options.persist.as_ref().map(|p| p.0.clone()),
+            metadata: options.metadata.clone().map(Arc::new),
         }
     }
 
@@ -1037,6 +1045,7 @@ impl<'g> Run<'g> {
                 hub: self.hub.clone(),
                 cancel: step_token.child(),
                 run_deadline: self.deadline,
+                metadata: self.metadata.clone(),
             };
             self.emit(Some(step), Some(id), || EventKind::NodeStarted {
                 attempt: 1,
@@ -1337,6 +1346,7 @@ struct NodeTask {
     hub: Option<Arc<Hub>>,
     cancel: CancelToken,
     run_deadline: Option<Deadline>,
+    metadata: Option<Arc<Value>>,
 }
 
 impl NodeTask {
@@ -1380,6 +1390,7 @@ impl NodeTask {
                     (a, b) => a.or(b),
                 },
                 memo: self.memo.clone(),
+                metadata: self.metadata.clone(),
             };
             let fut = self.node.run(ctx, self.state.clone());
             let result = match (attempt_end, self.policy.timeout_ms) {

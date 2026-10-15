@@ -90,11 +90,20 @@ write our own implementation.
   cosine in Rust, every backend; vectors encrypted with the rest) in
   storage; `Memory::semantic(embedder)`, `put_embedded`, `memory_text`
   in agents (keyword fallback when the embedder fails).
+- **Implemented: audit trail (0010).** `AuditLog` (`InMemoryAuditLog`,
+  `SqliteAuditLog`, `PostgresAuditLog`; table `agentbuild_audit`,
+  migration 5), SHA-256 hash chain with `verify` and `head`,
+  `Storage::with_audit` / `record`, fail closed (`audit_failed`). Agents
+  record model and tool calls (before the result is saved), runs,
+  approvals (decisions before the calls run), rewinds, deletions and
+  memory writes (key hashed), with `Thread::actor`. No content in
+  records. Core: `NodeContext::metadata` (agents put the audit context
+  under `agentbuild_audit`).
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 500 across the five crates (with `--all-features`; includes the
+- Tests: 513 across the five crates (with `--all-features`; includes the
   getting-started guide's examples), plus the package test. Release prep:
   `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`,
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
@@ -104,7 +113,7 @@ write our own implementation.
   UI; real OpenAI/Gemini models, manual only, not in CI or the workspace).
   Keys live in `~/.agentbuild-keys.env`, never in the repo.
 - **Next:** the 10-task roadmap in `docs/progress.md` ("Roadmap
-  tasks"), one full cycle each: audit trail,
+  tasks"), one full cycle each:
   `thread.stream`, Python SDK, TypeScript SDK, gateway, error catalog
   and JSON Schemas, workflow threads, benchmarks. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework

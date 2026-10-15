@@ -28,6 +28,9 @@ Threads, checkpoints and storage backends for
   row), with key rotation; a database that is encrypted refuses to open
   without its keys
 
+- audit trail (design 0010): who did what and when, without content, in
+  a hash chain that `verify` checks; in the same database
+  (`Storage::with_audit`)
 - semantic search: items saved with a vector (`put_embedded`) are found
   by meaning (`SearchQuery::similar_to`), ranked by cosine similarity on
   every backend

@@ -2,9 +2,11 @@
 //! and guarantees on a server, for several processes and machines, plus
 //! thread locks across processes, retention and encryption at rest.
 
+mod audit;
 mod locks;
 mod memory;
 
+pub use audit::PostgresAuditLog;
 pub use locks::PostgresThreadLocks;
 pub use memory::PostgresMemoryStore;
 
@@ -88,6 +90,22 @@ const MIGRATIONS: &[&str] = &[
     CREATE INDEX agentbuild_threads_updated ON agentbuild_threads (updated_at_ms)",
     // 4: memory vectors for semantic search (design 0008 §16).
     "ALTER TABLE agentbuild_memory ADD COLUMN embedding TEXT",
+    // 5: the audit trail (design 0010).
+    "CREATE TABLE agentbuild_audit (
+        seq BIGINT PRIMARY KEY,
+        at_ms BIGINT NOT NULL,
+        action TEXT NOT NULL,
+        actor TEXT,
+        thread_id TEXT,
+        run_id TEXT,
+        subject TEXT,
+        outcome TEXT,
+        details TEXT NOT NULL,
+        prev_hash TEXT NOT NULL,
+        hash TEXT NOT NULL
+    );
+    CREATE INDEX agentbuild_audit_thread ON agentbuild_audit (thread_id, seq);
+    CREATE INDEX agentbuild_audit_time ON agentbuild_audit (at_ms)",
 ];
 
 /// Checkpoint `$1` of thread `$2` and its ancestors up to the nearest
@@ -251,6 +269,11 @@ impl PostgresCheckpointer {
     /// Thread locks across processes on the same database.
     pub fn thread_locks(&self) -> PostgresThreadLocks {
         PostgresThreadLocks::new(self.lock_pool.clone())
+    }
+
+    /// The audit trail in the same database (design 0010).
+    pub fn audit_log(&self) -> PostgresAuditLog {
+        PostgresAuditLog::new(self.pool.clone())
     }
 
     /// The schema version the database is at.

@@ -55,7 +55,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: >-
           cargo test -p agentbuild-storage -p agentbuild-agent --all-features
-          --test postgres --test memory_store --test durable --test encryption --test retention
+          --test postgres --test memory_store --test durable --test encryption --test retention --test audit
 
   msrv:
     runs-on: ubuntu-latest

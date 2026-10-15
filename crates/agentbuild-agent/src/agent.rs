@@ -12,10 +12,12 @@ use agentbuild_core::{
 };
 use agentbuild_providers::{
     ContentBlock, FinishReason, Message, MessageDelta, Model, ModelError, ModelErrorKind,
-    ModelRequest, OutputSpec, OutputStrategy, Role, ToolIssue, ToolResultError, ToolSpec,
-    ToolStatus, Usage, transcript, validate_tools,
+    ModelRequest, ModelResponse, OutputSpec, OutputStrategy, Role, ToolIssue, ToolResultError,
+    ToolSpec, ToolStatus, Usage, transcript, validate_tools,
 };
-use agentbuild_storage::{MemoryStore, Storage};
+use agentbuild_storage::{
+    AuditEvent, MemoryStore, ScopedMemory, Storage, StorageError, sha256_hex,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use tokio::sync::Semaphore;
@@ -23,7 +25,7 @@ use tokio::task::JoinSet;
 
 use crate::approval::{APPROVAL_INTERRUPT, Approval, ApprovalRequest, Decision, check_decisions};
 use crate::hooks::{Hook, HookContext, ModelNext, Outcome, ToolCallRequest, ToolNext};
-use crate::memory::{self, Memory};
+use crate::memory::{self, FORGET_TOOL, Memory, REMEMBER_TOOL};
 use crate::output::{FINAL_OUTPUT_TOOL, OutputConfig};
 use crate::resilience::{CallEnv, ModelChain};
 use crate::schema;
@@ -493,6 +495,7 @@ impl AgentBuilder {
             output: output.clone(),
             hooks: hooks.clone(),
             memory: memory.clone(),
+            storage: storage.clone(),
         }));
         let tools_node = ToolsNode(Arc::new(ToolsInner {
             tools,
@@ -503,6 +506,7 @@ impl AgentBuilder {
             retry: self.tool_retry,
             app: self.app,
             memory,
+            storage: storage.clone(),
         }));
 
         let mut builder = WorkflowBuilder::new();
@@ -836,6 +840,17 @@ impl Agent {
             .await
     }
 
+    /// Checks decisions against the pending requests (as
+    /// [`resume_with`](Self::resume_with) does), so threads can record
+    /// valid decisions before the calls run.
+    pub(crate) fn check_decisions(
+        &self,
+        requests: &[ApprovalRequest],
+        decisions: &BTreeMap<String, Decision>,
+    ) -> Result<(), AgentError> {
+        check_decisions(requests, decisions, &self.schemas).map_err(AgentError::resume_invalid)
+    }
+
     /// [`resume`](Self::resume) with options (events, deadline, ...).
     pub async fn resume_with<I>(
         &self,
@@ -992,6 +1007,7 @@ impl AgentError {
                             | "deadline_exceeded"
                             | "update_conflict"
                             | "storage_failed"
+                            | "audit_failed"
                     )
                 ) =>
             {
@@ -1042,6 +1058,150 @@ impl AgentError {
     pub fn snapshot(&self) -> Option<&Snapshot> {
         self.run_error.as_deref().and_then(RunError::snapshot)
     }
+}
+
+// ---------- audit trail (design 0010) ----------
+
+/// Where agents put the audit context in [`RunOptions::metadata`]: the
+/// thread and actor of the operation that started the run.
+pub(crate) const AUDIT_CONTEXT: &str = "agentbuild_audit";
+
+/// `options` with the audit context of a thread operation added to its
+/// metadata (an object; other metadata is kept under `app`).
+pub(crate) fn with_audit_context(
+    options: RunOptions,
+    thread: &str,
+    actor: Option<&str>,
+) -> RunOptions {
+    let context = json!({"thread_id": thread, "actor": actor});
+    let metadata = match options.metadata_value().cloned() {
+        Some(Value::Object(mut map)) => {
+            map.insert(AUDIT_CONTEXT.into(), context);
+            Value::Object(map)
+        }
+        None => json!({ AUDIT_CONTEXT: context }),
+        Some(other) => json!({"app": other, AUDIT_CONTEXT: context}),
+    };
+    options.metadata(metadata)
+}
+
+/// What a node knows about who and where, for its audit records.
+pub(crate) struct AuditScope {
+    run_id: String,
+    thread_id: Option<String>,
+    actor: Option<String>,
+    namespace: Option<String>,
+}
+
+impl AuditScope {
+    pub(crate) fn of(ctx: &NodeContext, memory: Option<&ScopedMemory>) -> Self {
+        let context = ctx.metadata().and_then(|m| m.get(AUDIT_CONTEXT));
+        let text = |key: &str| {
+            context
+                .and_then(|c| c.get(key))
+                .and_then(Value::as_str)
+                .map(str::to_string)
+        };
+        Self {
+            run_id: ctx.run_id().to_string(),
+            thread_id: text("thread_id"),
+            actor: text("actor"),
+            namespace: memory.map(|m| m.namespace().path()),
+        }
+    }
+
+    fn event(&self, action: &str) -> AuditEvent {
+        AuditEvent::new(action)
+            .actor(self.actor.clone())
+            .thread(self.thread_id.clone())
+            .run(Some(self.run_id.clone()))
+    }
+}
+
+fn audit_failed(error: StorageError) -> NodeError {
+    NodeError::new(error.message)
+        .with_kind("audit_failed")
+        .retryable()
+}
+
+/// Records one model call: the model, how it ended, tokens.
+async fn record_model_call(
+    inner: &ModelInner,
+    ctx: &NodeContext,
+    called: &Result<ModelResponse, ModelError>,
+) -> Result<(), NodeError> {
+    if inner.storage.audit().is_none() {
+        return Ok(());
+    }
+    let primary = &inner.chain.models[0];
+    let event = AuditScope::of(ctx, None).event("model.called");
+    let event = match called {
+        Ok(response) => event
+            .subject(format!(
+                "{}/{}",
+                response
+                    .message
+                    .metadata
+                    .provider
+                    .as_deref()
+                    .unwrap_or(primary.provider()),
+                response
+                    .message
+                    .metadata
+                    .model
+                    .as_deref()
+                    .unwrap_or(primary.model())
+            ))
+            .outcome("ok")
+            .detail("input_tokens", response.usage.input_tokens)
+            .detail("output_tokens", response.usage.output_tokens),
+        Err(error) => event
+            .subject(format!(
+                "{}/{}",
+                error.provider.as_deref().unwrap_or(primary.provider()),
+                error.model.as_deref().unwrap_or(primary.model())
+            ))
+            .outcome(error.kind.code()),
+    };
+    inner.storage.record(event).await.map_err(audit_failed)
+}
+
+/// Records one executed tool call, and for the memory tools what they
+/// changed (the key only as a hash: it may name a condition).
+async fn record_tool_call(
+    inner: &ToolsInner,
+    scope: &AuditScope,
+    tool: &str,
+    call_id: &str,
+    args: &Map<String, Value>,
+    message: &Message,
+) -> Result<(), NodeError> {
+    if inner.storage.audit().is_none() {
+        return Ok(());
+    }
+    let success = message.status == Some(ToolStatus::Success);
+    let event = scope
+        .event("tool.executed")
+        .subject(tool)
+        .outcome(if success { "success" } else { "error" })
+        .detail("call_id", call_id)
+        .detail("duration_ms", message.metadata.duration_ms.unwrap_or(0));
+    inner.storage.record(event).await.map_err(audit_failed)?;
+    let action = match tool {
+        REMEMBER_TOOL => "memory.saved",
+        FORGET_TOOL => "memory.forgotten",
+        _ => return Ok(()),
+    };
+    if success {
+        let key = args.get("key").and_then(Value::as_str).unwrap_or_default();
+        let event = scope
+            .event(action)
+            .outcome("ok")
+            .detail("namespace", scope.namespace.clone())
+            .detail("key_sha256", sha256_hex(key));
+        inner.storage.record(event).await.map_err(audit_failed)?;
+    }
+    Ok(())
 }
 
 // ---------- shared helpers ----------
@@ -1128,6 +1288,8 @@ struct ModelInner {
     output: Option<Arc<OutputConfig>>,
     hooks: Arc<[Arc<dyn Hook>]>,
     memory: Option<Arc<(Memory, Arc<dyn MemoryStore>)>>,
+    /// For the audit trail.
+    storage: Storage,
 }
 
 struct ModelNode(Arc<ModelInner>);
@@ -1302,7 +1464,9 @@ async fn model_step(
         on_delta,
         deadline_hit: &deadline_hit,
     };
-    let response = match chain.call(request).await {
+    let called = chain.call(request).await;
+    record_model_call(&inner, &ctx, &called).await?;
+    let response = match called {
         Ok(response) => response,
         Err(error) if deadline_hit.load(std::sync::atomic::Ordering::SeqCst) => {
             return Err(NodeError::new(format!(
@@ -1527,6 +1691,8 @@ struct ToolsInner {
     retry: RetryPolicy,
     app: Option<Arc<dyn std::any::Any + Send + Sync>>,
     memory: Option<Arc<(Memory, Arc<dyn MemoryStore>)>>,
+    /// For the audit trail.
+    storage: Storage,
 }
 
 /// A finished call as saved in the tools task's memo, so a retried step
@@ -1864,7 +2030,9 @@ async fn tools_step(
     let mut task_calls = HashMap::new();
     // The first finished call whose result storage could not take.
     let unsaved: Arc<std::sync::Mutex<Option<NodeError>>> = Arc::default();
+    let audit = Arc::new(AuditScope::of(&ctx, memory.as_ref()));
     for call in pending {
+        let audit = audit.clone();
         let semaphore = semaphore.clone();
         let memo = memo.clone();
         let unsaved = unsaved.clone();
@@ -2015,6 +2183,28 @@ async fn tools_step(
             }
             message.metadata.duration_ms = Some(started.elapsed().as_millis() as u64);
             message.metadata.attempts = Some(attempt);
+            // Recorded before the result is saved: if the record fails, the
+            // step fails and a retry runs (and records) the call again
+            // (design 0010 §4).
+            if let Err(error) = record_tool_call(
+                &inner,
+                &audit,
+                &call.name,
+                &call.call_id,
+                &call.args,
+                &message,
+            )
+            .await
+            {
+                let mut unsaved = unsaved.lock().unwrap_or_else(|e| e.into_inner());
+                unsaved.get_or_insert(error);
+                return Ok(Finished {
+                    index: call.index,
+                    message,
+                    direct: None,
+                    state: Map::new(),
+                });
+            }
             // Saved at once, so a failure elsewhere in this step never makes
             // this call run again (0005 §5.1).
             let saved = SavedCall {

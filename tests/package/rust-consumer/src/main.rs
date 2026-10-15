@@ -38,6 +38,7 @@ async fn main() {
     postgres_threads_across_processes().await;
     encrypted_storage_with_retention().await;
     semantic_memory_search().await;
+    audit_trail().await;
     println!("package smoke test: ok");
 }
 
@@ -633,26 +634,33 @@ async fn postgres_threads_across_processes() {
     let process = |reply: &'static str| {
         let url = url.clone();
         async move {
-            let model = FakeModel::with_delay(Duration::from_millis(200), Duration::from_millis(200))
-                .then(FakeReply::text(reply));
-            Agent::builder(model)
+            let model = Arc::new(
+                FakeModel::with_delay(Duration::from_secs(1), Duration::from_secs(1))
+                    .then(FakeReply::text(reply)),
+            );
+            let agent = Agent::builder_shared(model.clone())
                 .storage(Storage::connect(&url).await.expect("connect"))
                 .build()
-                .expect("valid agent")
+                .expect("valid agent");
+            (agent, model)
         }
     };
-    let (a, b) = (process("one").await, process("two").await);
+    let ((a, model), (b, _)) = (process("one").await, process("two").await);
     let first = {
         let chat = a.thread(&thread);
         tokio::spawn(async move { chat.send("first").await })
     };
-    tokio::time::sleep(Duration::from_millis(50)).await;
+    // The second process starts once the first one's model call is under
+    // way, however loaded the machine is.
+    while model.requests().is_empty() {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
     let second = b.thread(&thread).send("second").await.expect("waits its turn");
     first.await.expect("joined").expect("first send");
     assert_eq!(second.result.messages.len(), 4);
     assert!(b.thread(&thread).delete().await.expect("delete"));
     let store = PostgresCheckpointer::connect(&url).await.expect("connect");
-    assert_eq!(store.schema_version().await.expect("version"), 4);
+    assert_eq!(store.schema_version().await.expect("version"), 5);
     store.close().await;
     println!("  Postgres threads across processes: ok");
 }
@@ -740,4 +748,49 @@ async fn semantic_memory_search() {
     assert!(recalled.contains("allergy"), "{recalled}");
     assert!(!recalled.contains("Vegetarian"), "{recalled}");
     println!("  semantic memory search: ok");
+}
+
+async fn audit_trail() {
+    use agentbuild_agent::{Agent, Approval, ToolError, tool_fn};
+    use agentbuild_storage::{AuditQuery, Storage};
+
+    let storage = Storage::connect("sqlite::memory:")
+        .await
+        .expect("open")
+        .with_audit();
+    let refund = tool_fn(
+        ToolSpec::new("refund", "Refunds an order", json!({"type": "object"})),
+        |_args, _ctx| async { Ok::<_, ToolError>("refunded") },
+    );
+    let agent = Agent::builder(
+        FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
+            .then(FakeReply::tool_call("refund", json!({"order": "A-1"})))
+            .then(FakeReply::text("Refunded.")),
+    )
+    .tool(refund)
+    .approval(Approval::new().tool("refund"))
+    .storage(storage.clone())
+    .build()
+    .expect("valid agent");
+    agent
+        .thread("t")
+        .actor("user:agent-1")
+        .send("refund A-1")
+        .await
+        .expect("send");
+    agent
+        .thread("t")
+        .actor("user:supervisor")
+        .approve()
+        .await
+        .expect("approve");
+    let log = storage.audit().expect("audit on");
+    let records = log.query(&AuditQuery::new().thread("t")).await.expect("query");
+    let decided = records
+        .iter()
+        .find(|r| r.event.action == "approval.decided")
+        .expect("decision recorded");
+    assert_eq!(decided.event.actor.as_deref(), Some("user:supervisor"));
+    assert!(log.verify().await.expect("verify").ok);
+    println!("  audit trail: ok");
 }

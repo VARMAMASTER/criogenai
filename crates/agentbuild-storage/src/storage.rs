@@ -5,6 +5,7 @@ use std::time::Duration;
 use agentbuild_core::CancelToken;
 use tokio::sync::OwnedMutexGuard;
 
+use crate::audit::{AuditEvent, AuditLog, InMemoryAuditLog};
 use crate::checkpoint::Checkpointer;
 use crate::error::{StorageError, StorageErrorKind};
 use crate::locks::{HeldLock, InterruptHandler, ThreadLocks};
@@ -72,6 +73,10 @@ pub struct Storage {
     pub(crate) retention: Retention,
     #[cfg_attr(not(feature = "encryption"), allow(dead_code))]
     rekey: Option<Arc<dyn Reencrypt>>,
+    /// Where actions are recorded, once turned on (design 0010).
+    audit: Option<Arc<dyn AuditLog>>,
+    /// The database's own trail, for [`Storage::with_audit`].
+    database_audit: Option<Arc<dyn AuditLog>>,
 }
 
 impl std::fmt::Debug for Storage {
@@ -82,6 +87,7 @@ impl std::fmt::Debug for Storage {
             .field("durability", &self.durability)
             .field("across_processes", &self.locks.is_some())
             .field("retention", &self.retention)
+            .field("audited", &self.audit.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -130,12 +136,23 @@ impl Storage {
     /// database.
     #[cfg(feature = "encryption")]
     pub async fn reencrypt(&self) -> Result<crate::ReencryptReport, StorageError> {
-        match &self.rekey {
-            Some(rekey) => rekey.reencrypt().await,
-            None => Err(crate::crypto::key_missing(
-                "reencrypt needs a database opened with `Storage::connect_encrypted`",
-            )),
-        }
+        let report = match &self.rekey {
+            Some(rekey) => rekey.reencrypt().await?,
+            None => {
+                return Err(crate::crypto::key_missing(
+                    "reencrypt needs a database opened with `Storage::connect_encrypted`",
+                ));
+            }
+        };
+        self.record(
+            AuditEvent::new("storage.reencrypted")
+                .outcome("ok")
+                .detail("checkpoints", report.checkpoints)
+                .detail("task_writes", report.task_writes)
+                .detail("memory_items", report.memory_items),
+        )
+        .await?;
+        Ok(report)
     }
 
     async fn open(url: &str, keys: Option<Keyring>) -> Result<Self, StorageError> {
@@ -155,9 +172,11 @@ impl Storage {
                 #[cfg(not(feature = "encryption"))]
                 let checkpointer = crate::SqliteCheckpointer::connect(url).await?;
                 let memory = checkpointer.memory_store();
+                let audit = checkpointer.audit_log();
                 let checkpointer = Arc::new(checkpointer);
                 let mut storage = Self::shared(checkpointer.clone()).with_memory(memory);
                 storage.rekey = Some(checkpointer);
+                storage.database_audit = Some(Arc::new(audit));
                 Ok(storage)
             };
             #[cfg(not(feature = "sqlite"))]
@@ -178,11 +197,13 @@ impl Storage {
                 let checkpointer = crate::PostgresCheckpointer::connect_with(url, options).await?;
                 let memory = checkpointer.memory_store();
                 let locks = checkpointer.thread_locks();
+                let audit = checkpointer.audit_log();
                 let checkpointer = Arc::new(checkpointer);
                 let mut storage = Self::shared(checkpointer.clone())
                     .with_memory(memory)
                     .with_locks(locks);
                 storage.rekey = Some(checkpointer);
+                storage.database_audit = Some(Arc::new(audit));
                 Ok(storage)
             };
             #[cfg(not(feature = "postgres"))]
@@ -214,7 +235,54 @@ impl Storage {
             durability: Durability::default(),
             retention: Retention::default(),
             rekey: None,
+            audit: None,
+            database_audit: None,
         }
+    }
+
+    /// Turns the audit trail on (design 0010): in the database's
+    /// `agentbuild_audit` table for storage from [`connect`](Self::connect)
+    /// on SQLite or Postgres, otherwise in process memory. Agents record
+    /// runs, model and tool calls, approvals, thread changes and memory
+    /// writes; [`prune`](Self::prune) and `reencrypt` record themselves.
+    pub fn with_audit(mut self) -> Self {
+        self.audit = Some(
+            self.database_audit
+                .clone()
+                .unwrap_or_else(|| Arc::new(InMemoryAuditLog::new())),
+        );
+        self
+    }
+
+    /// Records to `log` instead (any [`AuditLog`]).
+    pub fn with_audit_log(self, log: impl AuditLog) -> Self {
+        self.with_shared_audit_log(Arc::new(log))
+    }
+
+    /// [`with_audit_log`](Self::with_audit_log) with a shared log.
+    pub fn with_shared_audit_log(mut self, log: Arc<dyn AuditLog>) -> Self {
+        self.audit = Some(log);
+        self
+    }
+
+    /// The audit trail, if turned on.
+    pub fn audit(&self) -> Option<&Arc<dyn AuditLog>> {
+        self.audit.as_ref()
+    }
+
+    /// Records `event` if the audit trail is on. A record that cannot be
+    /// written fails with `audit_failed` (design 0010 §4: fail closed).
+    pub async fn record(&self, event: AuditEvent) -> Result<(), StorageError> {
+        let Some(log) = &self.audit else {
+            return Ok(());
+        };
+        let action = event.action.clone();
+        log.append(event).await.map(drop).map_err(|err| {
+            StorageError::new(
+                StorageErrorKind::AuditFailed,
+                format!("could not record `{action}`: {err}"),
+            )
+        })
     }
 
     /// Uses `store` for long-term memory.

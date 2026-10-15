@@ -434,6 +434,7 @@ mod sqlite {
             "DROP TABLE agentbuild_memory",
             "DROP TABLE agentbuild_settings",
             "DROP INDEX agentbuild_threads_updated",
+            "DROP TABLE agentbuild_audit",
             "DELETE FROM agentbuild_schema_migrations WHERE version >= 2",
         ] {
             sqlx::query(statement).execute(&pool).await.unwrap();
@@ -441,7 +442,7 @@ mod sqlite {
         pool.close().await;
 
         let checkpointer = SqliteCheckpointer::connect(&url).await.unwrap();
-        assert_eq!(checkpointer.schema_version().await.unwrap(), 4);
+        assert_eq!(checkpointer.schema_version().await.unwrap(), 5);
         let store = checkpointer.memory_store();
         store
             .put(&ns("users/ada"), "diet", json!("vegan"), None)

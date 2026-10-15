@@ -244,6 +244,22 @@ Facts the model saves with `remember` get their vector automatically. A
 self-hosted embedding model works the same way
 (`ProviderEmbedder::new(Endpoint::ollama(), "nomic-embed-text")`).
 
+**Who did what?** Turn on the audit trail and name who acts:
+
+```rust,ignore
+let storage = Storage::connect("sqlite://agent.db").await?.with_audit();
+// … build the agent with this storage …
+agent.thread("visit-7f3a").actor("user:dr-rao").approve().await?;
+let records = storage.audit().unwrap().query(&AuditQuery::new().thread("visit-7f3a")).await?;
+assert!(storage.audit().unwrap().verify().await?.ok);
+```
+
+Runs, model and tool calls, approval requests and decisions, rewinds,
+deletions and memory writes are recorded, without message text, tool
+arguments or results. Records are chained by hash, so `verify` finds a
+changed or removed record. If a record cannot be written the action fails
+(`audit_failed`).
+
 **Patient data, or anything else sensitive?** Turn on the `encryption`
 feature and open storage with keys:
 

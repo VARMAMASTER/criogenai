@@ -112,6 +112,22 @@ impl Storage {
         self.prune_pass(None).await
     }
 
+    /// Records a pass that removed something (design 0010 §2).
+    async fn record_pass(&self, report: &PruneReport) -> Result<(), StorageError> {
+        if *report == PruneReport::default() {
+            return Ok(());
+        }
+        self.record(
+            crate::audit::AuditEvent::new("storage.pruned")
+                .outcome("ok")
+                .detail("threads_deleted", report.threads_deleted)
+                .detail("threads_busy", report.threads_busy)
+                .detail("checkpoints_deleted", report.checkpoints_deleted)
+                .detail("memory_items_deleted", report.memory_items_deleted),
+        )
+        .await
+    }
+
     /// Runs [`prune`](Self::prune) now and then every `every`, in a Tokio
     /// task, until the returned [`Pruner`] is dropped. After the first pass
     /// only threads committed since the previous one are shortened.
@@ -158,6 +174,7 @@ impl Storage {
             }
         }
         report.memory_items_deleted = self.memory.prune_expired().await?;
+        self.record_pass(&report).await?;
         Ok(report)
     }
 
