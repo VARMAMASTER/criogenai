@@ -43,7 +43,8 @@ fn agent(model: FakeModel, storage: &Storage) -> Agent {
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     let started = Instant::now();
-    // In-memory here; SQLite and Postgres backends are planned.
+    // In-memory here; `Storage::connect("sqlite://…")` or "postgres://…"
+    // with the `sqlite` / `postgres` feature for real use.
     let storage = Storage::in_memory();
 
     let first = agent(

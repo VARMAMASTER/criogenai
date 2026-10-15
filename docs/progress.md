@@ -23,8 +23,9 @@ handoff point for whoever continues the work.
    checkpoints and migrations).
    Demo app `demos/support-chat` built and tested by hand with real models.
    Persistence step 3 (0008 §13): memory store and agent `Memory`.
-   **Next:** Postgres (step 4), then vector search, retention and
-   encryption (step 5).
+   Persistence step 4 (0008 §14): Postgres and thread locks across
+   processes.
+   **Next:** vector search, retention and encryption at rest (step 5).
 5. Phase 2 (Python SDK via PyO3/maturin): first design doc covers asyncio ↔
    Tokio bridging, free-threaded Python, and `abi3` wheels. Package test:
    install the built wheel in a clean venv.
@@ -46,6 +47,47 @@ handoff point for whoever continues the work.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-15: Postgres (0008 step 4)
+
+- `agentbuild-storage` feature `postgres`: `PostgresCheckpointer`
+  (`connect`, `connect_with` + `PostgresOptions`: connections, lock
+  connections, acquire timeout), `PostgresMemoryStore`, and
+  `PostgresThreadLocks`. `Storage::connect("postgres://…")` sets up all
+  three. The schema and migration versions are SQLite's. Migrations run
+  under a transaction advisory lock. Agents get the same feature
+  (forwarded).
+- The encoding shared by both SQL backends moved to `src/sql.rs`
+  (deltas, keyframes, snapshot without state, state cache): one
+  implementation, so SQLite and Postgres store the same thing.
+- `ThreadLocks` trait (new, backend-neutral) and
+  `Storage::with_locks`. `Storage::lease` takes the in-process lease,
+  then the cross-process lock; `busy_timeout` covers both. Interrupts
+  across processes cancel the holder's run. Postgres implements it with
+  session advisory locks held by one task per lock, with `lock_timeout`
+  for waits and `LISTEN`/`pg_notify` for interrupts.
+- Errors: Postgres URLs are never echoed (passwords); NUL and similar
+  text is `invalid_value`. SQLite memory: a TTL beyond `i64` no longer
+  wraps to "already expired".
+- TLS: rustls on aws-lc-rs (already in the tree via reqwest).
+  `cargo update -p rustls` to 0.23.46 for RUSTSEC-2026-0346 / 0347,
+  which were found by `cargo deny` and were already present via reqwest.
+- Testing: `scripts/get-postgres.sh` (portable binaries, checksummed;
+  no install) and `scripts/with-postgres.sh` (a throwaway cluster with
+  a TLS certificate from a throwaway CA). `ci-local.sh` has a new
+  `postgres` step, and the package step runs with a server. The GitHub
+  workflow has a manual Postgres 13/18 job. Tested locally on 13.23 and
+  18.6.
+- Tests:
+  - storage: 10 (contract, reconnecting, stored format, concurrent
+    migrations, bad URLs and NUL, TLS, 9 writers in 3 processes, locks
+    across processes, interrupt, lost connection), plus the memory
+    contract and prefix edges;
+  - agent: 4 (turns, interrupt and reject, shared memory, a 3-process
+    stress test), plus crash recovery by another process;
+  - the package consumer.
+- Mutation check: with the locks left out of `Storage::connect`, the
+  three lock tests fail.
 
 ### 2026-10-14: long-term memory (0008 step 3)
 

@@ -7,10 +7,13 @@ use tokio::sync::OwnedMutexGuard;
 
 use crate::checkpoint::Checkpointer;
 use crate::error::{StorageError, StorageErrorKind};
+use crate::locks::{HeldLock, InterruptHandler, ThreadLocks};
 use crate::memory::InMemoryCheckpointer;
 use crate::store::{InMemoryStore, MemoryStore};
 
-/// What a second operation on a busy thread does (design 0008 §5.2).
+/// What a second operation on a busy thread does (design 0008 §5.2). Holds
+/// across processes when the storage has [`ThreadLocks`] (Postgres);
+/// otherwise within this process.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 #[non_exhaustive]
 pub enum OnBusy {
@@ -44,6 +47,7 @@ pub enum Durability {
 pub struct Storage {
     checkpointer: Arc<dyn Checkpointer>,
     memory: Arc<dyn MemoryStore>,
+    locks: Option<Arc<dyn ThreadLocks>>,
     leases: Arc<Leases>,
     on_busy: OnBusy,
     busy_timeout: Duration,
@@ -56,6 +60,7 @@ impl std::fmt::Debug for Storage {
             .field("on_busy", &self.on_busy)
             .field("busy_timeout", &self.busy_timeout)
             .field("durability", &self.durability)
+            .field("across_processes", &self.locks.is_some())
             .finish_non_exhaustive()
     }
 }
@@ -79,10 +84,11 @@ impl Storage {
         Self::shared(Arc::new(checkpointer))
     }
 
-    /// Storage at `url`: `memory:` (in process memory), or with the
-    /// `sqlite` feature `sqlite://path/to/file.db` / `sqlite::memory:`.
-    /// Creates the database and its tables if needed. Threads and memory
-    /// share the database.
+    /// Storage at `url`: `memory:` (in process memory); with the `sqlite`
+    /// feature `sqlite://path/to/file.db` / `sqlite::memory:`; with the
+    /// `postgres` feature `postgres://user:password@host/database` (thread
+    /// locks across processes included). Creates the tables if needed.
+    /// Threads and memory share the database.
     pub async fn connect(url: &str) -> Result<Self, StorageError> {
         if url == "memory:" {
             return Ok(Self::in_memory());
@@ -100,9 +106,30 @@ impl Storage {
                 "SQLite storage needs the `sqlite` feature of agentbuild-storage",
             ));
         }
+        if url.starts_with("postgres://") || url.starts_with("postgresql://") {
+            #[cfg(feature = "postgres")]
+            return {
+                let checkpointer = crate::PostgresCheckpointer::connect(url).await?;
+                let memory = checkpointer.memory_store();
+                let locks = checkpointer.thread_locks();
+                Ok(Self::new(checkpointer)
+                    .with_memory(memory)
+                    .with_locks(locks))
+            };
+            #[cfg(not(feature = "postgres"))]
+            return Err(StorageError::new(
+                StorageErrorKind::Unavailable,
+                "Postgres storage needs the `postgres` feature of agentbuild-storage",
+            ));
+        }
+        // Only the scheme: the rest may hold a password.
+        let scheme = url.split(':').next().unwrap_or_default();
         Err(StorageError::new(
             StorageErrorKind::Unavailable,
-            format!("unsupported storage URL `{url}` (expected `memory:` or `sqlite:…`)"),
+            format!(
+                "unsupported storage URL scheme `{scheme}:` (expected `memory:`, `sqlite:` or \
+                 `postgres:`)"
+            ),
         ))
     }
 
@@ -111,6 +138,7 @@ impl Storage {
         Self {
             checkpointer,
             memory: Arc::new(InMemoryStore::new()),
+            locks: None,
             leases: Arc::default(),
             on_busy: OnBusy::default(),
             busy_timeout: Duration::from_secs(60),
@@ -126,6 +154,17 @@ impl Storage {
     /// [`with_memory`](Self::with_memory) with a shared store.
     pub fn with_shared_memory(mut self, store: Arc<dyn MemoryStore>) -> Self {
         self.memory = store;
+        self
+    }
+
+    /// Locks threads across processes with `locks` (see [`ThreadLocks`]).
+    pub fn with_locks(self, locks: impl ThreadLocks) -> Self {
+        self.with_shared_locks(Arc::new(locks))
+    }
+
+    /// [`with_locks`](Self::with_locks) with shared locks.
+    pub fn with_shared_locks(mut self, locks: Arc<dyn ThreadLocks>) -> Self {
+        self.locks = Some(locks);
         self
     }
 
@@ -165,10 +204,64 @@ impl Storage {
     /// Takes the thread for one operation, following
     /// [`on_busy`](Self::on_busy). Released when the lease is dropped.
     ///
-    /// Leases are per process (shared by clones of this `Storage`); across
-    /// processes, [`Checkpointer::commit`]'s compare-and-set keeps a thread
-    /// from forking.
+    /// First in this process (shared by clones of this `Storage`, FIFO),
+    /// then, with [`ThreadLocks`], across processes; `busy_timeout` covers
+    /// both. Without thread locks, [`Checkpointer::commit`]'s
+    /// compare-and-set still keeps another process from forking a thread.
     pub async fn lease(&self, thread: &str) -> Result<ThreadLease, StorageError> {
+        let started = tokio::time::Instant::now();
+        let mut lease = self.local_lease(thread).await?;
+        if let Some(locks) = &self.locks {
+            let slot = lease.slot.as_ref().expect("a new lease has its slot");
+            lease.remote = Some(self.remote_lock(locks, thread, slot, started).await?);
+        }
+        Ok(lease)
+    }
+
+    /// The thread's lock in other processes, after the local lease.
+    async fn remote_lock(
+        &self,
+        locks: &Arc<dyn ThreadLocks>,
+        thread: &str,
+        slot: &Arc<Slot>,
+        started: tokio::time::Instant,
+    ) -> Result<HeldLock, StorageError> {
+        // Another process interrupts: cancel the run registered here. Weak:
+        // the lease table forgets slots nobody holds.
+        let weak = Arc::downgrade(slot);
+        let on_interrupt: InterruptHandler = Arc::new(move || {
+            if let Some(slot) = weak.upgrade()
+                && let Some(token) = lock_slot(&slot.active).as_ref()
+            {
+                token.cancel();
+            }
+        });
+        let remaining = || self.busy_timeout.saturating_sub(started.elapsed());
+        let held = match self.on_busy {
+            OnBusy::Reject => locks.lock(thread, None, on_interrupt).await?,
+            OnBusy::Wait => locks.lock(thread, Some(remaining()), on_interrupt).await?,
+            OnBusy::Interrupt => match locks.lock(thread, None, on_interrupt.clone()).await? {
+                Some(held) => Some(held),
+                None => {
+                    locks.interrupt(thread).await?;
+                    locks.lock(thread, Some(remaining()), on_interrupt).await?
+                }
+            },
+        };
+        held.ok_or_else(|| match self.on_busy {
+            OnBusy::Reject => busy(thread, "another process runs it"),
+            _ => busy(
+                thread,
+                format!(
+                    "another run (in another process) is still active after {} ms",
+                    self.busy_timeout.as_millis()
+                ),
+            ),
+        })
+    }
+
+    /// The lease in this process.
+    async fn local_lease(&self, thread: &str) -> Result<ThreadLease, StorageError> {
         let slot = self.leases.slot(thread);
         let lock = slot.lock.clone();
         let guard = match (lock.clone().try_lock_owned().ok(), self.on_busy) {
@@ -203,13 +296,15 @@ impl Storage {
         Ok(ThreadLease {
             thread: thread.to_string(),
             guard: Some(guard),
+            remote: None,
             slot: Some(slot),
             leases: self.leases.clone(),
         })
     }
 
     /// Cancels the run that holds `thread` in this process, if any. `true`
-    /// if one was running.
+    /// if one was running. (A run in another process is stopped by a lease
+    /// with [`OnBusy::Interrupt`] on storage with [`ThreadLocks`].)
     pub fn cancel(&self, thread: &str) -> bool {
         let slot = self.leases.existing(thread);
         let token = slot
@@ -232,10 +327,12 @@ fn busy(thread: &str, why: impl std::fmt::Display) -> StorageError {
     )
 }
 
-/// Exclusive use of a thread in this process, from [`Storage::lease`].
+/// Exclusive use of a thread, from [`Storage::lease`]: in this process, and
+/// across processes with [`ThreadLocks`].
 pub struct ThreadLease {
     thread: String,
     guard: Option<OwnedMutexGuard<()>>,
+    remote: Option<HeldLock>,
     slot: Option<Arc<Slot>>,
     leases: Arc<Leases>,
 }
@@ -268,6 +365,8 @@ impl Drop for ThreadLease {
         if let Some(slot) = &self.slot {
             *lock_slot(&slot.active) = None;
         }
+        // Other processes first: a local waiter then finds it free sooner.
+        self.remote = None;
         self.guard = None;
         self.slot = None;
         self.leases.release(&self.thread);

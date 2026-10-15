@@ -31,6 +31,32 @@ jobs:
           cargo test -p agentbuild-providers --no-default-features
           cargo test -p agentbuild-agent --no-default-features
 
+  # The Postgres backend against real servers: the oldest supported
+  # version and the newest.
+  postgres:
+    strategy:
+      matrix:
+        version: ["13", "18"]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:${{ matrix.version }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 2s --health-timeout 5s
+          --health-retries 20
+    env:
+      AGENTBUILD_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
+      AGENTBUILD_REQUIRE_POSTGRES: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: >-
+          cargo test -p agentbuild-storage -p agentbuild-agent --all-features
+          --test postgres --test memory_store --test durable
+
   msrv:
     runs-on: ubuntu-latest
     steps:

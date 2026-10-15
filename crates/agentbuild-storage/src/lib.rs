@@ -13,10 +13,12 @@
 //! Runs are saved as they go ([`Durability::Step`], via [`ThreadWriter`]),
 //! so a run interrupted by a crash continues where it stopped.
 //!
-//! **Status:** steps 1–3 of design 0008: the contract, the in-memory
-//! backends and, with the `sqlite` feature, `SqliteCheckpointer` (delta
+//! **Status:** steps 1–4 of design 0008: the contract, the in-memory
+//! backends; with the `sqlite` feature, `SqliteCheckpointer` (delta
 //! checkpoints with keyframes, migrations) and `SqliteMemoryStore`
-//! (keyword search). Postgres, vector search and retention are planned.
+//! (keyword search); with the `postgres` feature, the same on Postgres
+//! plus [`ThreadLocks`] across processes. Vector search, retention and
+//! encryption at rest are planned.
 //!
 //! ```
 //! use agentbuild_core::State;
@@ -40,7 +42,12 @@
 mod checkpoint;
 pub mod delta;
 mod error;
+mod locks;
 mod memory;
+#[cfg(feature = "postgres")]
+mod postgres;
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
+mod sql;
 #[cfg(feature = "sqlite")]
 mod sqlite;
 mod storage;
@@ -51,7 +58,12 @@ pub use checkpoint::{
     Checkpoint, CheckpointMeta, CheckpointStatus, Checkpointer, Source, merge_pending,
 };
 pub use error::{StorageError, StorageErrorKind};
+pub use locks::{HeldLock, InterruptHandler, ThreadLocks};
 pub use memory::InMemoryCheckpointer;
+#[cfg(feature = "postgres")]
+pub use postgres::{
+    PostgresCheckpointer, PostgresMemoryStore, PostgresOptions, PostgresThreadLocks,
+};
 #[cfg(feature = "sqlite")]
 pub use sqlite::{SqliteCheckpointer, SqliteMemoryStore};
 pub use storage::{Durability, OnBusy, Storage, ThreadLease};

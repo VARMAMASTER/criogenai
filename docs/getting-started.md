@@ -27,7 +27,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 | `agentbuild-core` | The workflow engine: nodes, edges, routers, state, suspend/resume, retries |
 | `agentbuild-providers` | Messages, tools and models: OpenAI-compatible servers, Anthropic, Gemini, Ollama, vLLM, LM Studio |
 | `agentbuild-agent` | Agents: the model ⇄ tools loop, approvals, structured output, hooks, threads |
-| `agentbuild-storage` | Where threads live: in memory, or SQLite with the `sqlite` feature |
+| `agentbuild-storage` | Where threads live: in memory, SQLite (`sqlite` feature) or Postgres (`postgres` feature) |
 | `agentbuild-telemetry` | OpenTelemetry / Langfuse export |
 
 Rust 1.88 or newer.
@@ -215,6 +215,15 @@ A thread waiting for approval answers `chat.approve()`, `chat.reject(reason)`
 or `chat.decide(decisions)`. A thread whose last run failed or was
 interrupted answers `chat.retry()`; `send` refuses until then
 (`thread_interrupted`). Two `send`s on one thread queue up by default.
+
+**Several processes or machines?** Use Postgres. Turn on the
+`postgres` feature (on `agentbuild-storage` and `agentbuild-agent`) and
+connect with
+`Storage::connect("postgres://app:secret@db.internal/agents?sslmode=verify-full")`.
+Tables are created on first use, and threads and memory share the
+database. The busy-thread rules hold across processes: a second `send`
+waits even when another server runs the first. Use a direct connection,
+or PgBouncer in session mode.
 
 Testing tip: SQLite storage needs Tokio's real clock. Under a paused test
 clock (`start_paused`), the database pool's connection timeout fires at

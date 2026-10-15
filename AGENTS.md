@@ -57,7 +57,7 @@ write our own implementation.
   The 0004 agent list is complete. Threads (0008 §11): `agent.thread(id)`
   with `send`, `approve`/`reject`/`decide`, `retry`, `cancel`, `history`,
   `rewind`, `delete`.
-- **Implemented in `agentbuild-storage` (0008 steps 1–3):** `Checkpoint`,
+- **Implemented in `agentbuild-storage` (0008 steps 1–4):** `Checkpoint`,
   the `Checkpointer` trait (compare-and-set commit, `put_pending`),
   `InMemoryCheckpointer`, `SqliteCheckpointer` (feature `sqlite`, sqlx
   0.8: delta + keyframe checkpoints, migrations), `ThreadWriter`,
@@ -71,12 +71,18 @@ write our own implementation.
   `AgentBuilder::memory(Memory::by_state("user_id", users))` recalls
   facts before each model call and adds `remember` / `forget` /
   `search_memory`; `AgentInput::with(key, value)` sets run state;
-  `ToolContext::memory()`.
+  `ToolContext::memory()`. Postgres (feature `postgres`, §14):
+  `PostgresCheckpointer`, `PostgresMemoryStore`, and
+  `PostgresThreadLocks`. `ThreadLocks` makes `OnBusy` hold across
+  processes, using session advisory locks plus `LISTEN` for interrupts.
+  The tests need a server: `scripts/with-postgres.sh`, which starts a
+  throwaway one from the portable binaries that `scripts/get-postgres.sh`
+  downloads.
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 455 across the five crates (with `--all-features`; includes the
+- Tests: 471 across the five crates (with `--all-features`; includes the
   getting-started guide's examples), plus the package test. Release prep:
   `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`,
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
@@ -85,13 +91,13 @@ write our own implementation.
 - **Demo app:** `demos/support-chat` (Rust server on AgentBuild + Next.js
   UI; real OpenAI/Gemini models, manual only, not in CI or the workspace).
   Keys live in `~/.agentbuild-keys.env`, never in the repo.
-- **Next:** persistence step 4 (Postgres), step 5 (vector search,
-  retention, encryption); then the Python SDK (Phase 2). See `docs/progress.md`. The user will build their
+- **Next:** persistence step 5 (vector search, retention, encryption at
+  rest); then the Python SDK (Phase 2). See `docs/progress.md`. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
-- **Not started:** gateway, Python SDK, TypeScript SDK, the Postgres
-  backend, vector (semantic) memory search, encryption at rest. Do not describe
+- **Not started:** gateway, Python SDK, TypeScript SDK, vector
+  (semantic) memory search, encryption at rest, retention. Do not describe
   these as existing anywhere.
 
 ## Commands
@@ -121,6 +127,8 @@ RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 bash scripts/test-package.sh     # package the crate, use it from a separate project
 cargo deny --all-features check  # advisories, licenses, sources (deny.toml)
 bash scripts/ci-local.sh         # the whole CI pipeline, locally (--quick: rust step only)
+bash scripts/get-postgres.sh     # portable PostgreSQL into ~/.agentbuild/postgres (once)
+bash scripts/with-postgres.sh cargo test --workspace --all-features   # with a throwaway server
 # Every feature against real models, manual only (keys in ~/.agentbuild-keys.env):
 cd tests/live && cargo run       # or: cargo run -- gemini; LIVE_ONLY=approval cargo run
 ```

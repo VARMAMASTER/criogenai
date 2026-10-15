@@ -521,10 +521,11 @@ flowchart TB
    learned from LiteLLM (MIT). See [0006](design/0006-provider-layer.md).
 2. **Dynamic fan-out** (`Send`-style). Deferred (0005 §2); the frontier design
    stays compatible.
-3. **Persistence backends**: designed in 0008. Steps 1–3 are built
-   (`agentbuild-storage`: contract, in-memory and SQLite backends,
-   per-step saving and crash recovery, agent threads, the long-term
-   memory store and agent `Memory`); Postgres is next.
+3. **Persistence backends**: designed in 0008. Steps 1–4 are built
+   (`agentbuild-storage`: contract, in-memory, SQLite and Postgres
+   backends, per-step saving and crash recovery, agent threads, the
+   long-term memory store and agent `Memory`, thread locks across
+   processes); vector search, retention and encryption are next.
 4. **Subgraphs and multi-agent handoffs.** After the agent loop ships;
    `as_tool()` covers the first use case.
 

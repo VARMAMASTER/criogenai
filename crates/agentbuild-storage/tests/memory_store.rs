@@ -316,3 +316,46 @@ mod sqlite {
         remove(&path);
     }
 }
+
+#[cfg(feature = "postgres")]
+#[path = "support/postgres.rs"]
+mod pg;
+
+#[cfg(feature = "postgres")]
+#[tokio::test]
+async fn the_postgres_store_keeps_the_contract() {
+    use agentbuild_storage::{PostgresCheckpointer, Storage};
+
+    let Some(db) = pg::TestDb::create().await else {
+        return;
+    };
+    let checkpointer = PostgresCheckpointer::connect(&db.url).await.unwrap();
+    let store = checkpointer.memory_store();
+    contract(&store).await;
+
+    // A prefix is a byte range [`p/`, `p0`): its edges stay outside.
+    for path in ["users/ada0", "users/ada.", "users/adaé", "users/ada/x"] {
+        store
+            .put(&ns(path), "k", json!("edge"), None)
+            .await
+            .unwrap();
+    }
+    assert_eq!(
+        keys(&store, "users/ada", SearchQuery::new()).await,
+        ["users/ada/x:k"]
+    );
+    assert_eq!(store.delete_namespace(&ns("users/ada")).await.unwrap(), 1);
+    checkpointer.close().await;
+
+    // Through `Storage::connect`: the same database as threads.
+    let storage = Storage::connect(&db.url).await.unwrap();
+    assert!(
+        storage
+            .memory()
+            .get(&ns("users/ada0"), "k")
+            .await
+            .unwrap()
+            .is_some()
+    );
+    db.remove().await;
+}

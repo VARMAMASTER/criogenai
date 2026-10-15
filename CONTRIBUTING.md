@@ -14,11 +14,18 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 bash scripts/test-package.sh      # uses the packaged crates from a separate project
+bash scripts/get-postgres.sh      # once: portable PostgreSQL in ~/.agentbuild/postgres
+bash scripts/with-postgres.sh cargo test --workspace --all-features   # + the Postgres tests
 ```
 
+The Postgres tests skip unless `AGENTBUILD_TEST_POSTGRES_URL` names a
+server. `scripts/with-postgres.sh` starts a throwaway one (no install,
+service or Docker) and sets the variable.
+
 `bash scripts/ci-local.sh` runs the whole pipeline on your machine: all of
-the above, a build on Rust 1.88, every example, and a license and advisory
-check (`cargo deny`). For now this local run is the CI: GitHub Actions does
+the above (Postgres included once the binaries are there), a build on
+Rust 1.88, every example, and a license and advisory check
+(`cargo deny`). For now this local run is the CI: GitHub Actions does
 not run on push (the workflow can still be started by hand, and covers
 Linux, Windows and macOS).
 

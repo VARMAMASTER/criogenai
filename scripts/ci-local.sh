@@ -5,11 +5,15 @@
 # Steps (the same as the CI jobs, on the local OS only):
 #   rust        fmt, clippy (all features and default), tests, doctests,
 #               tests without the http feature
+#   postgres    the Postgres tests against a throwaway server
+#               (scripts/with-postgres.sh; skipped without binaries:
+#               `bash scripts/get-postgres.sh` fetches portable ones)
 #   msrv        cargo check on Rust 1.88 (skipped if that toolchain is not
 #               installed: `rustup toolchain install 1.88 --profile minimal`)
 #   deps        cargo deny (skipped if cargo-deny is not installed)
 #   standalone  fmt + clippy of tests/live and the demo server
-#   package     docs, scripts/test-package.sh, every example
+#   package     docs, scripts/test-package.sh (with a throwaway Postgres
+#               when available), every example
 #
 # Usage: scripts/ci-local.sh            all steps
 #        scripts/ci-local.sh --quick    rust step only
@@ -22,7 +26,7 @@ export CARGO_TERM_COLOR=always
 # Incremental build files take a lot of disk and do not help a full run.
 export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
 
-all=(rust msrv deps standalone package)
+all=(rust postgres msrv deps standalone package)
 if [[ $# -eq 0 ]]; then
   steps=("${all[@]}")
 elif [[ $1 == --quick ]]; then
@@ -56,6 +60,24 @@ step_rust() {
   run cargo test -p agentbuild-agent --no-default-features
 }
 
+# A server for the Postgres tests: given, or startable by with-postgres.sh.
+have_postgres() {
+  [[ -n ${AGENTBUILD_TEST_POSTGRES_URL:-} || -n ${PG_BIN:-} ]] ||
+    command -v pg_ctl >/dev/null 2>&1 ||
+    [[ -d ${PG_HOME:-$HOME/.agentbuild/postgres}/bin ]]
+}
+
+step_postgres() {
+  if ! have_postgres; then
+    skipped+=("postgres (no binaries: bash scripts/get-postgres.sh)")
+    return
+  fi
+  # REQUIRE: the tests fail instead of skipping if the server is missing.
+  AGENTBUILD_REQUIRE_POSTGRES=1 run bash scripts/with-postgres.sh \
+    cargo test -p agentbuild-storage -p agentbuild-agent --all-features \
+    --test postgres --test memory_store --test durable
+}
+
 step_msrv() {
   if ! rustup run 1.88 rustc --version >/dev/null 2>&1; then
     skipped+=("msrv (no 1.88 toolchain)")
@@ -82,7 +104,11 @@ step_standalone() {
 
 step_package() {
   RUSTDOCFLAGS="-D warnings" run cargo doc --no-deps --all-features
-  run bash scripts/test-package.sh
+  if have_postgres; then
+    run bash scripts/with-postgres.sh bash scripts/test-package.sh
+  else
+    run bash scripts/test-package.sh
+  fi
   run cargo run -p agentbuild-core --example basic_workflow -- "Hello world"
   run cargo run -p agentbuild-core --example approval_workflow -- yes
   run cargo run -p agentbuild-core --example llm_workflow -- "remote work"
@@ -95,7 +121,7 @@ step_package() {
 
 for step in "${steps[@]}"; do
   case $step in
-    rust | msrv | deps | standalone | package) ;;
+    rust | postgres | msrv | deps | standalone | package) ;;
     *)
       echo "unknown step: $step (steps: ${all[*]})" >&2
       exit 2

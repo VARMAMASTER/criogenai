@@ -64,19 +64,20 @@ fn order_replies() -> Vec<FakeReply> {
 
 /// Starts an order whose `ship` call hangs, and "kills the process" once
 /// `charge` finished: the run's task is aborted mid-step.
-async fn crash_during_shipping(storage: &Storage, charges: &Arc<AtomicUsize>) {
+async fn crash_during_shipping(storage: &Storage, charges: &Arc<AtomicUsize>, thread: &str) {
     let agent = shop(
         instant(order_replies()),
         storage,
         charges,
         Duration::from_secs(3600),
     );
-    let run = tokio::spawn(async move { agent.thread("order-1").send("buy").await });
+    let chat = agent.thread(thread);
+    let run = tokio::spawn(async move { chat.send("buy").await });
     // Wait until the charge's result is in storage (not a fixed time: disks
     // on CI machines can be slow), then kill the run.
     let saved = async {
         loop {
-            let head = storage.checkpointer().load("order-1", None).await.unwrap();
+            let head = storage.checkpointer().load(thread, None).await.unwrap();
             let memo = head
                 .and_then(|h| h.snapshot)
                 .and_then(|s| s.pending_writes.get("tools").map(|w| w.memo.len()));
@@ -94,7 +95,7 @@ async fn crash_during_shipping(storage: &Storage, charges: &Arc<AtomicUsize>) {
     assert!(run.await.unwrap_err().is_cancelled());
 }
 
-async fn recover(storage: &Storage, charges: &Arc<AtomicUsize>) {
+async fn recover(storage: &Storage, charges: &Arc<AtomicUsize>, thread: &str) {
     // A new process: a new agent on the same storage, `ship` now works.
     let agent = shop(
         instant(order_replies().split_off(1)),
@@ -102,7 +103,7 @@ async fn recover(storage: &Storage, charges: &Arc<AtomicUsize>) {
         charges,
         Duration::from_millis(10),
     );
-    let chat = agent.thread("order-1");
+    let chat = agent.thread(thread);
     let head = chat.head().await.unwrap().unwrap();
     assert_eq!(head.status(), CheckpointStatus::InProgress);
     let pending = &head.snapshot.as_ref().unwrap().pending_writes;
@@ -137,8 +138,8 @@ async fn recover(storage: &Storage, charges: &Arc<AtomicUsize>) {
 async fn a_crash_mid_step_is_recovered_without_repeating_finished_tool_calls() {
     let storage = Storage::in_memory();
     let charges = Arc::new(AtomicUsize::new(0));
-    crash_during_shipping(&storage, &charges).await;
-    recover(&storage, &charges).await;
+    crash_during_shipping(&storage, &charges, "order-1").await;
+    recover(&storage, &charges, "order-1").await;
 }
 
 #[cfg(feature = "sqlite")]
@@ -150,12 +151,12 @@ async fn a_crash_is_recovered_from_a_sqlite_file() {
     let charges = Arc::new(AtomicUsize::new(0));
     {
         let storage = Storage::new(SqliteCheckpointer::open(&path).await.unwrap());
-        crash_during_shipping(&storage, &charges).await;
+        crash_during_shipping(&storage, &charges, "order-1").await;
     }
     // Reopened from the file: nothing from the first process survives in
     // memory.
     let storage = Storage::new(SqliteCheckpointer::open(&path).await.unwrap());
-    recover(&storage, &charges).await;
+    recover(&storage, &charges, "order-1").await;
     let history = storage.checkpointer().history("order-1", 20).await.unwrap();
     let sources: Vec<Source> = history.iter().rev().map(|c| c.source).collect();
     // send: input, model step, (crash in tools); retry: input, tools step,
@@ -178,7 +179,24 @@ async fn a_crash_is_recovered_from_a_sqlite_file() {
     }
 }
 
-#[cfg(feature = "sqlite")]
+#[cfg(feature = "postgres")]
+#[tokio::test]
+async fn a_crash_is_recovered_by_another_process_on_postgres() {
+    let Ok(url) = std::env::var("AGENTBUILD_TEST_POSTGRES_URL") else {
+        assert!(std::env::var_os("AGENTBUILD_REQUIRE_POSTGRES").is_none());
+        eprintln!("skipped: no AGENTBUILD_TEST_POSTGRES_URL (see scripts/with-postgres.sh)");
+        return;
+    };
+    let thread = format!("order-{}", uuid_like());
+    let charges = Arc::new(AtomicUsize::new(0));
+    crash_during_shipping(&Storage::connect(&url).await.unwrap(), &charges, &thread).await;
+    // Another process: its own connections and thread locks.
+    let storage = Storage::connect(&url).await.unwrap();
+    recover(&storage, &charges, &thread).await;
+    assert!(storage.checkpointer().delete_thread(&thread).await.unwrap());
+}
+
+#[cfg(any(feature = "sqlite", feature = "postgres"))]
 fn uuid_like() -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)

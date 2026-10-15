@@ -25,15 +25,20 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["sync", "time"] }
 # Checkpoint ids (v7: ordered by creation time).
 uuid.workspace = true
-# The SQLite backend (feature `sqlite`): async, and the same crate will
-# serve Postgres. No macros (queries are plain strings, checked by tests);
-# SQLite itself is compiled in (bundled), so there is nothing to install.
-sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "sqlite"], optional = true }
+# The SQL backends (features `sqlite`, `postgres`): async, one crate for
+# both. No macros (queries are plain strings, checked by tests); SQLite
+# itself is compiled in (bundled), so there is nothing to install.
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio"], optional = true }
 
 [features]
 default = []
 # SQLite storage (`SqliteCheckpointer`, `Storage::connect("sqlite://…")`).
-sqlite = ["dep:sqlx"]
+sqlite = ["dep:sqlx", "sqlx/sqlite"]
+# Postgres storage (`PostgresCheckpointer`, `Storage::connect("postgres://…")`).
+# TLS with rustls on aws-lc-rs, the provider reqwest already uses (no second
+# crypto library). Tokio `rt` and `macros`: each cross-process thread lock
+# is held by a task that also listens for interrupts.
+postgres = ["dep:sqlx", "sqlx/postgres", "sqlx/tls-rustls-aws-lc-rs", "tokio/rt", "tokio/macros"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "rt-multi-thread", "macros", "time", "sync", "test-util"] }

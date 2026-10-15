@@ -4,9 +4,10 @@ use agentbuild_core::BoxFuture;
 use serde_json::Value;
 use sqlx::sqlite::{SqlitePool, SqliteRow};
 
-use super::{corrupt, get, parse, sql_error};
+use super::{get, sql_error};
 use crate::checkpoint::now_ms;
 use crate::error::StorageError;
+use crate::sql::memory_item;
 use crate::store::{
     MemoryItem, MemoryStore, Namespace, SearchQuery, check_prefix, check_put, expiry, query_terms,
     rank, search_text,
@@ -77,7 +78,7 @@ impl SqliteMemoryStore {
         .bind(text)
         .bind(search_text(key, &value))
         .bind(now as i64)
-        .bind(expiry(now, ttl).map(|at| at as i64))
+        .bind(expiry(now, ttl).map(|at| at.min(i64::MAX as u64) as i64))
         .execute(&self.pool)
         .await
         .map_err(sql_error)?;
@@ -184,20 +185,14 @@ impl SqliteMemoryStore {
 
 /// An item and its search text.
 fn read_item(row: &SqliteRow) -> Result<(MemoryItem, String), StorageError> {
-    let path: String = get(row, "namespace")?;
-    let namespace = Namespace::parse(&path)
-        .map_err(|err| corrupt(format!("unreadable memory namespace `{path}`: {err}")))?;
-    let value: String = get(row, "value")?;
-    let expires: Option<i64> = get(row, "expires_at_ms")?;
-    let item = MemoryItem {
-        namespace,
-        key: get(row, "key")?,
-        value: parse(&value, "memory value")?,
-        created_at_ms: get::<i64>(row, "created_at_ms")? as u64,
-        updated_at_ms: get::<i64>(row, "updated_at_ms")? as u64,
-        expires_at_ms: expires.map(|at| at as u64),
-        score: None,
-    };
+    let item = memory_item(
+        &get::<String>(row, "namespace")?,
+        get(row, "key")?,
+        &get::<String>(row, "value")?,
+        get(row, "created_at_ms")?,
+        get(row, "updated_at_ms")?,
+        get(row, "expires_at_ms")?,
+    )?;
     Ok((item, get(row, "search_text")?))
 }
 

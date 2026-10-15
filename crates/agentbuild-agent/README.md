@@ -16,15 +16,15 @@ with tools, run as a loop on the AgentBuild workflow engine.
   output, hooks around model and tool calls, agents as nodes and as tools,
   `agent.stream()` for UIs
 - threads: `agent.thread("user-42").send(...)` keeps the conversation in
-  storage (in memory, or SQLite with the `sqlite` feature); pending
+  storage (in memory, SQLite with the `sqlite` feature, or Postgres with
+  `postgres`); pending
   approvals and failed runs wait there for `approve()` or `retry()` from
   any agent instance
 - long-term memory: `Memory::by_state("user_id", users)` keeps facts per
   user across conversations, recalls them before each model call, and
   gives the model `remember` / `forget` / `search_memory`
 
-> **Early development.** Postgres storage is planned. Nothing is published
-> yet.
+> **Early development.** Nothing is published yet.
 
 ## Example
 

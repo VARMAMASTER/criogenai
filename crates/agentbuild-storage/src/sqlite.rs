@@ -6,21 +6,21 @@ mod memory;
 
 pub use memory::SqliteMemoryStore;
 
-use std::collections::HashMap;
 use std::str::FromStr;
-use std::sync::{Mutex, MutexGuard};
 use std::time::Duration;
 
-use agentbuild_core::{BoxFuture, PendingWrite, Snapshot, State};
-use serde_json::Value;
+use agentbuild_core::{BoxFuture, PendingWrite, State};
 use sqlx::sqlite::{
     SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions, SqliteRow,
 };
 use sqlx::{Row, Sqlite, Transaction};
 
-use crate::checkpoint::{Checkpoint, CheckpointMeta, Checkpointer, merge_pending, now_ms};
-use crate::delta::{self, DeltaOp};
+use crate::checkpoint::{Checkpoint, CheckpointMeta, Checkpointer, now_ms};
 use crate::error::{StorageError, StorageErrorKind};
+use crate::sql::{
+    KEYFRAME_INTERVAL, StateCache, conflict, decode_snapshot, encode, encode_error, enum_text,
+    parse, parse_enum, rebuild,
+};
 
 /// Schema changes, in order. Each runs once, in a transaction, and is
 /// recorded in `agentbuild_schema_migrations`.
@@ -75,12 +75,6 @@ const MIGRATIONS: &[&str] = &[
         ON agentbuild_memory (expires_at_ms) WHERE expires_at_ms IS NOT NULL",
 ];
 
-/// Default for [`SqliteCheckpointer::keyframe_interval`].
-const KEYFRAME_INTERVAL: u32 = 25;
-
-/// Remembered states (for computing deltas) before the cache is cleared.
-const CACHE_LIMIT: usize = 256;
-
 /// Checkpoints in a SQLite database file. Survives restarts; for local apps
 /// and single-machine services. Several processes may share the file:
 /// commits are compare-and-set, but leases ([`OnBusy`](crate::OnBusy)) are
@@ -100,16 +94,7 @@ const CACHE_LIMIT: usize = 256;
 pub struct SqliteCheckpointer {
     pool: SqlitePool,
     keyframe_interval: u32,
-    /// The last state written or read per thread, to compute the next delta
-    /// without reading it back.
-    cache: Mutex<HashMap<String, Cached>>,
-}
-
-#[derive(Clone)]
-struct Cached {
-    id: String,
-    state: State,
-    depth: u32,
+    cache: StateCache,
 }
 
 impl std::fmt::Debug for SqliteCheckpointer {
@@ -155,7 +140,7 @@ impl SqliteCheckpointer {
         let checkpointer = Self {
             pool,
             keyframe_interval: KEYFRAME_INTERVAL,
-            cache: Mutex::default(),
+            cache: StateCache::default(),
         };
         checkpointer.migrate().await?;
         Ok(checkpointer)
@@ -255,26 +240,14 @@ impl SqliteCheckpointer {
             .map_err(sql_error)
     }
 
-    fn cache(&self) -> MutexGuard<'_, HashMap<String, Cached>> {
-        self.cache.lock().unwrap_or_else(|e| e.into_inner())
-    }
-
-    fn remember(&self, thread: &str, cached: Cached) {
-        let mut cache = self.cache();
-        if cache.len() >= CACHE_LIMIT && !cache.contains_key(thread) {
-            cache.clear();
-        }
-        cache.insert(thread.to_string(), cached);
-    }
-
     /// The state of checkpoint `id` and its distance from its keyframe.
     async fn materialize(
         &self,
         thread: &str,
         id: &str,
     ) -> Result<Option<(State, u32)>, StorageError> {
-        if let Some(cached) = self.cache().get(thread).filter(|c| c.id == id) {
-            return Ok(Some((cached.state.clone(), cached.depth)));
+        if let Some(cached) = self.cache.get(thread, id) {
+            return Ok(Some(cached));
         }
         // The checkpoint and its ancestors up to the nearest keyframe.
         let rows = sqlx::query(
@@ -293,21 +266,15 @@ impl SqliteCheckpointer {
         .fetch_all(&self.pool)
         .await
         .map_err(sql_error)?;
-        let Some(first) = rows.first() else {
+        let Some(last) = rows.last() else {
             return Ok(None);
         };
-        if get::<String>(first, "kind")? != "keyframe" {
-            return Err(corrupt(format!(
-                "checkpoint `{id}` has no keyframe among its ancestors"
-            )));
-        }
-        let mut state: State = parse(&get::<String>(first, "body")?, "keyframe")?;
-        for row in &rows[1..] {
-            let ops: Vec<DeltaOp> = parse(&get::<String>(row, "body")?, "delta")?;
-            state = delta::apply(state, &ops)?;
-        }
-        let depth = get::<i64>(rows.last().expect("not empty"), "depth")? as u32;
-        Ok(Some((state, depth)))
+        let depth = get::<i64>(last, "depth")? as u32;
+        let chain = rows
+            .iter()
+            .map(|row| Ok((get(row, "kind")?, get(row, "body")?)))
+            .collect::<Result<Vec<_>, StorageError>>()?;
+        Ok(Some((rebuild(id, &chain)?, depth)))
     }
 
     async fn pending_writes(
@@ -369,20 +336,11 @@ impl SqliteCheckpointer {
             return Ok(None);
         };
         let snapshot = match get::<Option<String>>(&row, "snapshot")? {
-            Some(text) => {
-                let mut value: Value = parse(&text, "snapshot")?;
-                if let Value::Object(map) = &mut value
-                    && !map.contains_key("state")
-                {
-                    map.insert("state".into(), state.clone().into_value());
-                }
-                let mut snapshot: Snapshot = serde_json::from_value(value)
-                    .map_err(|err| corrupt(format!("unreadable snapshot: {err}")))?;
-                for (node, write) in self.pending_writes(&id).await? {
-                    merge_pending(&mut snapshot, &node, write);
-                }
-                Some(snapshot)
-            }
+            Some(text) => Some(decode_snapshot(
+                &text,
+                &state,
+                self.pending_writes(&id).await?,
+            )?),
             None => None,
         };
         let checkpoint = Checkpoint {
@@ -397,7 +355,7 @@ impl SqliteCheckpointer {
             snapshot,
             created_at_ms: get::<i64>(&row, "created_at_ms")? as u64,
         };
-        self.remember(thread, Cached { id, state, depth });
+        self.cache.remember(thread, id, state, depth);
         Ok(Some(checkpoint))
     }
 
@@ -419,32 +377,7 @@ impl SqliteCheckpointer {
             Some(parent) => self.materialize(&thread, parent).await?,
             None => None,
         };
-        let full = serde_json::to_string(&checkpoint.state).map_err(encode_error)?;
-        let (kind, depth, body) = match &parent {
-            Some((before, depth)) if depth + 1 < self.keyframe_interval => {
-                let ops = delta::diff(before, &checkpoint.state);
-                let encoded = serde_json::to_string(&ops).map_err(encode_error)?;
-                if encoded.len() < full.len() {
-                    ("delta", depth + 1, encoded)
-                } else {
-                    ("keyframe", 0, full)
-                }
-            }
-            _ => ("keyframe", 0, full),
-        };
-        let snapshot = match &checkpoint.snapshot {
-            Some(snapshot) => {
-                let mut value = serde_json::to_value(snapshot).map_err(encode_error)?;
-                // Stored once: the snapshot's state is the checkpoint's.
-                if snapshot.state == checkpoint.state
-                    && let Value::Object(map) = &mut value
-                {
-                    map.remove("state");
-                }
-                Some(value.to_string())
-            }
-            None => None,
-        };
+        let encoded = encode(&checkpoint, parent.as_ref(), self.keyframe_interval)?;
 
         let now = now_ms() as i64;
         let mut tx = self.begin().await?;
@@ -503,23 +436,17 @@ impl SqliteCheckpointer {
         .bind(enum_text(&checkpoint.status())?)
         .bind(&checkpoint.run_id)
         .bind(checkpoint.step as i64)
-        .bind(kind)
-        .bind(depth as i64)
-        .bind(body)
-        .bind(snapshot)
+        .bind(encoded.kind)
+        .bind(encoded.depth as i64)
+        .bind(encoded.body)
+        .bind(encoded.snapshot)
         .bind(checkpoint.created_at_ms as i64)
         .execute(&mut *tx)
         .await
         .map_err(sql_error)?;
         tx.commit().await.map_err(sql_error)?;
-        self.remember(
-            &thread,
-            Cached {
-                id: checkpoint.id,
-                state: checkpoint.state,
-                depth,
-            },
-        );
+        self.cache
+            .remember(&thread, checkpoint.id, checkpoint.state, encoded.depth);
         Ok(())
     }
 
@@ -589,7 +516,7 @@ impl SqliteCheckpointer {
             .rows_affected()
             > 0;
         tx.commit().await.map_err(sql_error)?;
-        self.cache().remove(thread);
+        self.cache.forget(thread);
         Ok(existed)
     }
 
@@ -672,35 +599,6 @@ where
     T: sqlx::Decode<'r, Sqlite> + sqlx::Type<Sqlite>,
 {
     row.try_get(column).map_err(sql_error)
-}
-
-fn parse<T: serde::de::DeserializeOwned>(text: &str, what: &str) -> Result<T, StorageError> {
-    serde_json::from_str(text).map_err(|err| corrupt(format!("unreadable {what}: {err}")))
-}
-
-/// A `Source` or `CheckpointStatus` as stored (its JSON name).
-fn enum_text<T: serde::Serialize>(value: &T) -> Result<String, StorageError> {
-    match serde_json::to_value(value).map_err(encode_error)? {
-        Value::String(text) => Ok(text),
-        other => Err(corrupt(format!("unexpected enum value {other}"))),
-    }
-}
-
-fn parse_enum<T: serde::de::DeserializeOwned>(text: &str) -> Result<T, StorageError> {
-    serde_json::from_value(Value::String(text.to_string()))
-        .map_err(|err| corrupt(format!("unknown value `{text}`: {err}")))
-}
-
-fn corrupt(message: String) -> StorageError {
-    StorageError::new(StorageErrorKind::Corrupt, message)
-}
-
-fn conflict(message: String) -> StorageError {
-    StorageError::new(StorageErrorKind::Conflict, message)
-}
-
-fn encode_error(err: serde_json::Error) -> StorageError {
-    corrupt(format!("cannot encode as JSON: {err}"))
 }
 
 fn sql_error(err: sqlx::Error) -> StorageError {

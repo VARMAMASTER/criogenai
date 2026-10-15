@@ -13,15 +13,17 @@ Threads, checkpoints and storage backends for
 - history follows the current branch; rewinding keeps the old branch
 - runs are saved before every step and after every task (durability
   `step`), so an interrupted run continues without repeating finished work
-- backends: in memory, and SQLite (feature `sqlite`), which stores only
-  what changed per checkpoint plus a full copy every 25
+- backends: in memory; SQLite (feature `sqlite`), which stores only what
+  changed per checkpoint plus a full copy every 25; and Postgres (feature
+  `postgres`), with the same format, TLS, and busy-thread rules that hold
+  across processes (advisory locks)
 - long-term memory: a `MemoryStore` of JSON items under namespaces such as
   `users/42`, with keyword search, time to live, and deleting everything
-  in a namespace; in memory or in the same SQLite database
+  in a namespace; in memory or in the same SQLite or Postgres database
 
-**Status:** the contract, the in-memory and SQLite backends, per-step
-saving, the memory store. Postgres, vector search and retention are
-planned.
+**Status:** the contract, the in-memory, SQLite and Postgres backends,
+per-step saving, the memory store. Vector search, retention and
+encryption at rest are planned.
 
 Most code uses this through agents (`agent.thread("user-42")`, see
 `agentbuild-agent`). The contract underneath:

@@ -32,6 +32,8 @@ default = ["http"]
 http = ["agentbuild-providers/http"]
 # SQLite thread storage (agentbuild-storage's `sqlite`).
 sqlite = ["agentbuild-storage/sqlite"]
+# Postgres thread storage (agentbuild-storage's `postgres`).
+postgres = ["agentbuild-storage/postgres"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "test-util", "net", "io-util"] }

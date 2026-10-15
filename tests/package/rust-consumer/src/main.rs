@@ -35,6 +35,7 @@ async fn main() {
     threads_keep_conversations().await;
     sqlite_threads_survive_a_restart().await;
     long_term_memory_per_user().await;
+    postgres_threads_across_processes().await;
     println!("package smoke test: ok");
 }
 
@@ -612,4 +613,44 @@ async fn long_term_memory_per_user() {
         1
     );
     println!("  long-term memory per user (recall, tools, SQLite store): ok");
+}
+
+/// Two processes (two `Storage::connect`) on one Postgres thread: the second
+/// send waits its turn. Needs a server (`scripts/with-postgres.sh`).
+async fn postgres_threads_across_processes() {
+    use agentbuild_agent::Agent;
+    use agentbuild_storage::{PostgresCheckpointer, PostgresOptions, Storage};
+
+    // Always compiled; run when a server is configured.
+    let _options = PostgresOptions::new().max_connections(4).lock_connections(8);
+    let Ok(url) = std::env::var("AGENTBUILD_TEST_POSTGRES_URL") else {
+        println!("  Postgres threads across processes: skipped (no AGENTBUILD_TEST_POSTGRES_URL)");
+        return;
+    };
+    let thread = format!("package-{}", std::process::id());
+    let process = |reply: &'static str| {
+        let url = url.clone();
+        async move {
+            let model = FakeModel::with_delay(Duration::from_millis(200), Duration::from_millis(200))
+                .then(FakeReply::text(reply));
+            Agent::builder(model)
+                .storage(Storage::connect(&url).await.expect("connect"))
+                .build()
+                .expect("valid agent")
+        }
+    };
+    let (a, b) = (process("one").await, process("two").await);
+    let first = {
+        let chat = a.thread(&thread);
+        tokio::spawn(async move { chat.send("first").await })
+    };
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let second = b.thread(&thread).send("second").await.expect("waits its turn");
+    first.await.expect("joined").expect("first send");
+    assert_eq!(second.result.messages.len(), 4);
+    assert!(b.thread(&thread).delete().await.expect("delete"));
+    let store = PostgresCheckpointer::connect(&url).await.expect("connect");
+    assert_eq!(store.schema_version().await.expect("version"), 2);
+    store.close().await;
+    println!("  Postgres threads across processes: ok");
 }

@@ -72,7 +72,11 @@ First release, planned as 0.1.0 (Rust crates only).
   keyframe checkpoints, automatic migrations and crash recovery.
 - Memory store: JSON items under namespaces, keyword search ranked the
   same on every backend, time to live, deleting a whole namespace; in
-  memory or in the same SQLite database.
+  memory or in the same SQLite or Postgres database.
+- Postgres backend (feature `postgres`): the SQLite format and guarantees
+  on a server (PostgreSQL 13+), TLS, and thread locks across processes
+  (`ThreadLocks`): `OnBusy` wait, reject and interrupt hold between
+  servers, and a crashed server's threads are freed.
 
 ### agentbuild-telemetry: tracing
 

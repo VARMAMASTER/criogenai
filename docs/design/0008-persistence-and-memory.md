@@ -1,6 +1,6 @@
 # 0008: Persistence, threads and memory
 
-Status: **Accepted**; §10 steps 1–3 built (§11, §12, §13). Builds on [0005](0005-core-runtime-extensions.md)
+Status: **Accepted**; §10 steps 1–4 built (§11–§14). Builds on [0005](0005-core-runtime-extensions.md)
 §5 (snapshots, saved task writes, resume) and gives developers the easy
 interactive API sketched in [0007](0007-public-api.md). Research input:
 [langgraph](../research/langgraph.md) §5 (checkpointing), §6 (interrupts) and §8 (store).
@@ -227,7 +227,9 @@ thread therefore cannot silently fork it:
 
 Across processes, the same compare-and-set keeps it correct. `wait` uses an
 advisory lock on Postgres, an in-process queue plus head-version polling with
-backoff on SQLite, and a plain queue in memory. Queuing is the default because
+backoff on SQLite, and a plain queue in memory. (As built, §14: Postgres
+locks across processes, including `reject` and `interrupt`; SQLite's
+polling is not built yet.) Queuing is the default because
 chat UIs expect a second message to wait its turn, not to fail.
 
 ### 5.3 History, rewind and fork
@@ -346,7 +348,7 @@ same interfaces (async methods); the bridge adapts them.
 | `thread_suspended` | developer | `send` on a thread that waits for approval: answer it first (`approve`, `reject`, `decide`) |
 | `thread_interrupted` | developer | `send` on a thread whose last run did not finish: continue it with `retry` first (§5.5) |
 | `storage_failed` | transient | (core run error) the run's progress could not be saved during the run; the cause's storage code is in the message and `NodeError` kind |
-| `invalid_value` | developer | A memory item the store does not accept: root namespace, bad key, value over 1 MiB (P11, §13) |
+| `invalid_value` | developer | A memory item the store does not accept: root namespace, bad key, value over 1 MiB (P11, §13); text Postgres cannot store, e.g. a NUL character (§14) |
 
 A storage failure **during** a run fails the step (nothing committed) and the
 run reports the error with its in-memory snapshot attached, so no work is lost
@@ -636,3 +638,121 @@ refused with the new code `invalid_input`.
 
 The fingerprint does not change: the memory tools are tools, and recall
 is part of the model node.
+
+## 14. Step 4 as built
+
+Postgres: feature `postgres` of `agentbuild-storage` (forwarded by
+`agentbuild-agent`), with `PostgresCheckpointer`, `PostgresMemoryStore`
+and `PostgresThreadLocks`. `Storage::connect("postgres://…")` (or
+`postgresql://`) sets up all three on one database. Tested on
+PostgreSQL 13 and 18.
+
+**Same format, same behaviour as SQLite.** Same tables, columns and
+migration versions (§12, §13), with `BIGINT` integers and JSON as `TEXT`
+(as written; `jsonb` would refuse `\u0000` inside strings). The
+encoding is one module both backends call: deltas with keyframes,
+snapshots without a second copy of the state, the per-thread state
+cache. Only the SQL differs. The checkpointer and memory-store contract
+tests that run on SQLite also run on Postgres. Memory namespaces and keys
+are `COLLATE "C"`: byte order, as in SQLite, so ties sort the same, and
+a namespace prefix `p` is the index range [`p/`, `p0`) (`0` is the byte
+after `/`).
+
+**Compare-and-set** is unchanged: `UPDATE … WHERE head_version =
+expected` (or `INSERT … ON CONFLICT DO NOTHING` for a new thread), in the
+transaction that inserts the checkpoint. Under read committed, a
+concurrent writer's update waits for the first transaction, then sees
+the new version, changes no row, and fails with `storage_conflict`.
+Tested with 9 writers in 3 processes (90 commits, one linear branch).
+
+**Migrations** run on connect, in one transaction holding
+`pg_advisory_xact_lock`. Processes that start together wait for the
+first, which migrates; the rest find nothing to do (tested with four at
+once).
+
+**Thread locks across processes (§5.2).** A new trait in
+`agentbuild-storage`:
+
+```rust
+trait ThreadLocks {
+    fn lock(&self, thread, wait: Option<Duration>, on_interrupt) -> Option<HeldLock>; // None: busy
+    fn interrupt(&self, thread);
+}
+```
+
+`Storage::lease` takes the lease in this process first (FIFO in the
+process, as before). Then, if the storage has `ThreadLocks`, it takes the
+thread's lock. One `busy_timeout` covers both waits. Dropping the lease
+releases the lock first, then the local lease.
+
+| `on_busy` | Across processes |
+|---|---|
+| `Wait` | Waits for the lock (Postgres's lock queue, so in arrival order) until `busy_timeout`, then `thread_busy` |
+| `Reject` | Tries once; `thread_busy` ("another process runs it") |
+| `Interrupt` | Tries once. If the lock is held, sends an interrupt, then waits as `Wait`. The holder's process cancels its run (the token from `ThreadLease::set_cancel`) |
+
+Postgres uses **session advisory locks**. The key is
+`hashtextextended('agentbuild/thread/' || thread_id, 0)`, computed by the
+server so every client agrees on it. One task owns each lock's
+connection from start to end:
+
+1. It takes the lock: `pg_try_advisory_lock`, or `pg_advisory_lock` with
+   `lock_timeout` set to the time left. The server ends the wait, so the
+   connection is never dropped mid-query.
+2. It runs `LISTEN agentbuild_interrupt`. An interrupt is
+   `pg_notify('agentbuild_interrupt', <key>)`.
+3. It holds the lock until the lease is dropped, then runs
+   `pg_advisory_unlock_all()` and returns the connection to the pool.
+
+A caller that stops waiting leaves the task to finish and unlock.
+
+- **Crashes.** A process that dies loses its connections, and the server
+  releases its locks, so the next waiter continues. Tested by terminating
+  the holder's backend.
+- **A lost lock connection.** If the lock connection drops while a run
+  continues, the run is no longer locked. Commits are still
+  compare-and-set, so the thread cannot fork.
+- **Connections.** Locks have their own pool
+  (`PostgresOptions::lock_connections`, default 32, opened as needed), so
+  runs waiting for a thread never take the connections commits need.
+  Each thread a process runs or waits for holds one lock connection,
+  which caps how many threads one process runs at once.
+- **Poolers.** Locks need session pooling: a direct connection, or
+  PgBouncer in session mode. Transaction mode would hand the session to
+  others.
+
+Not built:
+
+- Cross-process waiting on SQLite (§5.2's head-version polling). SQLite
+  leases stay per process; commits are still compare-and-set.
+- Cancelling across processes. `Storage::cancel` and `Thread::cancel`
+  stay per process; a run in another process is stopped by a lease with
+  `OnBusy::Interrupt`.
+
+**Errors.** No new codes.
+
+- Connection failures are `storage_unavailable`. Errors never repeat the
+  URL, which may hold a password (tested).
+- Text Postgres cannot store is `invalid_value`: a NUL character, or a
+  character outside the database encoding. So are rows over a size limit.
+
+**TLS** uses rustls, on the aws-lc-rs provider that reqwest already uses,
+with the webpki root certificates. Set `sslmode` and `sslrootcert` in the
+URL. Tested: `sslmode=require` and `verify-full` with a private CA are
+encrypted (checked with `pg_stat_ssl`), and a server certificate the
+client does not trust is refused.
+
+**Testing without installing Postgres.**
+
+- `scripts/get-postgres.sh` downloads portable binaries (checksummed) to
+  `~/.agentbuild/postgres`.
+- `scripts/with-postgres.sh` runs a command against a throwaway server: a
+  new cluster in a temporary directory, on 127.0.0.1, with trust auth and
+  a TLS certificate from a throwaway CA. The cluster is deleted
+  afterwards.
+- Tests read `AGENTBUILD_TEST_POSTGRES_URL`, create a database each, and
+  skip without it. The `postgres` step of `scripts/ci-local.sh` sets
+  `AGENTBUILD_REQUIRE_POSTGRES=1`, so they fail instead of skipping.
+- The GitHub workflow has a Postgres 13/18 job (manual, like the rest).
+
+No performance claims: there is no benchmark yet.

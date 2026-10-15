@@ -5,12 +5,12 @@ An AI agent orchestration framework with a Rust execution runtime.
 Today AgentBuild is a set of **Rust crates** for building AI agents and
 workflows: a workflow engine, a model layer (OpenAI-compatible servers,
 Anthropic, Gemini, Ollama and other self-hosted models), agents with tools
-and human approval, conversations stored in memory or SQLite with crash
-recovery, and OpenTelemetry export.
+and human approval, conversations stored in memory, SQLite or Postgres
+with crash recovery, and OpenTelemetry export.
 
 **Planned, not built yet:** Python and TypeScript SDKs on the same Rust
 engine (sketched in [docs/design/0007-public-api.md](docs/design/0007-public-api.md)),
-a Postgres backend, semantic (vector) memory search, and an embeddable
+semantic (vector) memory search, encryption at rest, and an embeddable
 LLM gateway. There are no performance claims until benchmarks are in this
 repository.
 
@@ -78,7 +78,11 @@ Storage is in memory by default or a SQLite file (feature `sqlite`:
 and every tool call, so a run killed mid-way continues with
 `thread.retry()` without repeating finished tool calls. SQLite stores only
 what changed per step (plus a full copy every 25), so a long chat stores
-each message about once. Postgres is next.
+each message about once. For services that run several processes or
+machines there is **Postgres** (feature `postgres`:
+`Storage::connect("postgres://…")`). It uses the same format, adds TLS,
+and keeps the busy-thread rules across processes: a second message waits
+its turn even when another server is running the first.
 
 Agents also get **long-term memory**: facts kept per user (or per patient,
 or any namespace) across conversations, in the same storage.
@@ -157,7 +161,7 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 | 2     | Python SDK (PyO3 + maturin)                                   | Planned     |
 | 3     | TypeScript SDK (NAPI-RS)                                      | Planned     |
 | 4     | Agents, tools, model providers (LLM gateway: planned)         | Done (0.1)  |
-| 5     | Persistence (threads, SQLite, crash recovery, long-term memory: done; Postgres, vector search: planned) | In progress |
+| 5     | Persistence (threads, SQLite, Postgres, crash recovery, long-term memory: done; vector search, retention, encryption: planned) | In progress |
 | 6     | Docs, publishing, benchmarks                                  | In progress |
 
 ## Documentation
