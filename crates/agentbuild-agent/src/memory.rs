@@ -5,10 +5,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agentbuild_core::{NodeError, State};
-use agentbuild_providers::{Message, Role, ToolAnnotations, ToolSpec};
+use agentbuild_providers::{Embedder, Message, ModelError, Role, ToolAnnotations, ToolSpec};
 use agentbuild_storage::{
-    MemoryItem, MemoryStore, Namespace, ScopedMemory, SearchQuery, StorageError, StorageErrorKind,
+    Embedding, MemoryItem, MemoryStore, Namespace, ScopedMemory, SearchQuery, StorageError,
+    StorageErrorKind,
 };
+
+use crate::AgentError;
 use serde_json::{Value, json};
 
 use crate::tool::{Tool, ToolContext, ToolError, tool_fn};
@@ -40,8 +43,8 @@ type Resolver = dyn Fn(&State) -> Result<Namespace, String> + Send + Sync;
 ///
 /// Before each model call, up to [`recall`](Self::recall) items are added
 /// to the request as a system message (not stored in the transcript):
-/// those matching the words of the latest user message first, then the
-/// newest. With [`tools`](Self::tools) on (the default) the model also
+/// those matching the words of the latest user message first (or, with
+/// [`semantic`](Self::semantic), its meaning), then the newest. With [`tools`](Self::tools) on (the default) the model also
 /// gets `remember`, `forget` and `search_memory`. Tools read the same
 /// namespace with [`ToolContext::memory`](crate::ToolContext::memory).
 ///
@@ -78,6 +81,7 @@ pub struct Memory {
     recall: usize,
     tools: bool,
     ttl: Option<Duration>,
+    embedder: Option<Arc<dyn Embedder>>,
 }
 
 #[derive(Clone)]
@@ -99,6 +103,13 @@ impl std::fmt::Debug for Memory {
             .field("recall", &self.recall)
             .field("tools", &self.tools)
             .field("ttl", &self.ttl)
+            .field(
+                "semantic",
+                &self
+                    .embedder
+                    .as_ref()
+                    .map(|e| format!("{}/{}", e.provider(), e.model())),
+            )
             .finish()
     }
 }
@@ -110,6 +121,7 @@ impl Memory {
             recall: 5,
             tools: true,
             ttl: None,
+            embedder: None,
         }
     }
 
@@ -156,6 +168,22 @@ impl Memory {
         self
     }
 
+    /// Searches by meaning (design 0008 §16.3): recall and `search_memory`
+    /// rank facts by how close their vectors from `embedder` are to the
+    /// question's; `remember` stores each fact with its vector. If the
+    /// embedder fails, recall and search fall back to keywords; `remember`
+    /// fails with a retryable error. Facts an app saves itself are found by
+    /// meaning only if saved with [`put_embedded`].
+    pub fn semantic(self, embedder: impl Embedder) -> Self {
+        self.semantic_shared(Arc::new(embedder))
+    }
+
+    /// [`semantic`](Self::semantic) with a shared embedder.
+    pub fn semantic_shared(mut self, embedder: Arc<dyn Embedder>) -> Self {
+        self.embedder = Some(embedder);
+        self
+    }
+
     pub(crate) fn has_tools(&self) -> bool {
         self.tools
     }
@@ -195,7 +223,7 @@ impl Memory {
         &self,
         memory: &ScopedMemory,
         transcript: &[Message],
-    ) -> Result<Option<(Message, Vec<String>)>, NodeError> {
+    ) -> Result<Option<Recalled>, NodeError> {
         if self.recall == 0 {
             return Ok(None);
         }
@@ -205,10 +233,9 @@ impl Memory {
             .find(|m| m.role == Role::User)
             .map(Message::text)
             .unwrap_or_default();
-        let mut items = memory
-            .search(&SearchQuery::new().text(question).limit(self.recall))
-            .await
-            .map_err(storage_node_error)?;
+        let (query, search, fallback) =
+            search_query(self.embedder.as_deref(), &question, self.recall).await;
+        let mut items = memory.search(&query).await.map_err(storage_node_error)?;
         if items.len() < self.recall {
             let newest = memory
                 .search(&SearchQuery::new().limit(self.recall))
@@ -237,15 +264,19 @@ impl Memory {
         for item in &items {
             text.push_str(&format!("\n- {}: {}", item.key, show(&item.value)));
         }
-        Ok(Some((
-            Message::system(text).with_id(MEMORY_MESSAGE_ID),
+        Ok(Some(Recalled {
+            message: Message::system(text).with_id(MEMORY_MESSAGE_ID),
             keys,
-        )))
+            search,
+            fallback,
+        }))
     }
 
     /// The memory tools.
     pub(crate) fn tool_list(&self) -> Vec<Arc<dyn Tool>> {
         let ttl = self.ttl;
+        let embedder = self.embedder.clone();
+        let search_embedder = self.embedder.clone();
         let remember = tool_fn(
             ToolSpec::new(
                 REMEMBER_TOOL,
@@ -269,15 +300,29 @@ impl Memory {
                 }),
             )
             .with_annotations(ToolAnnotations::idempotent()),
-            move |args, ctx: ToolContext| async move {
-                let memory = scoped(&ctx)?;
-                let key = text_arg(&args, "key");
-                let value = text_arg(&args, "value");
-                memory
-                    .put(&key, Value::String(value), ttl)
-                    .await
+            move |args, ctx: ToolContext| {
+                let embedder = embedder.clone();
+                async move {
+                    let memory = scoped(&ctx)?;
+                    let key = text_arg(&args, "key");
+                    let value = Value::String(text_arg(&args, "value"));
+                    match &embedder {
+                        Some(embedder) => {
+                            let embedding = embed(embedder.as_ref(), &memory_text(&key, &value))
+                                .await
+                                .map_err(|err| {
+                                    ToolError::new(format!(
+                                        "memory is not available (embedding failed: {err})"
+                                    ))
+                                    .retryable()
+                                })?;
+                            memory.put_embedded(&key, value, ttl, embedding).await
+                        }
+                        None => memory.put(&key, value, ttl).await,
+                    }
                     .map_err(tool_error)?;
-                Ok::<_, ToolError>(format!("Saved `{key}`."))
+                    Ok::<_, ToolError>(format!("Saved `{key}`."))
+                }
             },
         );
         let mut forget_annotations = ToolAnnotations::idempotent();
@@ -311,7 +356,11 @@ impl Memory {
         let search = tool_fn(
             ToolSpec::new(
                 SEARCH_MEMORY_TOOL,
-                "Search long-term memory by keywords. Returns matching facts, best first.",
+                if self.embedder.is_some() {
+                    "Search long-term memory by meaning. Returns the closest facts, best first."
+                } else {
+                    "Search long-term memory by keywords. Returns matching facts, best first."
+                },
                 json!({
                     "type": "object",
                     "properties": {
@@ -326,23 +375,105 @@ impl Memory {
                 }),
             )
             .with_annotations(ToolAnnotations::read_only()),
-            |args, ctx: ToolContext| async move {
-                let memory = scoped(&ctx)?;
-                let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(5) as usize;
-                let items = memory
-                    .search(
-                        &SearchQuery::new()
-                            .text(text_arg(&args, "query"))
-                            .limit(limit),
-                    )
-                    .await
-                    .map_err(tool_error)?;
-                let facts: Vec<Value> = items.iter().map(fact).collect();
-                Ok::<_, ToolError>(json!(facts))
+            move |args, ctx: ToolContext| {
+                let embedder = search_embedder.clone();
+                async move {
+                    let memory = scoped(&ctx)?;
+                    let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(5) as usize;
+                    let (query, _, _) =
+                        search_query(embedder.as_deref(), &text_arg(&args, "query"), limit).await;
+                    let items = memory.search(&query).await.map_err(tool_error)?;
+                    let facts: Vec<Value> = items.iter().map(fact).collect();
+                    Ok::<_, ToolError>(json!(facts))
+                }
             },
         );
         vec![Arc::new(remember), Arc::new(forget), Arc::new(search)]
     }
+}
+
+/// What recall found, for the model request and the `memory_recalled`
+/// event.
+pub(crate) struct Recalled {
+    pub(crate) message: Message,
+    pub(crate) keys: Vec<String>,
+    /// `semantic` or `keyword`.
+    pub(crate) search: &'static str,
+    /// Why semantic search was not used (the embedder's error code).
+    pub(crate) fallback: Option<String>,
+}
+
+/// The query for `text`: by meaning with an embedder (falling back to
+/// keywords if it fails), else by keywords. Also which search it is and
+/// why it fell back.
+async fn search_query(
+    embedder: Option<&dyn Embedder>,
+    text: &str,
+    limit: usize,
+) -> (SearchQuery, &'static str, Option<String>) {
+    let keywords = SearchQuery::new().text(text).limit(limit);
+    let Some(embedder) = embedder.filter(|_| !text.trim().is_empty()) else {
+        return (keywords, "keyword", None);
+    };
+    match embed(embedder, text).await {
+        Ok(embedding) => (
+            SearchQuery::new().similar_to(embedding).limit(limit),
+            "semantic",
+            None,
+        ),
+        Err(err) => (keywords, "keyword", Some(err.kind.code().to_string())),
+    }
+}
+
+/// The text a fact is embedded as: `key: value` (strings as they are,
+/// anything else as JSON). `remember` and [`put_embedded`] use it.
+pub fn memory_text(key: &str, value: &Value) -> String {
+    format!("{key}: {}", show(value))
+}
+
+/// The name vectors from `embedder` are stored under: `provider/model`.
+fn model_name(embedder: &dyn Embedder) -> String {
+    format!("{}/{}", embedder.provider(), embedder.model())
+}
+
+// `ModelError` is large, as everywhere a model is called; boxing it here
+// alone would not help.
+#[allow(clippy::result_large_err)]
+async fn embed(embedder: &dyn Embedder, text: &str) -> Result<Embedding, ModelError> {
+    let vectors = embedder.embed(&[text.to_string()]).await?;
+    match vectors.into_iter().next() {
+        Some(vector) => Ok(Embedding::new(model_name(embedder), vector)),
+        None => Err(ModelError::new(
+            agentbuild_providers::ModelErrorKind::InvalidResponse,
+            "the embedder returned no vector",
+        )),
+    }
+}
+
+/// Saves a fact with its vector, so agents with
+/// [`Memory::semantic`] find it by meaning: embeds [`memory_text`] of
+/// `key` and `value` with `embedder`, then
+/// [`MemoryStore::put_embedded`]. Errors: `model_failed` (the embedder,
+/// with the classified error in `details`) or the storage error's code.
+pub async fn put_embedded(
+    store: &dyn MemoryStore,
+    embedder: &dyn Embedder,
+    namespace: &Namespace,
+    key: &str,
+    value: Value,
+    ttl: Option<Duration>,
+) -> Result<(), AgentError> {
+    let embedding = embed(embedder, &memory_text(key, &value))
+        .await
+        .map_err(|err| {
+            let mut error = AgentError::new("model_failed", err.to_string());
+            error.details = Some(json!({"model_error": err}));
+            error
+        })?;
+    store
+        .put_embedded(namespace, key, value, ttl, embedding)
+        .await
+        .map_err(|err| AgentError::new(err.code(), err.message))
 }
 
 fn scoped(ctx: &ToolContext) -> Result<ScopedMemory, ToolError> {

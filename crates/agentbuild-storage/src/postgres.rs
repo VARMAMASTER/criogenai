@@ -86,6 +86,8 @@ const MIGRATIONS: &[&str] = &[
         value TEXT NOT NULL
     );
     CREATE INDEX agentbuild_threads_updated ON agentbuild_threads (updated_at_ms)",
+    // 4: memory vectors for semantic search (design 0008 §16).
+    "ALTER TABLE agentbuild_memory ADD COLUMN embedding TEXT",
 ];
 
 /// Checkpoint `$1` of thread `$2` and its ancestors up to the nearest

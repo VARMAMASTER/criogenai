@@ -21,7 +21,8 @@ with tools, run as a loop on the AgentBuild workflow engine.
   approvals and failed runs wait there for `approve()` or `retry()` from
   any agent instance
 - long-term memory: `Memory::by_state("user_id", users)` keeps facts per
-  user across conversations, recalls them before each model call, and
+  user across conversations (found by meaning with `.semantic(embedder)`),
+  recalls them before each model call, and
   gives the model `remember` / `forget` / `search_memory`
 
 > **Early development.** Nothing is published yet.

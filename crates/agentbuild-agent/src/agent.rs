@@ -1237,14 +1237,19 @@ async fn model_step(
     // Long-term memory: recalled facts, for this call only (0008 §13).
     if let Some(scoped) = memory::scope(inner.memory.as_deref(), &state)?
         && let Some((config, _)) = inner.memory.as_deref()
-        && let Some((message, keys)) = config.recall_message(&scoped, &transcript).await?
+        && let Some(recalled) = config.recall_message(&scoped, &transcript).await?
     {
         // Keys only: values may be personal data.
-        events.emit(
-            "memory_recalled",
-            json!({"namespace": scoped.namespace().path(), "keys": keys}),
-        );
-        request_messages.push(message);
+        let mut event = json!({
+            "namespace": scoped.namespace().path(),
+            "keys": recalled.keys,
+            "search": recalled.search,
+        });
+        if let Some(code) = recalled.fallback {
+            event["fallback"] = Value::String(code);
+        }
+        events.emit("memory_recalled", event);
+        request_messages.push(recalled.message);
     }
     request_messages.extend(transcript.iter().cloned());
     let mut tools = inner.specs.clone();

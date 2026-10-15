@@ -8,7 +8,10 @@
 //! `gemini-2.5-flash`), `OLLAMA_MODEL` (default: the first model Ollama
 //! lists; `OLLAMA_URL` default `http://localhost:11434`). Checks that need
 //! tool calling are skipped for an Ollama model without the `tools`
-//! capability.
+//! capability. Embedding models: `OPENAI_EMBEDDING_MODEL` (default
+//! `text-embedding-3-small`), `GEMINI_EMBEDDING_MODEL` (default
+//! `gemini-embedding-001`), `OLLAMA_EMBEDDING_MODEL` (none by default: the
+//! semantic check is skipped).
 //!
 //! Real models answer differently each time; the checks look for facts that
 //! any correct answer contains (a number, a name, a tool call), not exact
@@ -19,17 +22,20 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use agentbuild_agent::{
-    Agent, AgentEvent, AgentResult, Approval, Decision, Hook, HookAction, HookContext, HookError,
-    Limits, OnLimit, StopReason, ToolCallRequest, ToolError, ToolNext, ToolOutput, tool_fn,
+    Agent, AgentEvent, AgentInput, AgentResult, Approval, Decision, Hook, HookAction, HookContext,
+    HookError, Limits, Memory, OnLimit, StopReason, ToolCallRequest, ToolError, ToolNext,
+    ToolOutput, put_embedded, tool_fn,
 };
 use agentbuild_core::{
     BoxFuture, END, NodeError, RunOptions, State, Update, WorkflowBuilder, node_fn, router_fn,
 };
 use agentbuild_providers::{
-    BlockDelta, Endpoint, Message, MessageDelta, Model, ModelErrorKind, ModelRequest,
-    OutputStrategy, ProviderModel, ToolSpec,
+    BlockDelta, Embedder, Endpoint, Message, MessageDelta, Model, ModelErrorKind, ModelRequest,
+    OutputStrategy, ProviderEmbedder, ProviderModel, ToolSpec,
 };
-use agentbuild_storage::{CheckpointStatus, SqliteCheckpointer, Storage};
+use agentbuild_storage::{
+    CheckpointStatus, Embedding, Namespace, SearchQuery, SqliteCheckpointer, Storage,
+};
 use agentbuild_telemetry::{OtlpConfig, OtlpExporter};
 use serde_json::{Map, Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -44,6 +50,8 @@ struct Provider {
     tools: bool,
     /// Whether the server checks API keys (Ollama does not).
     keys: bool,
+    /// The embedding model, if any.
+    embedding: Option<String>,
 }
 
 impl Provider {
@@ -73,6 +81,9 @@ fn main() {
             endpoint: Endpoint::openai(key),
             tools: true,
             keys: true,
+            embedding: Some(
+                std::env::var("OPENAI_EMBEDDING_MODEL").unwrap_or("text-embedding-3-small".into()),
+            ),
         });
     }
     if let Ok(key) = std::env::var("GEMINI_API_KEY") {
@@ -86,6 +97,9 @@ fn main() {
             ),
             tools: true,
             keys: true,
+            embedding: Some(
+                std::env::var("GEMINI_EMBEDDING_MODEL").unwrap_or("gemini-embedding-001".into()),
+            ),
         });
     }
     let runtime = tokio::runtime::Runtime::new().expect("runtime");
@@ -98,6 +112,7 @@ fn main() {
                 endpoint: Endpoint::openai_compatible("ollama", format!("{base}/v1"), None),
                 tools,
                 keys: false,
+                embedding: std::env::var("OLLAMA_EMBEDDING_MODEL").ok(),
             }),
             Err(why) => eprintln!("ollama: {why}"),
         }
@@ -164,6 +179,10 @@ async fn run_all(p: &Provider) -> usize {
         ),
         ("threads: memory across turns", Box::pin(thread_memory(p))),
         (
+            "memory: recall by meaning [embed]",
+            Box::pin(semantic_memory(p)),
+        ),
+        (
             "threads: SQLite survives reopening",
             Box::pin(sqlite_reopen(p)),
         ),
@@ -204,9 +223,15 @@ async fn run_all(p: &Provider) -> usize {
         }
         let needs_tools = name.ends_with(" [tools]");
         let needs_keys = name.ends_with(" [keys]");
+        let needs_embedding = name.ends_with(" [embed]");
         let name = name
             .trim_end_matches(" [tools]")
-            .trim_end_matches(" [keys]");
+            .trim_end_matches(" [keys]")
+            .trim_end_matches(" [embed]");
+        if needs_embedding && p.embedding.is_none() {
+            println!("SKIP {name:<42}         no embedding model configured");
+            continue;
+        }
         if needs_tools && !p.tools {
             println!("SKIP {name:<42}         the model cannot call tools");
             continue;
@@ -648,6 +673,74 @@ async fn thread_memory(p: &Provider) -> Outcome {
         reply.result.messages.len(),
         history.len()
     ))
+}
+
+/// Facts saved with real embeddings; a question that shares no word with
+/// the right fact finds it, and the model uses it.
+async fn semantic_memory(p: &Provider) -> Outcome {
+    let model = p.embedding.clone().ok_or("no embedding model")?;
+    let embedder = ProviderEmbedder::new(p.endpoint.clone(), model).map_err(err)?;
+    let storage = Storage::in_memory();
+    let patient = Namespace::parse("patients/p1").map_err(err)?;
+    for (key, value) in [
+        ("allergy", "Severe reaction to penicillin in 2019"),
+        ("city", "Lives in Hyderabad, near the airport"),
+        ("diet", "Vegetarian, no eggs"),
+        ("sport", "Plays cricket on weekends"),
+    ] {
+        put_embedded(
+            storage.memory().as_ref(),
+            &embedder,
+            &patient,
+            key,
+            json!(value),
+            None,
+        )
+        .await
+        .map_err(|e| e.message)?;
+    }
+    let question = "Which antibiotics should I stay away from?";
+    let vector = embedder
+        .embed(&[question.to_string()])
+        .await
+        .map_err(err)?
+        .remove(0);
+    let dims = vector.len();
+    let name = format!("{}/{}", embedder.provider(), embedder.model());
+    let found = storage
+        .memory()
+        .search(
+            &patient,
+            &SearchQuery::new().similar_to(Embedding::new(name, vector)),
+        )
+        .await
+        .map_err(err)?;
+    let ranking: Vec<String> = found
+        .iter()
+        .map(|i| format!("{} {:.2}", i.key, i.score.unwrap_or(0.0)))
+        .collect();
+    ensure(
+        found.first().is_some_and(|i| i.key == "allergy"),
+        format!("ranking: {ranking:?}"),
+    )?;
+    let agent = Agent::builder(p.llm())
+        .instructions("Answer in one short sentence, using what you know about the patient.")
+        .storage(storage)
+        .memory(
+            Memory::by_state("patient", Namespace::parse("patients").map_err(err)?)
+                .recall(1)
+                .tools(false)
+                .semantic(embedder),
+        )
+        .build()
+        .map_err(err)?;
+    let result = agent
+        .run(AgentInput::from(question).with("patient", "p1"))
+        .await
+        .map_err(err)?;
+    let text = answer(&result).to_lowercase();
+    ensure(text.contains("penicillin"), format!("answer: {text}"))?;
+    Ok(format!("{dims} dims, ranking {ranking:?}"))
 }
 
 fn temp_db(name: &str) -> std::path::PathBuf {

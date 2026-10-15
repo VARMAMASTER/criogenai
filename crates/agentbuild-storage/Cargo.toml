@@ -32,8 +32,8 @@ uuid.workspace = true
 sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio"], optional = true }
 # Encryption at rest (feature `encryption`): AES-256-GCM, HKDF and HMAC from
 # aws-lc-rs, the library rustls already uses for TLS (no second crypto
-# library; a FIPS-validated build exists). base64 for the stored text; sqlx
-# already depends on it. `prebuilt-nasm`: builds on Windows without NASM (as
+# library; a FIPS-validated build exists). base64 for encrypted text and
+# stored vectors (SQL backends); sqlx already depends on it. `prebuilt-nasm`: builds on Windows without NASM (as
 # rustls does).
 aws-lc-rs = { version = "1.18", optional = true, default-features = false, features = ["aws-lc-sys", "prebuilt-nasm"] }
 base64 = { version = "0.22", optional = true }
@@ -41,12 +41,12 @@ base64 = { version = "0.22", optional = true }
 [features]
 default = []
 # SQLite storage (`SqliteCheckpointer`, `Storage::connect("sqlite://…")`).
-sqlite = ["dep:sqlx", "sqlx/sqlite"]
+sqlite = ["dep:sqlx", "dep:base64", "sqlx/sqlite"]
 # Postgres storage (`PostgresCheckpointer`, `Storage::connect("postgres://…")`).
 # TLS with rustls on aws-lc-rs, the provider reqwest already uses (no second
 # crypto library). Tokio `macros`: each cross-process thread lock
 # is held by a task that also listens for interrupts.
-postgres = ["dep:sqlx", "sqlx/postgres", "sqlx/tls-rustls-aws-lc-rs", "tokio/macros"]
+postgres = ["dep:sqlx", "dep:base64", "sqlx/postgres", "sqlx/tls-rustls-aws-lc-rs", "tokio/macros"]
 # Encryption at rest for the SQL backends (`Keyring`,
 # `Storage::connect_encrypted`; design 0008 §15.2).
 encryption = ["dep:aws-lc-rs", "dep:base64"]

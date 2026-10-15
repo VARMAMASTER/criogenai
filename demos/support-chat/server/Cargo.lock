@@ -43,6 +43,7 @@ name = "agentbuild-storage"
 version = "0.1.0"
 dependencies = [
  "agentbuild-core",
+ "base64 0.22.1",
  "serde",
  "serde_json",
  "sqlx",

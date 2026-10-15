@@ -225,6 +225,25 @@ database. The busy-thread rules hold across processes: a second `send`
 waits even when another server runs the first. Use a direct connection,
 or PgBouncer in session mode.
 
+**Find facts by meaning.** Keyword search finds "penicillin" only for
+"penicillin". With an embedding model, a question such as "Which
+antibiotics should I avoid?" finds it too:
+
+```rust,ignore
+let embedder = ProviderEmbedder::new(Endpoint::openai(key), "text-embedding-3-small")?;
+let agent = Agent::builder(model)
+    .storage(storage.clone())
+    .memory(Memory::by_state("patient", patients).semantic(embedder.clone()))
+    .build()?;
+// Facts the app saves itself need a vector too:
+put_embedded(storage.memory().as_ref(), &embedder, &patient, "allergy",
+    json!("Severe penicillin reaction"), None).await?;
+```
+
+Facts the model saves with `remember` get their vector automatically. A
+self-hosted embedding model works the same way
+(`ProviderEmbedder::new(Endpoint::ollama(), "nomic-embed-text")`).
+
 **Patient data, or anything else sensitive?** Turn on the `encryption`
 feature and open storage with keys:
 

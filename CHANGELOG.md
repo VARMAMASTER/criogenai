@@ -89,6 +89,10 @@ First release, planned as 0.1.0 (Rust crates only).
   places. An encrypted database refuses to open without its keys
   (`encryption_key_missing`) or with a wrong key
   (`encryption_key_invalid`).
+- Semantic memory search: `Embedding`, `MemoryStore::put_embedded`,
+  `SearchQuery::similar_to` / `min_score`, ranked by cosine similarity the
+  same way on every backend (brute force; vectors are encrypted with the
+  rest). Schema version 4.
 - SQLite overwrites deleted rows in the file (`secure_delete`).
 - Schema version 3 (`agentbuild_settings`, an index for idle threads);
   applied automatically.

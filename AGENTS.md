@@ -83,12 +83,18 @@ write our own implementation.
   at rest (feature `encryption`): `Keyring`, `Storage::connect_encrypted`,
   `reencrypt`; AES-256-GCM per-row keys (HKDF), memory keys as HMAC tags,
   `agentbuild_settings` refuses opening an encrypted database without
-  its keys. SQLite runs with `secure_delete`.
+  its keys. SQLite runs with `secure_delete`. Step 6 (§16): semantic
+  memory search. `Embedder` (`ProviderEmbedder` for OpenAI-compatible
+  `/embeddings`, `FakeEmbedder` for tests) in providers; `Embedding`,
+  `MemoryStore::put_embedded`, `SearchQuery::similar_to` (brute-force
+  cosine in Rust, every backend; vectors encrypted with the rest) in
+  storage; `Memory::semantic(embedder)`, `put_embedded`, `memory_text`
+  in agents (keyword fallback when the embedder fails).
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 491 across the five crates (with `--all-features`; includes the
+- Tests: 500 across the five crates (with `--all-features`; includes the
   getting-started guide's examples), plus the package test. Release prep:
   `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`,
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
@@ -98,14 +104,14 @@ write our own implementation.
   UI; real OpenAI/Gemini models, manual only, not in CI or the workspace).
   Keys live in `~/.agentbuild-keys.env`, never in the repo.
 - **Next:** the 10-task roadmap in `docs/progress.md` ("Roadmap
-  tasks"), one full cycle each: vector search, audit trail,
+  tasks"), one full cycle each: audit trail,
   `thread.stream`, Python SDK, TypeScript SDK, gateway, error catalog
   and JSON Schemas, workflow threads, benchmarks. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
-- **Not started:** gateway, Python SDK, TypeScript SDK, vector
-  (semantic) memory search. Do not describe these as existing anywhere.
+- **Not started:** gateway, Python SDK, TypeScript SDK, vector indexes
+  (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 
 ## Commands
 

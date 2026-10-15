@@ -1,6 +1,6 @@
 # 0008: Persistence, threads and memory
 
-Status: **Accepted**; §10 steps 1–4 built (§11–§14); step 5 (retention, encryption at rest) built (§15). Builds on [0005](0005-core-runtime-extensions.md)
+Status: **Accepted**; §10 steps 1–4 built (§11–§14); step 5 (retention, encryption at rest) built (§15); step 6 (semantic memory search) built (§16). Builds on [0005](0005-core-runtime-extensions.md)
 §5 (snapshots, saved task writes, resume) and gives developers the easy
 interactive API sketched in [0007](0007-public-api.md). Research input:
 [langgraph](../research/langgraph.md) §5 (checkpointing), §6 (interrupts) and §8 (store).
@@ -383,7 +383,7 @@ even if the database was down.
 3. Memory store (keyword search) + agent `Memory` hook and tools.
 4. Postgres backend, `on_busy="wait"` across processes.
 5. Retention, encryption at rest (built: §15).
-6. Vector search (`sqlite-vec`, `pgvector`).
+6. Semantic memory search (built: §16; vector indexes later).
 
 ## 11. Step 1 as built
 
@@ -629,7 +629,8 @@ refused with the new code `invalid_input`.
   transcript. It tells the model the facts may be out of date and are
   information, not instructions. A `memory_recalled` event carries the
   namespace and the keys, never the values (they may be personal data).
-  `recall(0)` turns it off.
+  `recall(0)` turns it off. (§16 adds `"search"`: `keyword` or
+  `semantic`.)
 - **Tools** (default on; `tools(false)` turns them off): `remember(key,
   value)` (idempotent; the value is stored as a JSON string, with the
   optional `Memory::ttl`), `forget(key)` (idempotent, destructive) and
@@ -923,3 +924,94 @@ with its key (changed or moved).
 - Encrypting ids, namespaces or timestamps (see "What stays readable").
 - Key management services: a `Keyring` is built from bytes or the
   environment; fetching keys from a KMS is up to the app.
+
+## 16. Step 6 as built: semantic memory search
+
+Keyword search (§13) finds "penicillin" only when the item says
+"penicillin". Semantic search finds it for "Which antibiotics should I
+avoid?": items and queries are turned into vectors by an embedding model,
+and items are ranked by how close their vector is to the query's.
+
+### 16.1 Embedding models (`agentbuild-providers`)
+
+```rust
+trait Embedder: Send + Sync {
+    fn provider(&self) -> &str;
+    fn model(&self) -> &str;
+    fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, ModelError>; // one vector per text, in order
+}
+```
+
+- `ProviderEmbedder::new(endpoint, model)` (feature `http`): the
+  OpenAI-compatible `POST {base_url}/embeddings` (OpenAI, Gemini's
+  OpenAI-compatible endpoint, Ollama, LM Studio, vLLM, OpenRouter).
+  `dimensions(n)` asks for shorter vectors where the model supports it.
+  Errors are classified like chat errors (0003 §4) and never contain the
+  key. An Anthropic endpoint has no embeddings API: `invalid_request`
+  at construction.
+- `FakeEmbedder` for tests: deterministic word-hash vectors (256
+  dimensions, unit length), so texts sharing words are close;
+  `synonym(a, b)` makes two words count as one, to test "meaning" without
+  a model; `failing()` fails every call. It records the texts it was
+  given.
+
+### 16.2 Vectors in the memory store (`agentbuild-storage`)
+
+```rust
+store.put_embedded(&ns, "allergy", json!("Severe penicillin allergy"), None,
+    Embedding::new("openai/text-embedding-3-small", vector)).await?;
+store.search(&prefix, &SearchQuery::new().similar_to(query_embedding).limit(5)).await?;
+```
+
+- `Embedding { model, vector }`. The model name keeps vectors of
+  different models apart: a query only matches items embedded by the same
+  model with the same number of dimensions. Vectors have 1–8192 finite
+  values (`invalid_value` otherwise).
+- `put` stores an item without a vector (and removes an old one);
+  `put_embedded` stores both, atomically.
+- `SearchQuery::similar_to(e)`: live items of the prefix that have a
+  matching vector, ranked by cosine similarity (−1 to 1, in
+  `MemoryItem::score`), then newest, then path and key.
+  `min_score(s)` drops items below `s`. Text in the same query is ignored.
+- Every backend ranks in Rust with the same function (as keyword search
+  does). SQL backends read the prefix's items that have a vector:
+  brute force, no vector index. Fine for one user's or patient's memory;
+  `sqlite-vec` / `pgvector` indexes wait for a benchmark showing the need.
+- Storage: migration 4 adds `agentbuild_memory.embedding` (text:
+  `{"model", "dims", "vector": base64 of little-endian f32}`). With
+  encryption (§15.2) it is encrypted like the value (embeddings can be
+  inverted into text), and `reencrypt` rewrites it.
+
+### 16.3 Agents (`agentbuild-agent`)
+
+`Memory::by_state("patient", patients).semantic(embedder)`:
+
+- **Recall** embeds the latest user message and recalls the most similar
+  items, then fills the remaining places with the newest (as before).
+  If the embedder fails, recall uses keyword search for that call; the
+  `memory_recalled` event says which search ran
+  (`"search": "semantic" | "keyword"`, plus `"fallback": <error code>`).
+- **`remember`** embeds `key: value` and stores it with the vector. If
+  the embedder fails the tool returns a retryable error (nothing saved).
+- **`search_memory`** searches by meaning, falling back to keywords if
+  the embedder fails.
+- Facts an app saves itself are found by meaning only if saved with a
+  vector: `agentbuild_agent::put_embedded(store, embedder, ns, key, value,
+  ttl)` embeds `memory_text(key, value)`, the same text `remember`
+  embeds.
+
+### 16.4 Tests
+
+Simulated: `FakeEmbedder` everywhere (rule 7). Vector search on the three
+backends with the shared memory contract; encrypted vectors unreadable;
+recall and the tools with a fake embedder, including fallback.
+`ProviderEmbedder` against the scripted local HTTP server (request body,
+response order, errors, key redaction). Real models only in the manual
+live check (`tests/live`: OpenAI `text-embedding-3-small`, Gemini
+`gemini-embedding-001`).
+
+### 16.5 Not built
+
+- Vector indexes (`sqlite-vec`, `pgvector`): brute force until a
+  benchmark shows the need.
+- Hybrid ranking (keywords and vectors together).

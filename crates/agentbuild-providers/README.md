@@ -20,6 +20,9 @@ providers share, the same JSON in Rust, Python and TypeScript:
     and other compatible servers (`Endpoint::openai`, `Endpoint::ollama`,
     ...)
   - Anthropic Messages: `Endpoint::anthropic`, `Endpoint::anthropic_compatible`
+- embedding models for semantic search: the `Embedder` trait,
+  `ProviderEmbedder` (the OpenAI-compatible `/embeddings` API: OpenAI,
+  Gemini, Ollama, LM Studio, vLLM) and `FakeEmbedder` for tests
 
 > **Early development.** The API may change. Not yet published to
 > crates.io. The gateway (design 0006 §7) is planned, not built.

@@ -20,7 +20,9 @@ Keys: `OPENAI_API_KEY`, `GEMINI_API_KEY` (environment), or `KEY=value`
 lines in `~/.agentbuild-keys.env` (or the file named by
 `AGENTBUILD_KEYS_FILE`). Models: `OPENAI_MODEL` (default `gpt-5-mini`),
 `GEMINI_MODEL` (default `gemini-2.5-flash`, through Google's
-OpenAI-compatible endpoint).
+OpenAI-compatible endpoint). Embedding models: `OPENAI_EMBEDDING_MODEL`
+(default `text-embedding-3-small`), `GEMINI_EMBEDDING_MODEL` (default
+`gemini-embedding-001`), `OLLAMA_EMBEDDING_MODEL` (none: skipped).
 
 | Check | What must hold |
 |---|---|
@@ -33,6 +35,7 @@ OpenAI-compatible endpoint).
 | output (native, tool) | JSON matching the schema, with correct facts |
 | approval (approve, reject, edit) | nothing runs before the decision; then exactly what was decided runs; the model describes an edited call correctly |
 | agent.stream | text, tool start/finish and message events |
+| memory: recall by meaning | facts saved with real embeddings; a question sharing no word with the allergy ranks it first, and the model's answer uses it |
 | threads | memory across turns; a SQLite thread survives reopening; a run killed mid-tool continues with `retry` without charging twice |
 | agent as a tool | the outer agent delegates to an inner agent, which uses its own tool |
 | hooks | `before_model` and `wrap_tool` see every call |

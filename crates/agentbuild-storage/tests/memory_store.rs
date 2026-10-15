@@ -3,7 +3,9 @@
 
 use std::time::Duration;
 
-use agentbuild_storage::{InMemoryStore, MemoryStore, Namespace, ScopedMemory, SearchQuery};
+use agentbuild_storage::{
+    Embedding, InMemoryStore, MAX_DIMENSIONS, MemoryStore, Namespace, ScopedMemory, SearchQuery,
+};
 use serde_json::json;
 
 fn ns(path: &str) -> Namespace {
@@ -211,6 +213,140 @@ async fn contract(store: &dyn MemoryStore) {
         .unwrap();
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].key, "u");
+
+    similar(store).await;
+}
+
+fn e(model: &str, vector: &[f32]) -> Embedding {
+    Embedding::new(model, vector.to_vec())
+}
+
+/// Semantic search (design 0008 §16.2): vectors of one model, ranked by
+/// cosine similarity, in the prefix, live only.
+async fn similar(store: &dyn MemoryStore) {
+    let ada = ns("vectors/ada");
+    let put = |key: &'static str, embedding: Option<Embedding>| {
+        let ada = ada.clone();
+        async move {
+            let value = json!(format!("fact {key}"));
+            match embedding {
+                Some(embedding) => store.put_embedded(&ada, key, value, None, embedding).await,
+                None => store.put(&ada, key, value, None).await,
+            }
+            .unwrap()
+        }
+    };
+    put("a", Some(e("m", &[1.0, 0.0, 0.0]))).await;
+    tick().await;
+    put("b", Some(e("m", &[0.8, 0.6, 0.0]))).await;
+    tick().await;
+    put("c", Some(e("m", &[0.0, 1.0, 0.0]))).await;
+    // Another model, another size, no vector: never matched.
+    put("d", Some(e("other", &[1.0, 0.0, 0.0]))).await;
+    put("f", Some(e("m", &[1.0, 0.0]))).await;
+    put("n", None).await;
+    store
+        .put_embedded(
+            &ns("vectors/bob"),
+            "x",
+            json!("bob's"),
+            None,
+            e("m", &[1.0, 0.0, 0.0]),
+        )
+        .await
+        .unwrap();
+    store
+        .put_embedded(
+            &ada,
+            "gone",
+            json!("expired"),
+            Some(Duration::ZERO),
+            e("m", &[1.0, 0.0, 0.0]),
+        )
+        .await
+        .unwrap();
+
+    let query = || SearchQuery::new().similar_to(e("m", &[1.0, 0.0, 0.0]));
+    let found = store.search(&ada, &query()).await.unwrap();
+    let ranked: Vec<(&str, f64)> = found
+        .iter()
+        .map(|i| (i.key.as_str(), i.score.unwrap()))
+        .collect();
+    assert_eq!(ranked.len(), 3, "{ranked:?}");
+    for ((key, score), (want_key, want_score)) in
+        ranked.iter().zip([("a", 1.0), ("b", 0.8), ("c", 0.0)])
+    {
+        assert_eq!(*key, want_key);
+        assert!((score - want_score).abs() < 1e-6, "{key}: {score}");
+    }
+    assert_eq!(found[0].value, json!("fact a"));
+    assert_eq!(
+        keys(store, "vectors/ada", query().limit(2)).await,
+        ["vectors/ada:a", "vectors/ada:b"]
+    );
+    assert_eq!(
+        keys(store, "vectors/ada", query().min_score(0.5)).await,
+        ["vectors/ada:a", "vectors/ada:b"]
+    );
+    // The whole store: bob's item ties with a (same vector); newer first.
+    assert_eq!(
+        keys(store, "vectors", query().limit(2)).await,
+        ["vectors/bob:x", "vectors/ada:a"]
+    );
+    // Text in the same query is ignored.
+    assert_eq!(
+        keys(
+            store,
+            "vectors/ada",
+            query().text("nothing matches this").limit(1)
+        )
+        .await,
+        ["vectors/ada:a"]
+    );
+    // A plain put drops the vector.
+    put("a", None).await;
+    assert_eq!(
+        keys(store, "vectors/ada", query()).await,
+        ["vectors/ada:b", "vectors/ada:c"]
+    );
+    assert!(store.get(&ada, "a").await.unwrap().is_some());
+
+    // Vectors the store refuses.
+    for bad in [
+        e("m", &[]),
+        e("m", &[f32::NAN]),
+        e("m", &[f32::INFINITY, 1.0]),
+        e("", &[1.0]),
+        Embedding::new("m", vec![0.5; MAX_DIMENSIONS + 1]),
+    ] {
+        let err = store
+            .put_embedded(&ada, "bad", json!(1), None, bad)
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), "invalid_value");
+    }
+    // The largest allowed vector round-trips.
+    let big: Vec<f32> = (0..MAX_DIMENSIONS).map(|i| (i % 7) as f32 - 3.0).collect();
+    store
+        .put_embedded(
+            &ada,
+            "big",
+            json!("big"),
+            None,
+            Embedding::new("big", big.clone()),
+        )
+        .await
+        .unwrap();
+    let found = store
+        .search(
+            &ada,
+            &SearchQuery::new().similar_to(Embedding::new("big", big)),
+        )
+        .await
+        .unwrap();
+    assert_eq!(found[0].key, "big");
+    assert!((found[0].score.unwrap() - 1.0).abs() < 1e-9);
+    store.delete_namespace(&ns("vectors")).await.unwrap();
 }
 
 #[tokio::test]
@@ -305,7 +441,7 @@ mod sqlite {
         pool.close().await;
 
         let checkpointer = SqliteCheckpointer::connect(&url).await.unwrap();
-        assert_eq!(checkpointer.schema_version().await.unwrap(), 3);
+        assert_eq!(checkpointer.schema_version().await.unwrap(), 4);
         let store = checkpointer.memory_store();
         store
             .put(&ns("users/ada"), "diet", json!("vegan"), None)

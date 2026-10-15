@@ -28,9 +28,13 @@ Threads, checkpoints and storage backends for
   row), with key rotation; a database that is encrypted refuses to open
   without its keys
 
+- semantic search: items saved with a vector (`put_embedded`) are found
+  by meaning (`SearchQuery::similar_to`), ranked by cosine similarity on
+  every backend
+
 **Status:** the contract, the in-memory, SQLite and Postgres backends,
-per-step saving, the memory store, retention, encryption at rest. Vector
-search is planned.
+per-step saving, the memory store with keyword and semantic search,
+retention, encryption at rest. Vector indexes are planned.
 
 Most code uses this through agents (`agent.thread("user-42")`, see
 `agentbuild-agent`). The contract underneath:

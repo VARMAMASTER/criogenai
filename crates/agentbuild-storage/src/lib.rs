@@ -78,8 +78,8 @@ pub use retention::{PruneReport, Pruner, Retention};
 pub use sqlite::{SqliteCheckpointer, SqliteMemoryStore};
 pub use storage::{Durability, OnBusy, Storage, ThreadLease};
 pub use store::{
-    InMemoryStore, MAX_KEY_BYTES, MAX_VALUE_BYTES, MemoryItem, MemoryStore, Namespace,
-    ScopedMemory, SearchQuery,
+    Embedding, InMemoryStore, MAX_DIMENSIONS, MAX_KEY_BYTES, MAX_VALUE_BYTES, MemoryItem,
+    MemoryStore, Namespace, ScopedMemory, SearchQuery,
 };
 pub use writer::ThreadWriter;
 

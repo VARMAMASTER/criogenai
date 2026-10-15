@@ -8,10 +8,10 @@ use super::{get, sql_error};
 use crate::checkpoint::now_ms;
 use crate::crypto::Sealer;
 use crate::error::StorageError;
-use crate::sql::{decode_memory, encode_memory};
+use crate::sql::{decode_embedding, decode_memory, encode_embedding, encode_memory};
 use crate::store::{
-    MemoryItem, MemoryStore, Namespace, SearchQuery, check_prefix, check_put, expiry, is_live,
-    query_terms, rank,
+    Embedding, MemoryItem, MemoryStore, Namespace, SearchQuery, check_embedding, check_prefix,
+    check_put, expiry, is_live, query_terms, rank, rank_similar,
 };
 
 /// Long-term memory in a Postgres database (table `agentbuild_memory`).
@@ -44,7 +44,7 @@ impl std::fmt::Debug for PostgresMemoryStore {
 const IN_PREFIX: &str = "($1 = '' OR namespace = $1 OR (namespace >= $2 AND namespace < $3))";
 
 const COLUMNS: &str =
-    "namespace, key, value, search_text, created_at_ms, updated_at_ms, expires_at_ms";
+    "namespace, key, value, search_text, created_at_ms, updated_at_ms, expires_at_ms, embedding";
 
 impl PostgresMemoryStore {
     pub(crate) fn new(pool: PgPool, sealer: Sealer) -> Self {
@@ -65,22 +65,30 @@ impl PostgresMemoryStore {
         key: &str,
         value: Value,
         ttl: Option<Duration>,
+        embedding: Option<Embedding>,
     ) -> Result<(), StorageError> {
+        if let Some(embedding) = &embedding {
+            check_embedding(embedding)?;
+        }
         let text = check_put(namespace, key, &value)?;
         let now = now_ms();
         let path = namespace.path();
         let (column, stored, search) = encode_memory(&self.sealer, &path, key, text, &value)?;
+        let vector = embedding
+            .map(|e| encode_embedding(&self.sealer, &path, &column, &e))
+            .transpose()?;
         let expires = expiry(now, ttl).map(|at| at.min(i64::MAX as u64) as i64);
         if !self.sealer.is_on() {
             // Overwriting an expired item starts a new one (new created_at).
             sqlx::query(
                 "INSERT INTO agentbuild_memory
                     (namespace, key, value, search_text, created_at_ms, updated_at_ms,
-                     expires_at_ms)
-                 VALUES ($1, $2, $3, $4, $5, $5, $6)
+                     expires_at_ms, embedding)
+                 VALUES ($1, $2, $3, $4, $5, $5, $6, $7)
                  ON CONFLICT (namespace, key) DO UPDATE SET
                     value = EXCLUDED.value,
                     search_text = EXCLUDED.search_text,
+                    embedding = EXCLUDED.embedding,
                     created_at_ms = CASE
                         WHEN agentbuild_memory.expires_at_ms IS NOT NULL
                             AND agentbuild_memory.expires_at_ms <= EXCLUDED.updated_at_ms
@@ -95,6 +103,7 @@ impl PostgresMemoryStore {
             .bind(search)
             .bind(now as i64)
             .bind(expires)
+            .bind(vector)
             .execute(&self.pool)
             .await
             .map_err(sql_error)?;
@@ -124,12 +133,14 @@ impl PostgresMemoryStore {
         // the later write wins.
         sqlx::query(
             "INSERT INTO agentbuild_memory
-                (namespace, key, value, search_text, created_at_ms, updated_at_ms, expires_at_ms)
-             VALUES ($1, $2, $3, $4, $5, $6, $7)
+                (namespace, key, value, search_text, created_at_ms, updated_at_ms, expires_at_ms,
+                 embedding)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
              ON CONFLICT (namespace, key) DO UPDATE SET
                 value = EXCLUDED.value,
                 updated_at_ms = EXCLUDED.updated_at_ms,
-                expires_at_ms = EXCLUDED.expires_at_ms",
+                expires_at_ms = EXCLUDED.expires_at_ms,
+                embedding = EXCLUDED.embedding",
         )
         .bind(&path)
         .bind(column)
@@ -138,6 +149,7 @@ impl PostgresMemoryStore {
         .bind(created)
         .bind(now as i64)
         .bind(expires)
+        .bind(vector)
         .execute(&mut *tx)
         .await
         .map_err(sql_error)?;
@@ -172,6 +184,9 @@ impl PostgresMemoryStore {
         prefix: &Namespace,
         query: &SearchQuery,
     ) -> Result<Vec<MemoryItem>, StorageError> {
+        if let Some(vector) = &query.vector {
+            return self.search_similar(prefix, query, vector).await;
+        }
         let terms = query_terms(query);
         let mut sql = format!(
             "SELECT {COLUMNS} FROM agentbuild_memory
@@ -209,6 +224,41 @@ impl PostgresMemoryStore {
             .map(|row| self.read_item(row))
             .collect::<Result<Vec<_>, _>>()?;
         Ok(rank(candidates, &terms, query.limit))
+    }
+
+    /// Semantic search: the live items of the prefix that have a vector,
+    /// ranked in Rust (no vector index; design 0008 §16.2).
+    async fn search_similar(
+        &self,
+        prefix: &Namespace,
+        query: &SearchQuery,
+        vector: &Embedding,
+    ) -> Result<Vec<MemoryItem>, StorageError> {
+        let path = prefix.path();
+        let rows = sqlx::query(&format!(
+            "SELECT {COLUMNS} FROM agentbuild_memory
+             WHERE {IN_PREFIX} AND (expires_at_ms IS NULL OR expires_at_ms > $4)
+                AND embedding IS NOT NULL"
+        ))
+        .bind(path.clone())
+        .bind(format!("{path}/"))
+        .bind(format!("{path}0"))
+        .bind(now_ms() as i64)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(sql_error)?;
+        let mut candidates = Vec::with_capacity(rows.len());
+        for row in &rows {
+            if let Some(embedding) = self.read_embedding(row)? {
+                candidates.push((self.read_item(row)?.0, embedding));
+            }
+        }
+        Ok(rank_similar(
+            candidates,
+            vector,
+            query.min_score,
+            query.limit,
+        ))
     }
 
     async fn delete_item(&self, namespace: &Namespace, key: &str) -> Result<bool, StorageError> {
@@ -260,7 +310,9 @@ impl PostgresMemoryStore {
         let mut after = (String::new(), String::new());
         let select = format!(
             "SELECT {COLUMNS} FROM agentbuild_memory
-                WHERE (namespace, key) > ($1, $2) AND substr(value, 1, length($3)) <> $3
+                WHERE (namespace, key) > ($1, $2)
+                    AND (substr(value, 1, length($3)) <> $3
+                        OR substr(embedding, 1, length($3)) <> $3)
                 ORDER BY namespace, key LIMIT $4"
         );
         loop {
@@ -281,9 +333,13 @@ impl PostgresMemoryStore {
                 let old_key: String = get(row, "key")?;
                 let old_value: String = get(row, "value")?;
                 let (item, _) = self.read_item(row)?;
+                let embedding = self.read_embedding(row)?;
                 let text = serde_json::to_string(&item.value).map_err(crate::sql::encode_error)?;
                 let (column, stored, search) =
                     encode_memory(&self.sealer, &path, &item.key, text, &item.value)?;
+                let vector = embedding
+                    .map(|e| encode_embedding(&self.sealer, &path, &column, &e))
+                    .transpose()?;
                 let mut tx = self.pool.begin().await.map_err(sql_error)?;
                 let removed = sqlx::query(
                     "DELETE FROM agentbuild_memory
@@ -301,8 +357,8 @@ impl PostgresMemoryStore {
                     done += sqlx::query(
                         "INSERT INTO agentbuild_memory
                             (namespace, key, value, search_text, created_at_ms, updated_at_ms,
-                             expires_at_ms)
-                         VALUES ($1, $2, $3, $4, $5, $6, $7)
+                             expires_at_ms, embedding)
+                         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                          ON CONFLICT (namespace, key) DO NOTHING",
                     )
                     .bind(&path)
@@ -312,6 +368,7 @@ impl PostgresMemoryStore {
                     .bind(item.created_at_ms as i64)
                     .bind(item.updated_at_ms as i64)
                     .bind(item.expires_at_ms.map(|at| at as i64))
+                    .bind(vector)
                     .execute(&mut *tx)
                     .await
                     .map_err(sql_error)?
@@ -320,6 +377,16 @@ impl PostgresMemoryStore {
                 tx.commit().await.map_err(sql_error)?;
             }
         }
+    }
+
+    /// The row's vector, if it has one (decrypted if needed).
+    fn read_embedding(&self, row: &PgRow) -> Result<Option<Embedding>, StorageError> {
+        let Some(stored) = get::<Option<String>>(row, "embedding")? else {
+            return Ok(None);
+        };
+        let path: String = get(row, "namespace")?;
+        let column: String = get(row, "key")?;
+        decode_embedding(&self.sealer, &path, &column, stored).map(Some)
     }
 
     /// An item and its search text (decrypted if needed).
@@ -345,7 +412,18 @@ impl MemoryStore for PostgresMemoryStore {
         value: Value,
         ttl: Option<Duration>,
     ) -> BoxFuture<'a, Result<(), StorageError>> {
-        Box::pin(self.put_item(namespace, key, value, ttl))
+        Box::pin(self.put_item(namespace, key, value, ttl, None))
+    }
+
+    fn put_embedded<'a>(
+        &'a self,
+        namespace: &'a Namespace,
+        key: &'a str,
+        value: Value,
+        ttl: Option<Duration>,
+        embedding: Embedding,
+    ) -> BoxFuture<'a, Result<(), StorageError>> {
+        Box::pin(self.put_item(namespace, key, value, ttl, Some(embedding)))
     }
 
     fn get<'a>(

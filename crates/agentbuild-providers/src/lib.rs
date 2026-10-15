@@ -7,8 +7,9 @@
 //! tests.
 //!
 //! **Status:** data types, error classification, transcript repair, the SSE
-//! parser, the stream assembler, the fake model, the HTTP transport and two
-//! wire protocols (OpenAI chat completions and Anthropic Messages) exist.
+//! parser, the stream assembler, the fake model, the HTTP transport, two
+//! wire protocols (OpenAI chat completions and Anthropic Messages) and
+//! embedding models ([`Embedder`], [`FakeEmbedder`]) exist.
 //! The gateway is planned (0006 §11).
 //!
 //! ```
@@ -34,6 +35,7 @@ struct ReadmeDoctests;
 
 #[cfg(feature = "http")]
 mod anthropic_messages;
+mod embed;
 mod error;
 mod fake;
 mod message;
@@ -54,6 +56,7 @@ mod transport;
 
 #[cfg(feature = "http")]
 pub use anthropic_messages::AnthropicOptions;
+pub use embed::{Embedder, FAKE_DIMENSIONS, FakeEmbedder};
 pub use error::{
     Dispatch, HttpFailure, MAX_MESSAGE_BYTES, ModelError, ModelErrorKind, classify_http,
     invalid_response, sanitize_message,
@@ -67,7 +70,7 @@ pub use model::{BoxFuture, DeltaSink, Model};
 #[cfg(feature = "http")]
 pub use openai_chat::OpenAiQuirks;
 #[cfg(feature = "http")]
-pub use provider::{Endpoint, Protocol, ProviderModel, preview_request};
+pub use provider::{Endpoint, Protocol, ProviderEmbedder, ProviderModel, preview_request};
 pub use request::{
     Capabilities, ModelRequest, ModelResponse, OutputSpec, OutputStrategy, Reasoning,
     ReasoningEffort, Settings, ToolChoice,

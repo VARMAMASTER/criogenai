@@ -20,6 +20,48 @@ pub const MAX_VALUE_BYTES: usize = 1024 * 1024;
 /// The longest key, in bytes.
 pub const MAX_KEY_BYTES: usize = 256;
 
+/// The most dimensions an [`Embedding`] may have.
+pub const MAX_DIMENSIONS: usize = 8192;
+
+/// A vector from an embedding model, for semantic search (design 0008
+/// §16). The model name keeps vectors of different models apart: a query
+/// only matches items embedded by the same model.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct Embedding {
+    /// The model that made it, e.g. `openai/text-embedding-3-small`.
+    pub model: String,
+    /// The vector: 1 to [`MAX_DIMENSIONS`] finite values.
+    pub vector: Vec<f32>,
+}
+
+impl Embedding {
+    /// A vector made by `model`.
+    pub fn new(model: impl Into<String>, vector: Vec<f32>) -> Self {
+        Self {
+            model: model.into(),
+            vector,
+        }
+    }
+}
+
+/// Checks an embedding's size and values (`invalid_value`).
+pub(crate) fn check_embedding(embedding: &Embedding) -> Result<(), StorageError> {
+    let n = embedding.vector.len();
+    if n == 0 || n > MAX_DIMENSIONS {
+        return Err(invalid(format!(
+            "embeddings have 1 to {MAX_DIMENSIONS} dimensions, got {n}"
+        )));
+    }
+    if embedding.vector.iter().any(|x| !x.is_finite()) {
+        return Err(invalid("embeddings hold finite numbers only"));
+    }
+    if embedding.model.is_empty() {
+        return Err(invalid("an embedding names its model"));
+    }
+    Ok(())
+}
+
 /// Where memory items live: a path of segments such as `users/42`.
 ///
 /// Segments are non-empty and contain no `/` or control characters. The
@@ -134,11 +176,17 @@ pub struct MemoryItem {
 }
 
 /// What [`MemoryStore::search`] looks for.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 #[non_exhaustive]
 pub struct SearchQuery {
     /// Words to match (keyword search). `None`: every item, newest first.
     pub text: Option<String>,
+    /// A vector to match (semantic search): items embedded by the same
+    /// model, most similar first. Takes the place of `text`.
+    pub vector: Option<Embedding>,
+    /// Semantic search only: drop items less similar than this (cosine
+    /// similarity, -1 to 1).
+    pub min_score: Option<f64>,
     /// The most items to return. Default 10.
     pub limit: usize,
 }
@@ -147,6 +195,8 @@ impl Default for SearchQuery {
     fn default() -> Self {
         Self {
             text: None,
+            vector: None,
+            min_score: None,
             limit: 10,
         }
     }
@@ -164,6 +214,21 @@ impl SearchQuery {
         self
     }
 
+    /// Items whose vectors are most similar to `embedding` (design 0008
+    /// §16). Only items stored with [`MemoryStore::put_embedded`] by the
+    /// same model match.
+    pub fn similar_to(mut self, embedding: Embedding) -> Self {
+        self.vector = Some(embedding);
+        self
+    }
+
+    /// With [`similar_to`](Self::similar_to): only items at least this
+    /// similar.
+    pub fn min_score(mut self, score: f64) -> Self {
+        self.min_score = Some(score);
+        self
+    }
+
     /// At most `limit` items.
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = limit;
@@ -178,18 +243,33 @@ impl SearchQuery {
 /// its value contains the query's words (common words such as "the" or
 /// "my" are ignored; a word also matches longer words it starts, from
 /// three letters). Items are ranked by the share of words matched, then by
-/// last update. Every backend ranks the same way.
+/// last update. Or by meaning ([`SearchQuery::similar_to`]): items stored
+/// with a vector, ranked by cosine similarity. Every backend ranks the
+/// same way.
 pub trait MemoryStore: Send + Sync + 'static {
-    /// Saves `value` under `key` in `namespace`, replacing what was there.
-    /// `ttl`: removed that long from now; `None` keeps it until deleted.
-    /// Fails with `invalid_value` for the root namespace, an empty or long
-    /// key, or a value over [`MAX_VALUE_BYTES`].
+    /// Saves `value` under `key` in `namespace`, replacing what was there
+    /// (including its vector). `ttl`: removed that long from now; `None`
+    /// keeps it until deleted. Fails with `invalid_value` for the root
+    /// namespace, an empty or long key, or a value over
+    /// [`MAX_VALUE_BYTES`].
     fn put<'a>(
         &'a self,
         namespace: &'a Namespace,
         key: &'a str,
         value: Value,
         ttl: Option<Duration>,
+    ) -> BoxFuture<'a, Result<(), StorageError>>;
+
+    /// [`put`](Self::put) with the value's vector, for semantic search.
+    /// Fails with `invalid_value` for a vector with no or more than
+    /// [`MAX_DIMENSIONS`] values, or values that are not finite.
+    fn put_embedded<'a>(
+        &'a self,
+        namespace: &'a Namespace,
+        key: &'a str,
+        value: Value,
+        ttl: Option<Duration>,
+        embedding: Embedding,
     ) -> BoxFuture<'a, Result<(), StorageError>>;
 
     /// The item, unless missing or expired.
@@ -266,6 +346,19 @@ impl ScopedMemory {
         ttl: Option<Duration>,
     ) -> Result<(), StorageError> {
         self.store.put(&self.namespace, key, value, ttl).await
+    }
+
+    /// [`MemoryStore::put_embedded`] in this namespace.
+    pub async fn put_embedded(
+        &self,
+        key: &str,
+        value: Value,
+        ttl: Option<Duration>,
+        embedding: Embedding,
+    ) -> Result<(), StorageError> {
+        self.store
+            .put_embedded(&self.namespace, key, value, ttl, embedding)
+            .await
     }
 
     /// [`MemoryStore::get`] in this namespace.
@@ -449,6 +542,54 @@ pub(crate) fn rank(
     items
 }
 
+/// Cosine similarity (0 if either vector is all zeros).
+pub(crate) fn cosine(a: &[f32], b: &[f32]) -> f64 {
+    let (mut dot, mut aa, mut bb) = (0f64, 0f64, 0f64);
+    for (x, y) in a.iter().zip(b) {
+        let (x, y) = (f64::from(*x), f64::from(*y));
+        dot += x * y;
+        aa += x * x;
+        bb += y * y;
+    }
+    if aa == 0.0 || bb == 0.0 {
+        0.0
+    } else {
+        dot / (aa.sqrt() * bb.sqrt())
+    }
+}
+
+/// Orders and cuts semantic search candidates: items embedded by the
+/// query's model with as many dimensions, most similar first (then newest,
+/// then namespace path and key).
+pub(crate) fn rank_similar(
+    candidates: Vec<(MemoryItem, Embedding)>,
+    query: &Embedding,
+    min_score: Option<f64>,
+    limit: usize,
+) -> Vec<MemoryItem> {
+    let mut items: Vec<MemoryItem> = candidates
+        .into_iter()
+        .filter(|(_, e)| e.model == query.model && e.vector.len() == query.vector.len())
+        .filter_map(|(mut item, e)| {
+            let score = cosine(&query.vector, &e.vector);
+            min_score.is_none_or(|min| score >= min).then(|| {
+                item.score = Some(score);
+                item
+            })
+        })
+        .collect();
+    items.sort_by(|a, b| {
+        b.score
+            .unwrap_or(0.0)
+            .total_cmp(&a.score.unwrap_or(0.0))
+            .then(b.updated_at_ms.cmp(&a.updated_at_ms))
+            .then_with(|| a.namespace.path().cmp(&b.namespace.path()))
+            .then_with(|| a.key.cmp(&b.key))
+    });
+    items.truncate(limit);
+    items
+}
+
 /// Keeps memory in process memory. Lost when the process exits: for tests,
 /// scripts and the default when no storage is configured.
 #[derive(Debug, Default)]
@@ -460,6 +601,7 @@ pub struct InMemoryStore {
 struct Stored {
     item: MemoryItem,
     search_text: String,
+    embedding: Option<Embedding>,
 }
 
 impl InMemoryStore {
@@ -471,17 +613,19 @@ impl InMemoryStore {
     fn items(&self) -> MutexGuard<'_, BTreeMap<(Namespace, String), Stored>> {
         self.items.lock().unwrap_or_else(|e| e.into_inner())
     }
-}
 
-impl MemoryStore for InMemoryStore {
-    fn put<'a>(
-        &'a self,
-        namespace: &'a Namespace,
-        key: &'a str,
+    fn store(
+        &self,
+        namespace: &Namespace,
+        key: &str,
         value: Value,
         ttl: Option<Duration>,
-    ) -> BoxFuture<'a, Result<(), StorageError>> {
-        let result = check_put(namespace, key, &value).map(|_| {
+        embedding: Option<Embedding>,
+    ) -> Result<(), StorageError> {
+        if let Some(embedding) = &embedding {
+            check_embedding(embedding)?;
+        }
+        check_put(namespace, key, &value).map(|_| {
             let now = now_ms();
             let mut items = self.items();
             let entry = (namespace.clone(), key.to_string());
@@ -504,9 +648,34 @@ impl MemoryStore for InMemoryStore {
                         score: None,
                     },
                     search_text,
+                    embedding,
                 },
             );
-        });
+        })
+    }
+}
+
+impl MemoryStore for InMemoryStore {
+    fn put<'a>(
+        &'a self,
+        namespace: &'a Namespace,
+        key: &'a str,
+        value: Value,
+        ttl: Option<Duration>,
+    ) -> BoxFuture<'a, Result<(), StorageError>> {
+        let result = self.store(namespace, key, value, ttl, None);
+        Box::pin(async move { result })
+    }
+
+    fn put_embedded<'a>(
+        &'a self,
+        namespace: &'a Namespace,
+        key: &'a str,
+        value: Value,
+        ttl: Option<Duration>,
+        embedding: Embedding,
+    ) -> BoxFuture<'a, Result<(), StorageError>> {
+        let result = self.store(namespace, key, value, ttl, Some(embedding));
         Box::pin(async move { result })
     }
 
@@ -530,13 +699,25 @@ impl MemoryStore for InMemoryStore {
         query: &'a SearchQuery,
     ) -> BoxFuture<'a, Result<Vec<MemoryItem>, StorageError>> {
         let now = now_ms();
-        let candidates: Vec<(MemoryItem, String)> = self
-            .items()
+        let items = self.items();
+        let live = items
             .values()
-            .filter(|s| prefix.contains(&s.item.namespace) && is_live(s.item.expires_at_ms, now))
-            .map(|s| (s.item.clone(), s.search_text.clone()))
-            .collect();
-        let found = rank(candidates, &query_terms(query), query.limit);
+            .filter(|s| prefix.contains(&s.item.namespace) && is_live(s.item.expires_at_ms, now));
+        let found = match &query.vector {
+            Some(vector) => {
+                let candidates = live
+                    .filter_map(|s| Some((s.item.clone(), s.embedding.clone()?)))
+                    .collect();
+                rank_similar(candidates, vector, query.min_score, query.limit)
+            }
+            None => {
+                let candidates = live
+                    .map(|s| (s.item.clone(), s.search_text.clone()))
+                    .collect();
+                rank(candidates, &query_terms(query), query.limit)
+            }
+        };
+        drop(items);
         Box::pin(async move { Ok(found) })
     }
 

@@ -457,3 +457,155 @@ pub fn preview_request(
     };
     Ok((body, warnings))
 }
+
+/// An embedding model reached over HTTP: the OpenAI-compatible
+/// `POST {base_url}/embeddings` (OpenAI, Gemini's OpenAI-compatible
+/// endpoint, Ollama, LM Studio, vLLM, OpenRouter). Design 0008 §16.1.
+///
+/// ```no_run
+/// use agentbuild_providers::{Embedder, Endpoint, ProviderEmbedder};
+///
+/// # async fn demo() -> Result<(), agentbuild_providers::ModelError> {
+/// let embedder = ProviderEmbedder::new(Endpoint::ollama(), "nomic-embed-text")?;
+/// let vectors = embedder.embed(&["Severe penicillin allergy".to_string()]).await?;
+/// println!("{} dimensions", vectors[0].len());
+/// # Ok(()) }
+/// ```
+#[derive(Debug, Clone)]
+pub struct ProviderEmbedder {
+    endpoint: Endpoint,
+    model: String,
+    dimensions: Option<u32>,
+    transport: Transport,
+}
+
+impl ProviderEmbedder {
+    /// An embedder with default timeouts. An Anthropic endpoint has no
+    /// embeddings API: `invalid_request`.
+    pub fn new(endpoint: Endpoint, model: impl Into<String>) -> Result<Self, ModelError> {
+        Self::with_config(endpoint, model, HttpConfig::default())
+    }
+
+    /// An embedder with explicit timeouts.
+    pub fn with_config(
+        endpoint: Endpoint,
+        model: impl Into<String>,
+        config: HttpConfig,
+    ) -> Result<Self, ModelError> {
+        if let Protocol::AnthropicMessages(_) = endpoint.protocol {
+            return Err(ModelError::new(
+                crate::ModelErrorKind::InvalidRequest,
+                format!(
+                    "endpoint `{}` speaks the Anthropic Messages API, which has no embeddings; \
+                     use an OpenAI-compatible endpoint",
+                    endpoint.name
+                ),
+            ));
+        }
+        let transport = Transport::new(config)?.redacting(endpoint.api_key.clone());
+        Ok(Self {
+            endpoint,
+            model: model.into(),
+            dimensions: None,
+            transport,
+        })
+    }
+
+    /// Asks for vectors of `n` dimensions (models that support shortening,
+    /// such as OpenAI's `text-embedding-3-*`).
+    pub fn dimensions(mut self, n: u32) -> Self {
+        self.dimensions = Some(n);
+        self
+    }
+
+    /// The endpoint.
+    pub fn endpoint(&self) -> &Endpoint {
+        &self.endpoint
+    }
+
+    async fn call(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, ModelError> {
+        if texts.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut body = serde_json::json!({"model": self.model, "input": texts});
+        if let Some(n) = self.dimensions {
+            body["dimensions"] = n.into();
+        }
+        let mut wire = WireRequest::post(
+            format!("{}/embeddings", self.endpoint.base_url),
+            serde_json::to_vec(&body).expect("JSON values serialize"),
+        )
+        .header("content-type", "application/json");
+        if let Some(key) = &self.endpoint.api_key {
+            wire = wire.header("authorization", format!("Bearer {key}"));
+        }
+        for (name, value) in &self.endpoint.headers {
+            wire = wire.header(name.clone(), value.clone());
+        }
+        let bytes = self.transport.send(&wire).await?;
+        decode_embeddings(&bytes, texts.len())
+    }
+}
+
+/// The vectors of an embeddings response, ordered by `index`.
+fn decode_embeddings(bytes: &[u8], expected: usize) -> Result<Vec<Vec<f32>>, ModelError> {
+    #[derive(serde::Deserialize)]
+    struct Response {
+        data: Vec<Item>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Item {
+        #[serde(default)]
+        index: Option<usize>,
+        embedding: Vec<f32>,
+    }
+    let invalid = |why: String| ModelError::new(crate::ModelErrorKind::InvalidResponse, why);
+    let response: Response = serde_json::from_slice(bytes)
+        .map_err(|err| invalid(format!("unreadable embeddings response: {err}")))?;
+    let mut vectors: Vec<Option<Vec<f32>>> = vec![None; expected];
+    for (position, item) in response.data.into_iter().enumerate() {
+        let index = item.index.unwrap_or(position);
+        match vectors.get_mut(index) {
+            Some(slot @ None) => *slot = Some(item.embedding),
+            _ => return Err(invalid(format!("unexpected embedding index {index}"))),
+        }
+    }
+    vectors
+        .into_iter()
+        .enumerate()
+        .map(|(index, vector)| {
+            vector
+                .filter(|v| !v.is_empty())
+                .ok_or_else(|| invalid(format!("no embedding for input {index}")))
+        })
+        .collect()
+}
+
+impl crate::embed::Embedder for ProviderEmbedder {
+    fn provider(&self) -> &str {
+        &self.endpoint.name
+    }
+
+    fn model(&self) -> &str {
+        &self.model
+    }
+
+    fn embed<'a>(
+        &'a self,
+        texts: &'a [String],
+    ) -> BoxFuture<'a, Result<Vec<Vec<f32>>, ModelError>> {
+        Box::pin(async move {
+            self.call(texts).await.map_err(|error| {
+                let error = if error.provider.is_none() {
+                    error.for_model(self.endpoint.name.clone(), self.model.clone())
+                } else {
+                    error
+                };
+                match &self.endpoint.api_key {
+                    Some(key) => error.redact(&[key.as_str()]),
+                    None => error,
+                }
+            })
+        })
+    }
+}

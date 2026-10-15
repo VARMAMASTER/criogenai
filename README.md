@@ -10,7 +10,7 @@ with crash recovery, and OpenTelemetry export.
 
 **Planned, not built yet:** Python and TypeScript SDKs on the same Rust
 engine (sketched in [docs/design/0007-public-api.md](docs/design/0007-public-api.md)),
-semantic (vector) memory search, and an embeddable LLM gateway. There are no performance claims until benchmarks are in this
+and an embeddable LLM gateway. There are no performance claims until benchmarks are in this
 repository.
 
 > **Status: early development (0.1, unreleased).** The API may change
@@ -160,7 +160,7 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 | 2     | Python SDK (PyO3 + maturin)                                   | Planned     |
 | 3     | TypeScript SDK (NAPI-RS)                                      | Planned     |
 | 4     | Agents, tools, model providers (LLM gateway: planned)         | Done (0.1)  |
-| 5     | Persistence (threads, SQLite, Postgres, crash recovery, long-term memory, retention, encryption at rest: done; vector search: planned) | In progress |
+| 5     | Persistence (threads, SQLite, Postgres, crash recovery, long-term memory with keyword and semantic search, retention, encryption at rest; vector indexes: planned) | Done (0.1)  |
 | 6     | Docs, publishing, benchmarks                                  | In progress |
 
 ## Documentation

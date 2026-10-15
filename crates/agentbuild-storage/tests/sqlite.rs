@@ -147,11 +147,11 @@ async fn a_long_chat_stores_each_message_once() {
 async fn migrations_run_once_and_refuse_newer_databases() {
     let db = TempDb::new();
     let store = db.open().await;
-    assert_eq!(store.schema_version().await.unwrap(), 3);
+    assert_eq!(store.schema_version().await.unwrap(), 4);
     drop(store);
     // Opening again applies nothing new.
     let store = db.open().await;
-    assert_eq!(store.schema_version().await.unwrap(), 3);
+    assert_eq!(store.schema_version().await.unwrap(), 4);
     drop(store);
 
     let pool = raw(&db).await;

@@ -13,7 +13,7 @@ use crate::checkpoint::{Checkpoint, merge_pending};
 use crate::crypto::{PREFIX, Sealer, aad};
 use crate::delta::{self, DeltaOp};
 use crate::error::{StorageError, StorageErrorKind};
-use crate::store::{MemoryItem, Namespace, search_text};
+use crate::store::{Embedding, MemoryItem, Namespace, search_text};
 
 /// Default keyframe interval: the full state at least every 25 checkpoints.
 pub(crate) const KEYFRAME_INTERVAL: u32 = 25;
@@ -172,6 +172,73 @@ pub(crate) fn write_aad(thread: &str, checkpoint: &str, node: &str) -> String {
 /// The additional data of a memory value, by the stored key column.
 pub(crate) fn memory_aad(namespace: &str, key_column: &str) -> String {
     aad(&["memory", namespace, key_column])
+}
+
+/// The additional data of a memory item's vector.
+pub(crate) fn embedding_aad(namespace: &str, key_column: &str) -> String {
+    aad(&["memory", namespace, key_column, "embedding"])
+}
+
+/// A vector as stored: `{"model", "dims", "vector": base64 of
+/// little-endian f32}`, encrypted with keys (design 0008 §16.2).
+pub(crate) fn encode_embedding(
+    sealer: &Sealer,
+    namespace: &str,
+    key_column: &str,
+    embedding: &Embedding,
+) -> Result<String, StorageError> {
+    use base64::Engine;
+    let bytes: Vec<u8> = embedding
+        .vector
+        .iter()
+        .flat_map(|x| x.to_le_bytes())
+        .collect();
+    let text = serde_json::json!({
+        "model": embedding.model,
+        "dims": embedding.vector.len(),
+        "vector": base64::engine::general_purpose::STANDARD.encode(bytes),
+    })
+    .to_string();
+    sealer.seal(&embedding_aad(namespace, key_column), text)
+}
+
+/// The vector of a stored `embedding` column.
+pub(crate) fn decode_embedding(
+    sealer: &Sealer,
+    namespace: &str,
+    key_column: &str,
+    stored: String,
+) -> Result<Embedding, StorageError> {
+    use base64::Engine;
+    #[derive(serde::Deserialize)]
+    struct Stored {
+        model: String,
+        dims: usize,
+        vector: String,
+    }
+    let text = sealer.open(
+        &embedding_aad(namespace, key_column),
+        stored,
+        "memory embedding",
+    )?;
+    let stored: Stored = parse(&text, "memory embedding")?;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(&stored.vector)
+        .map_err(|err| corrupt(format!("unreadable memory embedding: {err}")))?;
+    if bytes.len() != stored.dims * 4 {
+        return Err(corrupt(format!(
+            "memory embedding has {} bytes for {} dimensions",
+            bytes.len(),
+            stored.dims
+        )));
+    }
+    let vector = bytes
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| f32::from_le_bytes(*b))
+        .collect();
+    Ok(Embedding::new(stored.model, vector))
 }
 
 /// `(kind, body)` from rows `(id, kind, stored body)` of a chain, opened.

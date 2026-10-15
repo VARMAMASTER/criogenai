@@ -99,7 +99,9 @@ pub use approval::{
 pub use hooks::{
     Hook, HookAction, HookContext, HookError, ModelNext, Outcome, ToolCallRequest, ToolNext,
 };
-pub use memory::{FORGET_TOOL, Memory, REMEMBER_TOOL, SEARCH_MEMORY_TOOL};
+pub use memory::{
+    FORGET_TOOL, Memory, REMEMBER_TOOL, SEARCH_MEMORY_TOOL, memory_text, put_embedded,
+};
 pub use nested::{AGENT_APPROVAL_INTERRUPT, AgentNode, AgentTool};
 pub use output::FINAL_OUTPUT_TOOL;
 pub use schema::validate as validate_arguments;

@@ -106,7 +106,7 @@ async fn facts_are_recalled_for_the_runs_user_only() {
     // The event names the keys, never the values.
     assert_eq!(
         events,
-        [json!({"namespace": "users/ada", "keys": ["diet", "city"]})]
+        [json!({"namespace": "users/ada", "keys": ["diet", "city"], "search": "keyword"})]
     );
 
     agent

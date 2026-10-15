@@ -42,8 +42,8 @@ and push). A task is marked done only when all of that is verified.
 | # | Task | Spec | Status |
 |---|---|---|---|
 | 1 | Retention and encryption at rest | 0008 §15 | Done |
-| 2 | Vector (semantic) memory search | 0008 step 6 | Next |
-| 3 | Audit trail | (to write) | Planned |
+| 2 | Vector (semantic) memory search | 0008 §16 | Done |
+| 3 | Audit trail | (to write) | Next |
 | 4 | `thread.stream` | (to write) | Planned |
 | 5 | Python SDK | (to write) | Planned |
 | 6 | TypeScript SDK | (to write) | Planned |
@@ -66,6 +66,31 @@ and push). A task is marked done only when all of that is verified.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-15: semantic memory search (0008 step 6, task 2)
+
+- Design 0008 §16. Providers: `Embedder` trait, `ProviderEmbedder`
+  (OpenAI-compatible `POST /embeddings`, results put back in input
+  order by `index`, classified errors, key redacted; Anthropic endpoints
+  refused) and `FakeEmbedder` (word-hash vectors with synonyms, failing
+  mode, call log).
+- Storage: `Embedding`, `put_embedded`, `similar_to`, `min_score`;
+  migration 4 adds `agentbuild_memory.embedding` (base64 f32, encrypted
+  with keys and rewritten by `reencrypt`). Ranking in Rust on every
+  backend; no vector index (brute force over the prefix).
+- Agents: `Memory::semantic(embedder)`: recall and `search_memory` by
+  meaning with keyword fallback (the `memory_recalled` event says which,
+  and why); `remember` stores vectors (a failing embedder is a retryable
+  tool error); `put_embedded` and `memory_text` for app-saved facts.
+- Tests: the vector contract on the three backends; encrypted vectors
+  unreadable and re-encrypted; `ProviderEmbedder` against the scripted
+  server; agents with a fake embedder (by meaning where keywords fail,
+  fallback, helper errors). Live check (manual): OpenAI
+  `text-embedding-3-small` (1536 dims) and Gemini `gemini-embedding-001`
+  (3072 dims) both rank the allergy first for "Which antibiotics should I
+  stay away from?", and the model's answer uses it.
+- The disk filled up during the work (target/ at 28 GB): deleted
+  target/debug and rebuilt.
 
 ### 2026-10-15: retention and encryption at rest (0008 step 5, task 1)
 

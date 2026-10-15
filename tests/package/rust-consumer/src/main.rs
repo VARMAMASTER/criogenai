@@ -37,6 +37,7 @@ async fn main() {
     long_term_memory_per_user().await;
     postgres_threads_across_processes().await;
     encrypted_storage_with_retention().await;
+    semantic_memory_search().await;
     println!("package smoke test: ok");
 }
 
@@ -651,7 +652,7 @@ async fn postgres_threads_across_processes() {
     assert_eq!(second.result.messages.len(), 4);
     assert!(b.thread(&thread).delete().await.expect("delete"));
     let store = PostgresCheckpointer::connect(&url).await.expect("connect");
-    assert_eq!(store.schema_version().await.expect("version"), 3);
+    assert_eq!(store.schema_version().await.expect("version"), 4);
     store.close().await;
     println!("  Postgres threads across processes: ok");
 }
@@ -698,4 +699,45 @@ async fn encrypted_storage_with_retention() {
         let _ = std::fs::remove_file(file);
     }
     println!("  encrypted storage with retention: ok");
+}
+
+async fn semantic_memory_search() {
+    use agentbuild_agent::{Agent, AgentInput, Memory, put_embedded};
+    use agentbuild_providers::FakeEmbedder;
+    use agentbuild_storage::{Namespace, Storage};
+
+    let storage = Storage::connect("sqlite::memory:").await.expect("open");
+    let embedder = FakeEmbedder::new().synonym("antibiotics", "penicillin");
+    let patient = Namespace::parse("patients/p1").expect("namespace");
+    for (key, value) in [("allergy", "Severe penicillin reaction"), ("diet", "Vegetarian")] {
+        put_embedded(storage.memory().as_ref(), &embedder, &patient, key, json!(value), None)
+            .await
+            .expect("save");
+    }
+    let model = Arc::new(
+        FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
+            .then(FakeReply::text("Avoid penicillin.")),
+    );
+    let agent = Agent::builder_shared(model.clone())
+        .storage(storage)
+        .memory(
+            Memory::by_state("patient", Namespace::parse("patients").expect("namespace"))
+                .recall(1)
+                .semantic(embedder),
+        )
+        .build()
+        .expect("valid agent");
+    agent
+        .run(AgentInput::from("Which antibiotics should I avoid?").with("patient", "p1"))
+        .await
+        .expect("run");
+    let recalled = model.requests()[0]
+        .messages
+        .iter()
+        .find(|m| m.id == "msg_memory")
+        .map(|m| m.text())
+        .expect("recalled");
+    assert!(recalled.contains("allergy"), "{recalled}");
+    assert!(!recalled.contains("Vegetarian"), "{recalled}");
+    println!("  semantic memory search: ok");
 }

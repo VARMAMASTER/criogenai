@@ -8,7 +8,7 @@ mod contract;
 
 use agentbuild_core::{PendingWrite, State};
 use agentbuild_storage::{
-    Checkpoint, EncryptionKey, Keyring, Namespace, SearchQuery, Source, Storage,
+    Checkpoint, Embedding, EncryptionKey, Keyring, Namespace, SearchQuery, Source, Storage,
 };
 use serde_json::json;
 
@@ -25,6 +25,11 @@ fn ring(keys: &[(&str, u8)]) -> Keyring {
     iter.fold(Keyring::new(key(id, *byte)), |ring, (id, byte)| {
         ring.with_previous(key(id, *byte)).unwrap()
     })
+}
+
+/// A vector whose stored form would show its model name if readable.
+fn vector() -> Embedding {
+    Embedding::new("embedding-model-name", vec![0.25, -0.5, 1.0])
 }
 
 fn ns(path: &str) -> Namespace {
@@ -49,6 +54,7 @@ impl Raw {
             "SELECT key FROM agentbuild_memory",
             "SELECT value FROM agentbuild_memory",
             "SELECT search_text FROM agentbuild_memory",
+            "SELECT embedding FROM agentbuild_memory WHERE embedding IS NOT NULL",
         ];
         let mut all = Vec::new();
         for sql in queries {
@@ -125,11 +131,12 @@ async fn write_secrets(storage: &Storage, thread: &str) {
     let memory = storage.memory();
     let patient = ns(&format!("patients/{thread}"));
     memory
-        .put(
+        .put_embedded(
             &patient,
             &format!("allergy_{SECRET}"),
             json!({"severity": "high", "drug": SECRET}),
             None,
+            vector(),
         )
         .await
         .unwrap();
@@ -186,6 +193,13 @@ async fn read_secrets(storage: &Storage, thread: &str) {
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].key, format!("allergy_{SECRET}"));
     assert_eq!(found[0].score, Some(1.0));
+    // Its vector reads back too.
+    let similar = memory
+        .search(&patient, &SearchQuery::new().similar_to(vector()))
+        .await
+        .unwrap();
+    assert_eq!(similar.len(), 1);
+    assert_eq!(similar[0].key, format!("allergy_{SECRET}"));
     let newest = memory.search(&patient, &SearchQuery::new()).await.unwrap();
     assert_eq!(newest.len(), 2);
     assert!(newest[0].updated_at_ms >= newest[1].updated_at_ms);
@@ -198,6 +212,7 @@ async fn nothing_readable(raw: &Raw) {
         assert!(!text.contains(SECRET), "readable: {text}");
         assert!(!text.contains("vegetarian"), "readable: {text}");
         assert!(!text.contains("dietary_preference"), "readable: {text}");
+        assert!(!text.contains("embedding-model-name"), "readable: {text}");
     }
 }
 
