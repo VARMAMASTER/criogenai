@@ -39,6 +39,7 @@ async fn main() {
     encrypted_storage_with_retention().await;
     semantic_memory_search().await;
     audit_trail().await;
+    thread_stream().await;
     println!("package smoke test: ok");
 }
 
@@ -793,4 +794,27 @@ async fn audit_trail() {
     assert_eq!(decided.event.actor.as_deref(), Some("user:supervisor"));
     assert!(log.verify().await.expect("verify").ok);
     println!("  audit trail: ok");
+}
+
+async fn thread_stream() {
+    use agentbuild_agent::{Agent, AgentEvent};
+
+    let agent = Agent::builder(
+        FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
+            .then(FakeReply::text("Hello Ada")),
+    )
+    .build()
+    .expect("valid agent");
+    let chat = agent.thread("streamed");
+    let mut stream = chat.stream("I am Ada");
+    let mut text = String::new();
+    while let Some(event) = stream.next().await {
+        if let AgentEvent::Text { text: piece, .. } = event {
+            text.push_str(&piece);
+        }
+    }
+    let reply = stream.finish().await.expect("reply");
+    assert_eq!(text, "Hello Ada");
+    assert_eq!(chat.head().await.expect("head").expect("saved").version, reply.version);
+    println!("  thread.stream: ok");
 }

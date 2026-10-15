@@ -110,6 +110,11 @@ impl Thread {
         self
     }
 
+    /// The agent this thread runs.
+    pub(crate) fn agent(&self) -> &Agent {
+        &self.agent
+    }
+
     /// The [`actor`](Self::actor), if set.
     pub fn actor_name(&self) -> Option<&str> {
         self.actor.as_deref()
@@ -214,6 +219,16 @@ impl Thread {
     }
 
     async fn answer_all(&self, decision: impl Fn() -> Decision) -> Result<Reply, AgentError> {
+        self.answer_all_with(decision, self.agent.run_options())
+            .await
+    }
+
+    /// Gives every pending call `decision()`, with options.
+    pub(crate) async fn answer_all_with(
+        &self,
+        decision: impl Fn() -> Decision,
+        options: RunOptions,
+    ) -> Result<Reply, AgentError> {
         let lease = self.lease().await?;
         let decide = |requests: &[ApprovalRequest]| {
             requests
@@ -221,7 +236,7 @@ impl Thread {
                 .map(|r| (r.call_id.clone(), decision()))
                 .collect()
         };
-        self.resume(&lease, decide, self.agent.run_options()).await
+        self.resume(&lease, decide, options).await
     }
 
     async fn resume(
@@ -274,6 +289,11 @@ impl Thread {
     /// [`Durability::Step`] that includes calls finished just before a
     /// crash.
     pub async fn retry(&self) -> Result<Reply, AgentError> {
+        self.retry_with(self.agent.run_options()).await
+    }
+
+    /// [`retry`](Self::retry) with options.
+    pub(crate) async fn retry_with(&self, options: RunOptions) -> Result<Reply, AgentError> {
         let lease = self.lease().await?;
         let head = self.load().await?;
         let Some((head, snapshot)) = head
@@ -291,7 +311,7 @@ impl Thread {
                 self.id
             )));
         };
-        let (writer, options) = self.prepare(&lease, Some(head), self.agent.run_options());
+        let (writer, options) = self.prepare(&lease, Some(head), options);
         let result = self.agent.retry_with(snapshot, options).await;
         self.commit(&writer, result, "retry").await
     }

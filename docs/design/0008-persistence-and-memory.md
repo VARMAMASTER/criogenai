@@ -1,6 +1,6 @@
 # 0008: Persistence, threads and memory
 
-Status: **Accepted**; §10 steps 1–4 built (§11–§14); step 5 (retention, encryption at rest) built (§15); step 6 (semantic memory search) built (§16). Builds on [0005](0005-core-runtime-extensions.md)
+Status: **Accepted**; §10 steps 1–4 built (§11–§14); step 5 (retention, encryption at rest) built (§15); step 6 (semantic memory search) built (§16); `thread.stream` built (§17). Builds on [0005](0005-core-runtime-extensions.md)
 §5 (snapshots, saved task writes, resume) and gives developers the easy
 interactive API sketched in [0007](0007-public-api.md). Research input:
 [langgraph](../research/langgraph.md) §5 (checkpointing), §6 (interrupts) and §8 (store).
@@ -1015,3 +1015,51 @@ live check (`tests/live`: OpenAI `text-embedding-3-small`, Gemini
 - Vector indexes (`sqlite-vec`, `pgvector`): brute force until a
   benchmark shows the need.
 - Hybrid ranking (keywords and vectors together).
+
+## 17. `thread.stream` as built
+
+§2.2's streaming send, for Rust (task 4 of the roadmap): the events of a
+thread operation as they happen, and its [`Reply`] at the end, with the
+same storage, busy-thread and audit behaviour as `send`.
+
+```rust
+let mut stream = agent.thread("user-42").actor("user:ada").stream("Anything else?");
+while let Some(event) = stream.next().await {
+    if let AgentEvent::Text { text, .. } = event {
+        print!("{text}");
+    }
+}
+let reply = stream.finish().await?;          // saved, like send's Reply
+```
+
+| Method | Streams |
+|---|---|
+| `stream(input)` / `stream_with(input, options)` | `send` |
+| `stream_approve()`, `stream_reject(message)`, `stream_decide(decisions)` | the answers to pending approvals |
+| `stream_retry()` | `retry` |
+
+**`ThreadStream`**: `next()` gives [`AgentEvent`]s (the same as
+`agent.stream`) until the run's last event; `finish()` waits for the
+operation and returns `Result<Reply, AgentError>`; `cancel()` stops the
+run gracefully. Errors before the run (`thread_suspended`,
+`thread_busy`, …) end the events at once and come from `finish()`.
+
+- **The thread is always saved.** The operation runs in a Tokio task.
+  Dropping the stream (a client that disconnects) *cancels* the run
+  instead of aborting the task: the run fails with `cancelled`, and that
+  failure is committed like any other, so `retry` continues it.
+  (Aborting would leave the head `in_progress`.) The task ends on its
+  own; nothing waits for it.
+- **Cancelling is prompt.** A model call in progress is stopped at once:
+  the model node now watches the run's cancel token (before, it ran to
+  the end of the core's cancel grace, 5 s by default, still paying for
+  the answer). A tool call gets that grace unless it watches
+  `ToolContext::cancel_token`.
+- **Delivery** is the core's (0005 §6.3): no event is dropped while the
+  stream is read; a reader that falls behind slows the run only at step
+  boundaries, never inside a model or tool call.
+- **Interrupts from other processes** (§14) cancel the streamed run like
+  any other: the stream ends and `finish()` returns `cancelled`.
+
+Not built: a stream that survives the process (resuming to read events of
+a run started elsewhere); events are not stored.

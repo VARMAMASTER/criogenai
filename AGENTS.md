@@ -56,7 +56,9 @@ write our own implementation.
   truncation, state updates, app context); slice 9: `agent.stream()`.
   The 0004 agent list is complete. Threads (0008 §11): `agent.thread(id)`
   with `send`, `approve`/`reject`/`decide`, `retry`, `cancel`, `history`,
-  `rewind`, `delete`.
+  `rewind`, `delete`; `stream` / `stream_approve` / `stream_reject` /
+  `stream_decide` / `stream_retry` (`ThreadStream`, 0008 §17: a dropped
+  stream cancels and still saves; model calls stop at once on cancel).
 - **Implemented in `agentbuild-storage` (0008 steps 1–5):** `Checkpoint`,
   the `Checkpointer` trait (compare-and-set commit, `put_pending`),
   `InMemoryCheckpointer`, `SqliteCheckpointer` (feature `sqlite`, sqlx
@@ -103,7 +105,7 @@ write our own implementation.
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 513 across the five crates (with `--all-features`; includes the
+- Tests: 518 across the five crates (with `--all-features`; includes the
   getting-started guide's examples), plus the package test. Release prep:
   `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`,
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`

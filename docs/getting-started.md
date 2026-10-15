@@ -280,6 +280,24 @@ To rotate, put a new key first (`k2:…,k1:…`) and call
 `storage.prune()` runs (from a cron job) or in the background with
 `storage.spawn_pruner(every)`.
 
+**Stream a turn to a UI.** `chat.stream(input)` gives the events of
+`send` as they happen, then the saved reply:
+
+```rust,ignore
+let mut stream = chat.stream("Anything else?");
+while let Some(event) = stream.next().await {
+    if let AgentEvent::Text { text, .. } = event {
+        print!("{text}");
+    }
+}
+let reply = stream.finish().await?;
+```
+
+If the client goes away and the stream is dropped, the run is cancelled
+(the model call stops at once) and saved as failed; `chat.retry()`
+continues it. `stream_approve`, `stream_reject`, `stream_decide` and
+`stream_retry` stream the other operations.
+
 Testing tip: SQLite storage needs Tokio's real clock. Under a paused test
 clock (`start_paused`), the database pool's connection timeout fires at
 once; use `Storage::in_memory()` there, or real time with a fast

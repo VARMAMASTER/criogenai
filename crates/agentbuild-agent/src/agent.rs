@@ -1060,6 +1060,22 @@ impl AgentError {
     }
 }
 
+/// `fut`'s output, or `None` if `token` is cancelled first.
+async fn unless_cancelled<F: std::future::Future>(
+    fut: F,
+    token: &agentbuild_core::CancelToken,
+) -> Option<F::Output> {
+    let mut fut = std::pin::pin!(fut);
+    let mut cancelled = std::pin::pin!(token.cancelled());
+    std::future::poll_fn(|cx| {
+        if let std::task::Poll::Ready(output) = fut.as_mut().poll(cx) {
+            return std::task::Poll::Ready(Some(output));
+        }
+        cancelled.as_mut().poll(cx).map(|()| None)
+    })
+    .await
+}
+
 // ---------- audit trail (design 0010) ----------
 
 /// Where agents put the audit context in [`RunOptions::metadata`]: the
@@ -1464,7 +1480,13 @@ async fn model_step(
         on_delta,
         deadline_hit: &deadline_hit,
     };
-    let called = chain.call(request).await;
+    // A cancelled run stops paying for the answer at once; the core reports
+    // the run as `cancelled` (0008 §17).
+    let Some(called) = unless_cancelled(chain.call(request), ctx.cancel_token()).await else {
+        return Err(
+            NodeError::new("the run was cancelled during a model call").with_kind("cancelled")
+        );
+    };
     record_model_call(&inner, &ctx, &called).await?;
     let response = match called {
         Ok(response) => response,

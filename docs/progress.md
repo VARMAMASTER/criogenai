@@ -44,8 +44,8 @@ and push). A task is marked done only when all of that is verified.
 | 1 | Retention and encryption at rest | 0008 §15 | Done |
 | 2 | Vector (semantic) memory search | 0008 §16 | Done |
 | 3 | Audit trail | 0010 | Done |
-| 4 | `thread.stream` | (to write) | Next |
-| 5 | Python SDK | (to write) | Planned |
+| 4 | `thread.stream` | 0008 §17 | Done |
+| 5 | Python SDK | (to write) | Next |
 | 6 | TypeScript SDK | (to write) | Planned |
 | 7 | LLM gateway | 0006 | Planned |
 | 8 | Error catalog and JSON Schemas | (to write) | Planned |
@@ -66,6 +66,23 @@ and push). A task is marked done only when all of that is verified.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-16: `thread.stream` (0008 §17, task 4)
+
+- `ThreadStream` and `Thread::stream` / `stream_with` / `stream_approve`
+  / `stream_reject` / `stream_decide` / `stream_retry`. The operation
+  runs in a Tokio task; dropping the stream cancels (never aborts) so the
+  run is committed as failed and `retry` continues it.
+- Found while testing: cancelling waited for a model call in progress
+  until the core's cancel grace ended (5 s, still paying for tokens).
+  The model node now stops the call when the run's token fires. Done
+  without `tokio::select!`: the agent crate has Tokio's `macros` only for
+  tests, so a `select!` would have broken normal builds (caught by
+  `cargo build` without dev-dependencies).
+- Tests: streamed text and a saved reply, approvals streamed on both
+  sides (audited), a refused stream ends with no events, reject and
+  decide, a dropped stream saved for retry, cancel in under a second
+  (was 5 s).
 
 ### 2026-10-16: audit trail (design 0010, task 3)
 

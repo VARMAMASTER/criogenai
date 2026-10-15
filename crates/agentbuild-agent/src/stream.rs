@@ -1,4 +1,7 @@
-//! Streaming an agent run (design 0004 §8).
+//! Streaming an agent run (design 0004 §8) and a thread operation (0008
+//! §17).
+
+use std::future::Future;
 
 use agentbuild_core::{CancelToken, Event, EventKind, EventReceiver, RunOptions, event_channel};
 use agentbuild_providers::{BlockDelta, Message, MessageDelta, ToolStatus};
@@ -6,7 +9,8 @@ use serde_json::{Map, Value};
 use tokio::task::JoinHandle;
 
 use crate::agent::{Agent, AgentError, AgentInput, AgentResult};
-use crate::approval::ApprovalRequest;
+use crate::approval::{ApprovalRequest, Decision};
+use crate::thread::{Reply, Thread};
 
 /// Channel capacity for [`Agent::stream`].
 const STREAM_CAPACITY: usize = 512;
@@ -172,5 +176,134 @@ impl Agent {
             handle: Some(handle),
             cancel,
         }
+    }
+}
+
+/// A thread operation in the background, with its events (design 0008
+/// §17). Created by [`Thread::stream`] and the other `stream_*` methods.
+///
+/// Read events with [`next`](Self::next) until it returns `None`, then call
+/// [`finish`](Self::finish) for the saved [`Reply`]. Dropping the stream
+/// (a client that went away) cancels the run instead of aborting it, so the
+/// run is still saved (as failed with `cancelled`) and
+/// [`Thread::retry`] continues it.
+#[derive(Debug)]
+pub struct ThreadStream {
+    events: Option<EventReceiver>,
+    handle: Option<JoinHandle<Result<Reply, AgentError>>>,
+    cancel: CancelToken,
+}
+
+impl ThreadStream {
+    /// Runs `operation` on `thread` in a Tokio task, with an event channel
+    /// and a cancel token added to `options`.
+    fn spawn<F, Fut>(thread: &Thread, mut options: RunOptions, operation: F) -> Self
+    where
+        F: FnOnce(Thread, RunOptions) -> Fut,
+        Fut: Future<Output = Result<Reply, AgentError>> + Send + 'static,
+    {
+        let (sender, events) = event_channel(STREAM_CAPACITY);
+        let cancel = CancelToken::new();
+        options = options.cancel_token(cancel.clone()).events(sender);
+        let handle = tokio::spawn(operation(thread.clone(), options));
+        Self {
+            events: Some(events),
+            handle: Some(handle),
+            cancel,
+        }
+    }
+
+    /// The next event, or `None` after the run's last one (at once if the
+    /// operation failed before its run started).
+    pub async fn next(&mut self) -> Option<AgentEvent> {
+        let event = self.events.as_mut()?.recv().await?;
+        Some(AgentEvent::from_event(event))
+    }
+
+    /// Cancels the run (it fails with `cancelled` and is saved).
+    pub fn cancel(&self) {
+        self.cancel.cancel();
+    }
+
+    /// Waits for the operation and returns its reply, as the non-streaming
+    /// method would. Unread events are dropped.
+    pub async fn finish(mut self) -> Result<Reply, AgentError> {
+        self.events = None;
+        let handle = self.handle.take().expect("finish consumes the stream");
+        match handle.await {
+            Ok(result) => result,
+            Err(err) if err.is_panic() => std::panic::resume_unwind(err.into_panic()),
+            Err(_) => panic!("thread task was cancelled (is the Tokio runtime shutting down?)"),
+        }
+    }
+}
+
+impl Drop for ThreadStream {
+    fn drop(&mut self) {
+        // Cancel, never abort: the operation must still save the thread.
+        if self.handle.is_some() {
+            self.cancel.cancel();
+        }
+    }
+}
+
+impl Thread {
+    /// [`send`](Self::send), streaming its events (design 0008 §17).
+    pub fn stream(&self, input: impl Into<AgentInput>) -> ThreadStream {
+        self.stream_with(input, self.agent().run_options())
+    }
+
+    /// [`stream`](Self::stream) with options. Any event sender or cancel
+    /// token in `options` is replaced: cancel with [`ThreadStream::cancel`].
+    pub fn stream_with(&self, input: impl Into<AgentInput>, options: RunOptions) -> ThreadStream {
+        let input = input.into();
+        ThreadStream::spawn(self, options, move |thread, options| async move {
+            thread.send_with(input, options).await
+        })
+    }
+
+    /// [`approve`](Self::approve), streaming.
+    pub fn stream_approve(&self) -> ThreadStream {
+        ThreadStream::spawn(
+            self,
+            self.agent().run_options(),
+            |thread, options| async move { thread.answer_all_with(Decision::approve, options).await },
+        )
+    }
+
+    /// [`reject`](Self::reject), streaming.
+    pub fn stream_reject(&self, message: impl Into<String>) -> ThreadStream {
+        let message = message.into();
+        ThreadStream::spawn(
+            self,
+            self.agent().run_options(),
+            |thread, options| async move {
+                thread
+                    .answer_all_with(|| Decision::reject(message.clone()), options)
+                    .await
+            },
+        )
+    }
+
+    /// [`decide`](Self::decide), streaming.
+    pub fn stream_decide<I>(&self, decisions: I) -> ThreadStream
+    where
+        I: IntoIterator<Item = (String, Decision)>,
+    {
+        let decisions: Vec<(String, Decision)> = decisions.into_iter().collect();
+        ThreadStream::spawn(
+            self,
+            self.agent().run_options(),
+            |thread, options| async move { thread.decide_with(decisions, options).await },
+        )
+    }
+
+    /// [`retry`](Self::retry), streaming.
+    pub fn stream_retry(&self) -> ThreadStream {
+        ThreadStream::spawn(
+            self,
+            self.agent().run_options(),
+            |thread, options| async move { thread.retry_with(options).await },
+        )
     }
 }

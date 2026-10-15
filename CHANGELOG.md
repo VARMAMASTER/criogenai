@@ -60,6 +60,13 @@ First release, planned as 0.1.0 (Rust crates only).
 
 ### agentbuild-agent: agents
 
+- `Thread::stream` (and `stream_approve`, `stream_reject`,
+  `stream_decide`, `stream_retry`): a thread operation's events as they
+  happen, then the saved `Reply` (`ThreadStream`). Dropping the stream
+  cancels the run and still saves it, so `retry` continues it.
+- A cancelled run stops its model call at once (it used to run until the
+  cancel grace ended).
+
 - The model ⇄ tools loop: argument validation against JSON Schema,
   concurrent tool calls with limits and timeouts, tool errors the model can
   react to, retries for safe tools, result truncation, state updates.

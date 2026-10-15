@@ -23,7 +23,8 @@ with tools, run as a loop on the AgentBuild workflow engine.
   storage (in memory, SQLite with the `sqlite` feature, or Postgres with
   `postgres`; encrypted at rest with `encryption`); pending
   approvals and failed runs wait there for `approve()` or `retry()` from
-  any agent instance
+  any agent instance; `chat.stream(input)` streams a turn's events and
+  still saves it, even when the client disconnects
 - long-term memory: `Memory::by_state("user_id", users)` keeps facts per
   user across conversations (found by meaning with `.semantic(embedder)`),
   recalls them before each model call, and
