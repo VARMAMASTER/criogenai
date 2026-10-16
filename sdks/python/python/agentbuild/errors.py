@@ -52,10 +52,15 @@ class CancelledError(AgentBuildError):
     """The run was cancelled (``cancelled``)."""
 
 
+# By code, as schemas/error-codes.json's `family` says (design 0013); the
+# tests check every code against it.
 _BY_CODE = {
     "model_failed": ModelError,
     "tool_failed": ToolExecutionError,
     "limit_exceeded": LimitExceededError,
+    "step_limit_exceeded": LimitExceededError,
+    "deadline_exceeded": LimitExceededError,
+    "workflow_mismatch": ValidationError,
     "thread_busy": ThreadBusyError,
     "thread_suspended": ThreadSuspendedError,
     "cancelled": CancelledError,

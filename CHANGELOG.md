@@ -46,6 +46,19 @@ First release, planned as 0.1.0 (Rust crates only).
   block, also when streamed (`OpenAiQuirks::think_tags`, on by default).
 - `FakeModel` for tests: scripted replies, realistic delays, errors.
 
+### Error catalog and JSON Schemas (design 0013)
+
+- `schemas/error-codes.json`: every stable error code with its layer,
+  category, retryability, SDK error class and gateway HTTP status;
+  `docs/errors.md` is generated from it. Tests keep the Rust sources, the
+  page and both SDKs in line with it.
+- `schemas/agentbuild.schema.json`: JSON Schemas of the data every
+  language exchanges, checked against values the engine writes.
+- Tool-argument validation now enforces `anyOf`, `oneOf`, `allOf` and
+  local `$ref` (e.g. Pydantic `Optional` fields and nested models).
+- SDKs: `step_limit_exceeded` and `deadline_exceeded` raise
+  `LimitExceededError`, `workflow_mismatch` raises `ValidationError`.
+
 ### agentbuild-gateway: LLM gateway, first slice (design 0006 §12)
 
 - An OpenAI-compatible HTTP gateway: `POST /v1/chat/completions`

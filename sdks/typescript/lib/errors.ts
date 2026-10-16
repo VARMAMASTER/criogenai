@@ -31,10 +31,15 @@ export class ValidationError extends AgentBuildError {}
 /** The run was cancelled (`cancelled`), e.g. by an `AbortSignal`. */
 export class CancelledError extends AgentBuildError {}
 
+// By code, as schemas/error-codes.json's `family` says (design 0013); the
+// tests check every code against it.
 const BY_CODE: Record<string, typeof AgentBuildError> = {
   model_failed: ModelError,
   tool_failed: ToolExecutionError,
   limit_exceeded: LimitExceededError,
+  step_limit_exceeded: LimitExceededError,
+  deadline_exceeded: LimitExceededError,
+  workflow_mismatch: ValidationError,
   thread_busy: ThreadBusyError,
   thread_suspended: ThreadSuspendedError,
   cancelled: CancelledError,

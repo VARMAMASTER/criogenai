@@ -413,3 +413,38 @@ def test_cancel_reaches_a_stream_that_another_task_is_reading():
         assert asyncio.get_running_loop().time() - started < 2.0
 
     run(scenario())
+
+
+def test_every_catalog_code_raises_its_family_class():
+    """schemas/error-codes.json (design 0013): the scripts pass its path."""
+    import json
+    import pathlib
+
+    import agentbuild
+    from agentbuild.errors import error_for
+
+    path = os.environ.get("AGENTBUILD_ERROR_CATALOG") or str(
+        pathlib.Path(__file__).resolve().parents[3] / "schemas" / "error-codes.json"
+    )
+    catalog = json.load(open(path, encoding="utf-8"))
+    classes = {
+        "model": agentbuild.ModelError,
+        "tool": agentbuild.ToolExecutionError,
+        "limit": agentbuild.LimitExceededError,
+        "busy": agentbuild.ThreadBusyError,
+        "suspended": agentbuild.ThreadSuspendedError,
+        "storage": agentbuild.StorageError,
+        "validation": agentbuild.ValidationError,
+        "cancelled": agentbuild.CancelledError,
+        "other": agentbuild.AgentBuildError,
+    }
+    checked = 0
+    for entry in catalog["codes"]:
+        family = entry["family"]
+        if family is None:
+            continue
+        error = error_for(entry["code"], "x")
+        assert type(error) is classes[family], (entry["code"], type(error).__name__, family)
+        assert error.code == entry["code"]
+        checked += 1
+    assert checked > 20

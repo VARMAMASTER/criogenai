@@ -48,8 +48,8 @@ and push). A task is marked done only when all of that is verified.
 | 5 | Python SDK (first slice) | 0011 | Done |
 | 6 | TypeScript SDK (first slice) | 0012 | Done |
 | 7 | LLM gateway (first slice) | 0006 §12 | Done |
-| 8 | Error catalog and JSON Schemas | (to write) | Next |
-| 9 | Workflow threads | (to write) | Planned |
+| 8 | Error catalog and JSON Schemas | 0013 | Done |
+| 9 | Workflow threads | (to write) | Next |
 | 10 | Benchmarks | (to write) | Planned |
 
 ## Open decisions
@@ -66,6 +66,28 @@ and push). A task is marked done only when all of that is verified.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-16: error catalog and JSON Schemas (design 0013, task 8)
+
+- `schemas/error-codes.json` (53 codes) and `schemas/agentbuild.schema.json`
+  (28 definitions). `docs/errors.md` generated from the catalog; 0003 §9
+  now points to it.
+- The source scan found a code no document listed:
+  `memo_type_mismatch` (core's task memo), now in the catalog. It also
+  found SDK mappings that disagreed with the catalog
+  (`step_limit_exceeded`, `deadline_exceeded`, `workflow_mismatch` raised
+  the base class); fixed in both SDKs.
+- The validator gained `anyOf`, `oneOf`, `allOf` and local `$ref`
+  (with a depth guard for self-references); for a failed `oneOf` it
+  reports the variant whose `const` discriminator matches. Tool
+  arguments are checked with it too, so Pydantic `Optional` and nested
+  models are now enforced (a deliberate tightening, 0013 §4).
+- Tests: catalog (4), schemas (5: every content block, delta, model
+  error kind, decision, audit record, real agent messages and approval
+  requests; wrong values rejected with paths), validator unit test, the
+  gateway checks its usage records, both SDKs check every catalog code.
+- A dev Python module built before task 5's cancel fix made one test
+  fail locally; rebuilding fixed it (the pipeline always builds fresh).
 
 ### 2026-10-16: LLM gateway, first slice (design 0006 §12, task 7)
 

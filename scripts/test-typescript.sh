@@ -28,4 +28,4 @@ npm install --silent --no-audit --no-fund "$tarball"
 cp "$sdk/examples/consumer.mjs" .
 node consumer.mjs
 cp -r "$sdk/test" ./test
-AGENTBUILD_SDK=@agentbuild/sdk node --test test/*.test.js
+AGENTBUILD_ERROR_CATALOG="$root/schemas/error-codes.json" AGENTBUILD_SDK=@agentbuild/sdk node --test test/*.test.js

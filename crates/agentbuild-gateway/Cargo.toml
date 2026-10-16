@@ -30,6 +30,8 @@ toml = { version = "0.9", default-features = false, features = ["std", "parse", 
 uuid.workspace = true
 
 [dev-dependencies]
+# Checks usage records against schemas/agentbuild.schema.json (design 0013).
+agentbuild-agent = { path = "../agentbuild-agent" }
 reqwest = { version = "0.13", default-features = false, features = ["rustls", "json", "stream"] }
 
 [lints]

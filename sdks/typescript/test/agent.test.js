@@ -339,3 +339,30 @@ test("limits, construction errors and model names", async () => {
     delete process.env.OPENAI_API_KEY;
   }
 });
+
+test("every catalog code raises its family class", () => {
+  // schemas/error-codes.json (design 0013): the scripts pass its path.
+  const file = process.env.AGENTBUILD_ERROR_CATALOG || path.join(__dirname, "..", "..", "..", "schemas", "error-codes.json");
+  const catalog = JSON.parse(fs.readFileSync(file, "utf8"));
+  const { errorFor } = require(process.env.AGENTBUILD_SDK ? `${process.env.AGENTBUILD_SDK}/dist/errors` : "../dist/errors");
+  const classes = {
+    model: sdk.ModelError,
+    tool: sdk.ToolExecutionError,
+    limit: sdk.LimitExceededError,
+    busy: sdk.ThreadBusyError,
+    suspended: sdk.ThreadSuspendedError,
+    storage: sdk.StorageError,
+    validation: sdk.ValidationError,
+    cancelled: sdk.CancelledError,
+    other: sdk.AgentBuildError,
+  };
+  let checked = 0;
+  for (const entry of catalog.codes) {
+    if (entry.family === null) continue;
+    const error = errorFor(entry.code, "x");
+    assert.equal(error.constructor, classes[entry.family], `${entry.code}: ${error.constructor.name}, wanted ${entry.family}`);
+    assert.equal(error.code, entry.code);
+    checked += 1;
+  }
+  assert.ok(checked > 20);
+});

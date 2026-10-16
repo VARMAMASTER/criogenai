@@ -332,8 +332,12 @@ primary error.
 ## 9. Error code catalog
 
 Codes are stable API: they may be added, never renamed or removed before 1.0
-without a deprecation cycle. This catalog will be generated from the Rust enums
-and checked in CI, so docs and SDK mappings can't drift.
+without a deprecation cycle. **The authoritative list is
+[`schemas/error-codes.json`](../../schemas/error-codes.json)**, shown as
+[`docs/errors.md`](../errors.md) (design 0013): tests fail when the Rust
+sources raise a code it lacks, when the page differs from it, or when an
+SDK maps a code to the wrong class. The table below is the original design
+record; where they differ, the catalog wins.
 
 | Code | Category | Raised by | Status |
 |---|---|---|---|

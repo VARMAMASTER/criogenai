@@ -37,6 +37,19 @@ fn client(base: &str, route: &str, key: Option<&str>) -> ProviderModel {
     .unwrap()
 }
 
+/// `record` is a `UsageRecord` as schemas/agentbuild.schema.json describes.
+fn matches_schema(record: &UsageRecord) {
+    let path = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../../schemas/agentbuild.schema.json"
+    );
+    let mut schema: Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
+    schema["$ref"] = json!("#/$defs/UsageRecord");
+    let value = serde_json::to_value(record).unwrap();
+    let problems = agentbuild_agent::validate_arguments(&schema, &value);
+    assert!(problems.is_empty(), "{value}: {problems:?}");
+}
+
 fn ask(text: &str) -> ModelRequest {
     ModelRequest::new(vec![Message::user(text)])
 }
@@ -61,6 +74,7 @@ async fn an_openai_client_gets_answers_and_tool_calls_streamed_or_not() {
     assert_eq!(answer.finish_reason, FinishReason::Stop);
     assert!(answer.usage.input_tokens > 0);
     let record: UsageRecord = usage.recv().await.unwrap();
+    matches_schema(&record);
     assert_eq!(record.route, "support");
     assert_eq!(record.model, "acme/fake");
     assert_eq!(record.outcome, "ok");
@@ -215,6 +229,7 @@ async fn upstream_errors_keep_their_kind_and_routes_fall_back() {
         .unwrap();
     assert_eq!(answer.message.text(), "from the backup");
     let record = usage.recv().await.unwrap();
+    matches_schema(&record);
     assert_eq!(record.model, "backup/fake");
     assert_eq!(record.fallbacks, 1);
 

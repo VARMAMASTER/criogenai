@@ -36,4 +36,4 @@ venv_python="$(bin_of "$work/venv")/python"
 cp -r "$root/sdks/python/tests" "$work/tests"
 cd "$work"
 "$venv_python" "$root/sdks/python/examples/consumer.py"
-"$venv_python" -m pytest -q -p no:cacheprovider tests
+AGENTBUILD_ERROR_CATALOG="$root/schemas/error-codes.json" "$venv_python" -m pytest -q -p no:cacheprovider tests

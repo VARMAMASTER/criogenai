@@ -30,6 +30,7 @@ dependencies = [
 name = "agentbuild-gateway"
 version = "0.1.0"
 dependencies = [
+ "agentbuild-agent",
  "agentbuild-providers",
  "axum",
  "futures-util",

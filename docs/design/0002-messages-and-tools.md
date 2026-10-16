@@ -238,6 +238,12 @@ flowchart TD
   failure there is reported the same way (`invalid_arguments`).
 - Unknown keys are rejected when the schema says `additionalProperties: false`.
   This is the default for inferred schemas.
+- Supported keywords (0013 §4): `type`, `properties`, `required`,
+  `additionalProperties`, `items`, `enum`, `const`, bounds and lengths,
+  `anyOf`, `oneOf`, `allOf`, and local `$ref` (`#/$defs/…`). Since 0013
+  the last four are enforced, which covers Pydantic's `Optional` fields
+  and nested models; `pattern`, `format` and remote references are
+  ignored.
 
 ### 5.2 Execution rules
 

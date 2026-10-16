@@ -136,11 +136,23 @@ write our own implementation.
   client goes away. Checked live with the official `openai` Python SDK
   against OpenAI and Gemini upstreams. Not yet: relay fast path,
   `/v1/messages`, budgets, rate limits.
+- **Implemented: error catalog and JSON Schemas (0013).**
+  `schemas/error-codes.json` (every stable code: layers, category,
+  retryable, SDK family, gateway HTTP status) and
+  `schemas/agentbuild.schema.json` (Message, ContentBlock, ToolSpec,
+  ModelRequest/Response, MessageDelta, ModelError, ApprovalRequest,
+  Decision, AuditRecord, UsageRecord, ErrorObject). Tests:
+  `agentbuild-agent/tests/catalog.rs` (scans the sources for raised
+  codes; `docs/errors.md` is generated: `AGENTBUILD_UPDATE_DOCS=1 cargo
+  test -p agentbuild-agent --test catalog`), `tests/schemas.rs` (real
+  values validate), SDK tests check their error classes against the
+  catalog. The validator now enforces `anyOf`/`oneOf`/`allOf`/local
+  `$ref` (tool arguments too).
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 530 across the six crates (with `--all-features`; includes the
+- Tests: 540 across the six crates (with `--all-features`; includes the
   getting-started guide's examples), plus the package test. Release prep:
   `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`,
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
@@ -150,9 +162,8 @@ write our own implementation.
   UI; real OpenAI/Gemini models, manual only, not in CI or the workspace).
   Keys live in `~/.agentbuild-keys.env`, never in the repo.
 - **Next:** the 10-task roadmap in `docs/progress.md` ("Roadmap
-  tasks"), one full cycle each:
-  error catalog
-  and JSON Schemas, workflow threads, benchmarks. The user will build their
+  tasks"), one full cycle each: workflow threads, benchmarks; then the
+  release blockers (cross-platform CI and SDK packages, `Storage::close`). The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
@@ -300,6 +311,7 @@ git-ignored. REA is not registered as an MCP server in any agent config.
 | Question | File |
 |---|---|
 | What does a term mean? Naming rules? | `docs/glossary.md` |
+| What does an error code mean? | `docs/errors.md` (from `schemas/error-codes.json`) |
 | How does a run execute? | `docs/architecture.md` §4, `crates/agentbuild-core/src/runtime.rs` |
 | What are the exact semantics? | `docs/design/0001-execution-model.md` |
 | What's done, what's next, what's undecided? | `docs/progress.md` |
