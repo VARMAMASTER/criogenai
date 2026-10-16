@@ -49,8 +49,8 @@ and push). A task is marked done only when all of that is verified.
 | 6 | TypeScript SDK (first slice) | 0012 | Done |
 | 7 | LLM gateway (first slice) | 0006 §12 | Done |
 | 8 | Error catalog and JSON Schemas | 0013 | Done |
-| 9 | Workflow threads | (to write) | Next |
-| 10 | Benchmarks | (to write) | Planned |
+| 9 | Workflow threads | 0008 §18 | Done |
+| 10 | Benchmarks | (to write) | Next |
 
 ## Open decisions
 
@@ -66,6 +66,23 @@ and push). A task is marked done only when all of that is verified.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-16: workflow threads (0008 §18, task 9)
+
+- `WorkflowThread` in `agentbuild-storage` (not the agent crate, so
+  workflows without agents need no agent dependency): `run`, `resume`,
+  `retry`, `cancel`, `head`, `state`, `interrupts`, `history`, `rewind`,
+  `delete`, `actor`, `with_options`; `ThreadError` (`Run`, `Storage`,
+  `State`) with catalog codes; `Turn`.
+- Same rules as agent threads: leases and `OnBusy`, the
+  `thread_suspended` / `thread_interrupted` guards, per-step saving,
+  failures saved with their snapshot, `run.finished` and `run.resumed`
+  audit records; refused resume input writes nothing.
+- Tests (4): an expense workflow paused for approval and resumed from
+  another handle (exact audit trail), refused input, failure then retry
+  without re-running finished nodes, rewind to the pause, cancel saved as
+  failed, a pause surviving a reopened SQLite database. Package consumer
+  extended.
 
 ### 2026-10-16: error catalog and JSON Schemas (design 0013, task 8)
 

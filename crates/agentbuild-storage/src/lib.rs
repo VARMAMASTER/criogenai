@@ -59,6 +59,7 @@ mod sql;
 mod sqlite;
 mod storage;
 mod store;
+mod workflow_thread;
 mod writer;
 
 pub use audit::{
@@ -87,6 +88,7 @@ pub use store::{
     Embedding, InMemoryStore, MAX_DIMENSIONS, MAX_KEY_BYTES, MAX_VALUE_BYTES, MemoryItem,
     MemoryStore, Namespace, ScopedMemory, SearchQuery,
 };
+pub use workflow_thread::{ThreadError, Turn, WorkflowThread};
 pub use writer::ThreadWriter;
 
 // Compiles and runs the README's example with the doctests.

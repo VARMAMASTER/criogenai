@@ -244,6 +244,19 @@ Facts the model saves with `remember` get their vector automatically. A
 self-hosted embedding model works the same way
 (`ProviderEmbedder::new(Endpoint::ollama(), "nomic-embed-text")`).
 
+**Workflows that wait for a person.** Any workflow gets the same
+durable threads. A node that returns `NodeOutput::suspend(...)` pauses the
+run; it waits in storage until someone answers, from any process:
+
+```rust,ignore
+let thread = storage.workflow_thread(&expenses, "expense-1");
+let turn = thread.run(State::new().with("amount", json!(120))).await?;
+if turn.is_suspended() { /* show turn.interrupts() to a manager */ }
+// later, elsewhere:
+storage.workflow_thread(&expenses, "expense-1").actor("user:boss")
+    .resume([("approve", json!("yes"))]).await?;
+```
+
 **Who did what?** Turn on the audit trail and name who acts:
 
 ```rust,ignore

@@ -46,6 +46,14 @@ First release, planned as 0.1.0 (Rust crates only).
   block, also when streamed (`OpenAiQuirks::think_tags`, on by default).
 - `FakeModel` for tests: scripted replies, realistic delays, errors.
 
+### Workflow threads (design 0008 §18)
+
+- `Storage::workflow_thread(&workflow, id)`: durable, leased, audited
+  threads for any workflow. `run` continues from the stored state,
+  `resume` answers the nodes that paused for a human (from any process),
+  `retry` continues a failed run without repeating finished nodes; plus
+  `cancel`, `interrupts`, `history`, `rewind`, `delete` and `actor`.
+
 ### Error catalog and JSON Schemas (design 0013)
 
 - `schemas/error-codes.json`: every stable error code with its layer,

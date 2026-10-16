@@ -86,7 +86,11 @@ write our own implementation.
   `reencrypt`; AES-256-GCM per-row keys (HKDF), memory keys as HMAC tags,
   `agentbuild_settings` refuses opening an encrypted database without
   its keys. SQLite runs with `secure_delete`. Step 6 (§16): semantic
-  memory search. `Embedder` (`ProviderEmbedder` for OpenAI-compatible
+  memory search. Workflow threads (§18): `Storage::workflow_thread(&wf,
+  id)` → `WorkflowThread` (`run`, `resume(values)`, `retry`, `cancel`,
+  `interrupts`, `history`, `rewind`, `delete`, `actor`), `ThreadError`,
+  `Turn`; same leases, writer, guards and audit records as agent
+  threads. `Embedder` (`ProviderEmbedder` for OpenAI-compatible
   `/embeddings`, `FakeEmbedder` for tests) in providers; `Embedding`,
   `MemoryStore::put_embedded`, `SearchQuery::similar_to` (brute-force
   cosine in Rust, every backend; vectors encrypted with the rest) in
@@ -152,7 +156,7 @@ write our own implementation.
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 540 across the six crates (with `--all-features`; includes the
+- Tests: 544 across the six crates (with `--all-features`; includes the
   getting-started guide's examples), plus the package test. Release prep:
   `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`,
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
@@ -162,7 +166,7 @@ write our own implementation.
   UI; real OpenAI/Gemini models, manual only, not in CI or the workspace).
   Keys live in `~/.agentbuild-keys.env`, never in the repo.
 - **Next:** the 10-task roadmap in `docs/progress.md` ("Roadmap
-  tasks"), one full cycle each: workflow threads, benchmarks; then the
+  tasks"), one full cycle each: benchmarks; then the
   release blockers (cross-platform CI and SDK packages, `Storage::close`). The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and

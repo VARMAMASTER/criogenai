@@ -41,6 +41,7 @@ async fn main() {
     audit_trail().await;
     thread_stream().await;
     llm_gateway().await;
+    workflow_threads().await;
     println!("package smoke test: ok");
 }
 
@@ -857,4 +858,39 @@ models = [{ provider = \"ollama\", model = \"llama3.2\" }]",
         .expect("answer");
     assert_eq!(answer.message.text(), "through the gateway");
     println!("  LLM gateway (OpenAI wire format, keys): ok");
+}
+
+async fn workflow_threads() {
+    use agentbuild_storage::Storage;
+
+    // A workflow that asks a human before it finishes.
+    let workflow = WorkflowBuilder::new()
+        .add_node(
+            "ask",
+            node_with_context(|ctx, _| async move {
+                Ok(match ctx.resume() {
+                    None => NodeOutput::suspend(Update::new(), json!("approve?")),
+                    Some(answer) => Update::new().set("answer", answer.clone()).into(),
+                })
+            }),
+        )
+        .set_entry("ask")
+        .add_edge("ask", END)
+        .build()
+        .expect("valid workflow");
+    let storage = Storage::connect("sqlite::memory:").await.expect("open");
+    let turn = storage
+        .workflow_thread(&workflow, "w-1")
+        .run(State::new())
+        .await
+        .expect("run");
+    assert!(turn.is_suspended());
+    let turn = storage
+        .workflow_thread(&workflow, "w-1")
+        .actor("user:boss")
+        .resume([("ask", json!("yes"))])
+        .await
+        .expect("resume");
+    assert_eq!(turn.state().get("answer"), Some(&json!("yes")));
+    println!("  workflow threads (pause, resume from another handle): ok");
 }

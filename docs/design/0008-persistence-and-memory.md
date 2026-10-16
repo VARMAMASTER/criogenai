@@ -1,6 +1,6 @@
 # 0008: Persistence, threads and memory
 
-Status: **Accepted**; §10 steps 1–4 built (§11–§14); step 5 (retention, encryption at rest) built (§15); step 6 (semantic memory search) built (§16); `thread.stream` built (§17). Builds on [0005](0005-core-runtime-extensions.md)
+Status: **Accepted**; §10 steps 1–4 built (§11–§14); step 5 (retention, encryption at rest) built (§15); step 6 (semantic memory search) built (§16); `thread.stream` built (§17); workflow threads built (§18). Builds on [0005](0005-core-runtime-extensions.md)
 §5 (snapshots, saved task writes, resume) and gives developers the easy
 interactive API sketched in [0007](0007-public-api.md). Research input:
 [langgraph](../research/langgraph.md) §5 (checkpointing), §6 (interrupts) and §8 (store).
@@ -1063,3 +1063,51 @@ run gracefully. Errors before the run (`thread_suspended`,
 
 Not built: a stream that survives the process (resuming to read events of
 a run started elsewhere); events are not stored.
+
+## 18. Workflow threads as built
+
+Task 9 of the roadmap: §2.2's "workflows get the same API". Any core
+`Workflow` gets durable, leased, audited threads from `Storage`, so a
+workflow that pauses for a human (a `Suspend`, 0005 §2) can wait for days
+and be answered from another process.
+
+```rust
+let thread = storage.workflow_thread(&expenses, "expense-1").actor("user:ada");
+let turn = thread.run(State::new().with("amount", json!(120))).await?;
+if turn.is_suspended() {
+    // turn.interrupts(): which nodes wait, and what they asked for
+}
+// later, anywhere:
+storage.workflow_thread(&expenses, "expense-1")
+    .actor("user:boss")
+    .resume([("approve", json!("yes"))])
+    .await?;
+```
+
+| Method | Does |
+|---|---|
+| `run(input)` | Runs from the entry node on the stored state plus `input`'s values (an input key replaces the stored one) |
+| `resume(values)` | One value per waiting node (what it reads as `ctx.resume()`); refused input (`resume_invalid`) changes nothing |
+| `retry()` | Continues a failed or interrupted run; finished nodes are not run again |
+| `cancel()`, `head()`, `state()`, `interrupts()`, `history(n)`, `rewind(id)`, `delete()` | As for agent threads (§11) |
+| `actor(name)`, `with_options(options)` | Who acts (audit trail); default run options |
+
+Rules are the agent thread's: one run per thread at a time (leases,
+`OnBusy`, across processes with `ThreadLocks`), `thread_suspended` /
+`thread_interrupted` guards, saved per step with durability `step`, a
+failed run committed with its snapshot, every outcome recorded in the
+audit trail (`run.finished`, and `run.resumed` per answered node before
+the run continues).
+
+Errors are a `ThreadError`: `Run` (the core's `RunError`, with its
+snapshot), `Storage`, or `State` (`thread_suspended`,
+`thread_interrupted`, `resume_invalid`); `code()` gives the catalog code.
+
+The module lives in `agentbuild-storage` (which already depends on the
+core), not in the agent crate: workflows without agents need no agent
+dependency. Agent threads keep their own type, since a `Reply` carries
+agent results (text, approvals); both use the same leases, writer and
+checkpoint rules.
+
+Not built: the SDKs' workflow threads (they come with SDK workflows),
+streaming a workflow thread.
