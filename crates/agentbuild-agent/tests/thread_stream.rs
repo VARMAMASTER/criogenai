@@ -198,3 +198,66 @@ async fn cancel_ends_the_stream_with_cancelled() {
         started.elapsed()
     );
 }
+
+#[tokio::test]
+async fn a_threads_options_reach_its_tools_as_metadata() {
+    use std::sync::Mutex;
+
+    let seen: Arc<Mutex<Vec<Option<serde_json::Value>>>> = Arc::default();
+    let record = seen.clone();
+    let probe = tool_fn(
+        ToolSpec::new("probe", "", json!({"type": "object"})),
+        move |_args, ctx: agentbuild_agent::ToolContext| {
+            let record = record.clone();
+            async move {
+                record.lock().unwrap().push(ctx.metadata().cloned());
+                Ok::<_, ToolError>("seen")
+            }
+        },
+    );
+    let agent = Agent::builder(instant(vec![
+        FakeReply::tool_call("probe", json!({})),
+        FakeReply::text("one"),
+        FakeReply::tool_call("probe", json!({})),
+        FakeReply::text("two"),
+    ]))
+    .tool(probe)
+    .build()
+    .unwrap();
+    let options = agent.run_options().metadata(json!({"tenant": "clinic-7"}));
+    let chat = agent.thread("t").actor("user:ada").with_options(options);
+    chat.send("go").await.unwrap();
+    chat.stream("again").finish().await.unwrap();
+    let seen = seen.lock().unwrap();
+    assert_eq!(seen.len(), 2);
+    for metadata in seen.iter() {
+        let metadata = metadata.as_ref().unwrap();
+        // The app's keys, plus the audit context the thread adds.
+        assert_eq!(metadata["tenant"], "clinic-7");
+        assert_eq!(metadata["agentbuild_audit"]["actor"], "user:ada");
+        assert_eq!(metadata["agentbuild_audit"]["thread_id"], "t");
+    }
+}
+
+#[tokio::test]
+async fn the_cancel_token_stops_a_stream_another_task_is_reading() {
+    let model = Arc::new(
+        FakeModel::with_delay(Duration::from_secs(5), Duration::from_secs(5))
+            .then(FakeReply::text("never")),
+    );
+    let agent = Agent::builder_shared(model.clone()).build().unwrap();
+    let mut stream = agent.thread("t").stream("hi");
+    let token = stream.cancel_token();
+    let reader = tokio::spawn(async move {
+        while stream.next().await.is_some() {}
+        stream.finish().await
+    });
+    while model.requests().is_empty() {
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    let started = tokio::time::Instant::now();
+    token.cancel();
+    let result = reader.await.unwrap();
+    assert_eq!(result.unwrap_err().code, "cancelled");
+    assert!(started.elapsed() < Duration::from_secs(1));
+}

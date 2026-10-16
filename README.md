@@ -9,8 +9,11 @@ and human approval, conversations stored in memory, SQLite or Postgres
 with crash recovery, encryption at rest and an audit trail, and
 OpenTelemetry export.
 
-**Planned, not built yet:** Python and TypeScript SDKs on the same Rust
-engine (sketched in [docs/design/0007-public-api.md](docs/design/0007-public-api.md)),
+**Python:** a first SDK slice in [`sdks/python`](sdks/python) (agents,
+tools, approvals, threads, storage, memory; design 0011).
+
+**Planned, not built yet:** Python workflows and the TypeScript SDK on the
+same Rust engine (sketched in [docs/design/0007-public-api.md](docs/design/0007-public-api.md)),
 and an embeddable LLM gateway. There are no performance claims until benchmarks are in this
 repository.
 
@@ -158,7 +161,7 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 | Phase | Scope                                                         | Status      |
 |-------|---------------------------------------------------------------|-------------|
 | 1     | Rust execution core                                           | Done (0.1)  |
-| 2     | Python SDK (PyO3 + maturin)                                   | Planned     |
+| 2     | Python SDK (PyO3 + maturin): agents, threads, storage done; workflows planned | In progress |
 | 3     | TypeScript SDK (NAPI-RS)                                      | Planned     |
 | 4     | Agents, tools, model providers (LLM gateway: planned)         | Done (0.1)  |
 | 5     | Persistence (threads, SQLite, Postgres, crash recovery, long-term memory with keyword and semantic search, retention, encryption at rest; vector indexes: planned) | Done (0.1)  |

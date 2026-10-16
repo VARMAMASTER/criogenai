@@ -112,7 +112,7 @@ agent = Agent(
     tools=[get_order, issue_refund],
     output=Resolution,                          # result.output is a Resolution
     limits=Limits(model_calls=15, deadline="2m"),
-    hooks=[Approve(tools=["issue_refund"])],    # human approval (Level 4)
+    approve=["issue_refund"],                   # human approval (Level 4; 0011 §7)
 )
 result = await agent.run("Refund A-1001, it arrived broken", context=AppDeps(payments=…))
 ```

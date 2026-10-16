@@ -52,6 +52,7 @@ pub struct Thread {
     agent: Agent,
     id: String,
     actor: Option<String>,
+    options: Option<RunOptions>,
 }
 
 /// The result of a [`Thread`] call that did not fail.
@@ -92,6 +93,7 @@ impl Agent {
             agent: self.clone(),
             id: id.into(),
             actor: None,
+            options: None,
         }
     }
 }
@@ -110,9 +112,20 @@ impl Thread {
         self
     }
 
-    /// The agent this thread runs.
-    pub(crate) fn agent(&self) -> &Agent {
-        &self.agent
+    /// The run options every operation of this handle starts from
+    /// (instead of the agent's): metadata, deadline, observers. The
+    /// `*_with` methods still take their own.
+    pub fn with_options(mut self, options: RunOptions) -> Self {
+        self.options = Some(options);
+        self
+    }
+
+    /// The options operations start from: [`with_options`](Self::with_options)
+    /// or the agent's.
+    pub(crate) fn run_options(&self) -> RunOptions {
+        self.options
+            .clone()
+            .unwrap_or_else(|| self.agent.run_options())
     }
 
     /// The [`actor`](Self::actor), if set.
@@ -142,7 +155,7 @@ impl Thread {
     /// A failed run is still saved, so [`retry`](Self::retry) can continue
     /// it; the next `send` starts from its state.
     pub async fn send(&self, input: impl Into<AgentInput>) -> Result<Reply, AgentError> {
-        self.send_with(input, self.agent.run_options()).await
+        self.send_with(input, self.run_options()).await
     }
 
     /// [`send`](Self::send) with options (events, deadline, metadata). A
@@ -201,7 +214,7 @@ impl Thread {
     where
         I: IntoIterator<Item = (String, Decision)>,
     {
-        self.decide_with(decisions, self.agent.run_options()).await
+        self.decide_with(decisions, self.run_options()).await
     }
 
     /// [`decide`](Self::decide) with options.
@@ -219,8 +232,7 @@ impl Thread {
     }
 
     async fn answer_all(&self, decision: impl Fn() -> Decision) -> Result<Reply, AgentError> {
-        self.answer_all_with(decision, self.agent.run_options())
-            .await
+        self.answer_all_with(decision, self.run_options()).await
     }
 
     /// Gives every pending call `decision()`, with options.
@@ -289,7 +301,7 @@ impl Thread {
     /// [`Durability::Step`] that includes calls finished just before a
     /// crash.
     pub async fn retry(&self) -> Result<Reply, AgentError> {
-        self.retry_with(self.agent.run_options()).await
+        self.retry_with(self.run_options()).await
     }
 
     /// [`retry`](Self::retry) with options.

@@ -45,8 +45,8 @@ and push). A task is marked done only when all of that is verified.
 | 2 | Vector (semantic) memory search | 0008 §16 | Done |
 | 3 | Audit trail | 0010 | Done |
 | 4 | `thread.stream` | 0008 §17 | Done |
-| 5 | Python SDK | (to write) | Next |
-| 6 | TypeScript SDK | (to write) | Planned |
+| 5 | Python SDK (first slice) | 0011 | Done |
+| 6 | TypeScript SDK | (to write) | Next |
 | 7 | LLM gateway | 0006 | Planned |
 | 8 | Error catalog and JSON Schemas | (to write) | Planned |
 | 9 | Workflow threads | (to write) | Planned |
@@ -66,6 +66,35 @@ and push). A task is marked done only when all of that is verified.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-16: Python SDK, first slice (design 0011, task 5)
+
+- `sdks/python`: crate `agentbuild-python` (cdylib, outside the
+  workspace) with PyO3 0.29 (abi3-py39; 0.30 was three days old, so the
+  settled line) and the pure-Python package `agentbuild`. Configuration
+  crosses as JSON; tools as adapters returning JSON envelopes.
+- Bridge (0011 §4): one Tokio runtime; each awaitable call returns an
+  asyncio future completed with `call_soon_threadsafe`; cancelling it
+  fires the run's `CancelToken`. Async tools run on the caller's loop
+  (its id travels in the run metadata, read through the new
+  `ToolContext::metadata`); sync tools on `spawn_blocking`. A crashing
+  tool's exception becomes the `tool_failed` error's `__cause__`.
+- Agent API added for it: `Thread::with_options` (default options for a
+  handle's operations, so approve/reject/retry and their streams carry
+  the bridge's metadata) and `ToolContext::metadata`.
+- Tests: 15 pytest tests (simulated models); `scripts/test-python.sh`
+  builds a release wheel, installs it into a new venv, runs
+  `examples/consumer.py` and the tests from outside the source tree;
+  `ci-local.sh` step `python`. Live (manual, `examples/live.py`):
+  OpenAI and Gemini 4/4 (async tool, memory across turns, approval,
+  streaming); a first Gemini failure was the script's own shared state.
+- Found while planning the TypeScript bridge: `stream.cancel()` could not
+  reach a run while another task waited in `next()` (the stream was
+  locked). Fixed with `ThreadStream::cancel_token`, held apart from the
+  stream; tests in Rust and Python cancel a stream that is being read.
+- The first full pipeline was stopped by the machine running out of
+  memory (a compiler process failed to start); rerun with 2 build jobs:
+  all seven steps passed.
 
 ### 2026-10-16: `thread.stream` (0008 §17, task 4)
 

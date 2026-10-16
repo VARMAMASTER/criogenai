@@ -225,6 +225,12 @@ impl ThreadStream {
         self.cancel.cancel();
     }
 
+    /// The token that cancels this run: for cancelling from another task
+    /// while one waits in [`next`](Self::next).
+    pub fn cancel_token(&self) -> CancelToken {
+        self.cancel.clone()
+    }
+
     /// Waits for the operation and returns its reply, as the non-streaming
     /// method would. Unread events are dropped.
     pub async fn finish(mut self) -> Result<Reply, AgentError> {
@@ -250,7 +256,7 @@ impl Drop for ThreadStream {
 impl Thread {
     /// [`send`](Self::send), streaming its events (design 0008 §17).
     pub fn stream(&self, input: impl Into<AgentInput>) -> ThreadStream {
-        self.stream_with(input, self.agent().run_options())
+        self.stream_with(input, self.run_options())
     }
 
     /// [`stream`](Self::stream) with options. Any event sender or cancel
@@ -264,25 +270,19 @@ impl Thread {
 
     /// [`approve`](Self::approve), streaming.
     pub fn stream_approve(&self) -> ThreadStream {
-        ThreadStream::spawn(
-            self,
-            self.agent().run_options(),
-            |thread, options| async move { thread.answer_all_with(Decision::approve, options).await },
-        )
+        ThreadStream::spawn(self, self.run_options(), |thread, options| async move {
+            thread.answer_all_with(Decision::approve, options).await
+        })
     }
 
     /// [`reject`](Self::reject), streaming.
     pub fn stream_reject(&self, message: impl Into<String>) -> ThreadStream {
         let message = message.into();
-        ThreadStream::spawn(
-            self,
-            self.agent().run_options(),
-            |thread, options| async move {
-                thread
-                    .answer_all_with(|| Decision::reject(message.clone()), options)
-                    .await
-            },
-        )
+        ThreadStream::spawn(self, self.run_options(), |thread, options| async move {
+            thread
+                .answer_all_with(|| Decision::reject(message.clone()), options)
+                .await
+        })
     }
 
     /// [`decide`](Self::decide), streaming.
@@ -291,19 +291,15 @@ impl Thread {
         I: IntoIterator<Item = (String, Decision)>,
     {
         let decisions: Vec<(String, Decision)> = decisions.into_iter().collect();
-        ThreadStream::spawn(
-            self,
-            self.agent().run_options(),
-            |thread, options| async move { thread.decide_with(decisions, options).await },
-        )
+        ThreadStream::spawn(self, self.run_options(), |thread, options| async move {
+            thread.decide_with(decisions, options).await
+        })
     }
 
     /// [`retry`](Self::retry), streaming.
     pub fn stream_retry(&self) -> ThreadStream {
-        ThreadStream::spawn(
-            self,
-            self.agent().run_options(),
-            |thread, options| async move { thread.retry_with(options).await },
-        )
+        ThreadStream::spawn(self, self.run_options(), |thread, options| async move {
+            thread.retry_with(options).await
+        })
     }
 }

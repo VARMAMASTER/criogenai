@@ -8,3 +8,11 @@ research/tools/
 research/wheels/
 research/rea-evidence/
 research/repos/
+# Python SDK build outputs (maturin develop puts the module next to the sources).
+sdks/python/python/agentbuild/_native.*
+.pytest_cache/
+
+# TypeScript SDK build outputs.
+sdks/typescript/native/
+sdks/typescript/dist/
+sdks/typescript/node_modules/

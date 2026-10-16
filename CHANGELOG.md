@@ -46,6 +46,15 @@ First release, planned as 0.1.0 (Rust crates only).
   block, also when streamed (`OpenAiQuirks::think_tags`, on by default).
 - `FakeModel` for tests: scripted replies, realistic delays, errors.
 
+### Python SDK, first slice (design 0011)
+
+- `sdks/python`: the `agentbuild` package on the Rust engine (PyO3 abi3
+  wheel for Python 3.9+): `Agent`, `@tool`, approvals, typed output,
+  threads with streaming, `Storage` (SQLite, Postgres, encryption, audit,
+  retention), `Memory`, errors with the Rust codes, sync wrappers,
+  `FakeModel`. Checked live against OpenAI and Gemini.
+- agent: `Thread::with_options`, `ToolContext::metadata`.
+
 ### Audit trail (design 0010)
 
 - `AuditLog` with in-memory, SQLite and Postgres backends (schema version

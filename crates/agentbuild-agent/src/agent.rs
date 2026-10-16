@@ -2067,6 +2067,7 @@ async fn tools_step(
             depth: book.depth,
             app: inner.app.clone(),
             memory: memory.clone(),
+            metadata: ctx.metadata().cloned().map(Arc::new),
         };
         let timeout = call
             .tool

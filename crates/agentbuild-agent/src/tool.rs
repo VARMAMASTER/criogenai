@@ -39,9 +39,17 @@ pub struct ToolContext {
     pub(crate) depth: u32,
     pub(crate) app: Option<Arc<dyn Any + Send + Sync>>,
     pub(crate) memory: Option<ScopedMemory>,
+    pub(crate) metadata: Option<Arc<Value>>,
 }
 
 impl ToolContext {
+    /// The run's [`RunOptions::metadata`](agentbuild_core::RunOptions::metadata),
+    /// if any (who started it, for whom; SDK bridges keep their own keys
+    /// there).
+    pub fn metadata(&self) -> Option<&Value> {
+        self.metadata.as_deref()
+    }
+
     /// How many agents are above the agent making this call (0 for a
     /// top-level agent).
     pub fn depth(&self) -> u32 {

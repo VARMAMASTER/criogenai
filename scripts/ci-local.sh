@@ -14,6 +14,8 @@
 #   standalone  fmt + clippy of tests/live and the demo server
 #   package     docs, scripts/test-package.sh (with a throwaway Postgres
 #               when available), every example
+#   python      the Python SDK: lint of its bridge, scripts/test-python.sh
+#               (wheel into a new venv; skipped without Python 3.9+)
 #
 # Usage: scripts/ci-local.sh            all steps
 #        scripts/ci-local.sh --quick    rust step only
@@ -26,7 +28,7 @@ export CARGO_TERM_COLOR=always
 # Incremental build files take a lot of disk and do not help a full run.
 export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
 
-all=(rust postgres msrv deps standalone package)
+all=(rust postgres msrv deps standalone package python)
 if [[ $# -eq 0 ]]; then
   steps=("${all[@]}")
 elif [[ $1 == --quick ]]; then
@@ -119,9 +121,21 @@ step_package() {
   run cargo run -p agentbuild-agent --features sqlite --example durable_agent
 }
 
+step_python() {
+  local python="${PYTHON:-python}"
+  if ! "$python" -c 'import sys; sys.exit(sys.version_info < (3, 9))' >/dev/null 2>&1; then
+    skipped+=("python (no Python 3.9+: set PYTHON)")
+    return
+  fi
+  local manifest=sdks/python/Cargo.toml
+  CARGO_TARGET_DIR="$root/target/python" run cargo fmt --manifest-path "$manifest" --check
+  PYO3_PYTHON="$python" CARGO_TARGET_DIR="$root/target/python"     run cargo clippy --manifest-path "$manifest" -- -D warnings
+  run bash scripts/test-python.sh
+}
+
 for step in "${steps[@]}"; do
   case $step in
-    rust | postgres | msrv | deps | standalone | package) ;;
+    rust | postgres | msrv | deps | standalone | package | python) ;;
     *)
       echo "unknown step: $step (steps: ${all[*]})" >&2
       exit 2

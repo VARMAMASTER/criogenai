@@ -1,0 +1,28 @@
+[build-system]
+requires = ["maturin>=1.8,<2"]
+build-backend = "maturin"
+
+[project]
+name = "agentbuild"
+version = "0.1.0"
+description = "Agents and workflows on a Rust engine: tools, approvals, durable threads, memory"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT OR Apache-2.0" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Framework :: AsyncIO",
+]
+
+[project.optional-dependencies]
+pydantic = ["pydantic>=2"]
+test = ["pytest>=8"]
+
+[tool.maturin]
+python-source = "python"
+module-name = "agentbuild._native"
+features = ["pyo3/extension-module"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

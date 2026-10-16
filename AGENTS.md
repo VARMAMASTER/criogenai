@@ -101,11 +101,24 @@ write our own implementation.
   memory writes (key hashed), with `Thread::actor`. No content in
   records. Core: `NodeContext::metadata` (agents put the audit context
   under `agentbuild_audit`).
+- **Implemented: Python SDK, first slice (0011).** `sdks/python`
+  (crate `agentbuild-python`, not a workspace member; PyO3 0.29 abi3,
+  maturin): `Agent`, `@tool` (schemas from type hints; sync tools on a
+  worker thread, async tools on the caller's loop), approvals, typed
+  output, threads (send/approve/reject/decide/retry/history/rewind/
+  delete/stream), `Storage` (SQLite, Postgres, encryption, audit,
+  retention), `Memory`, errors by code, `run_sync`/`send_sync`,
+  `FakeModel`. Bridge: one Tokio runtime, asyncio futures completed with
+  `call_soon_threadsafe`, Python cancellation cancels the run. Tests:
+  `sdks/python/tests` (pytest); `scripts/test-python.sh` installs the
+  wheel into a new venv; `ci-local.sh` step `python`. Agent API added
+  for it: `Thread::with_options`, `ToolContext::metadata`. Not yet:
+  Python workflows, hooks, the gateway.
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 518 across the five crates (with `--all-features`; includes the
+- Tests: 520 across the five crates (with `--all-features`; includes the
   getting-started guide's examples), plus the package test. Release prep:
   `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`,
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
@@ -121,7 +134,7 @@ write our own implementation.
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
-- **Not started:** gateway, Python SDK, TypeScript SDK, vector indexes
+- **Not started:** gateway, TypeScript SDK, Python workflows and hooks, vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 
 ## Commands
@@ -151,6 +164,7 @@ RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 bash scripts/test-package.sh     # package the crate, use it from a separate project
 cargo deny --all-features check  # advisories, licenses, sources (deny.toml)
 bash scripts/ci-local.sh         # the whole CI pipeline, locally (--quick: rust step only)
+bash scripts/test-python.sh      # Python SDK: wheel into a new venv, consumer + pytest
 bash scripts/get-postgres.sh     # portable PostgreSQL into ~/.agentbuild/postgres (once)
 bash scripts/with-postgres.sh cargo test --workspace --all-features   # with a throwaway server
 # Every feature against real models, manual only (keys in ~/.agentbuild-keys.env):
