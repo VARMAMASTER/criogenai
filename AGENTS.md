@@ -124,11 +124,23 @@ write our own implementation.
   thread-safe functions returning Promises. Tests: `node --test`
   (`sdks/typescript/test`); `scripts/test-typescript.sh` installs the
   npm tarball into a new project; `ci-local.sh` step `typescript`.
+- **Implemented: LLM gateway, first slice (0006 §12).**
+  `crates/agentbuild-gateway` (axum 0.8, toml): `Gateway::builder()`
+  (routes with fallbacks, virtual keys kept as SHA-256 digests, usage
+  records on a `try_send` channel) → axum `Router`; `Config` (TOML;
+  secrets only through `*_env` variable names); binary
+  `agentbuild-gateway --config … [--listen] [--allow-open] [--log-usage]`
+  (refuses an open gateway off loopback). `POST /v1/chat/completions`
+  (stream and not; OpenAI wire format in and out, any upstream protocol),
+  `GET /v1/models`, `GET /health`; the upstream call is aborted when the
+  client goes away. Checked live with the official `openai` Python SDK
+  against OpenAI and Gemini upstreams. Not yet: relay fast path,
+  `/v1/messages`, budgets, rate limits.
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 520 across the five crates (with `--all-features`; includes the
+- Tests: 530 across the six crates (with `--all-features`; includes the
   getting-started guide's examples), plus the package test. Release prep:
   `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`,
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
@@ -139,12 +151,12 @@ write our own implementation.
   Keys live in `~/.agentbuild-keys.env`, never in the repo.
 - **Next:** the 10-task roadmap in `docs/progress.md` ("Roadmap
   tasks"), one full cycle each:
-  gateway, error catalog
+  error catalog
   and JSON Schemas, workflow threads, benchmarks. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
-- **Not started:** gateway, SDK workflows and hooks (Python, TypeScript), Standard Schema tool input, vector indexes
+- **Not started:** SDK workflows and hooks (Python, TypeScript), Standard Schema tool input, vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 
 ## Commands
@@ -176,6 +188,7 @@ cargo deny --all-features check  # advisories, licenses, sources (deny.toml)
 bash scripts/ci-local.sh         # the whole CI pipeline, locally (--quick: rust step only)
 bash scripts/test-python.sh      # Python SDK: wheel into a new venv, consumer + pytest
 bash scripts/test-typescript.sh  # TypeScript SDK: npm tarball into a new project, consumer + node --test
+cargo run -p agentbuild-gateway -- --config crates/agentbuild-gateway/examples/gateway.toml   # the LLM gateway
 bash scripts/get-postgres.sh     # portable PostgreSQL into ~/.agentbuild/postgres (once)
 bash scripts/with-postgres.sh cargo test --workspace --all-features   # with a throwaway server
 # Every feature against real models, manual only (keys in ~/.agentbuild-keys.env):

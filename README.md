@@ -13,9 +13,13 @@ OpenTelemetry export.
 and [`sdks/typescript`](sdks/typescript) (agents, tools, approvals,
 threads, storage, memory; designs 0011 and 0012).
 
-**Planned, not built yet:** workflows in the SDKs, on the same Rust engine (sketched in [docs/design/0007-public-api.md](docs/design/0007-public-api.md)),
-and an embeddable LLM gateway. There are no performance claims until benchmarks are in this
-repository.
+**LLM gateway:** a first slice in [`crates/agentbuild-gateway`](crates/agentbuild-gateway):
+any OpenAI client in front of any provider AgentBuild speaks, with
+fallback, keys and usage records.
+
+**Planned, not built yet:** workflows in the SDKs, on the same Rust engine
+(sketched in [docs/design/0007-public-api.md](docs/design/0007-public-api.md)).
+There are no performance claims until benchmarks are in this repository.
 
 > **Status: early development (0.1, unreleased).** The API may change
 > between 0.x releases. Nothing has been published yet. To get started,
@@ -163,7 +167,7 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 | 1     | Rust execution core                                           | Done (0.1)  |
 | 2     | Python SDK (PyO3 + maturin): agents, threads, storage done; workflows planned | In progress |
 | 3     | TypeScript SDK (NAPI-RS)                                      | Planned     |
-| 4     | Agents, tools, model providers (LLM gateway: planned)         | Done (0.1)  |
+| 4     | Agents, tools, model providers, LLM gateway (first slice)     | Done (0.1)  |
 | 5     | Persistence (threads, SQLite, Postgres, crash recovery, long-term memory with keyword and semantic search, retention, encryption at rest; vector indexes: planned) | Done (0.1)  |
 | 6     | Docs, publishing, benchmarks                                  | In progress |
 

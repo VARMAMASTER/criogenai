@@ -46,6 +46,16 @@ First release, planned as 0.1.0 (Rust crates only).
   block, also when streamed (`OpenAiQuirks::think_tags`, on by default).
 - `FakeModel` for tests: scripted replies, realistic delays, errors.
 
+### agentbuild-gateway: LLM gateway, first slice (design 0006 §12)
+
+- An OpenAI-compatible HTTP gateway: `POST /v1/chat/completions`
+  (streaming and not), `GET /v1/models`, `GET /health`, in front of any
+  upstream AgentBuild speaks (OpenAI, Anthropic, Gemini, OpenRouter,
+  Ollama, vLLM). Routes with fallback models, virtual keys per route,
+  usage records without content, the upstream call stopped when the
+  client leaves. A library (`Gateway::builder().router()`) and a binary
+  configured by TOML whose secrets come from environment variables.
+
 ### TypeScript SDK, first slice (design 0012)
 
 - `sdks/typescript`: the `@agentbuild/sdk` package on the Rust engine

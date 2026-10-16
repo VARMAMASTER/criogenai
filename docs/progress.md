@@ -47,8 +47,8 @@ and push). A task is marked done only when all of that is verified.
 | 4 | `thread.stream` | 0008 §17 | Done |
 | 5 | Python SDK (first slice) | 0011 | Done |
 | 6 | TypeScript SDK (first slice) | 0012 | Done |
-| 7 | LLM gateway | 0006 | Next |
-| 8 | Error catalog and JSON Schemas | (to write) | Planned |
+| 7 | LLM gateway (first slice) | 0006 §12 | Done |
+| 8 | Error catalog and JSON Schemas | (to write) | Next |
 | 9 | Workflow threads | (to write) | Planned |
 | 10 | Benchmarks | (to write) | Planned |
 
@@ -66,6 +66,31 @@ and push). A task is marked done only when all of that is verified.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-16: LLM gateway, first slice (design 0006 §12, task 7)
+
+- New crate `agentbuild-gateway` (axum 0.8, toml 0.9): server-side OpenAI
+  codec (requests → 0002, answers and deltas → `chat.completion` /
+  `chat.completion.chunk`), routes with fallback (transient errors and
+  `quota_exhausted`; streams only before the first delta), virtual keys
+  as SHA-256 digests, usage records via `try_send` with a drop counter,
+  OpenAI error bodies and status codes, the upstream task aborted when
+  the client's body stream is dropped.
+- The stream encoder sends at the end whatever the upstream did not
+  stream (FakeModel streams text in one piece and tool calls not at
+  all; real providers stream everything).
+- Binary: TOML config whose secrets are environment variable names;
+  refuses to serve without keys off loopback unless `--allow-open`;
+  `--log-usage` prints usage records (no content) as JSON lines.
+- Tests: 9 (codec and config unit tests; end to end with AgentBuild's
+  own OpenAI client and raw HTTP: streamed tool calls, SSE framing and
+  `[DONE]`, usage chunk, error kinds and statuses, fallback for plain and
+  streamed calls, keys, dropped usage records, client disconnect).
+  Package test and consumer extended. Live (manual): the official
+  `openai` Python SDK 3.31 against the binary with OpenAI and Gemini
+  upstreams, 10/10 (plain, streamed with usage, tool round trip,
+  streamed tool calls, bad key 401, unknown route 404); the usage log
+  held no key.
 
 ### 2026-10-16: TypeScript SDK, first slice (design 0012, task 6)
 

@@ -358,3 +358,97 @@ flowchart LR
    benchmark vs LiteLLM proxy (modes 3–4).
 7. Plugins (keys, budgets, logging, sticky routing), then `openai_responses`
    and Gemini.
+
+## 12. The gateway as built (first slice)
+
+Task 7 of the roadmap: §7's gateway, the part that lets any OpenAI client
+use every provider AgentBuild speaks, with keys and usage records. The
+relay fast path, `/v1/messages` inbound and the plugins beyond keys come
+in later slices (§12.6).
+
+### 12.1 Shape
+
+`crates/agentbuild-gateway` (workspace member): a library that builds an
+axum `Router`, and a binary `agentbuild-gateway` that serves one from a
+TOML file. New dependencies, in this crate only: axum 0.8 (the server),
+toml (the config file; TOML instead of §7's YAML because the maintained
+YAML crates are in flux, and TOML is what Rust tools already use).
+
+```rust
+let gateway = Gateway::builder()
+    .route("support", openai_model)                 // a name clients ask for
+    .route_with_fallbacks("triage", [gemini_model, ollama_model])
+    .key("team-a", secret, ["support"])             // virtual keys (optional)
+    .usage(sender)                                  // usage records, off the request path
+    .build()?;
+axum::serve(listener, gateway.router()).await?;
+```
+
+```toml
+# gateway.toml — `agentbuild-gateway --config gateway.toml --listen 127.0.0.1:4000`
+[[routes]]
+name = "support"
+models = [{ provider = "openai", model = "gpt-5-mini", api_key_env = "OPENAI_API_KEY" },
+          { provider = "ollama", model = "llama3.2" }]
+
+[[keys]]
+name = "team-a"
+key_env = "GATEWAY_KEY_TEAM_A"
+routes = ["support"]
+```
+
+### 12.2 Endpoints (OpenAI wire format)
+
+| Endpoint | Does |
+|---|---|
+| `POST /v1/chat/completions` | Decodes the request into 0002 (messages, tools, tool choice, `response_format`, settings), calls the route's model, encodes the answer; `stream: true` sends `chat.completion.chunk` SSE events and `data: [DONE]`, with usage in the last chunk when `stream_options.include_usage` is set |
+| `GET /v1/models` | The routes the key may use |
+| `GET /health` | `ok` (no key needed) |
+
+The upstream can speak another protocol: a client using the OpenAI SDK
+reaches an Anthropic model through the Anthropic Messages adapter.
+
+### 12.3 Keys
+
+Without keys the gateway is open, and the binary refuses to listen on a
+non-loopback address unless `--allow-open` is given. With keys, every
+request needs `Authorization: Bearer <key>`; keys are compared by SHA-256
+digest (the gateway keeps only digests) and name the routes they may use.
+Unknown key: 401; route not allowed: 404 (the route is not revealed).
+
+### 12.4 Fallback
+
+A route lists models; the first is tried, and on a transient or
+provider error (§6's fallback kinds: `rate_limited`, `overloaded`,
+`server`, `timeout`, `network`, `quota_exhausted`) the next one, once
+each. A stream falls back only before its first byte reaches the client.
+Retries within a model are the client's business (OpenAI SDKs retry).
+
+### 12.5 Errors and usage records
+
+Errors use OpenAI's shape, `{"error": {"message", "type", "code"}}`, with
+`code` the 0003 kind and a matching HTTP status (`rate_limited` 429,
+`auth` 502 since the upstream key is the gateway's, `invalid_request` 400,
+`context_overflow` 400, `timeout` 504, other upstream failures 502).
+Messages never include upstream keys (0003 redaction).
+
+Each request produces a `UsageRecord` (key name, route, provider/model
+that answered, tokens, latency, outcome, fallbacks used): **no content**.
+Records go to a bounded channel with `try_send`; a full channel drops the
+record and counts it (`dropped_usage_records`), never slowing a request
+(§7's off-the-critical-path rule).
+
+### 12.6 Not built yet
+
+The relay fast path, `/v1/messages` and Responses inbound, budgets, rate
+limits, sticky routing, a model catalog endpoint with prices, the
+benchmark against the LiteLLM proxy (roadmap task 10).
+
+### 12.7 Tests
+
+Gateway tests run the server on `127.0.0.1:0` with `FakeModel` upstreams
+and call it with AgentBuild's own OpenAI-compatible client
+(`ProviderModel`), so both codecs are exercised end to end, plus raw
+HTTP for the wire details (SSE framing, `[DONE]`, error bodies, keys).
+A manual check runs the official `openai` Python SDK against the gateway
+with real OpenAI and Gemini upstreams.

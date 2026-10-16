@@ -40,6 +40,7 @@ async fn main() {
     semantic_memory_search().await;
     audit_trail().await;
     thread_stream().await;
+    llm_gateway().await;
     println!("package smoke test: ok");
 }
 
@@ -817,4 +818,43 @@ async fn thread_stream() {
     assert_eq!(text, "Hello Ada");
     assert_eq!(chat.head().await.expect("head").expect("saved").version, reply.version);
     println!("  thread.stream: ok");
+}
+
+async fn llm_gateway() {
+    use agentbuild_gateway::{Config, Gateway};
+    use agentbuild_providers::{Endpoint, Model, ModelRequest, ProviderModel};
+
+    // A config names environment variables, never secrets.
+    let config = Config::parse(
+        "[[routes]]
+name = \"local\"
+models = [{ provider = \"ollama\", model = \"llama3.2\" }]",
+    )
+    .expect("config");
+    assert!(!config.into_gateway().expect("gateway").has_keys());
+
+    let upstream = Arc::new(
+        FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
+            .then(FakeReply::text("through the gateway")),
+    );
+    let gateway = Gateway::builder()
+        .route("support", upstream)
+        .key("team", "a-key-long-enough-for-the-test", ["support"])
+        .build()
+        .expect("gateway");
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+    let base = format!("http://{}/v1", listener.local_addr().expect("address"));
+    let router = gateway.router();
+    tokio::spawn(async move { axum::serve(listener, router).await });
+    let client = ProviderModel::new(
+        Endpoint::openai_compatible("gateway", base, Some("a-key-long-enough-for-the-test".into())),
+        "support",
+    )
+    .expect("client");
+    let answer = client
+        .invoke(&ModelRequest::new(vec![Message::user("hi")]))
+        .await
+        .expect("answer");
+    assert_eq!(answer.message.text(), "through the gateway");
+    println!("  LLM gateway (OpenAI wire format, keys): ok");
 }
