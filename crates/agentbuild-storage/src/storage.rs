@@ -22,7 +22,12 @@ type Keyring = std::convert::Infallible;
 /// A backend that can rewrite its rows with the active key
 /// ([`Storage::reencrypt`]).
 #[allow(dead_code)]
-pub(crate) trait Reencrypt: Send + Sync {
+/// The database behind a [`Storage`] from [`Storage::connect`]: what
+/// only the backend can do.
+pub(crate) trait Backend: Send + Sync {
+    /// Closes every connection (checkpoints, memory, locks, audit).
+    fn close(&self) -> agentbuild_core::BoxFuture<'_, ()>;
+
     #[cfg(feature = "encryption")]
     fn reencrypt(
         &self,
@@ -71,8 +76,8 @@ pub struct Storage {
     busy_timeout: Duration,
     durability: Durability,
     pub(crate) retention: Retention,
-    #[cfg_attr(not(feature = "encryption"), allow(dead_code))]
-    rekey: Option<Arc<dyn Reencrypt>>,
+    /// The database, for `close` and `reencrypt`.
+    backend: Option<Arc<dyn Backend>>,
     /// Where actions are recorded, once turned on (design 0010).
     audit: Option<Arc<dyn AuditLog>>,
     /// The database's own trail, for [`Storage::with_audit`].
@@ -136,8 +141,8 @@ impl Storage {
     /// database.
     #[cfg(feature = "encryption")]
     pub async fn reencrypt(&self) -> Result<crate::ReencryptReport, StorageError> {
-        let report = match &self.rekey {
-            Some(rekey) => rekey.reencrypt().await?,
+        let report = match &self.backend {
+            Some(backend) => backend.reencrypt().await?,
             None => {
                 return Err(crate::crypto::key_missing(
                     "reencrypt needs a database opened with `Storage::connect_encrypted`",
@@ -175,7 +180,7 @@ impl Storage {
                 let audit = checkpointer.audit_log();
                 let checkpointer = Arc::new(checkpointer);
                 let mut storage = Self::shared(checkpointer.clone()).with_memory(memory);
-                storage.rekey = Some(checkpointer);
+                storage.backend = Some(checkpointer);
                 storage.database_audit = Some(Arc::new(audit));
                 Ok(storage)
             };
@@ -202,7 +207,7 @@ impl Storage {
                 let mut storage = Self::shared(checkpointer.clone())
                     .with_memory(memory)
                     .with_locks(locks);
-                storage.rekey = Some(checkpointer);
+                storage.backend = Some(checkpointer);
                 storage.database_audit = Some(Arc::new(audit));
                 Ok(storage)
             };
@@ -234,7 +239,7 @@ impl Storage {
             busy_timeout: Duration::from_secs(60),
             durability: Durability::default(),
             retention: Retention::default(),
-            rekey: None,
+            backend: None,
             audit: None,
             database_audit: None,
         }
@@ -328,6 +333,17 @@ impl Storage {
     /// The [`durability`](Self::durability) setting.
     pub fn durability_mode(&self) -> Durability {
         self.durability
+    }
+
+    /// Closes the database's connections (SQLite: the file is released;
+    /// Postgres: the pools and lock connections). Later calls fail with
+    /// `storage_unavailable`. Close after the last run; in-memory storage
+    /// has nothing to close. Dropping the last clone also closes, but at a
+    /// time the runtime chooses.
+    pub async fn close(&self) {
+        if let Some(backend) = &self.backend {
+            backend.close().await;
+        }
     }
 
     /// The checkpointer.

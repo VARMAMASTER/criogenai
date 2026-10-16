@@ -160,7 +160,7 @@ write our own implementation.
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
-- Tests: 544 across the six crates (with `--all-features`; includes the
+- Tests: 545 across the seven crates (with `--all-features`; includes the
   getting-started guide's examples), plus the package test. Release prep:
   `CHANGELOG.md`, `CONTRIBUTING.md`, `SECURITY.md`, `RELEASING.md`,
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
@@ -170,9 +170,14 @@ write our own implementation.
   UI; real OpenAI/Gemini models, manual only, not in CI or the workspace).
   Keys live in `~/.agentbuild-keys.env`, never in the repo.
 - **Next:** the 10-task roadmap in `docs/progress.md` ("Roadmap
-  tasks") is done. Next: the release blockers (cross-platform CI and
-  SDK packages for every platform, `Storage::close`), then the user's
-  decisions (package names, making the repo public). The user will build their
+  tasks") is done, and so are the release blockers that need no
+  decision: `Storage::close` (and `close()` in both SDKs),
+  `.github/workflows/sdk-packages.yml` (wheels and npm addons for Linux
+  x64/arm64, macOS arm64/x64, Windows x64, tested per platform; manual,
+  never run yet), the TS loader for `@agentbuild/sdk-<platform>-<arch>`.
+  Waiting for the user: running the GitHub workflows (paid minutes while
+  private), package names, making the repo public, registry accounts
+  (see RELEASING.md). The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.

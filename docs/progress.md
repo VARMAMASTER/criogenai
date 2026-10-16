@@ -67,6 +67,24 @@ and push). A task is marked done only when all of that is verified.
 
 ## Log
 
+### 2026-10-16: release preparation (no user decision needed)
+
+- `Storage::close()` (crate-internal `Backend` trait, which also carries
+  `reencrypt`), and `close()` in both SDKs. Its test found that after
+  closing, Windows can keep the SQLite file busy for about 20 ms (another
+  program, typically the virus scanner, opening the new file); the test
+  retries the delete for up to a second, and also shows that without
+  `close` the file stays locked.
+- `.github/workflows/sdk-packages.yml`: wheels (maturin-action, abi3,
+  manylinux 2_28) and npm addons on Linux x64/arm64, macOS arm64 and
+  `macos-15-intel` (`macos-13` was retired in December 2025), Windows
+  x64; each tested in a fresh environment on its platform; publishing
+  only when asked (PyPI trusted publishing, npm token). Not run yet: it
+  needs the user's go-ahead (paid minutes while the repo is private).
+- RELEASING.md covers the SDKs, the gateway crate and the registry
+  setup. Names checked free on 2026-10-16: all crates, PyPI
+  `agentbuild`, npm `@agentbuild/sdk` (unscoped `agentbuild` is taken).
+
 ### 2026-10-16: benchmarks (design 0014, task 10)
 
 - `crates/agentbuild-bench` (workspace member, never published) with a

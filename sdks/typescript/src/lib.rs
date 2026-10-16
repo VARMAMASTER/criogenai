@@ -361,6 +361,12 @@ impl NativeStorage {
         Ok(Self { storage })
     }
 
+    /// Closes the database's connections.
+    #[napi]
+    pub async fn close(&self) {
+        self.storage.close().await;
+    }
+
     /// A storage operation (memory, prune, audit); the result as JSON.
     #[napi]
     pub async fn op(&self, op: String, payload: String) -> napi::Result<String> {

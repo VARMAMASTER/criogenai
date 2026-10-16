@@ -46,6 +46,11 @@ export class Storage {
     }
   }
 
+  /** Closes the database's connections (SQLite releases the file). Later calls fail with StorageError. */
+  async close(): Promise<void> {
+    await this.native.close();
+  }
+
   /** Saves a fact under `namespace` (e.g. "users/42"). */
   async remember(namespace: string, key: string, value: unknown, options: { ttlSecs?: number } = {}): Promise<void> {
     await this.op("memory_put", { namespace, key, value, ttlSecs: options.ttlSecs });

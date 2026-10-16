@@ -968,7 +968,11 @@ impl Checkpointer for PostgresCheckpointer {
     }
 }
 
-impl crate::storage::Reencrypt for PostgresCheckpointer {
+impl crate::storage::Backend for PostgresCheckpointer {
+    fn close(&self) -> BoxFuture<'_, ()> {
+        Box::pin(PostgresCheckpointer::close(self))
+    }
+
     #[cfg(feature = "encryption")]
     fn reencrypt(&self) -> BoxFuture<'_, Result<crate::ReencryptReport, StorageError>> {
         Box::pin(PostgresCheckpointer::reencrypt(self))

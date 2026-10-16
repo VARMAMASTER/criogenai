@@ -46,6 +46,16 @@ First release, planned as 0.1.0 (Rust crates only).
   block, also when streamed (`OpenAiQuirks::think_tags`, on by default).
 - `FakeModel` for tests: scripted replies, realistic delays, errors.
 
+### Release preparation
+
+- `Storage::close()` closes the database's connections (SQLite releases
+  the file); `Storage.close()` in the Python and TypeScript SDKs.
+- A manual workflow builds the Python wheels and the npm native addons
+  for Linux (x64, arm64), macOS (arm64, x64) and Windows (x64), tests each
+  installed on its own platform, and can publish them. The TypeScript SDK
+  loads a prebuilt `@agentbuild/sdk-<platform>-<arch>` package when no
+  locally built addon is present.
+
 ### Benchmarks (design 0014)
 
 - `agentbuild-bench` and `benches/`: the framework's own costs (engine

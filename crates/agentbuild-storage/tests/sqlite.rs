@@ -358,3 +358,64 @@ async fn many_writers_on_one_file_never_fork_or_lose_a_commit() {
     }
     println!("{conflicts} lost compare-and-set races were retried");
 }
+
+/// Deletes `file` and its WAL files, retrying until `patience` runs out:
+/// on Windows, other programs (the virus scanner) may hold a freshly
+/// written file for a moment.
+async fn remove_db(file: &std::path::Path, patience: std::time::Duration) -> std::io::Result<()> {
+    let until = std::time::Instant::now() + patience;
+    for suffix in ["", "-wal", "-shm"] {
+        let mut path = file.to_path_buf().into_os_string();
+        path.push(suffix);
+        while std::path::Path::new(&path).exists() {
+            match std::fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(e) if std::time::Instant::now() >= until => return Err(e),
+                Err(_) => tokio::time::sleep(std::time::Duration::from_millis(20)).await,
+            }
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn close_releases_the_database_file() {
+    use agentbuild_storage::{Namespace, Storage};
+    use std::time::Duration;
+
+    let open = |file: std::path::PathBuf| async move {
+        let storage = Storage::connect(&format!("sqlite://{}", file.display()))
+            .await
+            .unwrap();
+        let ns = Namespace::parse("users/1").unwrap();
+        storage
+            .memory()
+            .put(&ns, "k", serde_json::json!(1), None)
+            .await
+            .unwrap();
+        storage
+    };
+    let temp = |name: &str| {
+        std::env::temp_dir().join(format!("agentbuild-{name}-{}.db", uuid::Uuid::now_v7()))
+    };
+
+    let file = temp("close");
+    let storage = open(file.clone()).await;
+    storage.close().await;
+    let ns = Namespace::parse("users/1").unwrap();
+    let err = storage.memory().get(&ns, "k").await.unwrap_err();
+    assert_eq!(err.code(), "storage_unavailable");
+    remove_db(&file, Duration::from_secs(1)).await.unwrap();
+
+    // Without close, the database keeps the file (on Windows it cannot be
+    // deleted; elsewhere deleting an open file works, so only check there).
+    if cfg!(windows) {
+        let file = temp("open");
+        let storage = open(file.clone()).await;
+        assert!(remove_db(&file, Duration::from_millis(300)).await.is_err());
+        storage.close().await;
+        remove_db(&file, Duration::from_secs(1)).await.unwrap();
+    }
+    // In memory there is nothing to close.
+    Storage::in_memory().close().await;
+}

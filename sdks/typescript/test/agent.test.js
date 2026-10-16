@@ -227,6 +227,14 @@ test("SQLite threads survive a new agent; memory, retention and audit", async ()
     assert.ok(actions.includes("run.finished") && actions.includes("model.called"));
     assert.equal(records[0].actor, "user:ada");
     assert.equal((await storage.verifyAudit()).ok, true);
+    await storage.close();
+    await first.storage.close();
+    await assert.rejects(storage.recall("users/ada", "diet"), (e) => e instanceof StorageError && e.code === "storage_unavailable");
+    // Closed, the file can go (on Windows other programs, such as the
+    // virus scanner, may hold it for a moment).
+    for (const suffix of ["", "-wal", "-shm"]) {
+      fs.rmSync(db.file + suffix, { force: true, maxRetries: 50, retryDelay: 20 });
+    }
   } finally {
     db.remove();
   }

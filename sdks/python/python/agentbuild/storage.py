@@ -45,6 +45,11 @@ class Storage:
     async def _op(self, op: str, **payload: Any) -> Any:
         return await self._native.op(asyncio.get_running_loop(), op, json.dumps(payload))
 
+    async def close(self) -> None:
+        """Closes the database's connections (SQLite releases the file).
+        Later calls fail with ``StorageError`` (``storage_unavailable``)."""
+        await self._native.close(asyncio.get_running_loop())
+
     async def remember(
         self, namespace: str, key: str, value: Any, ttl: Optional[float] = None
     ) -> None:

@@ -528,6 +528,19 @@ impl NativeStorage {
         Ok(Self { storage })
     }
 
+    /// Closes the database's connections.
+    fn close<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let storage = self.storage.clone();
+        spawn(py, event_loop, None, async move {
+            storage.close().await;
+            Ok(Value::Null)
+        })
+    }
+
     /// A storage operation (memory, prune, audit).
     fn op<'py>(
         &self,

@@ -1,0 +1,156 @@
+name: SDK packages
+
+# Run by hand from the Actions tab (see RELEASING.md). Builds the Python
+# wheels and the npm packages on every platform, tests each on its own
+# platform, and keeps them as artifacts. Publishes only with "publish".
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to PyPI (trusted publishing) and npm (needs the NPM_TOKEN secret)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  python:
+    name: python ${{ matrix.target }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64, manylinux: "2_28" }
+          - { os: ubuntu-24.04-arm, target: aarch64, manylinux: "2_28" }
+          - { os: macos-14, target: aarch64 }
+          - { os: macos-15-intel, target: x86_64 }
+          - { os: windows-latest, target: x64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: build the wheel
+        uses: PyO3/maturin-action@v1
+        with:
+          target: ${{ matrix.target }}
+          manylinux: ${{ matrix.manylinux || 'auto' }}
+          args: --release --out dist --manifest-path sdks/python/Cargo.toml
+      - name: test the wheel in a new venv
+        shell: bash
+        run: |
+          python -m venv "$RUNNER_TEMP/venv"
+          bin="$RUNNER_TEMP/venv/bin"; [ -d "$bin" ] || bin="$RUNNER_TEMP/venv/Scripts"
+          "$bin/python" -m pip install --quiet dist/*.whl pytest
+          cp -r sdks/python/tests "$RUNNER_TEMP/tests"
+          cd "$RUNNER_TEMP"
+          "$bin/python" "$GITHUB_WORKSPACE/sdks/python/examples/consumer.py"
+          AGENTBUILD_ERROR_CATALOG="$GITHUB_WORKSPACE/schemas/error-codes.json" \
+            "$bin/python" -m pytest -q -p no:cacheprovider tests
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}-${{ matrix.target }}
+          path: dist/*.whl
+
+  node:
+    name: node ${{ matrix.platform }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, platform: linux-x64 }
+          - { os: ubuntu-24.04-arm, platform: linux-arm64 }
+          - { os: macos-14, platform: darwin-arm64 }
+          - { os: macos-15-intel, platform: darwin-x64 }
+          - { os: windows-latest, platform: win32-x64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: build and test the package on this platform
+        shell: bash
+        run: bash scripts/test-typescript.sh
+      - name: the platform package
+        shell: bash
+        run: |
+          version="$(node -p "require('./sdks/typescript/package.json').version")"
+          out="platform/${{ matrix.platform }}"
+          mkdir -p "$out"
+          cp sdks/typescript/native/agentbuild.node "$out/agentbuild.node"
+          cp LICENSE-MIT LICENSE-APACHE "$out/"
+          os="${{ matrix.platform }}"; os="${os%-*}"; cpu="${{ matrix.platform }}"; cpu="${cpu#*-}"
+          cat > "$out/package.json" <<EOF
+          {
+            "name": "@agentbuild/sdk-${{ matrix.platform }}",
+            "version": "$version",
+            "description": "The native addon of @agentbuild/sdk for ${{ matrix.platform }}",
+            "license": "MIT OR Apache-2.0",
+            "main": "agentbuild.node",
+            "files": ["agentbuild.node", "LICENSE-MIT", "LICENSE-APACHE"],
+            "os": ["$os"],
+            "cpu": ["$cpu"]
+          }
+          EOF
+      - uses: actions/upload-artifact@v4
+        with:
+          name: npm-${{ matrix.platform }}
+          path: platform/${{ matrix.platform }}
+
+  publish:
+    needs: [python, node]
+    if: inputs.publish
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: read
+      id-token: write # PyPI trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+      - name: the wheels
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          merge-multiple: true
+          path: dist
+      - name: the platform npm packages
+        uses: actions/download-artifact@v4
+        with:
+          pattern: npm-*
+          path: artifacts
+      - name: publish the wheels to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+      - name: publish the platform packages, then the main one
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          for dir in artifacts/npm-*; do
+            (cd "$dir" && npm publish --access public)
+          done
+          cd sdks/typescript
+          version="$(node -p "require('./package.json').version")"
+          # The main package depends on every platform package, optionally.
+          node -e '
+            const fs = require("fs");
+            const pkg = JSON.parse(fs.readFileSync("package.json"));
+            pkg.optionalDependencies = Object.fromEntries(
+              ["linux-x64", "linux-arm64", "darwin-arm64", "darwin-x64", "win32-x64"]
+                .map((p) => [`@agentbuild/sdk-${p}`, process.argv[1]]));
+            pkg.files = pkg.files.filter((f) => !f.startsWith("native"));
+            fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
+          ' "$version"
+          npm install --no-audit --no-fund && npx tsc -p tsconfig.json
+          npm publish --access public

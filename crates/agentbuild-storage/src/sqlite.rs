@@ -928,7 +928,11 @@ impl Checkpointer for SqliteCheckpointer {
     }
 }
 
-impl crate::storage::Reencrypt for SqliteCheckpointer {
+impl crate::storage::Backend for SqliteCheckpointer {
+    fn close(&self) -> BoxFuture<'_, ()> {
+        Box::pin(SqliteCheckpointer::close(self))
+    }
+
     #[cfg(feature = "encryption")]
     fn reencrypt(&self) -> BoxFuture<'_, Result<crate::ReencryptReport, StorageError>> {
         Box::pin(SqliteCheckpointer::reencrypt(self))

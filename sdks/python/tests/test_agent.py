@@ -5,6 +5,7 @@ memory, errors."""
 import asyncio
 import os
 import tempfile
+import time
 import uuid
 from typing import List, Literal, Optional
 
@@ -253,8 +254,25 @@ def test_sqlite_threads_survive_a_new_agent_and_storage_has_memory_retention_and
             assert "run.finished" in actions and "model.called" in actions
             assert records[0]["actor"] == "user:ada"
             assert (await storage.verify_audit())["ok"] is True
+            await storage.close()
+            with pytest.raises(StorageError) as caught:
+                await storage.recall("users/ada", "diet")
+            assert caught.value.code == "storage_unavailable"
 
         run(checks())
+        run(first.storage.close())
+        # Closed, the file can go (on Windows other programs, such as the
+        # virus scanner, may hold it for a moment).
+        for suffix in ("", "-wal", "-shm"):
+            for attempt in range(50):
+                try:
+                    if os.path.exists(path + suffix):
+                        os.remove(path + suffix)
+                    break
+                except PermissionError:
+                    if attempt == 49:
+                        raise
+                    time.sleep(0.02)
     finally:
         for suffix in ("", "-wal", "-shm"):
             try:
