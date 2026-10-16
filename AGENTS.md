@@ -114,6 +114,16 @@ write our own implementation.
   wheel into a new venv; `ci-local.sh` step `python`. Agent API added
   for it: `Thread::with_options`, `ToolContext::metadata`. Not yet:
   Python workflows, hooks, the gateway.
+- **Implemented: TypeScript SDK, first slice (0012).** `sdks/typescript`
+  (crate `agentbuild-node`, not a workspace member; napi-rs 3, N-API 6,
+  Node 18+; package `@agentbuild/sdk`, TypeScript in `lib/` compiled to
+  `dist/`): the same slice as Python. `Agent`, `tool({...})` with JSON
+  Schema input, approvals, typed output, threads (incl. `stream*`),
+  `AbortSignal` on every call, `Storage`, `Memory`, error classes by
+  code (`cause` = what a crashing tool threw). Tools are weak
+  thread-safe functions returning Promises. Tests: `node --test`
+  (`sdks/typescript/test`); `scripts/test-typescript.sh` installs the
+  npm tarball into a new project; `ci-local.sh` step `typescript`.
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
@@ -129,12 +139,12 @@ write our own implementation.
   Keys live in `~/.agentbuild-keys.env`, never in the repo.
 - **Next:** the 10-task roadmap in `docs/progress.md` ("Roadmap
   tasks"), one full cycle each:
-  `thread.stream`, Python SDK, TypeScript SDK, gateway, error catalog
+  gateway, error catalog
   and JSON Schemas, workflow threads, benchmarks. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
-- **Not started:** gateway, TypeScript SDK, Python workflows and hooks, vector indexes
+- **Not started:** gateway, SDK workflows and hooks (Python, TypeScript), Standard Schema tool input, vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 
 ## Commands
@@ -165,6 +175,7 @@ bash scripts/test-package.sh     # package the crate, use it from a separate pro
 cargo deny --all-features check  # advisories, licenses, sources (deny.toml)
 bash scripts/ci-local.sh         # the whole CI pipeline, locally (--quick: rust step only)
 bash scripts/test-python.sh      # Python SDK: wheel into a new venv, consumer + pytest
+bash scripts/test-typescript.sh  # TypeScript SDK: npm tarball into a new project, consumer + node --test
 bash scripts/get-postgres.sh     # portable PostgreSQL into ~/.agentbuild/postgres (once)
 bash scripts/with-postgres.sh cargo test --workspace --all-features   # with a throwaway server
 # Every feature against real models, manual only (keys in ~/.agentbuild-keys.env):

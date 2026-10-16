@@ -46,6 +46,13 @@ First release, planned as 0.1.0 (Rust crates only).
   block, also when streamed (`OpenAiQuirks::think_tags`, on by default).
 - `FakeModel` for tests: scripted replies, realistic delays, errors.
 
+### TypeScript SDK, first slice (design 0012)
+
+- `sdks/typescript`: the `@agentbuild/sdk` package on the Rust engine
+  (napi-rs addon, Node 18+): the same slice as the Python SDK, with
+  `AbortSignal` on every call and error classes whose `cause` is what a
+  crashing tool threw. Checked live against OpenAI and Gemini.
+
 ### Python SDK, first slice (design 0011)
 
 - `sdks/python`: the `agentbuild` package on the Rust engine (PyO3 abi3

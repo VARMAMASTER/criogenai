@@ -46,8 +46,8 @@ and push). A task is marked done only when all of that is verified.
 | 3 | Audit trail | 0010 | Done |
 | 4 | `thread.stream` | 0008 §17 | Done |
 | 5 | Python SDK (first slice) | 0011 | Done |
-| 6 | TypeScript SDK | (to write) | Next |
-| 7 | LLM gateway | 0006 | Planned |
+| 6 | TypeScript SDK (first slice) | 0012 | Done |
+| 7 | LLM gateway | 0006 | Next |
 | 8 | Error catalog and JSON Schemas | (to write) | Planned |
 | 9 | Workflow threads | (to write) | Planned |
 | 10 | Benchmarks | (to write) | Planned |
@@ -66,6 +66,28 @@ and push). A task is marked done only when all of that is verified.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-16: TypeScript SDK, first slice (design 0012, task 6)
+
+- `sdks/typescript`: crate `agentbuild-node` (napi-rs 3, outside the
+  workspace; no `@napi-rs/cli`, cargo builds and a script copies the
+  addon to `native/agentbuild.node`) and `@agentbuild/sdk` in TypeScript.
+- Bridge: napi async methods on napi's Tokio runtime; tools as weak
+  thread-safe functions `(request) => Promise<envelope>` that Rust
+  awaits (no event-loop bookkeeping, unlike Python); `AbortSignal`
+  fires a cancel token registered before the call starts; errors cross
+  as JSON in the message. Streams hold `ThreadStream::cancel_token`.
+- Tests: 13 `node --test` tests (simulated models);
+  `scripts/test-typescript.sh` packs with npm, installs the tarball into
+  a new project, runs an ES-module consumer and the tests; `ci-local.sh`
+  step `typescript`. Live (manual, `examples/live.mjs`): OpenAI and
+  Gemini 4/4.
+- Found: on Windows a test's SQLite file stays locked while its
+  `Storage` is open, and `Storage` has no `close()` (only the backends
+  do). Tests clean up best effort, as the Python tests do; a
+  `Storage::close` is an open item.
+- Node 22's `node --test test/` reads `test/` as a file: the scripts
+  pass the test files.
 
 ### 2026-10-16: Python SDK, first slice (design 0011, task 5)
 

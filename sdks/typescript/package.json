@@ -1,0 +1,19 @@
+{
+  "name": "@agentbuild/sdk",
+  "version": "0.1.0",
+  "description": "Agents with tools, approvals, durable threads and memory on a Rust engine",
+  "license": "MIT OR Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist", "native/agentbuild.node", "README.md"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "build:native": "cargo build --release && node scripts/copy-native.js",
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test test/agent.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "22.10.2",
+    "typescript": "5.7.2"
+  }
+}

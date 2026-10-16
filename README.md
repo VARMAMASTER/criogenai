@@ -9,11 +9,11 @@ and human approval, conversations stored in memory, SQLite or Postgres
 with crash recovery, encryption at rest and an audit trail, and
 OpenTelemetry export.
 
-**Python:** a first SDK slice in [`sdks/python`](sdks/python) (agents,
-tools, approvals, threads, storage, memory; design 0011).
+**Python and TypeScript:** first SDK slices in [`sdks/python`](sdks/python)
+and [`sdks/typescript`](sdks/typescript) (agents, tools, approvals,
+threads, storage, memory; designs 0011 and 0012).
 
-**Planned, not built yet:** Python workflows and the TypeScript SDK on the
-same Rust engine (sketched in [docs/design/0007-public-api.md](docs/design/0007-public-api.md)),
+**Planned, not built yet:** workflows in the SDKs, on the same Rust engine (sketched in [docs/design/0007-public-api.md](docs/design/0007-public-api.md)),
 and an embeddable LLM gateway. There are no performance claims until benchmarks are in this
 repository.
 

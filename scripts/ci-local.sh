@@ -16,6 +16,9 @@
 #               when available), every example
 #   python      the Python SDK: lint of its bridge, scripts/test-python.sh
 #               (wheel into a new venv; skipped without Python 3.9+)
+#   typescript  the TypeScript SDK: lint of its bridge, type check,
+#               scripts/test-typescript.sh (tarball into a new project;
+#               skipped without Node 18+)
 #
 # Usage: scripts/ci-local.sh            all steps
 #        scripts/ci-local.sh --quick    rust step only
@@ -28,7 +31,7 @@ export CARGO_TERM_COLOR=always
 # Incremental build files take a lot of disk and do not help a full run.
 export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
 
-all=(rust postgres msrv deps standalone package python)
+all=(rust postgres msrv deps standalone package python typescript)
 if [[ $# -eq 0 ]]; then
   steps=("${all[@]}")
 elif [[ $1 == --quick ]]; then
@@ -133,9 +136,20 @@ step_python() {
   run bash scripts/test-python.sh
 }
 
+step_typescript() {
+  if ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) < 18 ? 1 : 0)' >/dev/null 2>&1; then
+    skipped+=("typescript (no Node 18+)")
+    return
+  fi
+  local manifest=sdks/typescript/Cargo.toml
+  CARGO_TARGET_DIR="$root/target/node" run cargo fmt --manifest-path "$manifest" --check
+  CARGO_TARGET_DIR="$root/target/node" run cargo clippy --manifest-path "$manifest" -- -D warnings
+  run bash scripts/test-typescript.sh
+}
+
 for step in "${steps[@]}"; do
   case $step in
-    rust | postgres | msrv | deps | standalone | package | python) ;;
+    rust | postgres | msrv | deps | standalone | package | python | typescript) ;;
     *)
       echo "unknown step: $step (steps: ${all[*]})" >&2
       exit 2
