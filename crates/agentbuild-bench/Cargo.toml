@@ -1,0 +1,25 @@
+# AgentBuild's benchmarks (design 0014): `cargo run -p agentbuild-bench --release`.
+# A workspace member so it keeps compiling; never published.
+[package]
+name = "agentbuild-bench"
+description = "Benchmarks of AgentBuild's own costs"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[dependencies]
+agentbuild-core = { path = "../agentbuild-core" }
+agentbuild-providers = { path = "../agentbuild-providers" }
+agentbuild-agent = { path = "../agentbuild-agent" }
+agentbuild-storage = { path = "../agentbuild-storage", features = ["sqlite"] }
+agentbuild-gateway = { path = "../agentbuild-gateway" }
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
+serde_json.workspace = true
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "time"] }
+
+[lints]
+workspace = true

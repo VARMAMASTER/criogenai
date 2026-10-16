@@ -50,7 +50,7 @@ and push). A task is marked done only when all of that is verified.
 | 7 | LLM gateway (first slice) | 0006 §12 | Done |
 | 8 | Error catalog and JSON Schemas | 0013 | Done |
 | 9 | Workflow threads | 0008 §18 | Done |
-| 10 | Benchmarks | (to write) | Next |
+| 10 | Benchmarks | 0014 | Done |
 
 ## Open decisions
 
@@ -66,6 +66,24 @@ and push). A task is marked done only when all of that is verified.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-16: benchmarks (design 0014, task 10)
+
+- `crates/agentbuild-bench` (workspace member, never published) with a
+  reusable instant model, `benches/compare_langgraph.py`,
+  `benches/python_bridge.py`, `benches/typescript_bridge.mjs`;
+  `docs/benchmarks.md` records the run (Ryzen 5 4600H, Windows 11).
+  `ci-local.sh` runs the harness in `quick` mode so it keeps working.
+- Headline numbers (trivial nodes, this machine): 21.4 µs per workflow
+  step against LangGraph's 244 µs; 3.9 µs per parallel node against
+  334 µs; the gateway adds 0.14 ms per request on localhost; a Python
+  call adds 0.2 ms and a Python tool 0.3 ms.
+- Found: `FakeModel` at zero delay waited for a timer tick (~1 ms on
+  Windows), which first made the SDKs look 1.5 ms slower per call. Fixed
+  with a timer-free yield (not `tokio::task::yield_now`, which needs a
+  Tokio feature the providers crate does not use). Two telemetry tests
+  had relied on the slowness (one span batch per run); they now check
+  retries per batch, and passed three runs in a row.
 
 ### 2026-10-16: workflow threads (0008 §18, task 9)
 

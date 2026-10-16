@@ -173,7 +173,14 @@ impl FakeModel {
             .last()
             .map(Message::text)
             .unwrap_or_default();
-        tokio::time::sleep(self.delay_for(&prompt)).await;
+        let delay = self.delay_for(&prompt);
+        if delay.is_zero() {
+            // A timer, even of zero, waits for the next tick (about 1 ms on
+            // Windows): yield instead, so zero means zero.
+            YieldOnce(false).await;
+        } else {
+            tokio::time::sleep(delay).await;
+        }
 
         let fail = |kind, message: String| {
             Err(ModelError::new(kind, message).for_model(self.provider.clone(), self.model.clone()))
@@ -260,6 +267,26 @@ impl Model for FakeModel {
         request: &'a ModelRequest,
     ) -> BoxFuture<'a, Result<ModelResponse, ModelError>> {
         Box::pin(self.answer(request))
+    }
+}
+
+/// Lets other tasks run once, without a timer (and without Tokio's `rt`
+/// feature, which this crate does not use).
+struct YieldOnce(bool);
+
+impl std::future::Future for YieldOnce {
+    type Output = ();
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<()> {
+        if self.0 {
+            return std::task::Poll::Ready(());
+        }
+        self.0 = true;
+        cx.waker().wake_by_ref();
+        std::task::Poll::Pending
     }
 }
 

@@ -114,6 +114,8 @@ step_package() {
   else
     run bash scripts/test-package.sh
   fi
+  # The benchmarks keep working (debug build; numbers not recorded).
+  run cargo run -p agentbuild-bench -- quick
   run cargo run -p agentbuild-core --example basic_workflow -- "Hello world"
   run cargo run -p agentbuild-core --example approval_workflow -- yes
   run cargo run -p agentbuild-core --example llm_workflow -- "remote work"

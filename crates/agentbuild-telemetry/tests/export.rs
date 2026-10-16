@@ -79,7 +79,12 @@ async fn transient_errors_are_retried() {
         .await
         .unwrap();
     exporter.flush().await;
-    assert_eq!(collector.requests().len(), 3, "two failures, then success");
+    // The first batch is sent three times (two failures, then success).
+    // A fast run may send its spans in more than one batch.
+    let requests = collector.requests();
+    assert!(requests.len() >= 3, "{} requests", requests.len());
+    assert_eq!(requests[0].body, requests[1].body);
+    assert_eq!(requests[1].body, requests[2].body);
     let stats = exporter.stats();
     assert!(stats.exported > 0);
     assert_eq!(stats.failed, 0);
@@ -95,9 +100,12 @@ async fn client_errors_are_not_retried_and_never_fail_the_run() {
         .await;
     assert!(result.is_ok());
     exporter.flush().await;
-    assert_eq!(collector.requests().len(), 1);
+    // The refused batch is never sent again (a fast run may send its
+    // spans in more than one batch; later batches succeed).
+    let requests = collector.requests();
+    assert!(!requests.is_empty());
+    assert!(requests[1..].iter().all(|r| r.body != requests[0].body));
     let stats = exporter.stats();
-    assert_eq!(stats.exported, 0);
     assert!(stats.failed > 0);
     assert!(exporter.last_error().unwrap().starts_with("HTTP 400"));
 }

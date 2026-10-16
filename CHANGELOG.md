@@ -46,6 +46,15 @@ First release, planned as 0.1.0 (Rust crates only).
   block, also when streamed (`OpenAiQuirks::think_tags`, on by default).
 - `FakeModel` for tests: scripted replies, realistic delays, errors.
 
+### Benchmarks (design 0014)
+
+- `agentbuild-bench` and `benches/`: the framework's own costs (engine
+  steps, parallel nodes, agent loop, tool calls, thread saving, gateway,
+  SDK bridges) with instant simulated models, and the same workflow
+  shapes in LangGraph. Results in `docs/benchmarks.md`.
+- `FakeModel` with zero delay no longer waits for a timer tick (about
+  1 ms on Windows).
+
 ### Workflow threads (design 0008 §18)
 
 - `Storage::workflow_thread(&workflow, id)`: durable, leased, audited

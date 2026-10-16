@@ -16,6 +16,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "agentbuild-bench"
+version = "0.1.0"
+dependencies = [
+ "agentbuild-agent",
+ "agentbuild-core",
+ "agentbuild-gateway",
+ "agentbuild-providers",
+ "agentbuild-storage",
+ "axum",
+ "reqwest",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "agentbuild-core"
 version = "0.1.0"
 dependencies = [

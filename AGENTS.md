@@ -152,6 +152,10 @@ write our own implementation.
   values validate), SDK tests check their error classes against the
   catalog. The validator now enforces `anyOf`/`oneOf`/`allOf`/local
   `$ref` (tool arguments too).
+- **Benchmarks (0014):** `crates/agentbuild-bench` (`cargo run -p
+  agentbuild-bench --release`), `benches/` (LangGraph comparison, Python
+  and TypeScript bridges); results in `docs/benchmarks.md` (one machine,
+  2026-10-16). Quote numbers only from that page, with what was measured.
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
@@ -166,8 +170,9 @@ write our own implementation.
   UI; real OpenAI/Gemini models, manual only, not in CI or the workspace).
   Keys live in `~/.agentbuild-keys.env`, never in the repo.
 - **Next:** the 10-task roadmap in `docs/progress.md` ("Roadmap
-  tasks"), one full cycle each: benchmarks; then the
-  release blockers (cross-platform CI and SDK packages, `Storage::close`). The user will build their
+  tasks") is done. Next: the release blockers (cross-platform CI and
+  SDK packages for every platform, `Storage::close`), then the user's
+  decisions (package names, making the repo public). The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
@@ -203,6 +208,7 @@ cargo deny --all-features check  # advisories, licenses, sources (deny.toml)
 bash scripts/ci-local.sh         # the whole CI pipeline, locally (--quick: rust step only)
 bash scripts/test-python.sh      # Python SDK: wheel into a new venv, consumer + pytest
 bash scripts/test-typescript.sh  # TypeScript SDK: npm tarball into a new project, consumer + node --test
+cargo run -p agentbuild-bench --release   # benchmarks (docs/benchmarks.md)
 cargo run -p agentbuild-gateway -- --config crates/agentbuild-gateway/examples/gateway.toml   # the LLM gateway
 bash scripts/get-postgres.sh     # portable PostgreSQL into ~/.agentbuild/postgres (once)
 bash scripts/with-postgres.sh cargo test --workspace --all-features   # with a throwaway server

@@ -19,7 +19,9 @@ fallback, keys and usage records.
 
 **Planned, not built yet:** workflows in the SDKs, on the same Rust engine
 (sketched in [docs/design/0007-public-api.md](docs/design/0007-public-api.md)).
-There are no performance claims until benchmarks are in this repository.
+Measured costs (per step, per tool call, gateway overhead, SDK bridges,
+and a LangGraph comparison) are in [docs/benchmarks.md](docs/benchmarks.md),
+with the machine and method.
 
 > **Status: early development (0.1, unreleased).** The API may change
 > between 0.x releases. Nothing has been published yet. To get started,
