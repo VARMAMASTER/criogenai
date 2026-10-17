@@ -10,8 +10,7 @@ All crates and both SDKs share one version and are released together.
       on PyPI `agentbuild`; on npm `@agentbuild/sdk` (the unscoped
       `agentbuild` is taken). `agentbuild-bench` is never published.
 - [ ] Remove `publish = false` (and its comment) from every published
-      `crates/*/Cargo.toml`, and add `agentbuild-gateway` to the publish
-      list in `.github/workflows/release.yml` (after `agentbuild-providers`).
+      `crates/*/Cargo.toml` (not `agentbuild-bench`).
 - [ ] Make the GitHub repository public and turn on **private
       vulnerability reporting** (Settings → Code security), which
       [SECURITY.md](SECURITY.md) points to.

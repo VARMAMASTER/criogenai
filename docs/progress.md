@@ -52,6 +52,22 @@ and push). A task is marked done only when all of that is verified.
 | 9 | Workflow threads | 0008 §18 | Done |
 | 10 | Benchmarks | 0014 | Done |
 
+Second roadmap, started 2026-10-16 at the user's request ("finish all the
+remaining tasks one by one"), same full cycle:
+
+| # | Task | Spec | Status |
+|---|---|---|---|
+| 11 | Packaging fixes (licences, metadata, Python types, gateway release) | RELEASING.md | Done |
+| 12 | Linux and macOS runs, fix what they find | — | Linux done (GCP VM); macOS blocked (GitHub billing) |
+| 13 | Workflows in the Python and TypeScript SDKs | (to write) | Next |
+| 14 | Hooks in the SDKs | (to write) | Planned |
+| 15 | Semantic memory and telemetry in the SDKs | (to write) | Planned |
+| 16 | `Gateway` client in the SDKs | 0007 Level 0 | Planned |
+| 17 | TypeScript tool input with Standard Schema (Zod) | 0007 decision 3 | Planned |
+| 18 | Gateway: `/v1/messages`, relay path, rate limits, budgets | 0006 §7 | Planned |
+| 19 | Providers: OpenAI Responses, native Gemini | 0006 §11 step 7 | Planned |
+| 20 | Vector indexes (pgvector, sqlite-vec) | 0008 §16 | Planned |
+
 ## Open decisions
 
 | # | Decision | Status |
@@ -66,6 +82,42 @@ and push). A task is marked done only when all of that is verified.
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-17: Linux (task 12)
+
+- GitHub refused the approved CI and SDK-package runs ("recent account
+  payments have failed or your spending limit needs to be increased");
+  nothing ran or was charged. macOS stays untested until billing is fixed
+  or the repo is public.
+- Linux instead on a temporary GCP VM (`agentbuild-ci`, project
+  `resumingai-app`, e2-standard-8, Ubuntu 24.04; Rust 1.99.1 and 1.88,
+  Node 22, Python 3.12, portable Postgres 18.6), code copied from the
+  working tree over SSH: `scripts/ci-local.sh` passed all eight steps in
+  17 minutes, with nothing to fix. First Linux run since 2026-10-13.
+- Found while copying: `.gitignore` hid the new `_native.pyi` stub (the
+  pattern `_native.*` was meant for build outputs); narrowed.
+- A wheel built directly on Ubuntu 24.04 is tagged `manylinux_2_38`
+  (installs only on recent Linux); the SDK-package workflow builds in a
+  `manylinux_2_28` container for wider use, as intended.
+- The Windows pipeline for task 11 was stopped at `msrv` by low memory
+  (`rust` and `postgres` had passed); the same tree then passed all steps
+  on Linux.
+
+### 2026-10-16: packaging fixes (task 11)
+
+- Both SDK packages now ship `LICENSE-MIT` and `LICENSE-APACHE`, with
+  project links and keywords; the wheel uses PEP 639 licence metadata
+  (`License-Expression`, `License-File`).
+- The Python package is typed: `py.typed` and a stub for the native
+  module. mypy found one real error (two `call` adapters with different
+  signatures), fixed; `scripts/test-python.sh` now runs mypy on the
+  installed package and the consumer.
+- `agentbuild-gateway` is in the release workflow's publish order.
+- SDK binaries are built with `strip = "symbols"`: no change on Windows
+  (16.6 MB; the symbols are in a separate PDB there); the stripped Linux
+  addon is 16.5 MB, the Linux wheel 7.2 MB. Fat LTO
+  made the Windows addon 21% smaller (13.1 MB) but the build took 13
+  minutes instead of 1.5; not adopted.
 
 ### 2026-10-16: release preparation (no user decision needed)
 

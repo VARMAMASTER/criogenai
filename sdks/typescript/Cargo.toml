@@ -27,3 +27,8 @@ napi-build = "2"
 
 # Stand-alone: never part of the AgentBuild workspace.
 [workspace]
+
+# Published binaries carry no symbol table. (Fat LTO made the addon 21%
+# smaller but took the build from about 1.5 to 13 minutes: not worth it.)
+[profile.release]
+strip = "symbols"

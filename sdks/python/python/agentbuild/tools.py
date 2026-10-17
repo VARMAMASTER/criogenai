@@ -133,25 +133,23 @@ class Tool:
     def adapter(self) -> Tuple[Callable[[str, str], Any], bool]:
         """What the engine calls: ``(args_json, ctx_json)`` → a JSON
         envelope (or, for async tools, a coroutine that gives one)."""
+        async def call_async(args_json: str, ctx_json: str) -> str:
+            try:
+                value = await self.func(**self._kwargs(args_json, ctx_json))
+            except ToolError as error:
+                return json.dumps({"tool_error": error.message, "retryable": error.retryable})
+            return json.dumps({"ok": _jsonable(value)}, default=str)
+
+        def call_sync(args_json: str, ctx_json: str) -> str:
+            try:
+                value = self.func(**self._kwargs(args_json, ctx_json))
+            except ToolError as error:
+                return json.dumps({"tool_error": error.message, "retryable": error.retryable})
+            return json.dumps({"ok": _jsonable(value)}, default=str)
+
         if self.is_async:
-
-            async def call(args_json: str, ctx_json: str) -> str:
-                try:
-                    value = await self.func(**self._kwargs(args_json, ctx_json))
-                except ToolError as error:
-                    return json.dumps({"tool_error": error.message, "retryable": error.retryable})
-                return json.dumps({"ok": _jsonable(value)}, default=str)
-
-        else:
-
-            def call(args_json: str, ctx_json: str) -> str:
-                try:
-                    value = self.func(**self._kwargs(args_json, ctx_json))
-                except ToolError as error:
-                    return json.dumps({"tool_error": error.message, "retryable": error.retryable})
-                return json.dumps({"ok": _jsonable(value)}, default=str)
-
-        return call, self.is_async
+            return call_async, True
+        return call_sync, False
 
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
         return self.func(*args, **kwargs)

@@ -30,10 +30,13 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 "$python" -m venv "$work/venv"
 venv_python="$(bin_of "$work/venv")/python"
-"$venv_python" -m pip install --quiet "$wheel" pytest
+"$venv_python" -m pip install --quiet "$wheel" pytest mypy
 
 # From a directory without the sources: imports come from the wheel.
 cp -r "$root/sdks/python/tests" "$work/tests"
 cd "$work"
 "$venv_python" "$root/sdks/python/examples/consumer.py"
+# The package is typed (py.typed, stubs): its code and a user's both check.
+"$venv_python" -m mypy -p agentbuild
+"$venv_python" -m mypy "$root/sdks/python/examples/consumer.py"
 AGENTBUILD_ERROR_CATALOG="$root/schemas/error-codes.json" "$venv_python" -m pytest -q -p no:cacheprovider tests

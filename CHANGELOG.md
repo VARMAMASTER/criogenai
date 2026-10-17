@@ -48,6 +48,9 @@ First release, planned as 0.1.0 (Rust crates only).
 
 ### Release preparation
 
+- The Python and npm packages include the licence files and project
+  links; the Python package is typed (`py.typed`, stubs; checked with
+  mypy in the package test); SDK binaries are stripped.
 - `Storage::close()` closes the database's connections (SQLite releases
   the file); `Storage.close()` in the Python and TypeScript SDKs.
 - A manual workflow builds the Python wheels and the npm native addons

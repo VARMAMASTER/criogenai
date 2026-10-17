@@ -1,5 +1,5 @@
 [build-system]
-requires = ["maturin>=1.8,<2"]
+requires = ["maturin>=1.9,<2"]
 build-backend = "maturin"
 
 [project]
@@ -8,12 +8,25 @@ version = "0.1.0"
 description = "Agents and workflows on a Rust engine: tools, approvals, durable threads, memory"
 readme = "README.md"
 requires-python = ">=3.9"
-license = { text = "MIT OR Apache-2.0" }
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+keywords = ["agents", "llm", "workflows", "ai", "tools"]
 classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Rust",
     "Framework :: AsyncIO",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Typing :: Typed",
 ]
+
+[project.urls]
+Homepage = "https://github.com/VARMAMASTER/agentbuild"
+Repository = "https://github.com/VARMAMASTER/agentbuild"
+Documentation = "https://github.com/VARMAMASTER/agentbuild/tree/main/sdks/python"
+Changelog = "https://github.com/VARMAMASTER/agentbuild/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 pydantic = ["pydantic>=2"]
