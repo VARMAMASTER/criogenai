@@ -17,14 +17,23 @@ export interface NativeStream {
 }
 
 export interface NativeAgent {
+  /** The agent's handle, for a workflow node. */
+  readonly handle: number;
   run(payload: string, cancelId: number): Promise<string>;
   thread(op: string, payload: string, cancelId: number): Promise<string>;
   stream(op: string, payload: string): NativeStream;
 }
 
+export interface NativeWorkflow {
+  run(payload: string, cancelId: number): Promise<string>;
+  resume(payload: string, cancelId: number): Promise<string>;
+  thread(op: string, payload: string, cancelId: number): Promise<string>;
+}
+
 interface Addon {
   NativeStorage: new (spec: string) => NativeStorage;
   NativeAgent: new (config: string, tools: NativeTool[], storage: NativeStorage) => NativeAgent;
+  NativeWorkflow: new (config: string, nodes: NativeTool[], routers: NativeTool[], storage: NativeStorage) => NativeWorkflow;
   newCancelId(): number;
   cancelCall(id: number): void;
   releaseCancelId(id: number): void;

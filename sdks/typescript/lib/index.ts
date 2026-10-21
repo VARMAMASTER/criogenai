@@ -31,3 +31,5 @@ export { Memory, Storage } from "./storage";
 export type { MemoryOptions, RetentionOptions, StorageOptions } from "./storage";
 export { Tool, ToolError, tool } from "./tools";
 export type { JsonSchema, ToolContext, ToolDefinition } from "./tools";
+export { CompiledWorkflow, END, Workflow, WorkflowThread, goto, suspend } from "./workflow";
+export type { Goto, Interrupt, NodeContext, NodeFunction, Router, Suspend, WorkflowResult, WorkflowRunOptions } from "./workflow";

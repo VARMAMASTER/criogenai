@@ -65,6 +65,14 @@ First release, planned as 0.1.0 (Rust crates only).
   `ToolError::crashed` marks such a failure; `ToolError::fatal` still
   fails the run. Designs 0003 §5.1, 0004, 0011, 0012.
 
+### Workflows in the TypeScript SDK (design 0015)
+
+- `new Workflow()` with `.node` / `.addNode` (functions or agents),
+  `.start`, `.edge`, `.route`, `.join`, `.goto`, reducers, `suspend` /
+  `goto`, `compile({ storage })`, `run` / `resume` with `maxSteps`,
+  `deadlineMs` and an `AbortSignal`, and durable `thread(id)`s. A failing
+  node's thrown value is the error's `cause`.
+
 ### Workflows in the Python SDK (design 0015)
 
 - `Workflow` with `@wf.node` / `add_node` (functions or agents), `start`,

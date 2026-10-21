@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { Agent, FakeModel, FakeReply, Storage, ToolError, ValidationError, tool } from "@agentbuild/sdk";
+import { END, Agent, FakeModel, FakeReply, Storage, ToolError, ValidationError, Workflow, suspend, tool } from "@agentbuild/sdk";
 
 const require = createRequire(import.meta.url);
 const resolved = require.resolve("@agentbuild/sdk");
@@ -51,4 +51,13 @@ for (const suffix of ["", "-wal", "-shm"]) {
     fs.rmSync(file + suffix, { force: true });
   } catch {}
 }
+// A workflow that pauses for a person, then resumes (design 0015).
+const app = new Workflow()
+  .node("ask", (s, ctx) => (ctx.resume === undefined ? suspend({ refund: s.amount }) : { ok: ctx.resume }))
+  .start("ask")
+  .edge("ask", END)
+  .compile();
+const paused = await app.run({ amount: 40 });
+if (!paused.suspended || paused.interrupts[0].payload.refund !== 40) throw new Error("expected a pause");
+if ((await app.resume(paused.snapshot, { ask: true })).state.ok !== true) throw new Error("resume failed");
 console.log("typescript package test: ok");

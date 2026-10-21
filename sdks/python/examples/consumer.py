@@ -7,7 +7,7 @@ import tempfile
 import uuid
 
 import agentbuild
-from agentbuild import Agent, FakeModel, FakeReply, Storage, ToolError, ValidationError, tool
+from agentbuild import END, Agent, FakeModel, FakeReply, Storage, ToolError, ValidationError, Workflow, suspend, tool
 
 
 @tool
@@ -40,6 +40,14 @@ async def main():
         await chat.decide({"nope": {"type": "approve"}})
     except ValidationError as error:
         assert error.code == "resume_invalid"
+    # A workflow that pauses for a person, then resumes (design 0015).
+    wf = Workflow()
+    wf.add_node("ask", lambda s, ctx: suspend({"refund": s["amount"]}) if ctx.resume is None else {"ok": ctx.resume})
+    wf.start("ask").edge("ask", END)
+    app = wf.compile()
+    paused = await app.run({"amount": 40})
+    assert paused.suspended and paused.interrupts[0].payload == {"refund": 40}
+    assert (await app.resume(paused.snapshot, {"ask": True})).state["ok"] is True
     print("python package test: ok", agentbuild.__version__)
     for suffix in ("", "-wal", "-shm"):
         try:

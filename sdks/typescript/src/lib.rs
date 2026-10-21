@@ -16,11 +16,17 @@ use agentbuild_agent::{
     Agent, AgentError, AgentEvent, AgentInput, AgentResult, Approval, Decision, Limits, Memory,
     OnToolException, Reply, Thread, ThreadStream, ToolContext, ToolError, tool_fn,
 };
-use agentbuild_core::{CancelToken, RunOptions};
+use agentbuild_core::{
+    CancelToken, NodeContext, NodeError, NodeOutput, Reducer, RunError, RunErrorKind, RunOptions,
+    RunOutput, Snapshot, State, Update, Workflow, WorkflowBuilder, node_with_context, router_fn,
+};
 use agentbuild_providers::{
     Endpoint, FakeModel, FakeReply, Model, ProviderModel, ToolAnnotations, ToolSpec,
 };
-use agentbuild_storage::{AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage};
+use agentbuild_storage::{
+    AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
+    WorkflowThread,
+};
 use napi::Status;
 use napi::bindgen_prelude::{Promise, block_on, within_runtime_if_available};
 use napi::threadsafe_function::ThreadsafeFunction;
@@ -482,6 +488,20 @@ async fn storage_operation(storage: Storage, op: &str, payload: Value) -> napi::
 #[napi]
 pub struct NativeAgent {
     agent: Agent,
+    handle: u32,
+}
+
+/// Agents by handle, so a workflow (built from JavaScript, where only
+/// numbers and strings cross) can use one as a node.
+fn agents() -> &'static Mutex<HashMap<u32, Agent>> {
+    static AGENTS: OnceLock<Mutex<HashMap<u32, Agent>>> = OnceLock::new();
+    AGENTS.get_or_init(Mutex::default)
+}
+
+impl Drop for NativeAgent {
+    fn drop(&mut self) {
+        lock(agents()).remove(&self.handle);
+    }
 }
 
 fn input(payload: &Value) -> AgentInput {
@@ -609,7 +629,16 @@ impl NativeAgent {
         let agent = builder
             .build()
             .map_err(|err| failure("invalid_agent", err.to_string(), None))?;
-        Ok(Self { agent })
+        static NEXT: AtomicU32 = AtomicU32::new(1);
+        let handle = NEXT.fetch_add(1, Ordering::Relaxed);
+        lock(agents()).insert(handle, agent.clone());
+        Ok(Self { agent, handle })
+    }
+
+    /// This agent's handle, for a workflow node.
+    #[napi(getter)]
+    pub fn handle(&self) -> u32 {
+        self.handle
     }
 
     /// `agent.run`: payload `{input, state}`; `cancelId` from
@@ -665,6 +694,342 @@ impl NativeAgent {
             stream: Arc::new(tokio::sync::Mutex::new(Some(stream))),
         })
     }
+}
+
+// ---------- workflows (design 0015) ----------
+
+/// Calls a JavaScript node or router: request JSON in, envelope JSON out.
+async fn call_js(function: Arc<JsTool>, request: String) -> Result<Value, String> {
+    let promise = function
+        .call_async(request)
+        .await
+        .map_err(|err| format!("could not call the function: {err}"))?;
+    let envelope = promise
+        .await
+        .map_err(|err| format!("the function failed: {}", err.reason))?;
+    serde_json::from_str(&envelope).map_err(|err| format!("unreadable answer: {err}"))
+}
+
+/// A node's or router's exception, for the run error: the TypeScript side
+/// keeps what was thrown under this key.
+fn cause_key(node: &str, message: &str) -> String {
+    format!("node:{node}:{message}")
+}
+
+/// A JavaScript function as a node. Envelopes: `{"update"}`,
+/// `{"suspend", "update"}`, `{"goto", "update"}` or `{"crash"}`.
+fn js_node(name: String, function: Arc<JsTool>) -> impl agentbuild_core::Node {
+    node_with_context(move |ctx: NodeContext, state: Arc<State>| {
+        let (name, function) = (name.clone(), function.clone());
+        async move {
+            let request = json!({
+                "node": name,
+                "state": state.as_map(),
+                "ctx": {
+                    "runId": ctx.run_id(), "step": ctx.step(), "node": ctx.node(),
+                    "attempt": ctx.attempt(), "resume": ctx.resume(),
+                },
+            })
+            .to_string();
+            let envelope = call_js(function, request).await.map_err(NodeError::new)?;
+            if let Some(crash) = envelope.get("crash").and_then(Value::as_str) {
+                return Err(NodeError::new(crash));
+            }
+            let update = match envelope.get("update") {
+                Some(Value::Object(map)) => Update::from(map.clone()),
+                Some(Value::Null) | None => Update::new(),
+                Some(other) => {
+                    return Err(NodeError::new(format!(
+                        "a node returns an object (the update), not {other}"
+                    )));
+                }
+            };
+            if let Some(payload) = envelope.get("suspend") {
+                return Ok(NodeOutput::suspend(update, payload.clone()));
+            }
+            if let Some(targets) = envelope.get("goto").and_then(Value::as_array) {
+                let targets: Vec<String> = targets
+                    .iter()
+                    .filter_map(|t| t.as_str().map(str::to_string))
+                    .collect();
+                return Ok(NodeOutput::goto(update, targets));
+            }
+            Ok(NodeOutput::from(update))
+        }
+    })
+}
+
+/// A JavaScript function as a router: `{"label"}` or `{"crash"}`.
+fn js_router(from: String, function: Arc<JsTool>) -> impl agentbuild_core::Router {
+    router_fn(move |state: Arc<State>| {
+        let (from, function) = (from.clone(), function.clone());
+        async move {
+            let request = json!({"node": from, "state": state.as_map()}).to_string();
+            let envelope = call_js(function, request).await.map_err(NodeError::new)?;
+            if let Some(crash) = envelope.get("crash").and_then(Value::as_str) {
+                return Err(NodeError::new(crash));
+            }
+            envelope
+                .get("label")
+                .and_then(Value::as_str)
+                .map(str::to_string)
+                .ok_or_else(|| NodeError::new("a router returns a label (a string)"))
+        }
+    })
+}
+
+fn run_failure(error: RunError) -> napi::Error {
+    let code = error.kind.code().to_string();
+    let mut details = json!({"step": error.step});
+    if let Some(snapshot) = error.snapshot() {
+        details["snapshot"] = to_json(snapshot);
+        details["runId"] = json!(snapshot.run_id);
+    }
+    match &error.kind {
+        RunErrorKind::NodeFailed { node, source } | RunErrorKind::RouterFailed { node, source } => {
+            details["node"] = json!(node);
+            details["cause_key"] = json!(cause_key(node, &source.message));
+        }
+        RunErrorKind::NodeTimeout { node, .. } | RunErrorKind::NodePanicked { node, .. } => {
+            details["node"] = json!(node);
+        }
+        _ => {}
+    }
+    failure(&code, error.to_string(), Some(details))
+}
+
+fn thread_failure(error: ThreadError) -> napi::Error {
+    match error {
+        ThreadError::Run(run) => run_failure(*run),
+        other => failure(other.code(), other.to_string(), None),
+    }
+}
+
+fn reducer(name: &str) -> napi::Result<Reducer> {
+    match name {
+        "replace" => Ok(Reducer::Replace),
+        "append" => Ok(Reducer::Append),
+        "upsertById" | "upsert_by_id" => Ok(Reducer::UpsertById),
+        other => Err(bad(format!("unknown reducer `{other}`"))),
+    }
+}
+
+fn run_json(run: &RunOutput) -> Value {
+    json!({
+        "state": run.state,
+        "steps": run.steps.len(),
+        "suspended": run.is_suspended(),
+        "interrupts": to_json(&run.interrupts()),
+        "snapshot": run.snapshot().map(to_json),
+        "runId": run.run_id,
+    })
+}
+
+fn workflow_options(payload: &Value, cancel: &CancelToken) -> RunOptions {
+    let mut options = RunOptions::default().cancel_token(cancel.clone());
+    if let Some(n) = payload["maxSteps"].as_u64() {
+        options = options.max_steps(n as usize);
+    }
+    if let Some(ms) = payload["deadlineMs"].as_u64() {
+        options = options.deadline(Duration::from_millis(ms));
+    }
+    options
+}
+
+fn strings(value: &Value) -> Vec<String> {
+    value
+        .as_array()
+        .cloned()
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|s| s.as_str().map(str::to_string))
+        .collect()
+}
+
+/// A compiled workflow (design 0015).
+#[napi]
+pub struct NativeWorkflow {
+    workflow: Workflow,
+    storage: Storage,
+}
+
+#[napi]
+impl NativeWorkflow {
+    /// Builds the graph. `nodes`: one function per name in `config.nodes`;
+    /// `routers`: one per entry of `config.routes`; agents come by handle in
+    /// `config.agents`.
+    #[napi(constructor)]
+    pub fn new(
+        config: String,
+        nodes: Vec<JsTool>,
+        routers: Vec<JsTool>,
+        storage: &NativeStorage,
+    ) -> napi::Result<Self> {
+        let config = parse(&config)?;
+        let mut builder = WorkflowBuilder::new();
+        let names = strings(&config["nodes"]);
+        if names.len() != nodes.len() {
+            return Err(bad("one function per node"));
+        }
+        for (name, function) in names.into_iter().zip(nodes) {
+            builder.add_node(name.clone(), js_node(name, Arc::new(function)));
+        }
+        for (name, handle) in config["agents"].as_object().cloned().unwrap_or_default() {
+            let agent = lock(agents())
+                .get(&(handle.as_u64().unwrap_or_default() as u32))
+                .cloned()
+                .ok_or_else(|| bad(format!("node `{name}`: the agent is gone")))?;
+            builder.add_node(name, agent.as_node());
+        }
+        if let Some(entry) = text(&config, "entry") {
+            builder.set_entry(entry);
+        }
+        for edge in config["edges"].as_array().cloned().unwrap_or_default() {
+            builder.add_edge(
+                edge[0].as_str().unwrap_or_default(),
+                edge[1].as_str().unwrap_or_default(),
+            );
+        }
+        let routes = config["routes"].as_array().cloned().unwrap_or_default();
+        if routes.len() != routers.len() {
+            return Err(bad("one function per router"));
+        }
+        for (route, function) in routes.iter().zip(routers) {
+            let from = text(route, "from").unwrap_or_default().to_string();
+            let table: Vec<(String, String)> = route["routes"]
+                .as_object()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(label, target)| (label, target.as_str().unwrap_or_default().to_string()))
+                .collect();
+            builder.add_router(from.clone(), js_router(from, Arc::new(function)), table);
+        }
+        for join in config["joins"].as_array().cloned().unwrap_or_default() {
+            builder.add_join(strings(&join[0]), join[1].as_str().unwrap_or_default());
+        }
+        for goto in config["gotos"].as_array().cloned().unwrap_or_default() {
+            builder.may_goto(goto[0].as_str().unwrap_or_default(), strings(&goto[1]));
+        }
+        for (key, name) in config["reducers"].as_object().cloned().unwrap_or_default() {
+            builder.reducer(key, reducer(name.as_str().unwrap_or_default())?);
+        }
+        let workflow = builder.build().map_err(|err| {
+            failure(
+                "invalid_workflow",
+                err.to_string(),
+                Some(json!({
+                    "issues": err.issues.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                })),
+            )
+        })?;
+        Ok(Self {
+            workflow,
+            storage: storage.storage.clone(),
+        })
+    }
+
+    /// Runs once: payload `{input, maxSteps, deadlineMs}`.
+    #[napi]
+    pub async fn run(&self, payload: String, cancel_id: u32) -> napi::Result<String> {
+        let payload = parse(&payload)?;
+        let cancel = Registered::take(cancel_id);
+        let input = State::try_from(payload["input"].clone())
+            .map_err(|_| bad("the input must be an object"))?;
+        let run = self
+            .workflow
+            .run_with(input, workflow_options(&payload, &cancel.1))
+            .await
+            .map_err(run_failure)?;
+        Ok(run_json(&run).to_string())
+    }
+
+    /// Continues a snapshot (no storage): payload `{snapshot, values}`.
+    #[napi]
+    pub async fn resume(&self, payload: String, cancel_id: u32) -> napi::Result<String> {
+        let payload = parse(&payload)?;
+        let cancel = Registered::take(cancel_id);
+        let snapshot: Snapshot =
+            serde_json::from_value(payload["snapshot"].clone()).map_err(|err| {
+                failure(
+                    "resume_invalid",
+                    format!("unreadable snapshot: {err}"),
+                    None,
+                )
+            })?;
+        let values = payload["values"].as_object().cloned().unwrap_or_default();
+        let run = self
+            .workflow
+            .resume_with(&snapshot, values, workflow_options(&payload, &cancel.1))
+            .await
+            .map_err(run_failure)?;
+        Ok(run_json(&run).to_string())
+    }
+
+    /// A thread operation: payload `{threadId, actor, …}`.
+    #[napi]
+    pub async fn thread(
+        &self,
+        op: String,
+        payload: String,
+        cancel_id: u32,
+    ) -> napi::Result<String> {
+        let payload = parse(&payload)?;
+        let cancel = Registered::take(cancel_id);
+        let mut thread = self
+            .storage
+            .workflow_thread(
+                &self.workflow,
+                text(&payload, "threadId").unwrap_or_default(),
+            )
+            .with_options(workflow_options(&payload, &cancel.1));
+        if let Some(actor) = text(&payload, "actor") {
+            thread = thread.actor(actor);
+        }
+        workflow_thread_operation(thread, &op, payload).await
+    }
+}
+
+fn turn_json(turn: &Turn) -> Value {
+    let mut value = run_json(&turn.run);
+    value["version"] = json!(turn.version);
+    value["checkpointId"] = json!(turn.checkpoint_id);
+    value
+}
+
+async fn workflow_thread_operation(
+    thread: WorkflowThread,
+    op: &str,
+    payload: Value,
+) -> napi::Result<String> {
+    let turn = match op {
+        "run" => {
+            let input = State::try_from(payload["input"].clone())
+                .map_err(|_| bad("the input must be an object"))?;
+            thread.run(input).await
+        }
+        "resume" => {
+            let values = payload["values"].as_object().cloned().unwrap_or_default();
+            thread.resume(values).await
+        }
+        "retry" => thread.retry().await,
+        "state" => return Ok(to_json(&thread.state().await.map_err(thread_failure)?).to_string()),
+        "interrupts" => {
+            return Ok(to_json(&thread.interrupts().await.map_err(thread_failure)?).to_string());
+        }
+        "history" => {
+            let limit = payload["limit"].as_u64().unwrap_or(20) as usize;
+            return Ok(to_json(&thread.history(limit).await.map_err(thread_failure)?).to_string());
+        }
+        "rewind" => {
+            let id = text(&payload, "checkpointId").unwrap_or_default();
+            return Ok(to_json(&thread.rewind(id).await.map_err(thread_failure)?).to_string());
+        }
+        "delete" => return Ok(json!(thread.delete().await.map_err(thread_failure)?).to_string()),
+        other => return Err(bad(format!("unknown workflow thread operation `{other}`"))),
+    };
+    turn.map(|t| turn_json(&t).to_string())
+        .map_err(thread_failure)
 }
 
 /// A streamed thread operation.

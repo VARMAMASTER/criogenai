@@ -4,12 +4,6 @@ description: Graphs of steps with branches, parallel work, joins, loops and paus
 ---
 
 
-<Aside type="note" title="Rust today">
-Workflows are in the Rust API. Python workflows are being built now and
-TypeScript follows; see [Status](/docs/status/). Agents, threads, approvals
-and storage already work in all three languages.
-</Aside>
-
 A **workflow** is a graph of steps (nodes) over a shared state. Each node
 reads the state and returns the keys it changes. The engine runs ready
 nodes [in steps](/docs/concepts/runs/), concurrently, and checks the graph
@@ -28,12 +22,13 @@ before the first run.
 | **Goto** | A node chooses its next nodes itself (declared ahead) |
 | **Reducer** | How parallel writes to one key combine: replace, append, update by id |
 | **Suspend** | A node pauses the run for a person; `resume` gives it the answer |
-| **Policies** | Per-node timeouts and retries with backoff; a deadline per run |
-| **Agents as nodes** | An agent can be one node of a workflow (`agent.as_node()`) |
+| **Policies** | A deadline and a step limit per run; per-node timeouts and retries with backoff (Rust) |
+| **Agents as nodes** | An agent can be one node of a workflow: `wf.add_node(name, agent)`, `.addNode(name, agent)`, `agent.as_node()` |
 
 ## Durable workflows
 
-`storage.workflow_thread(&workflow, id)` gives a workflow the same thread
-guarantees as agents: progress saved every step, a pause that waits in the
+A workflow compiled with storage gives threads (`app.thread(id)` in
+Python and TypeScript, `storage.workflow_thread(&workflow, id)` in Rust)
+the same guarantees as agents: progress saved every step, a pause that waits in the
 database and is answered from any process, `retry()` after a failure
 without re-running finished nodes, history, rewind and the audit trail.

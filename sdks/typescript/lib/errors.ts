@@ -66,7 +66,7 @@ export function isAgentBuildError(error: unknown, code?: string): error is Agent
 /**
  * Turns an error from the addon (its message is `{code, message, details}`)
  * into an `AgentBuildError`. `causes` holds what crashing tools threw, by
- * call id.
+ * call id, and what failing workflow nodes threw, by `cause_key`.
  */
 export function translate(error: unknown, causes?: Map<string, unknown>): unknown {
   if (!(error instanceof Error)) return error;
@@ -77,11 +77,13 @@ export function translate(error: unknown, causes?: Map<string, unknown>): unknow
     return error;
   }
   if (typeof parsed?.code !== "string") return error;
-  const callId = parsed.details?.["call_id"];
   let cause: unknown;
-  if (typeof callId === "string" && causes?.has(callId)) {
-    cause = causes.get(callId);
-    causes.delete(callId);
+  for (const key of [parsed.details?.["call_id"], parsed.details?.["cause_key"]]) {
+    if (typeof key === "string" && causes?.has(key)) {
+      cause = causes.get(key);
+      causes.delete(key);
+      break;
+    }
   }
   return errorFor(parsed.code, parsed.message ?? "", parsed.details, cause);
 }

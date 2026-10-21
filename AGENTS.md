@@ -125,7 +125,8 @@ write our own implementation.
 - **Implemented: TypeScript SDK, first slice (0012).** `sdks/typescript`
   (crate `agentbuild-node`, not a workspace member; napi-rs 3, N-API 6,
   Node 18+; package `@agentbuild/sdk`, TypeScript in `lib/` compiled to
-  `dist/`): the same slice as Python. `Agent`, `tool({...})` with JSON
+  `dist/`): the same slice as Python, and workflows (`Workflow`, 0015;
+  `test/workflow.test.js`). `Agent`, `tool({...})` with JSON
   Schema input, approvals, typed output, threads (incl. `stream*`),
   `AbortSignal` on every call, `Storage`, `Memory`, error classes by
   code (`cause` = what a crashing tool threw). Tools are weak
@@ -204,7 +205,7 @@ write our own implementation.
   landing page, docs (MDX in `content/docs`, code samples compiled from
   `snippets/`), benchmark lab, install counter. `npm run build` /
   `npm run preview` (port 4400); checked by `ci-local.sh` step `website`.
-- **Not started:** TypeScript SDK workflows, SDK hooks, Standard Schema tool input, vector indexes
+- **Not started:** SDK hooks, Standard Schema tool input, vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 
 ## Commands

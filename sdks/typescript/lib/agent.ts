@@ -90,7 +90,8 @@ export type StreamEvent =
   | { type: "other"; event: string };
 
 /** Runs `call` with a cancellation id that `signal` fires. */
-async function cancellable<T>(signal: AbortSignal | undefined, call: (cancelId: number) => Promise<T>): Promise<T> {
+/** @internal Runs a native call that an AbortSignal can cancel. */
+export async function cancellable<T>(signal: AbortSignal | undefined, call: (cancelId: number) => Promise<T>): Promise<T> {
   const id = native.newCancelId();
   if (signal?.aborted) native.cancelCall(id);
   const onAbort = () => native.cancelCall(id);
