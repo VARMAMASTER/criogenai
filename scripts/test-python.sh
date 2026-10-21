@@ -23,7 +23,7 @@ wheels="$root/target/wheels"
 rm -rf "$wheels"
 "$(bin_of "$build")/maturin" build --release --quiet \
   --manifest-path "$root/sdks/python/Cargo.toml" --out "$wheels"
-wheel="$(ls "$wheels"/agentbuild-*.whl | head -1)"
+wheel="$(ls "$wheels"/agentbuild_sdk-*.whl | head -1)"
 echo "built $(basename "$wheel")"
 
 work="$(mktemp -d)"

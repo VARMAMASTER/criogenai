@@ -1,0 +1,48 @@
+---
+title: What AgentBuild is
+description: AI agents and workflows on a Rust engine, used from Python, TypeScript or Rust.
+---
+
+
+AgentBuild runs AI agents and workflows. You write tools, agents and steps in
+**Python, TypeScript or Rust**; a Rust engine runs them: it schedules the
+steps, calls the models, checks every tool argument, saves progress, and
+records who did what.
+
+<Sample name="quickstart" />
+
+## What it is for
+
+Agents that do real work, where mistakes cost something:
+
+- **A person approves risky actions.** The run pauses before a refund, an
+  email or a prescription, waits in the database (for minutes or days),
+  and continues from any process when someone decides.
+- **Nothing is lost when a process dies.** Progress is saved after every
+  step and every tool call. `retry()` continues where the run stopped, and
+  tools that already ran are not run again.
+- **You can prove what happened.** An audit trail records every run, model
+  call, tool call and decision, with who did it, and no message content.
+  A hash chain shows if a record was changed or removed.
+- **Sensitive data stays protected.** Conversations and memory can be
+  encrypted in the database, deleted on a schedule, or deleted per person.
+- **Any model, including your own.** OpenAI, Anthropic, Gemini, OpenRouter,
+  or self-hosted models through Ollama, vLLM or LM Studio, with fallback
+  when one is down.
+
+## How it fits together
+
+| Part | What it does |
+|---|---|
+| **Agents** | A model with tools, run as a loop until it answers: tool calls run concurrently, arguments are validated, limits stop runaway loops |
+| **Workflows** | A graph of steps: branches, parallel steps, joins, loops, pauses for a person |
+| **Threads** | Durable conversations: every step saved, approvals that wait, crash recovery, history and rewind |
+| **Storage** | In memory, SQLite or Postgres; long-term memory per user; encryption, audit trail, retention |
+| **Gateway** | An OpenAI-compatible server in front of every provider, with keys, fallback and usage records |
+
+<CardGrid>
+  <LinkCard title="Install" description="Python, TypeScript or Rust, on Linux, macOS and Windows." href="/docs/install/" />
+  <LinkCard title="Quickstart" description="An agent with a tool, a conversation and an approval in ten minutes." href="/docs/quickstart/" />
+  <LinkCard title="What is built, what is planned" description="AgentBuild is 0.1: see exactly what works today." href="/docs/status/" />
+  <LinkCard title="API reference" description="Every type and function, in all three languages." href="/docs/reference/api/" />
+</CardGrid>

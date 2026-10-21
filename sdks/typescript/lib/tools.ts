@@ -61,11 +61,12 @@ export class Tool<Args = Record<string, unknown>> {
   }
 
   /**
-   * What the engine calls: request JSON in, envelope JSON out. A crash is
-   * recorded in `crashes` by call id, so the run's `tool_failed` error can
-   * carry it as `cause`.
+   * What the engine calls: request JSON in, envelope JSON out. A crash (an
+   * exception other than ToolError) is recorded in `crashes` by call id when
+   * the agent fails runs on crashes, so its `tool_failed` error can carry it
+   * as `cause`; otherwise the engine returns it to the model.
    */
-  adapter(crashes: Map<string, unknown>): (request: string) => Promise<string> {
+  adapter(crashes: Map<string, unknown> | null): (request: string) => Promise<string> {
     return async (request: string) => {
       const { args, callId, runId } = JSON.parse(request) as { args: Args; callId: string; runId: string };
       try {
@@ -75,7 +76,7 @@ export class Tool<Args = Record<string, unknown>> {
         if (error instanceof ToolError) {
           return JSON.stringify({ toolError: error.message, retryable: error.retryable });
         }
-        crashes.set(callId, error);
+        crashes?.set(callId, error);
         const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
         return JSON.stringify({ crash: text });
       }

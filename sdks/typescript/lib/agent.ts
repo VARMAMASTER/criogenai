@@ -57,6 +57,14 @@ export interface AgentOptions {
   /** JSON Schema of the final answer (`result.output`). */
   output?: JsonSchema;
   limits?: { modelCalls?: number; toolCalls?: number; tokens?: number; toolTimeoutSecs?: number };
+  /**
+   * When a tool throws an exception that is not a ToolError: "returnToModel"
+   * (default; the model sees its name and message, the run goes on),
+   * "returnGeneric" (the model only learns that the tool failed; the text
+   * stays in the result's `artifact`) or "fail" (the run fails with
+   * ToolExecutionError, the exception as its `cause`).
+   */
+  onToolException?: "returnToModel" | "returnGeneric" | "fail";
   /** A Storage, a URL ("sqlite:///x.db", "postgres://…"), or in memory. */
   storage?: Storage | string;
   memory?: Memory;
@@ -115,13 +123,13 @@ export class Agent<Output = unknown> {
       tools: tools.map((t) => t.spec()),
       approve: options.approve ?? [],
       output: options.output,
-      limits: options.limits,
+      limits: options.onToolException ? { ...options.limits, onToolException: options.onToolException } : options.limits,
       memory: options.memory?.spec,
     };
     try {
       this.native = new native.NativeAgent(
         JSON.stringify(config),
-        tools.map((t) => t.adapter(this.crashes)),
+        tools.map((t) => t.adapter(options.onToolException === "fail" ? this.crashes : null)),
         this.storage.native,
       );
     } catch (error) {

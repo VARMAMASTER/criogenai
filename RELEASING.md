@@ -50,7 +50,7 @@ All crates and both SDKs share one version and are released together.
    the packages are kept as artifacts. Then with *publish*: wheels to
    PyPI, the platform packages `@agentbuild/sdk-<platform>-<arch>` to
    npm, then `@agentbuild/sdk` with them as optional dependencies.
-8. Check the crates on crates.io and docs.rs, `pip install agentbuild`
+8. Check the crates on crates.io and docs.rs, `pip install agentbuild-sdk`
    and `npm install @agentbuild/sdk` on a clean machine.
 
 A published version cannot be replaced, only yanked. If something is wrong,

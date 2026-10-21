@@ -15,13 +15,20 @@ use std::time::Duration;
 
 use agentbuild_agent::{
     Agent, AgentError, AgentEvent, AgentInput, AgentResult, Approval, Decision, Limits, Memory,
-    Reply, Thread, ThreadStream, ToolContext, ToolError, tool_fn,
+    OnToolException, Reply, Thread, ThreadStream, ToolContext, ToolError, tool_fn,
 };
-use agentbuild_core::{CancelToken, RunOptions};
+use agentbuild_core::{
+    CancelToken, Node, NodeContext, NodeError, NodeOutput, Reducer, Router, RunError, RunErrorKind,
+    RunOptions, RunOutput, Snapshot, State, Update, Workflow, WorkflowBuilder, node_with_context,
+    router_fn,
+};
 use agentbuild_providers::{
     Endpoint, FakeModel, FakeReply, Model, ProviderModel, ToolAnnotations, ToolSpec,
 };
-use agentbuild_storage::{AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage};
+use agentbuild_storage::{
+    AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
+    WorkflowThread,
+};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyCFunction, PyDict, PyTuple};
@@ -72,9 +79,9 @@ impl Drop for LoopId {
     }
 }
 
-/// The caller's event loop of the run a tool belongs to.
-fn loop_of(ctx: &ToolContext) -> Option<Arc<Py<PyAny>>> {
-    let id = ctx.metadata()?.get(LOOP_KEY)?.as_u64()?;
+/// The caller's event loop of a run, from its metadata.
+fn loop_of(metadata: Option<&Value>) -> Option<Arc<Py<PyAny>>> {
+    let id = metadata?.get(LOOP_KEY)?.as_u64()?;
     lock(loops()).get(&id).cloned()
 }
 
@@ -180,7 +187,7 @@ fn deliver(
             let cause = failure
                 .details
                 .as_ref()
-                .and_then(|d| d.get("call_id"))
+                .and_then(|d| d.get("call_id").or_else(|| d.get("cause_key")))
                 .and_then(Value::as_str)
                 .and_then(|id| lock(tool_exceptions()).remove(id));
             event_loop.call_method1(
@@ -267,7 +274,14 @@ fn model(spec: &Value) -> Result<Arc<dyn Model>, Failure> {
     if kind == "fake" {
         let delay =
             Duration::from_millis(spec.get("delay_ms").and_then(Value::as_u64).unwrap_or(0));
-        let mut fake = FakeModel::with_delay(delay, delay);
+        // Python cannot read the request log: keep none.
+        let mut fake = FakeModel::with_delay(delay, delay).without_request_log();
+        if let Some(calls) = spec.get("fail_first").and_then(Value::as_u64) {
+            fake = fake.flaky_first(calls as usize);
+        }
+        if spec.get("by_turn").and_then(Value::as_bool) == Some(true) {
+            fake = fake.by_turn();
+        }
         for reply in spec["replies"].as_array().cloned().unwrap_or_default() {
             fake = fake.then(fake_reply(&reply)?);
         }
@@ -382,7 +396,7 @@ fn memory(spec: &Value) -> Result<Memory, Failure> {
     Ok(memory)
 }
 
-fn limits(spec: &Value) -> Limits {
+fn limits(spec: &Value) -> Result<Limits, Failure> {
     let mut limits = Limits::default();
     if let Some(n) = spec["model_calls"].as_u64() {
         limits = limits.model_calls(n as u32);
@@ -396,7 +410,13 @@ fn limits(spec: &Value) -> Limits {
     if let Some(secs) = spec["tool_timeout_secs"].as_f64() {
         limits = limits.tool_timeout(Duration::from_secs_f64(secs));
     }
-    limits
+    if let Some(policy) = spec.get("on_tool_exception").filter(|p| !p.is_null()) {
+        let policy: OnToolException = serde_json::from_value(policy.clone()).map_err(|_| {
+            bad("on_tool_exception is \"return_to_model\", \"return_generic\" or \"fail\"")
+        })?;
+        limits = limits.on_tool_exception(policy);
+    }
+    Ok(limits)
 }
 
 // ---------- tools ----------
@@ -417,28 +437,25 @@ fn raised(py: Python<'_>, err: PyErr) -> Answer {
     Answer::Raised(err.value(py).clone().into_any().unbind(), text)
 }
 
-/// Calls a Python tool: `adapter(args_json, ctx_json)` returns the
-/// envelope, or (async tools) a coroutine that does, run on the caller's
-/// event loop.
-async fn call_tool(
+/// Calls `adapter(a, b)`: its JSON envelope, or (async adapters) the
+/// envelope of the coroutine it returns, run on `event_loop`.
+async fn call_python(
     adapter: Arc<Py<PyAny>>,
     is_async: bool,
-    args: Map<String, Value>,
-    ctx: ToolContext,
-) -> Result<Value, ToolError> {
-    let args_json = Value::Object(args).to_string();
-    let ctx_json = json!({"call_id": ctx.call_id, "run_id": ctx.run_id}).to_string();
-    let answer = if is_async {
-        let event_loop = loop_of(&ctx).ok_or_else(|| {
-            ToolError::fatal(
-                "an async Python tool needs the caller's event loop: use the async API \
-                 (or run_sync), not a run started elsewhere",
-            )
+    a: String,
+    b: String,
+    event_loop: Option<Arc<Py<PyAny>>>,
+) -> Result<Answer, String> {
+    if is_async {
+        let event_loop = event_loop.ok_or_else(|| {
+            "an async Python function needs the caller's event loop: use the async API \
+             (or run_sync), not a run started elsewhere"
+                .to_string()
         })?;
         let (sender, receiver) = tokio::sync::oneshot::channel::<Answer>();
         let sender = Mutex::new(Some(sender));
         let scheduled = Python::attach(|py| -> PyResult<()> {
-            let coroutine = adapter.call1(py, (args_json, ctx_json))?;
+            let coroutine = adapter.call1(py, (a, b))?;
             let running = py
                 .import("asyncio")?
                 .call_method1("run_coroutine_threadsafe", (coroutine, event_loop.bind(py)))?;
@@ -446,8 +463,8 @@ async fn call_tool(
                 py,
                 None,
                 None,
-                move |a: &Bound<'_, PyTuple>, _: Option<&Bound<'_, PyDict>>| -> PyResult<()> {
-                    let done = a.get_item(0)?;
+                move |args: &Bound<'_, PyTuple>, _: Option<&Bound<'_, PyDict>>| -> PyResult<()> {
+                    let done = args.get_item(0)?;
                     let answer = match done
                         .call_method0("result")
                         .and_then(|v| v.extract::<String>())
@@ -467,14 +484,14 @@ async fn call_tool(
         match scheduled {
             Ok(()) => receiver
                 .await
-                .map_err(|_| ToolError::fatal("the Python tool was abandoned"))?,
-            Err(err) => Python::attach(|py| raised(py, err)),
+                .map_err(|_| "the Python function was abandoned".to_string()),
+            Err(err) => Ok(Python::attach(|py| raised(py, err))),
         }
     } else {
         tokio::task::spawn_blocking(move || {
             Python::attach(|py| {
                 match adapter
-                    .call1(py, (args_json, ctx_json))
+                    .call1(py, (a, b))
                     .and_then(|v| v.extract::<String>(py))
                 {
                     Ok(envelope) => Answer::Envelope(envelope),
@@ -483,8 +500,32 @@ async fn call_tool(
             })
         })
         .await
-        .map_err(|_| ToolError::fatal("the Python tool panicked"))?
-    };
+        .map_err(|_| "the Python function panicked".to_string())
+    }
+}
+
+/// Calls a Python tool: `adapter(args_json, ctx_json)`.
+/// Calls a Python tool. An exception it raises is a crash
+/// (`on_tool_exception` decides); with `keep_cause` (the run fails on it)
+/// the exception object is kept to become the error's cause.
+async fn call_tool(
+    adapter: Arc<Py<PyAny>>,
+    is_async: bool,
+    keep_cause: bool,
+    args: Map<String, Value>,
+    ctx: ToolContext,
+) -> Result<Value, ToolError> {
+    let args_json = Value::Object(args).to_string();
+    let ctx_json = json!({"call_id": ctx.call_id, "run_id": ctx.run_id}).to_string();
+    let answer = call_python(
+        adapter,
+        is_async,
+        args_json,
+        ctx_json,
+        loop_of(ctx.metadata()),
+    )
+    .await
+    .map_err(ToolError::fatal)?;
     match answer {
         Answer::Envelope(envelope) => {
             let envelope: Value = serde_json::from_str(&envelope)
@@ -500,8 +541,10 @@ async fn call_tool(
             Ok(envelope.get("ok").cloned().unwrap_or(Value::Null))
         }
         Answer::Raised(exception, text) => {
-            lock(tool_exceptions()).insert(ctx.call_id.clone(), exception);
-            Err(ToolError::fatal(text))
+            if keep_cause {
+                lock(tool_exceptions()).insert(ctx.call_id.clone(), exception);
+            }
+            Err(ToolError::crashed(text))
         }
     }
 }
@@ -756,6 +799,8 @@ impl NativeAgent {
             builder = builder.instructions(instructions);
         }
         let specs = config["tools"].as_array().cloned().unwrap_or_default();
+        // Only a run that fails on a tool's exception reports it as a cause.
+        let keep_cause = config["limits"]["on_tool_exception"].as_str() == Some("fail");
         if specs.len() != tools.len() {
             return Err(PyValueError::new_err("one adapter per tool"));
         }
@@ -772,7 +817,7 @@ impl NativeAgent {
             .with_annotations(annotations);
             let adapter = Arc::new(adapter);
             builder = builder.tool(tool_fn(tool_spec, move |args, ctx: ToolContext| {
-                call_tool(adapter.clone(), is_async, args, ctx)
+                call_tool(adapter.clone(), is_async, keep_cause, args, ctx)
             }));
         }
         if let Some(names) = config["approve"].as_array().filter(|n| !n.is_empty()) {
@@ -786,7 +831,7 @@ impl NativeAgent {
             builder = builder.output(schema.clone());
         }
         if let Some(spec) = config.get("limits").filter(|s| s.is_object()) {
-            builder = builder.limits(limits(spec));
+            builder = builder.limits(limits(spec).map_err(py_failure)?);
         }
         if let Some(spec) = config.get("memory").filter(|s| s.is_object()) {
             builder = builder.memory(memory(spec).map_err(py_failure)?);
@@ -874,6 +919,376 @@ impl NativeAgent {
     }
 }
 
+// ---------- workflows (design 0015) ----------
+
+/// A run error for Python: the node's exception is found by `cause_key`.
+fn run_failure(error: RunError) -> Failure {
+    let code = error.kind.code().to_string();
+    let mut details = json!({"step": error.step});
+    if let Some(snapshot) = error.snapshot() {
+        details["snapshot"] = to_json(snapshot);
+        details["run_id"] = json!(snapshot.run_id);
+    }
+    match &error.kind {
+        RunErrorKind::NodeFailed { node, source } | RunErrorKind::RouterFailed { node, source } => {
+            details["node"] = json!(node);
+            details["cause_key"] = json!(cause_key(node, &source.message));
+            if let Some(kind) = &source.kind {
+                details["kind"] = json!(kind);
+            }
+        }
+        RunErrorKind::NodeTimeout { node, .. } | RunErrorKind::NodePanicked { node, .. } => {
+            details["node"] = json!(node);
+        }
+        _ => {}
+    }
+    Failure {
+        code,
+        message: error.to_string(),
+        details: Some(details),
+    }
+}
+
+/// Where a node's or router's exception waits for its error: the node and
+/// the message are known on both sides.
+fn cause_key(node: &str, message: &str) -> String {
+    format!("node:{node}:{message}")
+}
+
+fn thread_failure(error: ThreadError) -> Failure {
+    match error {
+        ThreadError::Run(run) => run_failure(*run),
+        other => Failure::new(other.code(), other.to_string()),
+    }
+}
+
+/// A Python function as a node: `adapter(state_json, ctx_json)` returns
+/// an envelope with the update, and a suspend payload or goto targets.
+fn python_node(name: String, adapter: Arc<Py<PyAny>>, is_async: bool) -> impl Node {
+    node_with_context(move |ctx: NodeContext, state: Arc<State>| {
+        let (name, adapter) = (name.clone(), adapter.clone());
+        async move {
+            let ctx_json = json!({
+                "run_id": ctx.run_id(), "step": ctx.step(), "node": ctx.node(),
+                "attempt": ctx.attempt(), "resume": ctx.resume(),
+            })
+            .to_string();
+            let state_json = serde_json::to_string(state.as_map()).unwrap_or_default();
+            let answer = call_python(
+                adapter,
+                is_async,
+                state_json,
+                ctx_json,
+                loop_of(ctx.metadata()),
+            )
+            .await
+            .map_err(NodeError::new)?;
+            let envelope = match answer {
+                Answer::Envelope(envelope) => envelope,
+                Answer::Raised(exception, text) => {
+                    lock(tool_exceptions()).insert(cause_key(&name, &text), exception);
+                    return Err(NodeError::new(text));
+                }
+            };
+            let envelope: Value = serde_json::from_str(&envelope)
+                .map_err(|err| NodeError::new(format!("unreadable node answer: {err}")))?;
+            let update = match envelope.get("update") {
+                Some(Value::Object(map)) => Update::from(map.clone()),
+                Some(Value::Null) | None => Update::new(),
+                Some(other) => {
+                    return Err(NodeError::new(format!(
+                        "a node returns a dict (the update), not {other}"
+                    )));
+                }
+            };
+            if let Some(payload) = envelope.get("suspend") {
+                return Ok(NodeOutput::suspend(update, payload.clone()));
+            }
+            if let Some(targets) = envelope.get("goto").and_then(Value::as_array) {
+                let targets: Vec<String> = targets
+                    .iter()
+                    .filter_map(|t| t.as_str().map(str::to_string))
+                    .collect();
+                return Ok(NodeOutput::goto(update, targets));
+            }
+            Ok(NodeOutput::from(update))
+        }
+    })
+}
+
+/// A sync Python function as a router: `adapter(state_json, "")` returns
+/// `{"label"}`. (A router has no run context, so it cannot reach the
+/// caller's event loop: routers are sync functions.)
+fn python_router(from: String, adapter: Arc<Py<PyAny>>) -> impl Router {
+    router_fn(move |state: Arc<State>| {
+        let (from, adapter) = (from.clone(), adapter.clone());
+        async move {
+            let state_json = serde_json::to_string(state.as_map()).unwrap_or_default();
+            let answer = call_python(adapter, false, state_json, String::new(), None)
+                .await
+                .map_err(NodeError::new)?;
+            match answer {
+                Answer::Envelope(envelope) => {
+                    let envelope: Value = serde_json::from_str(&envelope).map_err(|err| {
+                        NodeError::new(format!("unreadable router answer: {err}"))
+                    })?;
+                    envelope
+                        .get("label")
+                        .and_then(Value::as_str)
+                        .map(str::to_string)
+                        .ok_or_else(|| NodeError::new("a router returns a label (a string)"))
+                }
+                Answer::Raised(exception, text) => {
+                    lock(tool_exceptions()).insert(cause_key(&from, &text), exception);
+                    Err(NodeError::new(text))
+                }
+            }
+        }
+    })
+}
+
+fn reducer(name: &str) -> Result<Reducer, Failure> {
+    match name {
+        "replace" => Ok(Reducer::Replace),
+        "append" => Ok(Reducer::Append),
+        "upsert_by_id" => Ok(Reducer::UpsertById),
+        other => Err(bad(format!("unknown reducer `{other}`"))),
+    }
+}
+
+fn run_json(run: &RunOutput) -> Value {
+    json!({
+        "state": run.state,
+        "steps": run.steps.len(),
+        "suspended": run.is_suspended(),
+        "interrupts": to_json(&run.interrupts()),
+        "snapshot": run.snapshot().map(to_json),
+        "run_id": run.run_id,
+    })
+}
+
+fn workflow_options(payload: &Value, loop_id: &LoopId, cancel: &CancelToken) -> RunOptions {
+    let mut options = RunOptions::default()
+        .metadata(json!({ LOOP_KEY: loop_id.0 }))
+        .cancel_token(cancel.clone());
+    if let Some(n) = payload["max_steps"].as_u64() {
+        options = options.max_steps(n as usize);
+    }
+    if let Some(ms) = payload["deadline_ms"].as_u64() {
+        options = options.deadline(Duration::from_millis(ms));
+    }
+    options
+}
+
+/// A compiled workflow (design 0015).
+#[pyclass(frozen)]
+struct NativeWorkflow {
+    workflow: Workflow,
+    storage: Storage,
+}
+
+#[pymethods]
+impl NativeWorkflow {
+    /// Builds the graph. `nodes`: `(name, adapter, is_async)`; `routers`:
+    /// `(from, adapter)` in the order of `config.routes`; `agents`:
+    /// `(name, agent)`.
+    #[new]
+    #[pyo3(signature = (config, nodes, routers, agents, storage=None))]
+    fn new(
+        config: &str,
+        nodes: Vec<(String, Py<PyAny>, bool)>,
+        routers: Vec<(String, Py<PyAny>)>,
+        agents: Vec<(String, Py<NativeAgent>)>,
+        storage: Option<&NativeStorage>,
+    ) -> PyResult<Self> {
+        let config: Value =
+            serde_json::from_str(config).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let mut builder = WorkflowBuilder::new();
+        for (name, adapter, is_async) in nodes {
+            builder.add_node(name.clone(), python_node(name, Arc::new(adapter), is_async));
+        }
+        for (name, agent) in agents {
+            builder.add_node(name, agent.get().agent.as_node());
+        }
+        if let Some(entry) = text(&config, "entry") {
+            builder.set_entry(entry);
+        }
+        for edge in config["edges"].as_array().cloned().unwrap_or_default() {
+            builder.add_edge(
+                edge[0].as_str().unwrap_or_default(),
+                edge[1].as_str().unwrap_or_default(),
+            );
+        }
+        let routes = config["routes"].as_array().cloned().unwrap_or_default();
+        if routes.len() != routers.len() {
+            return Err(PyValueError::new_err("one function per router"));
+        }
+        for (route, (from, adapter)) in routes.iter().zip(routers) {
+            let table: Vec<(String, String)> = route["routes"]
+                .as_object()
+                .cloned()
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(label, target)| (label, target.as_str().unwrap_or_default().to_string()))
+                .collect();
+            builder.add_router(from.clone(), python_router(from, Arc::new(adapter)), table);
+        }
+        for join in config["joins"].as_array().cloned().unwrap_or_default() {
+            let sources: Vec<String> = join[0]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|s| s.as_str().map(str::to_string))
+                .collect();
+            builder.add_join(sources, join[1].as_str().unwrap_or_default());
+        }
+        for goto in config["gotos"].as_array().cloned().unwrap_or_default() {
+            let targets: Vec<String> = goto[1]
+                .as_array()
+                .cloned()
+                .unwrap_or_default()
+                .iter()
+                .filter_map(|s| s.as_str().map(str::to_string))
+                .collect();
+            builder.may_goto(goto[0].as_str().unwrap_or_default(), targets);
+        }
+        for (key, name) in config["reducers"].as_object().cloned().unwrap_or_default() {
+            let reducer = reducer(name.as_str().unwrap_or_default()).map_err(py_failure)?;
+            builder.reducer(key, reducer);
+        }
+        let workflow = builder.build().map_err(|err| {
+            py_failure(Failure {
+                code: "invalid_workflow".into(),
+                message: err.to_string(),
+                details: Some(json!({
+                    "issues": err.issues.iter().map(ToString::to_string).collect::<Vec<_>>(),
+                })),
+            })
+        })?;
+        let storage = storage.map_or_else(Storage::in_memory, |s| s.storage.clone());
+        Ok(Self { workflow, storage })
+    }
+
+    /// Runs once: payload `{"input", "max_steps", "deadline_ms"}`.
+    fn run<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+        payload: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let payload: Value =
+            serde_json::from_str(payload).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let loop_id = LoopId::register(event_loop);
+        let cancel = CancelToken::new();
+        let options = workflow_options(&payload, &loop_id, &cancel);
+        let workflow = self.workflow.clone();
+        spawn(py, event_loop, Some(cancel), async move {
+            let _loop_id = loop_id;
+            let input = State::try_from(payload["input"].clone())
+                .map_err(|_| bad("the input must be a dict"))?;
+            let run = workflow
+                .run_with(input, options)
+                .await
+                .map_err(run_failure)?;
+            Ok(run_json(&run))
+        })
+    }
+
+    /// Continues a snapshot (no storage): payload `{"snapshot", "values"}`.
+    fn resume<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+        payload: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let payload: Value =
+            serde_json::from_str(payload).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let loop_id = LoopId::register(event_loop);
+        let cancel = CancelToken::new();
+        let options = workflow_options(&payload, &loop_id, &cancel);
+        let workflow = self.workflow.clone();
+        spawn(py, event_loop, Some(cancel), async move {
+            let _loop_id = loop_id;
+            let snapshot: Snapshot =
+                serde_json::from_value(payload["snapshot"].clone()).map_err(|err| {
+                    Failure::new("resume_invalid", format!("unreadable snapshot: {err}"))
+                })?;
+            let values = payload["values"].as_object().cloned().unwrap_or_default();
+            let run = workflow
+                .resume_with(&snapshot, values, options)
+                .await
+                .map_err(run_failure)?;
+            Ok(run_json(&run))
+        })
+    }
+
+    /// A thread operation: payload `{"thread_id", "actor", …}`.
+    fn thread<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+        op: String,
+        payload: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let payload: Value =
+            serde_json::from_str(payload).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let loop_id = LoopId::register(event_loop);
+        let cancel = CancelToken::new();
+        let mut thread = self
+            .storage
+            .workflow_thread(
+                &self.workflow,
+                text(&payload, "thread_id").unwrap_or_default(),
+            )
+            .with_options(workflow_options(&payload, &loop_id, &cancel));
+        if let Some(actor) = text(&payload, "actor") {
+            thread = thread.actor(actor);
+        }
+        spawn(py, event_loop, Some(cancel), async move {
+            let _loop_id = loop_id;
+            workflow_thread_operation(thread, &op, payload).await
+        })
+    }
+}
+
+fn turn_json(turn: &Turn) -> Value {
+    let mut value = run_json(&turn.run);
+    value["version"] = json!(turn.version);
+    value["checkpoint_id"] = json!(turn.checkpoint_id);
+    value
+}
+
+async fn workflow_thread_operation(thread: WorkflowThread, op: &str, payload: Value) -> Outcome {
+    let turn = match op {
+        "run" => {
+            let input = State::try_from(payload["input"].clone())
+                .map_err(|_| bad("the input must be a dict"))?;
+            thread.run(input).await
+        }
+        "resume" => {
+            let values = payload["values"].as_object().cloned().unwrap_or_default();
+            thread.resume(values).await
+        }
+        "retry" => thread.retry().await,
+        "state" => return Ok(to_json(&thread.state().await.map_err(thread_failure)?)),
+        "interrupts" => return Ok(to_json(&thread.interrupts().await.map_err(thread_failure)?)),
+        "history" => {
+            let limit = payload["limit"].as_u64().unwrap_or(20) as usize;
+            return Ok(to_json(
+                &thread.history(limit).await.map_err(thread_failure)?,
+            ));
+        }
+        "rewind" => {
+            let id = text(&payload, "checkpoint_id").unwrap_or_default();
+            return Ok(to_json(&thread.rewind(id).await.map_err(thread_failure)?));
+        }
+        "delete" => return Ok(json!(thread.delete().await.map_err(thread_failure)?)),
+        other => return Err(bad(format!("unknown workflow thread operation `{other}`"))),
+    };
+    turn.map(|t| turn_json(&t)).map_err(thread_failure)
+}
+
 /// A streamed thread operation.
 #[pyclass(frozen)]
 struct NativeStream {
@@ -931,6 +1346,7 @@ impl NativeStream {
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NativeAgent>()?;
     m.add_class::<NativeStorage>()?;
+    m.add_class::<NativeWorkflow>()?;
     m.add_class::<NativeStream>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())

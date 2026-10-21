@@ -1,0 +1,31 @@
+---
+title: Models and providers
+description: OpenAI, Anthropic, Gemini, OpenRouter and self-hosted models, with fallback.
+---
+
+
+<Sample name="models" />
+
+| Provider | How it is reached | Key |
+|---|---|---|
+| OpenAI | Chat Completions API | `OPENAI_API_KEY` |
+| Anthropic (Claude) | Messages API, natively (reasoning, caching) | `ANTHROPIC_API_KEY` |
+| Google Gemini | Its OpenAI-compatible endpoint | `GEMINI_API_KEY` |
+| OpenRouter | OpenAI-compatible | `OPENROUTER_API_KEY` |
+| Ollama, LM Studio | Local, OpenAI-compatible | none |
+| vLLM and any OpenAI-compatible server | Your URL | optional |
+| Any Anthropic-compatible server | Your URL (Rust) | optional |
+
+## What every model gets
+
+- **Streaming**, assembled into one message the same way for every
+  provider.
+- **Classified errors**: `rate_limited`, `overloaded`, `context_overflow`,
+  `auth`, … ([all codes](/docs/reference/errors/)). Retries honour
+  `Retry-After`; requests that never left are retried at once.
+- **Fallback** (Rust): rate limits, overload and outages move to the next
+  model.
+- **Keys stay secret**: removed from every error message.
+
+For self-hosted models nothing leaves your network, which is often the
+simplest answer for patient data.

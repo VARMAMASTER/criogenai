@@ -1,0 +1,61 @@
+---
+title: Messages and tools
+description: The conversation format every language and provider shares, and how tool calls are checked.
+---
+
+## Messages
+
+A conversation is a list of **messages**. Each has a `role` (`system`,
+`user`, `assistant`, `tool`) and a list of **content blocks**: text,
+reasoning, images, audio, files, JSON, tool calls and tool results. The same
+JSON is used in Python, TypeScript and Rust, stored in threads, and
+translated to and from each provider's own format. It is published as a
+JSON Schema: [JSON formats](/docs/reference/schemas/).
+
+```json
+{"id": "msg_01", "role": "assistant", "content": [
+  {"type": "text", "text": "Let me check that order."},
+  {"type": "tool_call", "id": "call_9", "name": "get_order", "args": {"order_id": "A-1001"}}
+]}
+```
+
+## Tools
+
+A tool has a **name**, a **description** the model reads, and an **input
+schema** (JSON Schema). In Python the schema comes from the function's type
+hints; in TypeScript and Rust you write it.
+
+Before your function runs, the engine checks the model's arguments against
+the schema. Wrong arguments never reach your code: the model gets the
+problems (`amount: must be at most 500, got 900`) and tries again.
+
+How a tool can end:
+
+| Outcome | What happens |
+|---|---|
+| Returns a value | The value goes back to the model as the tool result |
+| Raises / throws / returns `ToolError` | The message goes back to the model, which can recover or explain |
+| Any other exception (or a panic in Rust) | The model sees the exception's type and message as a `tool_failed` result, and the run goes on |
+| Takes too long | The call ends as a `timeout` result (60 s by default) |
+
+An exception your tool did not expect no longer stops the run: the model
+learns that the tool failed and can try something else or explain. Choose
+another behaviour per agent with `on_tool_exception` (Python),
+`onToolException` (TypeScript) or `Limits::on_tool_exception` (Rust):
+
+| Setting | What happens |
+|---|---|
+| return to model (default) | The model sees the exception's type and message |
+| return generic | The model only learns that the tool failed; the message is kept in the result's `artifact`, which is stored with the thread but never sent to a model. Use it when an exception could carry data that must not leave your systems. |
+| fail | The run fails with `tool_failed`, and your exception is the error's cause (a thread can retry it) |
+
+Tools of one turn run **concurrently**, and their results go back in call
+order. Python async tools run on your event loop; sync tools on worker
+threads. TypeScript tools may be sync or async.
+
+## Approval states
+
+A tool can be marked as needing **approval**. Its call then ends one of
+four ways: approved (runs as asked), edited (runs with changed arguments),
+rejected (does not run; the model is told why), or answered by the reviewer
+in place of the tool.

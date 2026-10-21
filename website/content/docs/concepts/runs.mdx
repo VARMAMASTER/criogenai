@@ -1,0 +1,59 @@
+---
+title: How a run works
+description: Steps, state, pauses, failures and retries, the same for agents and workflows.
+---
+
+Everything in AgentBuild is a **run** of a graph: a workflow you build, or
+the small graph inside every agent (model → tools → model …). The Rust
+engine runs it the same way in every language.
+
+## Steps
+
+A run moves in **steps**. In each step, every step that is ready runs at
+the same time; their changes to the **state** are merged when all of them
+are done, and then the next step starts.
+
+```
+step 1   model                       decides to call three tools
+step 2   get_order  get_weather  search_docs     (concurrently)
+step 3   model                       answers
+```
+
+- **A step either commits completely or not at all.** If one of the
+  parallel tools fails, none of that step's state changes are kept, so the
+  state never mixes old and new.
+- **Merging is defined.** When two parallel steps write the same key, the
+  key's *reducer* decides: replace (the default, and two writes are an
+  error), append, or update messages by id.
+- **Graph problems are found before running**: unknown steps, steps that
+  can never run, dead ends. All are reported at once.
+
+## Pausing for a person
+
+A step can **pause** the run and say what it needs: "approve this refund of
+40". The run stops with a **snapshot**, plain JSON holding everything needed
+to continue. Continuing later (from any process) gives the paused step its
+answer; steps that already finished are not run again.
+
+Agent approvals are built on this: the review step pauses before any tool
+of that turn runs.
+
+## Failures and retries
+
+Every failure has a stable **error code** (`model_failed`, `tool_failed`,
+`thread_busy`, …; see [Error codes](/docs/reference/errors/)). A failed run
+also carries a snapshot, so **retry** continues from the failed step. Tool
+calls that finished before the failure are saved and not run again: an
+email is not sent twice.
+
+With [storage](/docs/guides/storage/), progress is saved after every step
+and every tool call. If the process dies mid-run, the thread shows an
+unfinished run, and `retry()` continues it.
+
+## Limits and cancellation
+
+Runs stop on purpose when they reach a limit: model calls, tool calls,
+tokens, steps or a deadline. Cancelling a run (a cancel token in Rust,
+cancelling the asyncio task in Python, an `AbortSignal` in TypeScript)
+stops the model call at once; the run fails with `cancelled` and, on a
+thread, is saved so it can be retried.

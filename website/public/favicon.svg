@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="AgentBuild">
+  <!-- A run: three steps, the middle one fanned out into parallel work. -->
+  <circle cx="5" cy="16" r="3.2" fill="#7fd6e8"/>
+  <path d="M8 16 L13 9 M8 16 L13 16 M8 16 L13 23" stroke="#7fd6e8" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="16" cy="9" r="2.6" fill="#7fd6e8"/>
+  <circle cx="16" cy="16" r="2.6" fill="#f2b544"/>
+  <circle cx="16" cy="23" r="2.6" fill="#7fd6e8"/>
+  <path d="M19 9 L24 16 M19 16 L24 16 M19 23 L24 16" stroke="#8bd9a0" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="27" cy="16" r="3.2" fill="#8bd9a0"/>
+</svg>

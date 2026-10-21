@@ -1,0 +1,22 @@
+---
+title: "Tracing: Langfuse and OpenTelemetry"
+description: Every run as a trace, with model calls as generations; content capture can be turned off.
+---
+
+
+<Aside type="note" title="Rust today">
+Tracing is in the Rust API (`agentbuild-telemetry`); the SDKs get it next.
+</Aside>
+
+Every run becomes a trace: workflow nodes are spans, model calls are
+*generations* (model, input, output, tokens), tool calls are tool
+observations, failures are marked as errors. Export goes over OTLP/HTTP to
+Langfuse or any OpenTelemetry collector.
+
+<Sample name="telemetry" />
+
+- **Never slows or breaks a run**: the observer only queues events; a
+  background task batches and sends them, and retries on transient errors.
+- **Sensitive data**: `capture_content(false)` sends structure and timing
+  only, no prompts or answers; a `mask` function can redact instead.
+- **Metadata** (`user_id`, `session_id`, any JSON) is attached to the trace.

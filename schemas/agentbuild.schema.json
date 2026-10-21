@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/VARMAMASTER/agentbuild/schemas/agentbuild.schema.json",
+  "$id": "https://agentbuild.vercel.app/schemas/agentbuild.schema.json",
   "title": "AgentBuild data contracts",
   "description": "The JSON every AgentBuild language and service exchanges (design 0013 §3). Each type is under $defs; refer to one as agentbuild.schema.json#/$defs/<Type>. Checked against values serialized by the Rust engine.",
   "$defs": {

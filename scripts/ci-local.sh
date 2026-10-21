@@ -19,6 +19,9 @@
 #   typescript  the TypeScript SDK: lint of its bridge, type check,
 #               scripts/test-typescript.sh (tarball into a new project;
 #               skipped without Node 18+)
+#   website     the website: its type check, every code sample checked
+#               against the API (website/scripts/check-snippets.sh), the
+#               static build (skipped without Node 20.9+)
 #
 # Usage: scripts/ci-local.sh            all steps
 #        scripts/ci-local.sh --quick    rust step only
@@ -31,7 +34,7 @@ export CARGO_TERM_COLOR=always
 # Incremental build files take a lot of disk and do not help a full run.
 export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
 
-all=(rust postgres msrv deps standalone package python typescript)
+all=(rust postgres msrv deps standalone package python typescript website)
 if [[ $# -eq 0 ]]; then
   steps=("${all[@]}")
 elif [[ $1 == --quick ]]; then
@@ -149,9 +152,20 @@ step_typescript() {
   run bash scripts/test-typescript.sh
 }
 
+step_website() {
+  if ! node -e 'const [a, b] = process.versions.node.split(".").map(Number); process.exit(a > 20 || (a === 20 && b >= 9) ? 0 : 1)' >/dev/null 2>&1; then
+    skipped+=("website (no Node 20.9+)")
+    return
+  fi
+  [[ -d website/node_modules ]] || run npm --prefix website ci
+  run npm --prefix website run check
+  run bash website/scripts/check-snippets.sh
+  run npm --prefix website run build
+}
+
 for step in "${steps[@]}"; do
   case $step in
-    rust | postgres | msrv | deps | standalone | package | python | typescript) ;;
+    rust | postgres | msrv | deps | standalone | package | python | typescript | website) ;;
     *)
       echo "unknown step: $step (steps: ${all[*]})" >&2
       exit 2

@@ -1,0 +1,66 @@
+---
+title: The LLM gateway
+description: One OpenAI-compatible endpoint in front of every provider, with keys, fallback and usage records.
+---
+
+
+`agentbuild-gateway` is a server that speaks the OpenAI Chat Completions
+API. Any OpenAI client (the official SDKs, curl, LangChain, AgentBuild
+itself) can use it, and behind it each **route** can be any model
+AgentBuild supports: a client written for OpenAI can use Claude, Gemini or
+a model on your own GPUs.
+
+## Run it
+
+```toml
+# gateway.toml: secrets are never in this file, only the names of the
+# environment variables that hold them.
+[[routes]]
+name = "support"
+models = [
+  { provider = "openai", model = "gpt-5-mini", api_key_env = "OPENAI_API_KEY" },
+  { provider = "ollama", model = "llama3.2" },   # used when OpenAI fails
+]
+
+[[keys]]
+name = "team-a"
+key_env = "GATEWAY_KEY_TEAM_A"
+routes = ["support"]
+```
+
+```sh
+agentbuild-gateway --config gateway.toml --listen 0.0.0.0:4000 --log-usage
+```
+
+## Call it
+
+```python
+from openai import OpenAI
+
+client = OpenAI(base_url="http://localhost:4000/v1", api_key="<team-a key>")
+reply = client.chat.completions.create(
+    model="support",
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```
+
+Streaming (`stream=True`, with `stream_options.include_usage`), tool calls
+and `response_format` work as with OpenAI.
+
+## Or embed it
+
+<Sample name="gateway" />
+
+## What it does
+
+| Feature | Behaviour |
+|---|---|
+| Routes | The `model` a client asks for; each lists models tried in order |
+| Fallback | On rate limits, overload, outages or exhausted quota; a stream only before its first byte |
+| Keys | Bearer keys per route, stored as SHA-256 digests; without keys the server only listens on localhost unless `--allow-open` |
+| Errors | OpenAI's error format, with AgentBuild's [codes](/docs/reference/errors/) and matching HTTP statuses |
+| Usage | One record per request: key, route, model, tokens, latency, outcome; **no content**; never slows a request |
+| Disconnects | When a client goes away, the call to the provider stops |
+
+Planned: the Anthropic-format `/v1/messages`, rate limits and budgets per
+key, and a pass-through mode.

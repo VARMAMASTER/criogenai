@@ -1,0 +1,42 @@
+// [show]
+import { Agent, FakeModel, FakeReply, ToolError, tool } from "@agentbuild/sdk";
+
+const issueRefund = tool<{ orderId: string; amount: number }>({
+  name: "issue_refund",
+  description: "Refund an order.",
+  destructive: true,
+  input: {
+    type: "object",
+    properties: {
+      orderId: { type: "string" },
+      amount: { type: "number", minimum: 0, maximum: 500 },
+    },
+    required: ["orderId", "amount"],
+  },
+  run: ({ amount }) => {
+    // Arguments arrive already checked against the schema.
+    if (amount > 200) throw new ToolError("Refunds over 200 need a manager");
+    return { refunded: amount };
+  },
+});
+
+const agent = new Agent<{ category: string; refund: boolean }>({
+  model: "openai:gpt-5-mini",
+  instructions: "You are a support agent.",
+  tools: [issueRefund],
+  output: {
+    type: "object",
+    properties: { category: { enum: ["billing", "shipping", "other"] }, refund: { type: "boolean" } },
+    required: ["category", "refund"],
+  },
+  limits: { modelCalls: 10, toolCalls: 20 },
+});
+
+// In tests: scripted replies, no network, the same answer every time.
+const testAgent = new Agent({
+  model: new FakeModel([FakeReply.toolCall("issue_refund", { orderId: "A-1001", amount: 24 }), "Refunded."]),
+  tools: [issueRefund],
+});
+const result = await testAgent.run("Refund my order");
+// [/show]
+export {};

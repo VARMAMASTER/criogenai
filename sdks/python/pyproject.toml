@@ -3,13 +3,13 @@ requires = ["maturin>=1.9,<2"]
 build-backend = "maturin"
 
 [project]
-name = "agentbuild"
+name = "agentbuild-sdk"
 version = "0.1.0"
 description = "Agents and workflows on a Rust engine: tools, approvals, durable threads, memory"
 readme = "README.md"
 requires-python = ">=3.9"
-license = "MIT OR Apache-2.0"
-license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
+license = "LicenseRef-AgentBuild-Free"
+license-files = ["LICENSE"]
 keywords = ["agents", "llm", "workflows", "ai", "tools"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -23,10 +23,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/VARMAMASTER/agentbuild"
-Repository = "https://github.com/VARMAMASTER/agentbuild"
-Documentation = "https://github.com/VARMAMASTER/agentbuild/tree/main/sdks/python"
-Changelog = "https://github.com/VARMAMASTER/agentbuild/blob/main/CHANGELOG.md"
+Homepage = "https://agentbuild.vercel.app"
+Documentation = "https://agentbuild.vercel.app/docs/"
 
 [project.optional-dependencies]
 pydantic = ["pydantic>=2"]

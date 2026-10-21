@@ -88,8 +88,11 @@ is what the tool threw), `LimitExceededError`, `ThreadBusyError`,
   (an idle agent does not keep Node running). Every tool is wrapped as
   `(requestJson) => Promise<envelopeJson>`; Rust awaits the Promise. A
   `ToolError` becomes a tool error the model sees; anything else thrown
-  fails the run with `tool_failed`, and the TypeScript side attaches the
-  thrown value as the error's `cause` (kept by call id).
+  follows `onToolException` (0003 §5.1): by default the model sees it
+  (`tool_failed`) and the run goes on; `"returnGeneric"` hides the text;
+  with `"fail"` the run fails with `tool_failed`, and the TypeScript side
+  attaches the thrown value as the error's `cause` (kept by call id, only
+  then).
 - **Errors** cross as the error message `{"code","message","details"}`,
   turned into the classes of §3.
 - **Values** cross as JSON, as in the Python SDK.

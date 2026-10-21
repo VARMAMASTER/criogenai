@@ -1,0 +1,355 @@
+.scene {
+  margin: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(16rem, 1fr);
+  border: 1px solid var(--glass-border);
+  border-radius: 24px;
+  background:
+    radial-gradient(40rem 22rem at 25% 0%, rgba(127, 214, 232, 0.1), transparent 70%),
+    var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+  overflow: hidden;
+}
+.scene-stage {
+  position: relative;
+  border-right: 1px solid var(--glass-border);
+  background-image: radial-gradient(rgba(200, 220, 240, 0.14) 1px, transparent 1px);
+  background-size: 22px 22px;
+  display: grid;
+  align-items: center;
+  min-height: 15rem;
+}
+.scene-scroll {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--ab-line) transparent;
+  padding: 1.25rem 1.25rem 4.5rem;
+}
+.scene svg {
+  width: 100%;
+  min-width: 600px;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+/* Edges: a quiet line, and travelling dashes while data flows. */
+.edge-line {
+  fill: none;
+  stroke: rgba(255, 255, 255, 0.14);
+  stroke-width: 2;
+  transition: stroke 0.4s;
+}
+.edge-flow {
+  fill: none;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-dasharray: 6 14;
+  opacity: 0;
+  stroke: var(--ab-running);
+}
+.edge[data-state="run"] .edge-flow {
+  opacity: 1;
+  animation: flow 0.6s linear infinite;
+}
+.edge[data-state="done"] .edge-line { stroke: rgba(139, 217, 160, 0.6); }
+.edge[data-state="skip"] .edge-line { stroke: rgba(159, 179, 200, 0.4); stroke-dasharray: 3 6; }
+.edge[data-state="fail"] .edge-line { stroke: var(--ab-failed); }
+.edge[data-state="wait"] .edge-line { stroke: var(--ab-waiting); stroke-dasharray: 7 6; }
+@keyframes flow {
+  to { stroke-dashoffset: -20; }
+}
+
+/* Nodes: the box takes the state's colour; running and waiting glow. */
+.node-box {
+  fill: rgba(10, 20, 38, 0.55);
+  stroke: rgba(255, 255, 255, 0.16);
+  stroke-width: 1.5;
+  transition: fill 0.35s, stroke 0.35s;
+}
+.node-label {
+  fill: var(--ab-muted);
+  font-family: var(--ab-mono);
+  font-size: 13px;
+  font-weight: 600;
+  transition: fill 0.35s;
+}
+.node-halo {
+  fill: none;
+  stroke-width: 6;
+  opacity: 0;
+  transition: opacity 0.35s;
+}
+.node[data-state="run"] .node-box { fill: var(--ab-running); stroke: var(--ab-running); }
+.node[data-state="run"] .node-label { fill: var(--ab-ink); }
+.node[data-state="run"] .node-halo { stroke: var(--ab-running); opacity: 0.7; animation: breathe 1s ease-in-out infinite; }
+
+.node[data-state="wait"] .node-box { fill: rgba(242, 181, 68, 0.14); stroke: var(--ab-waiting); }
+.node[data-state="wait"] .node-label { fill: var(--ab-waiting); }
+.node[data-state="wait"] .node-halo { stroke: var(--ab-waiting); opacity: 0.8; animation: breathe 0.8s ease-in-out infinite; }
+
+.node[data-state="done"] .node-box { fill: rgba(139, 217, 160, 0.12); stroke: var(--ab-done); }
+.node[data-state="done"] .node-label { fill: var(--ab-done); }
+
+.node[data-state="fail"] .node-box { fill: rgba(242, 125, 114, 0.14); stroke: var(--ab-failed); }
+.node[data-state="fail"] .node-label { fill: var(--ab-failed); }
+
+.node[data-state="skip"] .node-box { fill: transparent; stroke: rgba(159, 179, 200, 0.45); stroke-dasharray: 4 4; }
+.node[data-state="skip"] .node-label { fill: rgba(159, 179, 200, 0.6); }
+
+@keyframes breathe {
+  50% { opacity: 0.15; }
+}
+
+/* A full-scene flash, e.g. the process being killed. */
+.scene-flash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 1rem;
+  background: rgba(242, 125, 114, 0.12);
+  opacity: 0;
+  pointer-events: none;
+}
+.scene-flash span {
+  font-family: var(--ab-mono);
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #fff;
+  background: var(--ab-failed);
+  border-radius: 999px;
+  padding: 0.35rem 1rem;
+  box-shadow: 0 10px 30px -10px rgba(242, 125, 114, 0.8);
+}
+.scene-flash.on {
+  animation: flash 1.8s ease-out forwards;
+}
+.scene-flash.on span {
+  animation: jolt 0.4s ease-out;
+}
+@keyframes flash {
+  0% { opacity: 0; }
+  6% { opacity: 1; }
+  14% { opacity: 0.4; }
+  22%, 75% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes jolt {
+  0%, 100% { transform: none; }
+  20% { transform: translateX(-6px) rotate(-2deg); }
+  40% { transform: translateX(5px) rotate(1.5deg); }
+  60% { transform: translateX(-3px); }
+  80% { transform: translateX(2px); }
+}
+
+/* The question: the run waits for the viewer. */
+.scene-ask {
+  position: absolute;
+  left: 50%;
+  bottom: 1rem;
+  transform: translateX(-50%);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+  padding: 0.6rem 0.7rem 0.6rem 1rem;
+  border: 1px solid rgba(242, 181, 68, 0.7);
+  border-radius: 18px;
+  background: rgba(40, 34, 20, 0.55);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  backdrop-filter: blur(16px) saturate(160%);
+  box-shadow: 0 16px 40px -16px rgba(242, 181, 68, 0.45);
+  overflow: hidden;
+  animation: rise 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.3);
+  width: max-content;
+  max-width: calc(100% - 2rem);
+}
+@keyframes rise {
+  from { opacity: 0; transform: translate(-50%, 12px) scale(0.96); }
+}
+.scene-ask-prompt {
+  margin: 0;
+  color: var(--ab-waiting);
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+.scene-ask-buttons {
+  display: flex;
+  gap: 0.4rem;
+}
+.scene-ask button {
+  font: inherit;
+  font-weight: 750;
+  font-size: 0.85rem;
+  border-radius: 999px;
+  padding: 0.3rem 0.9rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: transform 0.12s;
+}
+.scene-ask button:hover { transform: translateY(-1px); }
+.scene-ask button:active { transform: scale(0.96); }
+.scene-ask [data-choice="approve"] { background: var(--ab-done); color: var(--ab-ink); }
+.scene-ask [data-choice="reject"] { background: transparent; color: var(--ab-failed); border-color: var(--ab-failed); }
+.scene-ask-timer {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: var(--ab-waiting);
+  transform-origin: left;
+}
+
+/* The log. */
+.scene-log {
+  display: flex;
+  flex-direction: column;
+  font-family: var(--ab-mono);
+  font-size: 0.74rem;
+  min-width: 0;
+}
+.scene-log-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid var(--glass-border);
+  color: var(--ab-text);
+  font-family: var(--ab-font);
+  font-size: 0.95rem;
+  font-weight: 750;
+}
+.scene-toggle {
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: var(--ab-muted);
+  background: transparent;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 999px;
+  padding: 0.2rem 0.75rem;
+  cursor: pointer;
+}
+.scene-toggle:hover { color: var(--ab-text); border-color: var(--ab-muted); }
+.scene-log ol {
+  list-style: none;
+  margin: 0;
+  padding: 0.8rem 1rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+/* Lines are added by the script, so these rules are global (under .scene-log). */
+.scene-log li {
+  color: var(--ab-muted);
+  line-height: 1.45;
+  padding-left: 1rem;
+  position: relative;
+  animation: slide 0.3s ease-out;
+}
+.scene-log li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.45em;
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: currentColor;
+}
+@keyframes slide {
+  from { opacity: 0; transform: translateX(-6px); }
+}
+.scene-log li[data-tone="run"] { color: var(--ab-running); }
+.scene-log li[data-tone="wait"] { color: var(--ab-waiting); }
+.scene-log li[data-tone="done"] { color: var(--ab-done); }
+.scene-log li[data-tone="fail"] { color: var(--ab-failed); }
+
+@media (max-width: 860px) {
+  .scene { grid-template-columns: 1fr; }
+  .scene-stage { border-right: 0; border-bottom: 1px solid var(--glass-border); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scene *, .scene *::before { animation: none !important; transition: none !important; }
+}
+
+/* Tap targets and the light theme (added in the React port). */
+.scene-toggle {
+  min-height: 2.5rem;
+  padding: 0 0.95rem;
+}
+.scene-ask button {
+  min-height: 2.5rem;
+}
+.scene-log-head {
+  padding-block: 0.55rem;
+}
+:root[data-theme="light"] .scene-stage {
+  background-image: radial-gradient(rgba(15, 27, 45, 0.12) 1px, transparent 1px);
+}
+:root[data-theme="light"] .edge-line {
+  stroke: rgba(15, 27, 45, 0.18);
+}
+:root[data-theme="light"] .edge[data-state="done"] .edge-line {
+  stroke: rgba(35, 122, 60, 0.55);
+}
+:root[data-theme="light"] .node-box {
+  fill: rgba(255, 255, 255, 0.72);
+  stroke: rgba(15, 27, 45, 0.18);
+}
+:root[data-theme="light"] .node[data-state="run"] .node-box {
+  fill: var(--ab-running);
+  stroke: #3fb6d1;
+}
+:root[data-theme="light"] .node[data-state="wait"] .node-box {
+  fill: rgba(242, 181, 68, 0.2);
+}
+:root[data-theme="light"] .node[data-state="done"] .node-box {
+  fill: rgba(139, 217, 160, 0.22);
+  stroke: #4cae6a;
+}
+:root[data-theme="light"] .node[data-state="wait"] .node-label {
+  fill: var(--ab-waiting-text);
+}
+:root[data-theme="light"] .node[data-state="done"] .node-label {
+  fill: var(--ab-done-text);
+}
+:root[data-theme="light"] .node[data-state="fail"] .node-label {
+  fill: var(--ab-failed-text);
+}
+:root[data-theme="light"] .node[data-state="skip"] .node-box {
+  stroke: rgba(75, 99, 128, 0.5);
+}
+:root[data-theme="light"] .node[data-state="skip"] .node-label {
+  fill: rgba(75, 99, 128, 0.75);
+}
+:root[data-theme="light"] .scene-ask {
+  background: rgba(255, 247, 228, 0.88);
+  border-color: rgba(200, 140, 20, 0.7);
+}
+:root[data-theme="light"] .scene-ask-prompt {
+  color: var(--ab-waiting-text);
+}
+:root[data-theme="light"] .scene-ask [data-choice="reject"] {
+  color: var(--ab-failed-text);
+  border-color: var(--ab-failed-text);
+}
+:root[data-theme="light"] .scene-log li[data-tone="run"] { color: var(--ab-running-text); }
+:root[data-theme="light"] .scene-log li[data-tone="wait"] { color: var(--ab-waiting-text); }
+:root[data-theme="light"] .scene-log li[data-tone="done"] { color: var(--ab-done-text); }
+:root[data-theme="light"] .scene-log li[data-tone="fail"] { color: var(--ab-failed-text); }
+@media (max-width: 600px) {
+  .scene-scroll {
+    padding: 1rem 1rem 5.5rem;
+  }
+  .scene-ask {
+    bottom: 0.75rem;
+    max-width: calc(100% - 1.5rem);
+  }
+}

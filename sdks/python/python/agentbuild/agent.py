@@ -110,7 +110,15 @@ def _run_sync(coroutine: Any) -> Any:
 
 class Agent:
     """A model with tools, instructions and (optionally) approval, typed
-    output, storage and memory. The loop runs in Rust."""
+    output, storage and memory. The loop runs in Rust.
+
+    ``on_tool_exception``: what happens when a tool raises an exception it
+    did not handle (``ToolError`` always goes to the model):
+    ``"return_to_model"`` (default; the model sees the exception's type and
+    message, the run goes on), ``"return_generic"`` (the model only learns
+    that the tool failed; the text stays in the result's ``artifact``) or
+    ``"fail"`` (the run fails with ``ToolExecutionError``, the exception as
+    its ``__cause__``)."""
 
     def __init__(
         self,
@@ -123,6 +131,7 @@ class Agent:
         limits: Optional[Dict[str, Any]] = None,
         storage: Union[None, str, Storage] = None,
         memory: Optional[Memory] = None,
+        on_tool_exception: Optional[str] = None,
     ):
         for t in tools:
             if not isinstance(t, Tool):
@@ -138,7 +147,9 @@ class Agent:
             "tools": [t.spec() for t in tools],
             "approve": list(approve),
             "output": schema,
-            "limits": limits,
+            "limits": {**(limits or {}), "on_tool_exception": on_tool_exception}
+            if on_tool_exception is not None
+            else limits,
             "memory": memory._spec if memory is not None else None,
         }
         self._native = _native.NativeAgent(
@@ -168,11 +179,20 @@ class Agent:
 class Event:
     """One streamed event: ``type`` is ``text``, ``tool_call_started``,
     ``tool_call_finished``, ``message``, ``approval_needed`` or ``other``;
-    the rest are attributes."""
+    the rest are attributes (``text``, ``tool``, ``call_id``, ``status``,
+    ``requests``, … by type)."""
+
+    type: str
+    data: Dict[str, Any]
 
     def __init__(self, data: Dict[str, Any]):
         self.__dict__.update(data)
         self.data = data
+
+    def __getattr__(self, name: str) -> Any:
+        # Only reached for fields this type of event does not have: typed
+        # code may read any field (mypy), and a missing one is an error.
+        raise AttributeError(f"a {self.data.get('type')!r} event has no {name!r}")
 
     def __repr__(self) -> str:
         return f"Event({self.data!r})"

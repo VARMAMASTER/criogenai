@@ -87,7 +87,7 @@ test("sync and async tools run and their results reach the model", async () => {
   assert.equal(doubled.callId, results[1].call_id);
 });
 
-test("tool errors reach the model; crashes fail the run with the thrown value as cause", async () => {
+test("tool errors and exceptions reach the model unless told to fail", async () => {
   class Missing extends Error {}
   const lookup = tool({
     name: "lookup",
@@ -108,13 +108,30 @@ test("tool errors reach the model; crashes fail the run with the thrown value as
   assert.equal(error.status, "error");
   assert.match(JSON.stringify(error.content), /No such order/);
 
-  const crashing = new Agent({ model: new FakeModel([FakeReply.toolCall("lookup", { orderId: "x" })]), tools: [lookup] });
+  // An exception the tool did not handle reaches the model too (by default).
+  const script = () => new FakeModel([FakeReply.toolCall("lookup", { orderId: "x" }), "The order system failed."]);
+  const reported = await new Agent({ model: script(), tools: [lookup] }).run("go");
+  assert.equal(reported.text, "The order system failed.");
+  const crash = toolResults(reported)[0];
+  assert.equal(crash.status, "error");
+  assert.equal(crash.error.code, "tool_failed");
+  assert.match(JSON.stringify(crash.content), /Error: x/);
+
+  // "returnGeneric": the model only learns that the tool failed.
+  const quiet = await new Agent({ model: script(), tools: [lookup], onToolException: "returnGeneric" }).run("go");
+  const hidden = toolResults(quiet)[0];
+  assert.doesNotMatch(JSON.stringify(hidden.content), /Error: x/);
+  assert.equal(hidden.artifact.exception, "Error: x");
+
+  // "fail": the run fails, with the thrown value as the cause.
+  const crashing = new Agent({ model: script(), tools: [lookup], onToolException: "fail" });
   await assert.rejects(crashing.run("go"), (e) => {
     assert.ok(e instanceof ToolExecutionError);
     assert.equal(e.code, "tool_failed");
     assert.ok(e.cause instanceof Missing);
     return true;
   });
+  assert.throws(() => new Agent({ model: script(), onToolException: "ignore" }), ValidationError);
 });
 
 test("the engine validates arguments before the tool runs", async () => {

@@ -99,7 +99,7 @@ def test_the_schema_comes_from_type_hints():
             pass
 
 
-def test_tool_errors_reach_the_model_and_crashes_fail_the_run_with_the_cause():
+def test_tool_errors_and_exceptions_reach_the_model_unless_told_to_fail():
     @tool
     def lookup(order_id: str) -> str:
         """Looks up an order."""
@@ -117,12 +117,53 @@ def test_tool_errors_reach_the_model_and_crashes_fail_the_run_with_the_cause():
     assert error["status"] == "error"
     assert "No such order" in str(error["content"])
 
-    crashing = Agent(FakeModel([FakeReply.tool_call("lookup", {"order_id": "x"})]), tools=[lookup])
+    # An exception the tool did not handle reaches the model too (by default).
+    script = [FakeReply.tool_call("lookup", {"order_id": "x"}), "The order system failed."]
+    result = Agent(FakeModel(script), tools=[lookup]).run_sync("go")
+    assert result.text == "The order system failed."
+    crash = tool_results(result)[0]
+    assert crash["status"] == "error" and crash["error"]["code"] == "tool_failed"
+    assert "KeyError" in str(crash["content"])
+
+    # "return_generic": the model only learns that the tool failed.
+    quiet = Agent(FakeModel(script), tools=[lookup], on_tool_exception="return_generic").run_sync("go")
+    hidden = tool_results(quiet)[0]
+    assert "KeyError" not in str(hidden["content"])
+    assert "KeyError" in hidden["artifact"]["exception"]
+
+    # "fail": the run fails, with the exception as the cause.
+    crashing = Agent(FakeModel(script), tools=[lookup], on_tool_exception="fail")
     with pytest.raises(ToolExecutionError) as caught:
         crashing.run_sync("go")
     assert caught.value.code == "tool_failed"
     assert isinstance(caught.value.__cause__, KeyError)
     assert "KeyError" in caught.value.message
+
+    with pytest.raises(ValidationError):
+        Agent(FakeModel([]), on_tool_exception="ignore")
+
+
+def test_a_transient_model_error_is_retried_by_the_agent():
+    agent = Agent(FakeModel(["fine now"], fail_first=1))
+    result = agent.run_sync("hello")
+    assert result.text == "fine now"
+
+
+def test_a_by_turn_model_serves_many_runs_at_once():
+    @tool
+    def lookup(order_id: str) -> str:
+        "Looks up an order."
+        return f"order {order_id} shipped"
+
+    model = FakeModel([FakeReply.tool_call("lookup", {"order_id": "A-1"}), "done"], by_turn=True)
+    agent = Agent(model, tools=[lookup])
+
+    async def many():
+        return await asyncio.gather(*(agent.run("where is it?") for _ in range(20)))
+
+    for result in run(many()):
+        assert result.text == "done"
+        assert len(tool_results(result)) == 1
 
 
 def test_the_engine_validates_arguments_before_the_tool_runs():

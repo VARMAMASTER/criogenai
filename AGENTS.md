@@ -116,8 +116,12 @@ write our own implementation.
   `call_soon_threadsafe`, Python cancellation cancels the run. Tests:
   `sdks/python/tests` (pytest); `scripts/test-python.sh` installs the
   wheel into a new venv; `ci-local.sh` step `python`. Agent API added
-  for it: `Thread::with_options`, `ToolContext::metadata`. Not yet:
-  Python workflows, hooks, the gateway.
+  for it: `Thread::with_options`, `ToolContext::metadata`. Workflows
+  (0015): `Workflow`, nodes (functions or agents), routes, joins, goto,
+  reducers, suspend/resume, threads (`sdks/python/tests/test_workflow.py`).
+  Published as **`agentbuild-sdk`** on PyPI (import `agentbuild`; the
+  name "agentbuild" there belongs to another project). Not yet: hooks,
+  the gateway client.
 - **Implemented: TypeScript SDK, first slice (0012).** `sdks/typescript`
   (crate `agentbuild-node`, not a workspace member; napi-rs 3, N-API 6,
   Node 18+; package `@agentbuild/sdk`, TypeScript in `lib/` compiled to
@@ -156,6 +160,16 @@ write our own implementation.
   agentbuild-bench --release`), `benches/` (LangGraph comparison, Python
   and TypeScript bridges); results in `docs/benchmarks.md` (one machine,
   2026-10-16). Quote numbers only from that page, with what was measured.
+- **Framework comparison (0016):** `benches/compare/` (setup.py: one venv
+  per framework in `target/compare/venvs`; `run.py`: scenarios, load,
+  reliability, footprint → `bench/results/<date>T<time>-<machine>.json`;
+  `package.py`: the public kit zip for the website). AgentBuild,
+  LangGraph and CrewAI in Python with one simulated model. The website's
+  benchmark lab (`website/app/benchmarks`) shows the file in
+  `website/public/bench/results.json`.
+- **Tool exceptions:** `Limits::on_tool_exception` (`OnToolException`:
+  `ReturnToModel` default, `ReturnGeneric`, `Fail`); `ToolError::crashed`;
+  Rust tool panics are caught and follow it (0003 §5.1).
 - **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
@@ -175,13 +189,22 @@ write our own implementation.
   `.github/workflows/sdk-packages.yml` (wheels and npm addons for Linux
   x64/arm64, macOS arm64/x64, Windows x64, tested per platform; manual,
   never run yet), the TS loader for `@agentbuild/sdk-<platform>-<arch>`.
-  Waiting for the user: running the GitHub workflows (paid minutes while
-  private), package names, making the repo public, registry accounts
-  (see RELEASING.md). The user will build their
+  Decided (2026-10-22): the code stays private until 10,000 installs
+  (then MIT or Apache-2.0); until then the Python and npm packages are
+  free to use under the AgentBuild Free Licence (`sdks/*/LICENSE`, a
+  draft to review); Python and TypeScript first, Rust crates when the
+  code opens; no GitHub links on the website; a live install counter on
+  the home page. Waiting for the user: running the GitHub workflows (paid
+  minutes while private), registry accounts (see RELEASING.md), a legal
+  review of the licence. The user will build their
   hospital product (Axon Health OS) on AgentBuild: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
-- **Not started:** SDK workflows and hooks (Python, TypeScript), Standard Schema tool input, vector indexes
+- **Website:** `website/` (Next.js 16, React, static export for Vercel):
+  landing page, docs (MDX in `content/docs`, code samples compiled from
+  `snippets/`), benchmark lab, install counter. `npm run build` /
+  `npm run preview` (port 4400); checked by `ci-local.sh` step `website`.
+- **Not started:** TypeScript SDK workflows, SDK hooks, Standard Schema tool input, vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 
 ## Commands

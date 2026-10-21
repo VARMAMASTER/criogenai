@@ -1,0 +1,115 @@
+/*
+ * Glass: frosted, translucent panels over a slowly drifting aurora made of
+ * the run-state colours (running cyan, done mint, waiting amber) and an
+ * indigo for depth. Shared by the landing page and the docs.
+ */
+:root {
+  --ab-base: #070e1c;
+  --glass-bg: rgba(20, 36, 60, 0.42);
+  --glass-bg-strong: rgba(14, 26, 46, 0.66);
+  --glass-bg-soft: rgba(255, 255, 255, 0.04);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-border-strong: rgba(255, 255, 255, 0.18);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --glass-shadow: 0 30px 70px -36px rgba(0, 0, 0, 0.75);
+  --glass-blur: blur(20px) saturate(165%);
+  --aurora-1: rgba(127, 214, 232, 0.42);
+  --aurora-2: rgba(108, 92, 255, 0.42);
+  --aurora-3: rgba(139, 217, 160, 0.3);
+  --aurora-4: rgba(242, 181, 68, 0.2);
+  --aurora-5: rgba(88, 70, 220, 0.22);
+}
+
+:root[data-theme="light"] {
+  --ab-base: #edf3f9;
+  --glass-bg: rgba(255, 255, 255, 0.5);
+  --glass-bg-strong: rgba(255, 255, 255, 0.72);
+  --glass-bg-soft: rgba(255, 255, 255, 0.35);
+  --glass-border: rgba(15, 27, 45, 0.08);
+  --glass-border-strong: rgba(15, 27, 45, 0.14);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.95);
+  --glass-shadow: 0 30px 70px -40px rgba(15, 27, 45, 0.35);
+  --aurora-1: rgba(63, 182, 209, 0.32);
+  --aurora-2: rgba(124, 110, 255, 0.22);
+  --aurora-3: rgba(76, 190, 120, 0.2);
+  --aurora-4: rgba(242, 181, 68, 0.2);
+  --aurora-5: rgba(124, 110, 255, 0.14);
+}
+
+html {
+  background: var(--ab-base);
+}
+body {
+  background: transparent;
+}
+
+/* The aurora: one fixed layer behind everything. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: -18vmax;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(34vmax 28vmax at 18% 18%, var(--aurora-1), transparent 62%),
+    radial-gradient(32vmax 30vmax at 86% 12%, var(--aurora-2), transparent 62%),
+    radial-gradient(34vmax 30vmax at 72% 78%, var(--aurora-3), transparent 62%),
+    radial-gradient(26vmax 22vmax at 22% 86%, var(--aurora-4), transparent 62%),
+    radial-gradient(40vmax 30vmax at 50% 50%, var(--aurora-5), transparent 65%);
+  animation: aurora 38s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes aurora {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg) scale(1); }
+  50% { transform: translate3d(4vmax, -3vmax, 0) rotate(7deg) scale(1.04); }
+  100% { transform: translate3d(-3vmax, 2.5vmax, 0) rotate(-5deg) scale(1.08); }
+}
+
+/* A glass panel. */
+.glass {
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.09) 0%, rgba(255, 255, 255, 0.015) 45%, rgba(255, 255, 255, 0.04) 100%),
+    var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+
+/* Orbs: big soft lights placed down the page (landing), drifting slowly,
+   so colour passes behind the glass as you scroll. */
+.orbs {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: -1;
+  pointer-events: none;
+}
+.orb {
+  position: absolute;
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--c) 0%, transparent 68%);
+  animation: float var(--t, 22s) ease-in-out infinite alternate;
+}
+@keyframes float {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(var(--dx, 6vw), var(--dy, -4vw), 0) scale(1.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  .orb {
+    animation: none;
+  }
+}
+/* Browsers without backdrop-filter get a more opaque panel instead. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root {
+    --glass-bg: rgba(16, 29, 50, 0.92);
+  }
+  :root[data-theme="light"] {
+    --glass-bg: rgba(255, 255, 255, 0.92);
+  }
+}

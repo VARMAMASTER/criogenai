@@ -16,7 +16,7 @@ access goes through the embeddable gateway (0006, pending).
    decorators and `async`/`await`. TypeScript uses Zod, object options,
    Promises and `AbortSignal`. The names match across languages.
 3. **No Rust visible.** Users never see Rust types, lifetimes or build steps:
-   `pip install agentbuild` / `npm i @agentbuild/sdk` ship prebuilt binaries.
+   `pip install agentbuild-sdk` / `npm i @agentbuild/sdk` ship prebuilt binaries.
 4. **Errors are typed and predictable** (0003). Every failure is a documented
    exception class with a stable `code`.
 5. **Validation before running.** Graphs and agents are checked when built, and

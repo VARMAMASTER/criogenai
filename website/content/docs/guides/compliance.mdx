@@ -1,0 +1,56 @@
+---
+title: Encryption, audit trail, retention
+description: For sensitive data such as patient records - encrypt at rest, record who did what, delete on schedule.
+---
+
+
+Three storage features for software that handles personal or medical data.
+Each is one setting.
+
+<Sample name="compliance" />
+
+## Encryption at rest
+
+With keys, everything with content is encrypted in the database:
+messages, approval requests, tool results, remembered facts and their
+vectors (AES-256-GCM, a key per row derived from yours). Memory keys are
+stored as keyed hashes.
+
+- **No accidental plain text.** Once a database is encrypted, opening it
+  without its keys fails (`encryption_key_missing`), so an app started
+  without keys cannot write plain text into it.
+- **Key rotation.** Put the new key first (`k2:…,k1:…`): new data uses it,
+  old data still reads. `reencrypt()` rewrites old data with the new key.
+- **What stays readable**: thread ids, memory namespaces, timestamps. Use
+  opaque ids.
+
+Generate a key with `openssl rand -hex 32` and keep it in a secrets
+manager, never in code or the repository.
+
+## Audit trail
+
+Records **who did what, when**: runs, model calls (model, tokens), tool
+calls, approval requests and decisions (recorded before the call runs),
+rewinds, deletions and memory writes (the key only as a hash). Records hold
+**no content**: no message text, no tool arguments or results.
+
+- Each record names the `actor` set on the thread (`user:dr-rao`).
+- Records are chained by SHA-256: `verify` reports the first changed or
+  missing record. To also detect a rewrite of the whole chain, copy the
+  latest hash (`head`) to another system now and then.
+- **Fail closed**: if a record cannot be written, the action fails
+  (`audit_failed`) rather than happening unrecorded.
+
+## Retention
+
+Rules apply when `prune()` runs (from a scheduled job), or in the background
+(`spawn_pruner`, Rust): delete threads idle longer than a time, keep only
+the last N checkpoints, drop rewound branches; expired memory goes too.
+`forget_all` deletes every fact about one person.
+
+<Aside type="caution" title="Your part">
+These features help you meet rules such as HIPAA or India's DPDP Act; they
+do not make an application compliant on their own. Key management,
+backups, access control to the database, the model providers you send data
+to, and your own review remain your responsibility.
+</Aside>

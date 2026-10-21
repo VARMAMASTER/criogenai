@@ -18,7 +18,7 @@
     {"code": "workflow_mismatch", "layers": ["run"], "category": "developer", "retryable": false, "family": "validation", "description": "A snapshot was made by a different workflow."},
     {"code": "storage_failed", "layers": ["run"], "category": "transient", "retryable": true, "family": "storage", "description": "Saving the run's progress failed; details carry the storage code."},
     {"code": "model_failed", "layers": ["run"], "category": "provider", "retryable": null, "family": "model", "description": "A model call failed after retries and fallbacks; details.model_error has the kind, and retryable follows it."},
-    {"code": "tool_failed", "layers": ["run"], "category": "developer", "retryable": false, "family": "tool", "description": "A tool raised an unexpected error (not a ToolError the model sees)."},
+    {"code": "tool_failed", "layers": ["run", "tool_result"], "category": "developer", "retryable": false, "family": "tool", "description": "A tool failed with an error it did not handle (an exception, a panic). By default the model sees it as the call's result and the run goes on; with on_tool_exception=\"fail\" (or ToolError::fatal) it fails the run."},
     {"code": "limit_exceeded", "layers": ["run"], "category": "policy", "retryable": false, "family": "limit", "description": "A model-call, tool-call, token or nesting limit was reached; details.limit names it."},
     {"code": "output_invalid", "layers": ["run"], "category": "policy", "retryable": false, "family": "other", "description": "The structured output was still invalid after the allowed retries."},
     {"code": "hook_failed", "layers": ["run"], "category": "developer", "retryable": false, "family": "other", "description": "A hook returned an error."},

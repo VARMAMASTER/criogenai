@@ -1,0 +1,83 @@
+---
+title: Install
+description: AgentBuild for Python, TypeScript and Rust, on Linux, macOS and Windows.
+---
+
+
+<Aside type="caution" title="Before the first release">
+AgentBuild 0.1.0 is not on PyPI, npm or crates.io yet. The commands below
+are the ones that will work once it is published.
+</Aside>
+
+## Supported platforms
+
+| | Linux x64 | Linux ARM64 | macOS Apple Silicon | macOS Intel | Windows x64 |
+|---|---|---|---|---|---|
+| Python 3.9+ (one wheel per platform) | yes | yes | yes | yes | yes |
+| Node.js 18+ (a prebuilt addon per platform) | yes | yes | yes | yes | yes |
+| Rust 1.88+ (compiled on your machine) | yes | yes | yes | yes | yes |
+| Tested so far | yes | not yet | not yet | not yet | yes |
+
+Other platforms (Windows on ARM, Alpine/musl, 32-bit) are not supported yet.
+
+## Install
+
+<Tabs syncKey="lang">
+<TabItem label="Python">
+
+```sh
+pip install agentbuild-sdk
+# with Pydantic models as tool arguments and typed output:
+pip install "agentbuild-sdk[pydantic]"
+```
+
+The package is called `agentbuild-sdk`; in code you `import agentbuild`.
+The wheel contains the Rust engine, so nothing else is needed. It is typed
+(`py.typed`): mypy and your editor know every type.
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```sh
+npm install @agentbuild/sdk
+```
+
+npm installs the engine for your platform automatically
+(`@agentbuild/sdk-linux-x64`, `-darwin-arm64`, `-win32-x64`, …). Works from
+TypeScript and JavaScript, as CommonJS or ES modules.
+
+</TabItem>
+<TabItem label="Rust">
+
+The Rust crates are published when AgentBuild's code opens, at 10,000
+installs (a Rust crate ships its source). Until then, use the Python or
+TypeScript package; they run the same Rust engine. This is what you will
+add then:
+
+```toml
+[dependencies]
+agentbuild-agent = { version = "0.1", features = ["sqlite"] }
+agentbuild-providers = "0.1"
+agentbuild-storage = { version = "0.1", features = ["sqlite"] }
+serde_json = "1"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+```
+
+| Crate | What it gives you |
+|---|---|
+| `agentbuild-core` | The workflow engine: steps, edges, routers, state, pauses, retries |
+| `agentbuild-providers` | Messages, tools and models (OpenAI, Anthropic, Gemini, Ollama, vLLM, …) |
+| `agentbuild-agent` | Agents: tools, approvals, structured output, hooks, threads, memory |
+| `agentbuild-storage` | In memory, SQLite (`sqlite`), Postgres (`postgres`), encryption (`encryption`) |
+| `agentbuild-telemetry` | OpenTelemetry and Langfuse export |
+| `agentbuild-gateway` | The OpenAI-compatible LLM gateway (library and binary) |
+
+</TabItem>
+</Tabs>
+
+## API keys
+
+Models read their keys from environment variables: `OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`. Self-hosted
+models (Ollama, vLLM, LM Studio) need none. Keys never appear in errors or
+logs: AgentBuild removes them from provider error messages.

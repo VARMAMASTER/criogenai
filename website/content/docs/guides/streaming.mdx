@@ -1,0 +1,31 @@
+---
+title: Streaming
+description: Show text, tool calls and approvals as they happen, then get the saved reply.
+---
+
+
+`stream(...)` runs one turn on a thread and gives its events as they
+happen; the reply at the end is saved exactly like `send`'s.
+
+<Sample name="streaming" />
+
+## Events
+
+| Type | Fields | When |
+|---|---|---|
+| `text` | `text`, message id | More of the model's answer |
+| `tool_call_started` | call id, `tool`, `args` | A tool call starts |
+| `tool_call_finished` | call id, `tool`, `status` | It ends (`success`, `error`, …) |
+| `message` | `message` | A complete message (the authoritative version) |
+| `approval_needed` | `requests` | The run paused for a person |
+| `other` | | Steps, retries, warnings |
+
+`stream_approve` / `streamApprove`, `stream_reject`, `stream_decide` and
+`stream_retry` stream the other thread operations.
+
+## When the reader goes away
+
+Leaving the loop early, cancelling it, or dropping the stream (a browser
+that closed) **cancels** the run instead of abandoning it: the model call
+stops at once, the run is saved as failed with `cancelled`, and `retry()`
+continues it later. Nothing half-written is left in the thread.

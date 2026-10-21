@@ -1,7 +1,7 @@
 # @agentbuild/sdk
 
 Agents with tools, human approval, durable threads, long-term memory, an
-audit trail and encryption at rest, on [AgentBuild](https://github.com/VARMAMASTER/agentbuild)'s
+audit trail and encryption at rest, on [AgentBuild](https://agentbuild.vercel.app)'s
 Rust engine (design 0012).
 
 ```ts

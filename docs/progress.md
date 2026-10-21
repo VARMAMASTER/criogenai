@@ -59,7 +59,7 @@ remaining tasks one by one"), same full cycle:
 |---|---|---|---|
 | 11 | Packaging fixes (licences, metadata, Python types, gateway release) | RELEASING.md | Done |
 | 12 | Linux and macOS runs, fix what they find | — | Linux done (GCP VM); macOS blocked (GitHub billing) |
-| 13 | Workflows in the Python and TypeScript SDKs | (to write) | Next |
+| 13 | Workflows in the Python and TypeScript SDKs | 0015 | Python done; TypeScript next |
 | 14 | Hooks in the SDKs | (to write) | Planned |
 | 15 | Semantic memory and telemetry in the SDKs | (to write) | Planned |
 | 16 | `Gateway` client in the SDKs | 0007 Level 0 | Planned |
@@ -82,6 +82,43 @@ remaining tasks one by one"), same full cycle:
 | D8 | Package names | **Open.** `publish = false` until verified |
 
 ## Log
+
+### 2026-10-22: framework comparison, tool exceptions, site and licence decisions
+
+- **Comparison with LangGraph and CrewAI (design 0016):** `benches/compare/`
+  runs the same agents, workflows, loads (1/100/1000 runs at once) and
+  injected faults on all three, in Python, one venv per framework, one
+  process per measurement, one simulated model; results in
+  `bench/results/*.json` (`agentbuild-compare/1`), shown by the website's
+  benchmark lab as comparison graphs and tables. Fairness choices are
+  in the file's notes (CrewAI cache off and BaseTool tools for its
+  checkpoints; each framework's own async API; native tool calling).
+  Found while building it: a harness bug (parallel tools overwrote each
+  other's log lines; now one lock) and that one load batch is noisy on a
+  laptop (now three batches, median reported, all three recorded).
+- **Tool exceptions (0003 §5.1, 0004):** an exception a tool did not
+  handle (or a Rust panic, now caught around the call) reaches the model
+  as `tool_failed` by default; `on_tool_exception` = `return_to_model` |
+  `return_generic` | `fail`. Python and TypeScript bridges keep the
+  exception as a cause only under `fail`. The comparison showed AgentBuild
+  and LangGraph failing this test while CrewAI passed; the user asked for
+  the change.
+- **Python SDK workflows (0015, task 13 Python half):** `Workflow`,
+  routes, joins, reducers, goto, suspend/resume, threads, agents as
+  nodes. `FakeModel(fail_first=, by_turn=)`; Rust `FakeModel::by_turn`,
+  `without_request_log`.
+- **Website:** rebuilt in Next.js (`website/`, static export): the
+  landing page, all docs pages, and the benchmark lab with "Head to head"
+  graphs. All GitHub links removed (the repository is private).
+- **Decisions by the user:** the code opens at 10,000 installs; until
+  then everything is free to use under the AgentBuild Free Licence
+  (`sdks/*/LICENSE`, draft: have it reviewed before release); Python and
+  TypeScript are published first, Rust crates when the code opens; the
+  benchmark kit is published on its own (`benches/compare/package.py` →
+  the site); a live install counter on the home page. Package names:
+  `agentbuild-sdk` on PyPI ("agentbuild" was taken by an unrelated project
+  on 2026-10-21; `import agentbuild` stays), `@agentbuild/sdk` on npm (the
+  user owns the org).
 
 ### 2026-10-17: Linux (task 12)
 

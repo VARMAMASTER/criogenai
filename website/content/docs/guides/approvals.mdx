@@ -1,0 +1,35 @@
+---
+title: Human approval
+description: Pause before risky tool calls, decide from anywhere, and record who decided.
+---
+
+
+Name the tools a person must approve. When the model calls one, the run
+pauses **before any tool of that turn runs** and returns the requests. The
+pause is saved with the thread, so the decision can come minutes or days
+later, from another process, a dashboard or a webhook.
+
+<Sample name="approvals" />
+
+## Decisions
+
+| Decision | What happens |
+|---|---|
+| **approve** | The call runs as the model wrote it |
+| **edit** | The call runs with your arguments (or another tool); the model is told what actually ran |
+| **reject** | The call does not run; the model sees your reason |
+| **respond** | The call does not run; your answer is the tool's result |
+
+`approve()` and `reject(reason)` answer every pending call; `decide` takes
+one decision per call id. A decision that does not fit (an unknown call id,
+arguments that fail the schema) is refused with `resume_invalid` and the
+thread keeps waiting.
+
+## While it waits
+
+- Sending a new message fails with `thread_suspended` until the approval is
+  answered.
+- `reply.approvals` lists what waits: call id, tool, arguments.
+- With the [audit trail](/docs/guides/compliance/) on, the request, the
+  decision and who made it (`actor`) are recorded, and the decision is
+  recorded **before** the call runs.

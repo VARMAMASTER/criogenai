@@ -180,6 +180,31 @@ async fn interrupted_tool_loop_is_repaired_before_the_next_call() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn by_turn_replies_follow_each_conversation_and_need_no_log() {
+    let model = FakeModel::with_delay(Duration::ZERO, Duration::ZERO)
+        .by_turn()
+        .without_request_log()
+        .then(FakeReply::tool_call("lookup", json!({"id": 1})))
+        .then(FakeReply::text("done"));
+    // Two conversations at turn 0, then one at turn 1, then past the script.
+    for _ in 0..2 {
+        let first = model.invoke(&ask("hi")).await.unwrap();
+        assert_eq!(first.finish_reason, FinishReason::ToolCalls);
+    }
+    let mut turn1 = vec![Message::user("hi"), Message::assistant("thinking")];
+    let second = model
+        .invoke(&ModelRequest::new(turn1.clone()))
+        .await
+        .unwrap();
+    assert_eq!(second.message.text(), "done");
+    turn1.push(Message::assistant("more"));
+    let past = model.invoke(&ModelRequest::new(turn1)).await.unwrap();
+    assert_eq!(past.message.text(), "done", "the last reply repeats");
+    assert_eq!(model.calls(), 4);
+    assert!(model.requests().is_empty());
+}
+
+#[tokio::test(start_paused = true)]
 async fn scripted_errors_are_returned_as_given() {
     let error = agentbuild_providers::ModelError::new(ModelErrorKind::ContextOverflow, "too long");
     let model =

@@ -1,0 +1,228 @@
+.trace {
+  margin: 0;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 24px;
+  background: linear-gradient(160deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0) 40%), var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  font-family: var(--ab-mono);
+  font-size: 0.78rem;
+  color: var(--ab-muted);
+  overflow: hidden;
+  box-shadow: var(--glass-highlight), 0 40px 90px -40px rgba(127, 214, 232, 0.45);
+}
+.trace-head,
+.trace-foot {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.8rem 1.1rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+.trace-head b {
+  color: var(--ab-text);
+  font-weight: 600;
+}
+.trace-actor {
+  margin-left: auto;
+}
+.trace-foot {
+  border-top: 1px solid var(--glass-border);
+  border-bottom: 0;
+  color: var(--ab-done);
+}
+.trace .replay {
+  margin-left: auto;
+  font: inherit;
+  font-family: var(--ab-font);
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: var(--ab-muted);
+  background: transparent;
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 999px;
+  padding: 0.15rem 0.7rem;
+  cursor: pointer;
+}
+.trace .replay:hover {
+  color: var(--ab-text);
+  border-color: var(--ab-muted);
+}
+.trace .steps {
+  list-style: none;
+  margin: 0;
+  padding: 0.6rem 0;
+}
+.trace .step {
+  display: grid;
+  grid-template-columns: 4.2rem 1fr auto;
+  align-items: center;
+  gap: 0.9rem;
+  padding: 0.6rem 1.1rem;
+}
+.trace .step-n {
+  color: var(--ab-faint);
+}
+.trace .lane {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.trace .lane-parallel {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+.trace .call {
+  display: inline-block;
+  padding: 0.28rem 0.65rem;
+  border-radius: 8px;
+  color: var(--ab-ink);
+  background: var(--ab-running);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.trace .call.model {
+  border-radius: 999px;
+}
+.trace .call.tool {
+  background: transparent;
+  color: var(--ab-done);
+  border: 1px solid var(--ab-done);
+  position: relative;
+  overflow: hidden;
+}
+.trace .note {
+  color: var(--ab-muted);
+  font-family: var(--ab-font);
+  font-size: 0.92rem;
+}
+.trace .note-wait {
+  color: var(--ab-waiting);
+  display: none;
+}
+.trace .note-ok {
+  color: var(--ab-done);
+}
+.trace .saved {
+  color: var(--ab-done);
+  opacity: 0.85;
+  font-size: 0.72rem;
+}
+.trace .dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  display: inline-block;
+  background: var(--ab-done);
+}
+
+/* While playing (the script adds .playing): hidden until reached. */
+.trace.playing [data-at]:not(.on),
+.trace.playing .saved[data-after]:not(.on) {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.trace [data-at],
+.trace .saved[data-after] {
+  transition: opacity 0.4s ease-out, transform 0.4s ease-out;
+}
+.trace.playing .trace-head .dot {
+  background: var(--ab-running);
+  animation: pulse 1s ease-in-out infinite;
+}
+/* Step 2: the three tools run at once, each filling at its own pace. */
+.trace.playing .lane-parallel .call {
+  color: var(--ab-running);
+  border-color: var(--ab-running);
+}
+.trace.playing .lane-parallel .call::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(127, 214, 232, 0.22);
+  transform-origin: left;
+  transform: scaleX(0);
+}
+.trace.playing .step.on .lane-parallel .call::after {
+  animation: fill var(--d) ease-out forwards;
+}
+.trace.playing .step.on .lane-parallel .call {
+  animation: turn-done 0.01s linear var(--d) forwards;
+}
+/* Step 3: waits (amber, pulsing) until a person approves. */
+.trace .step-wait.waiting .approval {
+  color: var(--ab-waiting);
+  border-color: var(--ab-waiting);
+  animation: pulse 0.9s ease-in-out infinite;
+}
+.trace .step-wait.waiting .note-wait {
+  display: inline;
+  animation: pulse 0.9s ease-in-out infinite;
+}
+.trace .step-wait.waiting .note-ok {
+  display: none;
+}
+.trace .step-wait .note-ok {
+  animation: pop 0.4s cubic-bezier(0.2, 0.9, 0.3, 1.4);
+}
+
+@keyframes fill {
+  to { transform: scaleX(1); }
+}
+@keyframes turn-done {
+  to { color: var(--ab-done); border-color: var(--ab-done); }
+}
+@keyframes pulse {
+  50% { opacity: 0.4; }
+}
+@keyframes pop {
+  from { opacity: 0; transform: scale(0.85); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .trace * { animation: none !important; transition: none !important; }
+}
+@media (max-width: 560px) {
+  .trace .step { grid-template-columns: 1fr; gap: 0.35rem; }
+  .trace-actor { display: none; }
+}
+
+/* Tap targets and the light theme (added in the React port). */
+.trace .replay {
+  min-height: 2.5rem;
+  padding: 0 0.95rem;
+}
+.trace-foot {
+  padding-block: 0.45rem;
+}
+.trace .call {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:root[data-theme="light"] .trace {
+  box-shadow: var(--glass-highlight), 0 40px 90px -40px rgba(15, 111, 134, 0.35);
+}
+:root[data-theme="light"] .trace .call.tool,
+:root[data-theme="light"] .trace .note-ok,
+:root[data-theme="light"] .trace .saved,
+:root[data-theme="light"] .trace-foot {
+  color: var(--ab-done-text);
+  border-color: var(--ab-done-text);
+}
+:root[data-theme="light"] .trace.playing .lane-parallel .call {
+  color: var(--ab-running-text);
+  border-color: var(--ab-running-text);
+}
+:root[data-theme="light"] .trace .step-wait.waiting .approval,
+:root[data-theme="light"] .trace .step-wait.waiting .note-wait {
+  color: var(--ab-waiting-text);
+  border-color: var(--ab-waiting-text);
+}
+@media (max-width: 560px) {
+  .trace .step {
+    padding-inline: 0.9rem;
+  }
+}

@@ -1,5 +1,5 @@
 """AgentBuild for Python: agents with tools, approvals, durable threads and
-memory, on a Rust engine (design 0011).
+memory, and workflows, on a Rust engine (designs 0011, 0015).
 
     from agentbuild import Agent, tool
 
@@ -37,11 +37,24 @@ from .models import (
 )
 from .storage import Memory, Storage
 from .tools import Tool, ToolContext, ToolError, tool
+from .workflow import (
+    END,
+    CompiledWorkflow,
+    Interrupt,
+    NodeContext,
+    Workflow,
+    WorkflowResult,
+    WorkflowThread,
+    goto,
+    suspend,
+)
 
 __all__ = [
-    "Agent", "AgentBuildError", "Anthropic", "ApprovalRequest", "CancelledError", "Decision",
-    "Event", "FakeModel", "FakeReply", "Gemini", "LimitExceededError", "Memory", "ModelError",
-    "Ollama", "OpenAI", "OpenAICompatible", "OpenRouter", "Reply", "RunResult", "StorageError",
-    "Storage", "Stream", "Thread", "ThreadBusyError", "ThreadSuspendedError", "Tool",
-    "ToolContext", "ToolError", "ToolExecutionError", "ValidationError", "__version__", "tool",
+    "END", "Agent", "AgentBuildError", "Anthropic", "ApprovalRequest", "CancelledError",
+    "CompiledWorkflow", "Decision", "Event", "FakeModel", "FakeReply", "Gemini", "Interrupt",
+    "LimitExceededError", "Memory", "ModelError", "NodeContext", "Ollama", "OpenAI",
+    "OpenAICompatible", "OpenRouter", "Reply", "RunResult", "StorageError", "Storage", "Stream",
+    "Thread", "ThreadBusyError", "ThreadSuspendedError", "Tool", "ToolContext", "ToolError",
+    "ToolExecutionError", "ValidationError", "Workflow", "WorkflowResult", "WorkflowThread",
+    "__version__", "goto", "suspend", "tool",
 ]

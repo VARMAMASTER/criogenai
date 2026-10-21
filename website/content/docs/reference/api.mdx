@@ -1,0 +1,31 @@
+---
+title: API reference
+description: Every class, function and type, generated from the code, for Python, TypeScript and Rust.
+---
+
+
+Generated from the source on every build of this site, so it always matches
+the code: Python from docstrings and type hints, TypeScript from the type
+declarations, Rust from its doc comments.
+
+<CardGrid>
+  <LinkCard title="Python" description="The agentbuild package: Agent, tool, Thread, Storage, Memory, errors." href="/api/python/agentbuild.html" />
+  <LinkCard title="TypeScript" description="@agentbuild/sdk: Agent, tool, Thread, Stream, Storage, Memory, errors." href="/api/typescript/" />
+  <LinkCard title="Rust" description="All crates: core, providers, agent, storage, telemetry, gateway." href="/api/rust/agentbuild_agent/" />
+</CardGrid>
+
+## Where to start in each
+
+| You want | Python | TypeScript | Rust |
+|---|---|---|---|
+| An agent | `Agent` | `Agent`, `AgentOptions` | `agentbuild_agent::AgentBuilder` |
+| A tool | `@tool`, `ToolError`, `ToolContext` | `tool()`, `ToolDefinition`, `ToolError` | `tool_fn`, `ToolSpec`, `ToolError` |
+| A conversation | `Thread`, `Reply` | `Thread`, `Reply`, `Stream` | `Thread`, `Reply`, `ThreadStream` |
+| Storage | `Storage`, `Memory` | `Storage`, `Memory` | `agentbuild_storage::Storage`, `Memory` |
+| Models | `OpenAI`, `Anthropic`, `Gemini`, `Ollama`, `OpenAICompatible`, `FakeModel` | `openai()`, `anthropic()`, `gemini()`, `ollama()`, `FakeModel` | `ProviderModel`, `Endpoint`, `FakeModel` |
+| Errors | `AgentBuildError` and subclasses | `AgentBuildError`, `isAgentBuildError` | `AgentError`, `RunError`, `StorageError` |
+| Workflows | in progress | planned | `agentbuild_core::WorkflowBuilder`, `Storage::workflow_thread` |
+| Gateway | – | – | `agentbuild_gateway::Gateway`, `Config` |
+
+Once the crates are on crates.io, the Rust reference is also on
+[docs.rs](https://docs.rs).

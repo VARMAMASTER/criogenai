@@ -238,8 +238,11 @@ impl From<Vec<ContentBlock>> for ToolOutput {
 ///
 /// [`ToolError::new`] is a message **for the model** (it becomes a tool
 /// result with `status: error`, and the loop continues). [`ToolError::fatal`]
-/// is a developer error: it fails the run, like an uncaught exception
-/// (0003 §3).
+/// is a developer error: it fails the run (0003 §3).
+/// [`ToolError::crashed`] is a failure the tool did not handle (an exception
+/// in Python or JavaScript, a panic in Rust): the agent's
+/// [`Limits::on_tool_exception`](crate::Limits::on_tool_exception) decides
+/// (by default, the model sees it and the run goes on).
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("{message}")]
 #[non_exhaustive]
@@ -250,6 +253,9 @@ pub struct ToolError {
     pub fatal: bool,
     /// Calling again may succeed (shown to the model).
     pub retryable: bool,
+    /// `true`: the tool did not handle this failure (an exception or a
+    /// panic); `on_tool_exception` decides what happens.
+    pub crashed: bool,
 }
 
 impl ToolError {
@@ -259,6 +265,7 @@ impl ToolError {
             message: message.into(),
             fatal: false,
             retryable: false,
+            crashed: false,
         }
     }
 
@@ -268,6 +275,18 @@ impl ToolError {
             message: message.into(),
             fatal: true,
             retryable: false,
+            crashed: false,
+        }
+    }
+
+    /// A failure the tool did not handle (an uncaught exception, a panic).
+    /// `message` is the exception's type and text.
+    pub fn crashed(message: impl Into<String>) -> Self {
+        Self {
+            message: message.into(),
+            fatal: false,
+            retryable: false,
+            crashed: true,
         }
     }
 

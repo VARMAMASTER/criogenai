@@ -1,0 +1,79 @@
+/*
+ * AgentBuild's colours are the states of a run: a colour on the site means
+ * what it means in a run (running, waiting for a person, done, failed).
+ * Dark first; a light theme for every page.
+ */
+:root {
+  color-scheme: dark;
+  --ab-ink: #0f1b2d;        /* page */
+  --ab-surface: #16263d;    /* panels, code */
+  --ab-surface-2: #1c3150;  /* raised */
+  --ab-line: #25405c;       /* borders */
+  --ab-text: #e6edf5;
+  --ab-muted: #9fb3c8;
+  --ab-faint: #6b829b;
+  --ab-fine: #8ea4bc;
+  --ab-running: #7fd6e8;    /* the brand colour */
+  --ab-waiting: #f2b544;
+  --ab-done: #8bd9a0;
+  --ab-failed: #f27d72;
+  /* The same states as text on the page's background. */
+  --ab-running-text: #7fd6e8;
+  --ab-waiting-text: #f2b544;
+  --ab-done-text: #8bd9a0;
+  --ab-failed-text: #f27d72;
+
+  --ab-font: "Nunito Variable", system-ui, sans-serif;
+  --ab-mono: "JetBrains Mono Variable", ui-monospace, monospace;
+
+  /* The docs' scale (as Starlight's, dark). */
+  --c-accent-low: #12384a;
+  --c-accent: #3fb6d1;
+  --c-accent-high: #bfeef8;
+  --c-accent-text: #bfeef8;
+  --c-white: #ffffff;
+  --c-gray-1: #e6edf5;
+  --c-gray-2: #c4d2e1;
+  --c-gray-3: #9fb3c8;
+  --c-gray-4: #6b829b;
+  --c-gray-5: #3a5370;
+  --c-gray-6: #1c3150;
+  --c-black: #0f1b2d;
+
+  /* Frameworks in the benchmark lab (categorical, validated for both themes;
+     never the run-state colours, which mean pass / partial / fail there). */
+  --fw-1: #3987e5;
+  --fw-2: #d95926;
+  --fw-3: #199e70;
+  --fw-4: #9085e9;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --ab-text: #0f1b2d;
+  --ab-muted: #4b6380;
+  --ab-faint: #7a91aa;
+  --ab-fine: #5b7390;
+  --ab-running-text: #0f6f86;
+  --ab-waiting-text: #8a5a00;
+  --ab-done-text: #237a3c;
+  --ab-failed-text: #b3392e;
+
+  --c-accent-low: #d4f1f7;
+  --c-accent: #0f6f86;
+  --c-accent-high: #0b4352;
+  --c-accent-text: #0f6f86;
+  --c-white: #0f1b2d;
+  --c-gray-1: #16263d;
+  --c-gray-2: #25405c;
+  --c-gray-3: #4b6380;
+  --c-gray-4: #7a91aa;
+  --c-gray-5: #c4d2e1;
+  --c-gray-6: #e8eef5;
+  --c-black: #ffffff;
+
+  --fw-1: #2a78d6;
+  --fw-2: #eb6834;
+  --fw-3: #1baf7a;
+  --fw-4: #6250d6;
+}

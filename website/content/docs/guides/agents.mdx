@@ -1,0 +1,54 @@
+---
+title: Agents and tools
+description: Tools with validated arguments, limits, structured output and testing without a model.
+---
+
+
+An **agent** is a model plus tools, run as a loop: the model answers or asks
+for tool calls, the tools run, the results go back, until the model answers
+without calling a tool (or a limit is reached).
+
+## Tools, limits and typed output
+
+<Sample name="agents" />
+
+In Rust, typed output is a JSON Schema:
+
+<Sample name="agents" region="structured" only={["rust"]} />
+
+- **Arguments are validated** against the schema before your function runs
+  ([how](/docs/concepts/messages-and-tools/)).
+- **Limits** stop runaway loops: `model_calls` (default 25), `tool_calls`
+  (200), `tokens`, and a timeout per tool call (60 s). Reaching one fails
+  the run with `limit_exceeded`.
+- **Typed output** makes the run end with JSON matching a schema (in Python,
+  a Pydantic model). Invalid answers go back to the model with the
+  problems. Models with a JSON mode answer in it; others call a reserved
+  `final_output` tool.
+
+## The result
+
+| Field (Python / TypeScript) | Rust | Meaning |
+|---|---|---|
+| `text` | `result.text()` | The final answer |
+| `output` | `result.output` | The typed output, if you asked for one |
+| `messages` | `result.messages` | The whole transcript |
+| `usage` | `result.usage` | Tokens across all model calls |
+| `model_calls`, `tool_calls` / `modelCalls`, `toolCalls` | same names | How much the run did |
+| `needs_approval`, `approvals` / `needsApproval`, `approvals` | `is_suspended()`, `approval_requests()` | Paused for a person |
+
+## Testing
+
+Use `FakeModel` in tests: scripted replies (text or tool calls) in order,
+with no network. In Rust it can also fail on purpose (`failing_on`,
+`flaky_first`) to test error handling.
+
+<Sample name="agents" region="testing" only={["rust"]} />
+
+## Rust only, for now
+
+Hooks around every model and tool call (`Hook`: redact text before it
+reaches a model, log, block a tool), fallback models, retry policies, and
+agents used as tools of other agents (`agent.as_tool`) or as workflow steps
+(`agent.as_node`) are in the Rust API today; see the
+[Rust reference](/docs/reference/api/). They come to the SDKs next.

@@ -64,9 +64,9 @@ code keeps working.
 
 | Category | Who fixes it | Examples | Default action |
 |---|---|---|---|
-| **model_recoverable** | The model, on its next turn | unknown tool, invalid arguments, `ToolError` raised by a tool, tool timeout after retries | Send it to the model as a tool result with `status: error`; continue |
+| **model_recoverable** | The model, on its next turn | unknown tool, invalid arguments, `ToolError` raised by a tool, tool timeout after retries, an exception a tool did not handle (by default, §5.1) | Send it to the model as a tool result with `status: error`; continue |
 | **transient** | Time | HTTP 429/5xx, overload, network reset, per-attempt timeout | Retry with backoff where allowed (§5); then escalate to the next category's action |
-| **developer** | The developer | uncaught exception in a tool or hook, invalid tool return value, JSON conversion failure, state update conflict, bad configuration | **Fail the run.** Never shown to the model. |
+| **developer** | The developer | uncaught exception in a hook, a tool's exception with `on_tool_exception="fail"`, `ToolError::fatal`, invalid tool return value, JSON conversion failure, state update conflict, bad configuration | **Fail the run.** Never shown to the model. |
 | **provider_fatal** | The developer or operator | auth, permission, unknown model, invalid request, context overflow, content filter | Fail the run without retrying (a hook may handle context overflow, §6) |
 | **policy** | Configuration | model-call limit, tool-call limit, step limit, deadline, nesting limit | Fail with a `limit_exceeded`-family code, or end gracefully if configured (0004 §5) |
 | **human** | A reviewer | rejected tool call | Send it to the model as `status: rejected`; continue |
@@ -128,7 +128,7 @@ in its answer.
 | Backoff | exponential, base 0.5 s, factor 2, cap 20 s, full jitter | same, when enabled |
 | After retries are exhausted | fallback models if configured, else fail `model_failed` | `status: error` result to the model (`timeout` / `transient`) |
 | `ToolError` raised | — | `status: error` result to the model |
-| Unexpected exception | fail `model_failed` (`kind: unknown`) | fail `tool_failed` (override: `on_tool_exception="return_to_model"`) |
+| Unexpected exception | fail `model_failed` (`kind: unknown`) | `status: error` result to the model, code `tool_failed`, with the exception's type and message (`on_tool_exception`: `"return_to_model"`, the default; `"return_generic"` sends only "the tool failed", keeping the text in the result's `artifact`; `"fail"` fails the run with `tool_failed`, the exception as its cause). A Rust tool's panic counts as an exception. |
 
 Every value is configurable per agent, per tool and per model. Policies are
 **declarative data**, executed by the core, so Python and TypeScript agents

@@ -46,6 +46,45 @@ First release, planned as 0.1.0 (Rust crates only).
   block, also when streamed (`OpenAiQuirks::think_tags`, on by default).
 - `FakeModel` for tests: scripted replies, realistic delays, errors.
 
+### Security
+
+- TLS certificate checks: `rustls-webpki` 0.103.16, `webpki-roots` and
+  `webpki-root-certs` 1.0.10 (RUSTSEC-2026-0381, -0382, -0383: distrusted
+  intermediates could be accepted), in every lockfile.
+
+### A tool's exception no longer stops the run
+
+- **Changed default:** an exception a tool did not handle (Python,
+  JavaScript) or a panic in a Rust tool now reaches the model as a
+  `tool_failed` result with the exception's type and message, and the run
+  goes on (it used to fail the run). Choose per agent with
+  `Limits::on_tool_exception` / `on_tool_exception=` / `onToolException`:
+  `return_to_model` (default), `return_generic` (the model only learns
+  that the tool failed; the text stays in the result's `artifact`) or
+  `fail` (the old behaviour; the exception is the error's cause).
+  `ToolError::crashed` marks such a failure; `ToolError::fatal` still
+  fails the run. Designs 0003 §5.1, 0004, 0011, 0012.
+
+### Workflows in the Python SDK (design 0015)
+
+- `Workflow` with `@wf.node` / `add_node` (functions or agents), `start`,
+  `edge`, `route`, `join`, `goto`, reducers, `suspend` / `resume`,
+  `compile(storage=…)` (every graph problem at once), `run` / `run_sync`
+  and durable `thread(id)`s (`run`, `resume`, `retry`, `interrupts`,
+  `history`, `rewind`, `delete`). The engine runs it in Rust.
+- `FakeModel(fail_first=n)` (the first calls fail with a transient rate
+  limit) and `FakeModel(by_turn=True)` (replies chosen by the
+  conversation's turn, so one model serves many runs at once); in Rust,
+  `FakeModel::by_turn` and `FakeModel::without_request_log`.
+
+### Comparison with LangGraph and CrewAI (design 0016)
+
+- `benches/compare/`: the same agents, workflows, loads and injected
+  faults run on AgentBuild, LangGraph and CrewAI in Python, one venv per
+  framework and one process per measurement, with one simulated model;
+  results as a JSON file (`agentbuild-compare/1`) that the website's
+  benchmark lab shows as comparison graphs.
+
 ### Release preparation
 
 - The Python and npm packages include the licence files and project

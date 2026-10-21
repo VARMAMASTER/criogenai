@@ -1,0 +1,35 @@
+---
+title: Error codes
+description: Every stable error code, what it means, whether to retry, and the error class each SDK raises.
+---
+
+
+Every failure has a stable **code**, the same in Python, TypeScript, Rust
+and the gateway, so code that checks codes works everywhere. Codes may be
+added; before 1.0 none is renamed or removed.
+
+```python
+from agentbuild import AgentBuildError, ThreadBusyError
+
+try:
+    await chat.send("Hello")
+except ThreadBusyError:
+    ...                      # another run holds the thread
+except AgentBuildError as error:
+    print(error.code, error.message, error.details)
+```
+
+```ts
+import { isAgentBuildError } from "@agentbuild/sdk";
+
+try {
+  await chat.send("Hello");
+} catch (error) {
+  if (isAgentBuildError(error, "thread_busy")) { /* … */ }
+}
+```
+
+In Rust, `RunError::kind.code()`, `AgentError::code`, `StorageError::code()`
+and `ModelErrorKind::code()` give the same strings.
+
+<ErrorTable />

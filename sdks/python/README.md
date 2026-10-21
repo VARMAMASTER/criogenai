@@ -1,7 +1,11 @@
-# agentbuild (Python)
+# agentbuild-sdk (Python)
 
-Agents with tools, human approval, durable threads, long-term memory, an
-audit trail and encryption at rest, on [AgentBuild](https://github.com/VARMAMASTER/agentbuild)'s
+```sh
+pip install agentbuild-sdk
+```
+
+Agents and workflows with tools, human approval, durable threads, long-term memory, an
+audit trail and encryption at rest, on [AgentBuild](https://agentbuild.vercel.app)'s
 Rust engine (design 0011).
 
 ```python
@@ -28,8 +32,7 @@ asyncio.run(main())
 **Status:** first slice: agents, tools, approvals, typed output, threads
 (send, approve, reject, decide, retry, history, rewind, delete, stream),
 storage (SQLite, Postgres, encryption, audit, retention) and memory.
-Python workflows, hooks and the gateway are planned. Tests use
-`FakeModel`; no real model is called.
+Workflows too (`Workflow`, design 0015). Hooks and the gateway client
+are planned. Tests use `FakeModel`; no real model is called.
 
-Build from source: `pip install maturin && maturin develop` in this
-directory (needs Rust 1.88+).
+Free to use, also commercially (see `LICENSE`).

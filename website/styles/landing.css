@@ -1,0 +1,411 @@
+/* The landing page: frosted glass panels over the aurora (glass.css), the
+   runs moving inside them (hero trace, "Watch it run"). Rounded type. */
+
+.landing main {
+  max-width: 76rem;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+}
+
+/* Hero: copy left, the run trace right. */
+.landing .hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: 3.5rem;
+  align-items: center;
+  padding: 5rem 0 5.5rem;
+}
+.landing .hero h1 {
+  font-size: clamp(2.3rem, 4.4vw, 3.5rem);
+  line-height: 1.06;
+  letter-spacing: -0.02em;
+  font-weight: 850;
+  margin: 0 0 1.4rem;
+  max-width: 20ch;
+  background: linear-gradient(180deg, #ffffff 30%, #bfe9f3 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+:root[data-theme="light"] .landing .hero h1 {
+  background-image: linear-gradient(180deg, #0f1b2d 35%, #0f6f86 100%);
+}
+.landing .lede {
+  font-size: 1.15rem;
+  color: var(--ab-muted);
+  max-width: 34rem;
+  margin: 0 0 1.8rem;
+}
+.landing .install {
+  max-width: 100%;
+}
+.landing .install code {
+  display: inline-block;
+  max-width: 100%;
+  font-family: var(--ab-mono);
+  font-size: 0.86rem;
+  padding: 0.75rem 1.1rem;
+  border-radius: 14px;
+  color: var(--ab-text);
+  overflow-wrap: anywhere;
+}
+.landing .install code::before {
+  content: "$ ";
+  color: var(--ab-faint);
+}
+.landing .actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin: 1.5rem 0 1rem;
+}
+
+/* Sections: separated by space, not rules; the panels carry the structure. */
+.landing section {
+  padding: 4.5rem 0;
+}
+.landing section h2 {
+  font-size: clamp(1.7rem, 2.8vw, 2.25rem);
+  letter-spacing: -0.015em;
+  font-weight: 850;
+  margin: 0 0 0.6rem;
+}
+.landing .section-lede {
+  color: var(--ab-muted);
+  max-width: 42rem;
+  margin: 0 0 2rem;
+}
+
+/* Watch it run: each scene with a short caption above it. */
+.landing .watch-item {
+  display: grid;
+  gap: 1.2rem;
+  margin-top: 2.75rem;
+  min-width: 0;
+}
+.landing .watch-copy {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+.landing .watch-copy h3 {
+  margin: 0;
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+.landing .watch-copy p {
+  margin: 0;
+  color: var(--ab-muted);
+  max-width: 40rem;
+}
+.landing .watch-copy a {
+  font-weight: 700;
+  padding: 0.35rem 0;
+}
+
+/* Code tabs */
+.landing .tabs {
+  border-radius: 24px;
+  overflow: hidden;
+}
+.landing .ab-tablist {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  padding: 0.6rem;
+  border-bottom: 1px solid var(--glass-border);
+}
+.landing .ab-tablist button {
+  font-size: 0.92rem;
+  font-weight: 700;
+  min-height: 2.5rem;
+  background: none;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: var(--ab-muted);
+  padding: 0.45rem 1.1rem;
+  cursor: pointer;
+  transition: background-color 0.2s, color 0.2s;
+}
+.landing .ab-tablist button:hover {
+  color: var(--ab-text);
+}
+.landing .ab-tablist button[aria-selected="true"] {
+  color: var(--ab-text);
+  background: rgba(127, 214, 232, 0.14);
+  border-color: rgba(127, 214, 232, 0.35);
+}
+html[data-lang="python"] .landing .ab-synced[data-has-python]:not([data-hydrated]) button[data-tab-lang="python"],
+html[data-lang="typescript"] .landing .ab-synced[data-has-typescript]:not([data-hydrated]) button[data-tab-lang="typescript"],
+html[data-lang="rust"] .landing .ab-synced[data-has-rust]:not([data-hydrated]) button[data-tab-lang="rust"] {
+  color: var(--ab-text);
+  background: rgba(127, 214, 232, 0.14);
+  border-color: rgba(127, 214, 232, 0.35);
+}
+html[data-lang="python"] .landing .ab-synced[data-has-python]:not([data-hydrated]) button:not([data-tab-lang="python"]),
+html[data-lang="typescript"] .landing .ab-synced[data-has-typescript]:not([data-hydrated]) button:not([data-tab-lang="typescript"]),
+html[data-lang="rust"] .landing .ab-synced[data-has-rust]:not([data-hydrated]) button:not([data-tab-lang="rust"]) {
+  color: var(--ab-muted);
+  background: none;
+  border-color: transparent;
+}
+.landing .code-panel pre {
+  margin: 0;
+  padding: 1.4rem 1.6rem;
+  font-family: var(--ab-mono);
+  font-size: 0.84rem;
+  line-height: 1.7;
+  overflow-x: auto;
+}
+
+/* The run lifecycle: a definition list on one glass sheet. */
+.landing .lifecycle dl {
+  margin: 1.5rem 0 0;
+  padding: 0.5rem 2rem;
+  border-radius: 24px;
+}
+.landing .lifecycle .row {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  gap: 2rem;
+  padding: 1.6rem 0;
+  border-bottom: 1px solid var(--glass-border);
+}
+.landing .lifecycle .row:last-child {
+  border-bottom: 0;
+}
+.landing .lifecycle dt {
+  font-size: 1.2rem;
+  font-weight: 780;
+  line-height: 1.35;
+  display: flex;
+  gap: 0.8rem;
+  align-items: baseline;
+}
+.landing .lifecycle dd {
+  margin: 0;
+  color: var(--ab-muted);
+}
+.landing .lifecycle dd p {
+  margin: 0 0 0.4rem;
+}
+.landing .lifecycle dd a {
+  font-weight: 700;
+}
+.landing .state {
+  flex: none;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 50%;
+  transform: translateY(-0.05rem);
+}
+.landing .state-running {
+  background: var(--ab-running);
+  box-shadow: 0 0 12px var(--ab-running);
+}
+.landing .state-waiting {
+  background: var(--ab-waiting);
+  box-shadow: 0 0 12px var(--ab-waiting);
+}
+.landing .state-done {
+  background: var(--ab-done);
+  box-shadow: 0 0 12px var(--ab-done);
+}
+
+/* Measured */
+.landing .table-glass {
+  max-width: 46rem;
+  border-radius: 24px;
+  padding: 0.5rem 1.6rem;
+  overflow-x: auto;
+}
+.landing .measured table {
+  border-collapse: collapse;
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+.landing .measured th,
+.landing .measured td {
+  text-align: left;
+  padding: 0.85rem 1rem 0.85rem 0;
+  border-bottom: 1px solid var(--glass-border);
+}
+.landing .measured tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+.landing .measured thead th {
+  color: var(--ab-muted);
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.landing .measured tbody td:nth-child(2) {
+  color: var(--ab-running);
+  font-family: var(--ab-mono);
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-shadow: 0 0 18px rgba(127, 214, 232, 0.5);
+  white-space: nowrap;
+}
+:root[data-theme="light"] .landing .measured tbody td:nth-child(2) {
+  color: var(--ab-running-text);
+  text-shadow: none;
+}
+.landing .measured tbody td:nth-child(3) {
+  font-family: var(--ab-mono);
+  color: var(--ab-muted);
+  white-space: nowrap;
+}
+.landing .measured .fine {
+  margin-top: 1.2rem;
+}
+
+/* FAQ: each question a glass card. */
+.landing .faq-list {
+  display: grid;
+  gap: 0.7rem;
+  max-width: 50rem;
+}
+.landing .faq details {
+  border-radius: 18px;
+  padding: 0 1.3rem;
+  transition: background-color 0.2s;
+}
+.landing .faq details[open] {
+  background: var(--glass-bg-strong);
+}
+.landing .faq summary {
+  cursor: pointer;
+  padding: 1.05rem 0;
+  font-weight: 750;
+  font-size: 1.05rem;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  border-radius: 12px;
+}
+.landing .faq summary::-webkit-details-marker {
+  display: none;
+}
+.landing .faq summary::after {
+  content: "+";
+  color: var(--ab-running-text);
+  font-weight: 800;
+  transition: transform 0.2s;
+}
+.landing .faq details[open] summary::after {
+  transform: rotate(45deg);
+}
+.landing .faq details p {
+  margin: 0 0 1.2rem;
+  color: var(--ab-muted);
+}
+
+/* Closing: one glowing glass card. */
+.landing .closing-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  padding: 3rem;
+}
+.landing .closing-card::before {
+  content: "";
+  position: absolute;
+  inset: auto -10% -60% 30%;
+  height: 120%;
+  background: radial-gradient(closest-side, rgba(127, 214, 232, 0.35), transparent);
+  pointer-events: none;
+}
+.landing .closing-card > * {
+  position: relative;
+}
+.landing .closing-card h2 {
+  margin-top: 0;
+}
+.landing .closing-card p {
+  color: var(--ab-muted);
+  margin: 0 0 1.6rem;
+}
+
+@media (max-width: 900px) {
+  .landing .hero {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
+    padding-top: 3rem;
+  }
+  .landing .lifecycle dl {
+    padding: 0.5rem 1.3rem;
+  }
+  .landing .lifecycle .row {
+    grid-template-columns: 1fr;
+    gap: 0.6rem;
+  }
+  .landing .closing-card {
+    padding: 2rem 1.5rem;
+  }
+}
+@media (max-width: 600px) {
+  .landing main {
+    padding: 0 1rem;
+  }
+  .landing section {
+    padding: 3rem 0;
+  }
+  .landing .hero {
+    padding: 2.25rem 0 3rem;
+  }
+  .landing .code-panel pre {
+    padding: 1.1rem 1.1rem;
+    font-size: 0.8rem;
+  }
+  .landing .table-glass {
+    padding: 0.4rem 1rem;
+  }
+  .landing .faq details {
+    padding: 0 1rem;
+  }
+}
+
+/* Installs toward opening the code (components/landing/InstallCounter). */
+.install-goal {
+  margin-top: 1.4rem;
+  max-width: 34rem;
+  padding: 0.9rem 1.1rem 1rem;
+  border-radius: 18px;
+}
+.install-goal-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.2rem 1rem;
+  margin-bottom: 0.55rem;
+}
+.install-goal-title {
+  font-weight: 800;
+  color: var(--ab-text);
+}
+.install-goal-count {
+  font-size: 0.86rem;
+  color: var(--ab-muted);
+  font-variant-numeric: tabular-nums;
+}
+.install-goal-track {
+  height: 10px;
+  border-radius: 999px;
+  background: var(--glass-bg-soft);
+  border: 1px solid var(--glass-border);
+  overflow: hidden;
+}
+.install-goal-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #7fd6e8, #8bd9a0);
+}
+.install-goal-note {
+  margin: 0.6rem 0 0;
+  font-size: 0.82rem;
+  color: var(--ab-muted);
+}

@@ -1,0 +1,31 @@
+---
+title: Conversations (threads)
+description: Durable conversations that remember, survive crashes, and can be rewound.
+---
+
+
+A **thread** is one conversation, kept in the agent's
+[storage](/docs/guides/storage/). Every call saves checkpoints: before each
+step and after each tool call.
+
+<Sample name="threads" />
+
+In Python, every call also has a blocking form for scripts and notebooks:
+
+<Sample name="threads" region="sync" only={["python"]} />
+
+## What a thread guarantees
+
+- **One run at a time.** A second `send` on a busy thread waits by default;
+  with Postgres this holds across processes and machines. Storage can
+  instead reject (`thread_busy`) or interrupt the running one.
+- **Nothing lost on a crash.** If the process dies mid-run, the thread
+  shows an unfinished run: `send` refuses (`thread_interrupted`) until
+  `retry()` continues it. Tool calls that finished are not run again.
+- **History.** `history(n)` lists checkpoints, newest first; `rewind(id)`
+  makes an older one current (the newer ones stay stored, off the history).
+- **Identity.** `actor` names who acts through this handle (for example
+  `user:dr-rao`), for the [audit trail](/docs/guides/compliance/).
+
+Thread ids are visible in the database even when it is encrypted: use opaque
+ids (a UUID), not names or record numbers.

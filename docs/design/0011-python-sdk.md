@@ -115,8 +115,11 @@ by code: `ModelError` (`model_failed`), `ToolExecutionError`
   the run's metadata, 0010's `NodeContext::metadata` mechanism), so
   concurrent runs on different loops work.
 - **Exceptions** in a tool: `ToolError` → a tool error the model sees;
-  any other exception → the run fails with `tool_failed`, and the
-  original exception is the error's `__cause__`.
+  any other exception follows `Agent(on_tool_exception=...)` (0003 §5.1):
+  by default the model sees its type and message (`tool_failed`) and the
+  run goes on; `"return_generic"` hides the text from the model; with
+  `"fail"` the run fails with `tool_failed` and the original exception is
+  the error's `__cause__` (kept only then).
 - **Values** cross as JSON (`json.dumps` / `serde_json`): no Python
   objects inside the engine, and the same data the Rust API sees.
 - **Sync wrappers** (`run_sync`, `send_sync`) run the async call with

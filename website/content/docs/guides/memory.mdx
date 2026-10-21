@@ -1,0 +1,37 @@
+---
+title: Long-term memory
+description: Facts about a user or a patient that every conversation can recall.
+---
+
+
+Threads remember one conversation. **Long-term memory** keeps facts about a
+person (a user, a patient, a customer) across all their conversations, in
+the same storage.
+
+<Sample name="memory" />
+
+## How it works
+
+- **Namespaces.** Memory is organised like paths: `users/42`. With
+  `by_state("user_id", "users")`, each run works in `users/<user_id>`; a run
+  without `user_id` fails instead of seeing someone else's facts.
+- **Recall.** Before each model call, the best-matching facts (then the
+  newest) are added to the model's request, marked as information, not
+  instructions. They are not stored in the transcript.
+- **Tools.** The model gets `remember`, `forget` and `search_memory`. Turn
+  either half off with `recall=0` / `tools=False` (`recall: 0`,
+  `tools: false`).
+- **Expiry.** A time to live per memory, or per fact.
+- **Deleting a person.** `forget_all("users/42")` / `forgetAll` /
+  `delete_namespace` removes every fact under the namespace.
+
+Search is by keywords in Python and TypeScript.
+
+## By meaning (Rust)
+
+With an embedding model, a question such as "Which antibiotics should I
+avoid?" finds a fact saying "Severe penicillin reaction", with no word in
+common. Vectors are stored (and encrypted) with the facts. If the embedding
+model fails, recall falls back to keywords.
+
+<Sample name="memory" region="semantic" only={["rust"]} />

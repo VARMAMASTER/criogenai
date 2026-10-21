@@ -2,6 +2,7 @@
 
 use std::collections::VecDeque;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
 use serde_json::{Map, Value};
@@ -17,14 +18,19 @@ use crate::request::{Capabilities, ModelRequest, ModelResponse};
 ///
 /// The prompt is the text of the request's last message. Without a script,
 /// the answer is `"[fake-llm] reply to: <prompt>"`. Scripted replies
-/// ([`then`](Self::then)) are used first, in order.
+/// ([`then`](Self::then)) are used first, in order; with
+/// [`by_turn`](Self::by_turn) they are chosen by the conversation's turn
+/// instead, so one model can serve many runs, also at once.
 #[derive(Debug)]
 pub struct FakeModel {
     min: Duration,
     max: Duration,
     fail_marker: Option<String>,
     flaky_calls: usize,
+    by_turn: bool,
+    log_requests: bool,
     script: Mutex<VecDeque<FakeReply>>,
+    calls: AtomicUsize,
     requests: Mutex<Vec<ModelRequest>>,
     provider: String,
     model: String,
@@ -106,7 +112,10 @@ impl FakeModel {
             max,
             fail_marker: None,
             flaky_calls: 0,
+            by_turn: false,
+            log_requests: true,
             script: Mutex::new(VecDeque::new()),
+            calls: AtomicUsize::new(0),
             requests: Mutex::new(Vec::new()),
             provider: "fake".into(),
             model: "fake".into(),
@@ -135,6 +144,25 @@ impl FakeModel {
         self
     }
 
+    /// Chooses the scripted reply by the request's turn (the number of
+    /// assistant messages it already holds) instead of using replies up:
+    /// turn 0 gets the first reply, turn 1 the second, and past the end the
+    /// last one repeats. Concurrent runs each get their own sequence.
+    pub fn by_turn(mut self) -> Self {
+        self.by_turn = true;
+        self
+    }
+
+    /// Keeps no copy of the requests, for long benchmarks: [`requests`]
+    /// is then empty ([`calls`] still counts).
+    ///
+    /// [`requests`]: Self::requests
+    /// [`calls`]: Self::calls
+    pub fn without_request_log(mut self) -> Self {
+        self.log_requests = false;
+        self
+    }
+
     /// Adds a scripted reply; scripted replies are used in order.
     pub fn then(self, reply: FakeReply) -> Self {
         self.script.lock().expect("script lock").push_back(reply);
@@ -154,20 +182,23 @@ impl FakeModel {
 
     /// Number of calls so far.
     pub fn calls(&self) -> usize {
-        self.requests.lock().expect("requests lock").len()
+        self.calls.load(Ordering::SeqCst)
     }
 
-    /// Every request received, in order.
+    /// Every request received, in order (none with
+    /// [`without_request_log`](Self::without_request_log)).
     pub fn requests(&self) -> Vec<ModelRequest> {
         self.requests.lock().expect("requests lock").clone()
     }
 
     async fn answer(&self, request: &ModelRequest) -> Result<ModelResponse, ModelError> {
-        let call = {
-            let mut requests = self.requests.lock().expect("requests lock");
-            requests.push(request.clone());
-            requests.len()
-        };
+        let call = self.calls.fetch_add(1, Ordering::SeqCst) + 1;
+        if self.log_requests {
+            self.requests
+                .lock()
+                .expect("requests lock")
+                .push(request.clone());
+        }
         let prompt = request
             .messages
             .last()
@@ -200,7 +231,19 @@ impl FakeModel {
             );
         }
 
-        let scripted = self.script.lock().expect("script lock").pop_front();
+        let scripted = {
+            let mut script = self.script.lock().expect("script lock");
+            if self.by_turn {
+                let turn = request
+                    .messages
+                    .iter()
+                    .filter(|m| m.role == Role::Assistant)
+                    .count();
+                script.get(turn).or_else(|| script.back()).cloned()
+            } else {
+                script.pop_front()
+            }
+        };
         let (content, finish) = match scripted {
             Some(FakeReply::Error(error)) => return Err(error),
             Some(FakeReply::Message(message)) => {

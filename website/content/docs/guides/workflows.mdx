@@ -1,0 +1,39 @@
+---
+title: Workflows
+description: Graphs of steps with branches, parallel work, joins, loops and pauses for a person.
+---
+
+
+<Aside type="note" title="Rust today">
+Workflows are in the Rust API. Python workflows are being built now and
+TypeScript follows; see [Status](/docs/status/). Agents, threads, approvals
+and storage already work in all three languages.
+</Aside>
+
+A **workflow** is a graph of steps (nodes) over a shared state. Each node
+reads the state and returns the keys it changes. The engine runs ready
+nodes [in steps](/docs/concepts/runs/), concurrently, and checks the graph
+before the first run.
+
+<Sample name="workflows" />
+
+## Building blocks
+
+| Piece | Use |
+|---|---|
+| **Edge** | After A, run B (or `END`) |
+| **Router** | After A, a function of the state picks the next node by label |
+| **Parallel nodes** | Several edges from one node: they run at the same time |
+| **Join** | Run a node once all of its sources have finished |
+| **Goto** | A node chooses its next nodes itself (declared ahead) |
+| **Reducer** | How parallel writes to one key combine: replace, append, update by id |
+| **Suspend** | A node pauses the run for a person; `resume` gives it the answer |
+| **Policies** | Per-node timeouts and retries with backoff; a deadline per run |
+| **Agents as nodes** | An agent can be one node of a workflow (`agent.as_node()`) |
+
+## Durable workflows
+
+`storage.workflow_thread(&workflow, id)` gives a workflow the same thread
+guarantees as agents: progress saved every step, a pause that waits in the
+database and is answered from any process, `retry()` after a failure
+without re-running finished nodes, history, rewind and the audit trail.

@@ -24,7 +24,7 @@ Generated from [`schemas/error-codes.json`](../schemas/error-codes.json) (design
 | `workflow_mismatch` | developer | no | `ValidationError` | - | A snapshot was made by a different workflow. |
 | `storage_failed` | transient | yes | `StorageError` | - | Saving the run's progress failed; details carry the storage code. |
 | `model_failed` | provider | depends | `ModelError` | - | A model call failed after retries and fallbacks; details.model_error has the kind, and retryable follows it. |
-| `tool_failed` | developer | no | `ToolExecutionError` | - | A tool raised an unexpected error (not a ToolError the model sees). |
+| `tool_failed` | developer | no | `ToolExecutionError` | - | A tool failed with an error it did not handle (an exception, a panic). By default the model sees it as the call's result and the run goes on; with on_tool_exception="fail" (or ToolError::fatal) it fails the run. |
 | `limit_exceeded` | policy | no | `LimitExceededError` | - | A model-call, tool-call, token or nesting limit was reached; details.limit names it. |
 | `output_invalid` | policy | no | `AgentBuildError` | - | The structured output was still invalid after the allowed retries. |
 | `hook_failed` | developer | no | `AgentBuildError` | - | A hook returned an error. |
@@ -79,6 +79,7 @@ Generated from [`schemas/error-codes.json`](../schemas/error-codes.json) (design
 | Code | Category | Retryable | SDK class | HTTP | Meaning |
 |---|---|---|---|---|---|
 | `cancelled` | cancellation | yes | `CancelledError` | - | The run was cancelled (a cancel token, an AbortSignal, a dropped stream, an interrupt from another process). In a tool message: a call that never got a result. |
+| `tool_failed` | developer | no | `ToolExecutionError` | - | A tool failed with an error it did not handle (an exception, a panic). By default the model sees it as the call's result and the run goes on; with on_tool_exception="fail" (or ToolError::fatal) it fails the run. |
 | `timeout` | transient | yes | - | 504 | No answer in time: a model call, or (in a tool message) a tool call. |
 | `invalid_arguments` | model_recoverable | no | - | - | The model's arguments did not match the tool's schema; the model sees the problems and may correct them. |
 | `unknown_tool` | model_recoverable | no | - | - | The model called a tool the agent does not have. |

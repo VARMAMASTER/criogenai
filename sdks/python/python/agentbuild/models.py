@@ -107,19 +107,34 @@ class FakeReply:
 
 class FakeModel:
     """A simulated model for tests: answers with the scripted replies in
-    order (a string is a text reply), then echoes. Never a network call."""
+    order (a string is a text reply), then echoes. Never a network call.
+    ``fail_first``: the first n calls fail with ``rate_limited`` (a
+    transient error the agent retries), to test retries. ``by_turn``: choose
+    each reply by the conversation's turn (the first reply for a run's first
+    model call, the second for its second, then the last repeats) instead
+    of using replies up, so one model serves many runs, also at once."""
 
-    def __init__(self, replies: Sequence[Union[str, FakeReply]] = (), delay: float = 0.0):
+    def __init__(
+        self,
+        replies: Sequence[Union[str, FakeReply]] = (),
+        delay: float = 0.0,
+        fail_first: int = 0,
+        by_turn: bool = False,
+    ):
         self.replies: List[FakeReply] = [
             FakeReply.text(r) if isinstance(r, str) else r for r in replies
         ]
         self.delay = delay
+        self.fail_first = fail_first
+        self.by_turn = by_turn
 
     def spec(self) -> Dict[str, Any]:
         return {
             "kind": "fake",
             "replies": [r._spec for r in self.replies],
             "delay_ms": int(self.delay * 1000),
+            "fail_first": self.fail_first,
+            "by_turn": self.by_turn,
         }
 
     def __repr__(self) -> str:

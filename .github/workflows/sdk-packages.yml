@@ -85,16 +85,16 @@ jobs:
           out="platform/${{ matrix.platform }}"
           mkdir -p "$out"
           cp sdks/typescript/native/agentbuild.node "$out/agentbuild.node"
-          cp LICENSE-MIT LICENSE-APACHE "$out/"
+          cp sdks/typescript/LICENSE "$out/"
           os="${{ matrix.platform }}"; os="${os%-*}"; cpu="${{ matrix.platform }}"; cpu="${cpu#*-}"
           cat > "$out/package.json" <<EOF
           {
             "name": "@agentbuild/sdk-${{ matrix.platform }}",
             "version": "$version",
             "description": "The native addon of @agentbuild/sdk for ${{ matrix.platform }}",
-            "license": "MIT OR Apache-2.0",
+            "license": "SEE LICENSE IN LICENSE",
             "main": "agentbuild.node",
-            "files": ["agentbuild.node", "LICENSE-MIT", "LICENSE-APACHE"],
+            "files": ["agentbuild.node", "LICENSE"],
             "os": ["$os"],
             "cpu": ["$cpu"]
           }

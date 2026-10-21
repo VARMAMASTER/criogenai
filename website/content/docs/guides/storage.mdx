@@ -1,0 +1,39 @@
+---
+title: "Storage: SQLite and Postgres"
+description: Where threads and memory live, and how runs on one thread take turns.
+---
+
+
+Storage keeps threads (every checkpoint), long-term memory and the audit
+trail. Pass it to an agent; agents sharing one storage share its threads and
+memory.
+
+<Sample name="storage" />
+
+| Backend | For | Notes |
+|---|---|---|
+| In memory | Tests, scripts | Gone when the process ends |
+| SQLite | One process | A file; tables created on first use; deleted rows are overwritten |
+| Postgres | Several processes or machines | Tables created on first use; one run per thread across all processes (advisory locks); interrupts reach the process running the thread |
+
+## A thread that is busy
+
+Only one run uses a thread at a time. What a second call does:
+
+| `on_busy` | Second call |
+|---|---|
+| `wait` (default) | Waits its turn (up to a timeout) |
+| `reject` | Fails at once with `thread_busy` |
+| `interrupt` | Cancels the running one (it is saved for `retry`) and goes next |
+
+## Durability
+
+By default every step and every tool call is saved as it happens, so a
+crash loses at most the call in progress. Rust can trade that for speed
+(`Durability::Exit`: save only when the call ends).
+
+## Postgres in production
+
+Use a direct connection or PgBouncer in **session** mode (thread locks need
+the same connection), TLS (`sslmode=verify-full`), and regular backups:
+threads, memory and the audit trail are all in this database.

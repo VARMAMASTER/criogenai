@@ -14,7 +14,7 @@ use std::time::Duration;
 
 use agentbuild_agent::{
     Agent, AgentError, AgentEvent, AgentInput, AgentResult, Approval, Decision, Limits, Memory,
-    Reply, Thread, ThreadStream, ToolContext, ToolError, tool_fn,
+    OnToolException, Reply, Thread, ThreadStream, ToolContext, ToolError, tool_fn,
 };
 use agentbuild_core::{CancelToken, RunOptions};
 use agentbuild_providers::{
@@ -291,7 +291,7 @@ fn memory(spec: &Value) -> napi::Result<Memory> {
     Ok(memory)
 }
 
-fn limits(spec: &Value) -> Limits {
+fn limits(spec: &Value) -> napi::Result<Limits> {
     let mut limits = Limits::default();
     if let Some(n) = spec["modelCalls"].as_u64() {
         limits = limits.model_calls(n as u32);
@@ -305,14 +305,27 @@ fn limits(spec: &Value) -> Limits {
     if let Some(secs) = spec["toolTimeoutSecs"].as_f64() {
         limits = limits.tool_timeout(Duration::from_secs_f64(secs));
     }
-    limits
+    if let Some(policy) = spec.get("onToolException").filter(|p| !p.is_null()) {
+        limits = limits.on_tool_exception(match policy.as_str() {
+            Some("returnToModel") => OnToolException::ReturnToModel,
+            Some("returnGeneric") => OnToolException::ReturnGeneric,
+            Some("fail") => OnToolException::Fail,
+            _ => {
+                return Err(bad(
+                    "onToolException is \"returnToModel\", \"returnGeneric\" or \"fail\"",
+                ));
+            }
+        });
+    }
+    Ok(limits)
 }
 
 // ---------- tools ----------
 
 /// Calls a JavaScript tool and reads its envelope: `{"ok": value}`,
-/// `{"toolError", "retryable"}` (the model sees it) or `{"crash"}` (the run
-/// fails with `tool_failed`; the TypeScript side keeps the exception).
+/// `{"toolError", "retryable"}` (the model sees it) or `{"crash"}` (an
+/// exception the tool did not handle: `onToolException` decides; when the
+/// run fails on it, the TypeScript side keeps the exception as its cause).
 async fn call_tool(
     tool: Arc<JsTool>,
     args: Map<String, Value>,
@@ -329,7 +342,7 @@ async fn call_tool(
     let envelope: Value = serde_json::from_str(&envelope)
         .map_err(|err| ToolError::fatal(format!("unreadable tool answer: {err}")))?;
     if let Some(crash) = envelope.get("crash").and_then(Value::as_str) {
-        return Err(ToolError::fatal(crash));
+        return Err(ToolError::crashed(crash));
     }
     if let Some(message) = envelope.get("toolError").and_then(Value::as_str) {
         let error = ToolError::new(message);
@@ -588,7 +601,7 @@ impl NativeAgent {
             builder = builder.output(schema.clone());
         }
         if let Some(spec) = config.get("limits").filter(|s| s.is_object()) {
-            builder = builder.limits(limits(spec));
+            builder = builder.limits(limits(spec)?);
         }
         if let Some(spec) = config.get("memory").filter(|s| s.is_object()) {
             builder = builder.memory(memory(spec)?);

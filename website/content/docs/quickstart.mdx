@@ -1,0 +1,44 @@
+---
+title: Quickstart
+description: An agent with a tool, a conversation that remembers, and an approval, in Python, TypeScript or Rust.
+---
+
+
+Pick your language once in any tab: the whole site follows. Each sample is
+compiled or type-checked against the current SDK, so it runs as shown.
+
+## 1. An agent with a tool
+
+A tool is a function the model may call. Its arguments are checked against
+the tool's schema before your code runs; a `ToolError` goes back to the
+model, which can try again or explain.
+
+<Sample name="quickstart" />
+
+## 2. A conversation that remembers
+
+A **thread** is one conversation, saved in storage after every step. The next
+message continues it, from this process or another.
+
+<Sample name="threads" />
+
+## 3. A person approves first
+
+Name the tools that need approval. The run pauses before any of them runs
+and waits in storage until someone approves, rejects or edits the call.
+
+<Sample name="approvals" />
+
+## 4. Testing without a model
+
+`FakeModel` plays back scripted replies: no network, no cost, the same
+result every time. Use it in your tests.
+
+<Sample name="agents" only={["python", "typescript"]} />
+
+## Next
+
+- [Agents and tools](/docs/guides/agents/): limits, structured output, errors.
+- [Conversations](/docs/guides/threads/) and [streaming](/docs/guides/streaming/).
+- [Storage](/docs/guides/storage/): SQLite and Postgres.
+- [Encryption, audit and retention](/docs/guides/compliance/) for sensitive data.

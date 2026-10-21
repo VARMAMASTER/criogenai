@@ -185,7 +185,13 @@ Implementation decisions (slice 1):
   tool error lists `completed_calls` in the error details.
 - Result message ids are `msg_result_<call_id>` (deterministic).
 - Rust tools: the `Tool` trait and `tool_fn`; `ToolError::new` goes to the
-  model, `ToolError::fatal` fails the run.
+  model, `ToolError::fatal` fails the run. A failure the tool did not
+  handle (`ToolError::crashed`, which the SDKs send for an uncaught
+  exception, or a panic, caught around the call) follows
+  `Limits::on_tool_exception` (0003 §5.1): by default the model sees it
+  (`tool_failed`) and the loop continues. Decided 2026-10-21 after the
+  framework comparison (0016), changing the earlier default (fail): a run
+  should survive a broken tool the way it survives a bad argument.
 
 Builds on [0002](0002-messages-and-tools.md)
 (data contracts), [0003](0003-error-model.md) (errors) and

@@ -67,6 +67,9 @@ pub struct Limits {
     pub tokens: Option<u64>,
     /// What happens when a limit is reached. Default [`OnLimit::Error`].
     pub on_limit: OnLimit,
+    /// What happens when a tool fails with an error it did not handle (an
+    /// exception, a panic). Default [`OnToolException::ReturnToModel`].
+    pub on_tool_exception: OnToolException,
     /// How deep agents may call agents ([`Agent::as_tool`]). Default 8.
     pub nesting: u32,
     /// Tool results longer than this (in characters) are cut, unless the
@@ -88,6 +91,30 @@ pub enum OnLimit {
     End,
 }
 
+/// What happens when a tool fails with an error it did not handle: an
+/// exception in a Python or JavaScript tool, a panic in a Rust tool
+/// ([`ToolError::crashed`](crate::ToolError::crashed)); 0003 §5.1. Errors a
+/// tool reports on purpose ([`ToolError::new`](crate::ToolError::new)) always
+/// go to the model, and [`ToolError::fatal`](crate::ToolError::fatal) always
+/// fails the run.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum OnToolException {
+    /// The call's result is an error the model sees (code `tool_failed`,
+    /// with the exception's type and message), and the run goes on.
+    #[default]
+    ReturnToModel,
+    /// As `ReturnToModel`, but the model only learns that the tool failed;
+    /// the exception's text stays in the result's `artifact` (stored with
+    /// the thread, never sent to a model). For exceptions that may carry
+    /// data that must not leave your systems.
+    ReturnGeneric,
+    /// The run fails with `tool_failed` (the exception is the cause in the
+    /// SDKs); a thread can retry it.
+    Fail,
+}
+
 impl Default for Limits {
     fn default() -> Self {
         Self {
@@ -99,6 +126,7 @@ impl Default for Limits {
             output_retries: 2,
             tokens: None,
             on_limit: OnLimit::Error,
+            on_tool_exception: OnToolException::ReturnToModel,
             nesting: 8,
             max_result_chars: 100_000,
         }
@@ -163,6 +191,12 @@ impl Limits {
     /// Sets [`tool_timeout`](Self::tool_timeout).
     pub fn tool_timeout(mut self, timeout: Duration) -> Self {
         self.tool_timeout = timeout;
+        self
+    }
+
+    /// Sets [`on_tool_exception`](Self::on_tool_exception).
+    pub fn on_tool_exception(mut self, policy: OnToolException) -> Self {
+        self.on_tool_exception = policy;
         self
     }
 
@@ -2116,7 +2150,15 @@ async fn tools_step(
                     name: call.name.clone(),
                     args: call.args.clone(),
                 };
-                let outcome = tokio::time::timeout(timeout, chain.call(request)).await;
+                let outcome = tokio::time::timeout(timeout, CatchPanic(chain.call(request)))
+                    .await
+                    .map(|caught| {
+                        caught.unwrap_or_else(|panic| {
+                            Err(crate::tool::ToolError::crashed(format!(
+                                "the tool panicked: {panic}"
+                            )))
+                        })
+                    });
                 let retryable = match &outcome {
                     Ok(Ok(_)) => false,
                     Ok(Err(error)) => !error.fatal && error.retryable,
@@ -2179,6 +2221,31 @@ async fn tools_step(
                     (message, direct)
                 }
                 Ok(Err(error)) if error.fatal => return Err((call.call_id, call.name, error)),
+                Ok(Err(error)) if error.crashed => match inner.limits.on_tool_exception {
+                    OnToolException::Fail => return Err((call.call_id, call.name, error)),
+                    OnToolException::ReturnGeneric => {
+                        let mut message = error_result(
+                            &call.call_id,
+                            &call.name,
+                            "tool_failed",
+                            "The tool failed with an unexpected error.".to_string(),
+                        );
+                        message.artifact = Some(json!({"exception": error.message}));
+                        (message, None)
+                    }
+                    _ => (
+                        error_result(
+                            &call.call_id,
+                            &call.name,
+                            "tool_failed",
+                            format!(
+                                "The tool failed with an unexpected error: {}",
+                                error.message
+                            ),
+                        ),
+                        None,
+                    ),
+                },
                 Ok(Err(error)) => {
                     let mut message =
                         error_result(&call.call_id, &call.name, "tool_error", error.message);
@@ -2373,6 +2440,32 @@ async fn tools_step(
 
 /// A developer error in a tool: the step fails. Calls that already finished
 /// are listed, and their results are saved in the memo (0003 E2).
+/// Turns a panic while polling the tool call into an error value, so a
+/// crashing tool follows `on_tool_exception` like an exception does.
+struct CatchPanic<F>(F);
+
+impl<F: std::future::Future + Unpin> std::future::Future for CatchPanic<F> {
+    type Output = Result<F::Output, String>;
+
+    fn poll(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Self::Output> {
+        let inner = &mut self.0;
+        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            std::pin::Pin::new(inner).poll(cx)
+        })) {
+            Ok(std::task::Poll::Ready(value)) => std::task::Poll::Ready(Ok(value)),
+            Ok(std::task::Poll::Pending) => std::task::Poll::Pending,
+            Err(payload) => std::task::Poll::Ready(Err(payload
+                .downcast_ref::<&str>()
+                .map(|s| s.to_string())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_else(|| "unknown panic".to_string()))),
+        }
+    }
+}
+
 fn tool_failed(
     memo: &agentbuild_core::TaskMemo,
     call_id: &str,

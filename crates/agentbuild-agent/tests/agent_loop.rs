@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::time::Duration;
 
-use agentbuild_agent::{Agent, Limits, StopReason, ToolError, tool_fn};
+use agentbuild_agent::{Agent, Limits, OnToolException, StopReason, ToolError, tool_fn};
 use agentbuild_core::{CancelToken, EventKind, RetryPolicy, RunOptions, event_channel};
 use agentbuild_providers::{
     ContentBlock, FakeModel, FakeReply, Message, ModelError, ModelErrorKind, Role, ToolSpec,
@@ -449,6 +449,79 @@ async fn transient_model_errors_are_retried_with_backoff() {
         "attempts are not separate model calls"
     );
     assert_eq!(fake.calls(), 3);
+}
+
+/// A tool that fails without handling it: an error marked `crashed` (what
+/// the SDKs send for an uncaught exception), or a panic.
+fn crashing(panic: bool) -> impl agentbuild_agent::Tool {
+    tool_fn(
+        ToolSpec::new("get_order", "", json!({"type": "object"})),
+        move |_, _| async move {
+            if panic {
+                panic!("index out of range");
+            }
+            Err::<Value, _>(ToolError::crashed("RuntimeError: database is down"))
+        },
+    )
+}
+
+fn crash_agent(panic: bool, limits: Limits) -> Agent {
+    Agent::builder(
+        model(0)
+            .then(FakeReply::tool_call("get_order", json!({})))
+            .then(FakeReply::text("Sorry, the order system is down.")),
+    )
+    .tool(crashing(panic))
+    .limits(limits)
+    .build()
+    .unwrap()
+}
+
+#[tokio::test(start_paused = true)]
+async fn an_unhandled_tool_error_reaches_the_model_by_default() {
+    for (panic, detail) in [
+        (false, "RuntimeError: database is down"),
+        (true, "the tool panicked: index out of range"),
+    ] {
+        let result = crash_agent(panic, Limits::default())
+            .run("order?")
+            .await
+            .unwrap();
+        assert_eq!(result.text(), Some("Sorry, the order system is down."));
+        let failed = &result.messages[2];
+        assert_eq!(failed.status, Some(ToolStatus::Error));
+        let error = failed.error.as_ref().unwrap();
+        assert_eq!(error.code, "tool_failed");
+        assert!(!error.retryable);
+        assert!(failed.text().contains(detail), "{}", failed.text());
+        assert!(transcript::check(&result.messages).is_empty());
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn return_generic_keeps_the_exception_from_the_model() {
+    let limits = Limits::default().on_tool_exception(OnToolException::ReturnGeneric);
+    let result = crash_agent(false, limits).run("order?").await.unwrap();
+    let failed = &result.messages[2];
+    assert_eq!(
+        failed.text(),
+        "Error: The tool failed with an unexpected error."
+    );
+    assert!(!format!("{:?}", failed.content).contains("database"));
+    assert_eq!(
+        failed.artifact.as_ref().unwrap()["exception"],
+        "RuntimeError: database is down"
+    );
+}
+
+#[tokio::test(start_paused = true)]
+async fn on_tool_exception_fail_fails_the_run_as_before() {
+    for panic in [false, true] {
+        let limits = Limits::default().on_tool_exception(OnToolException::Fail);
+        let err = crash_agent(panic, limits).run("order?").await.unwrap_err();
+        assert_eq!(err.code, "tool_failed");
+        assert_eq!(err.details.as_ref().unwrap()["tool"], "get_order");
+    }
 }
 
 #[tokio::test(start_paused = true)]

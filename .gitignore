@@ -18,3 +18,6 @@ sdks/python/python/agentbuild/_native*.so
 sdks/typescript/native/
 sdks/typescript/dist/
 sdks/typescript/node_modules/
+
+# Browser screenshots from local website checks
+.playwright-mcp/

@@ -1,0 +1,21 @@
+// [show]
+import { Agent, Memory, Storage } from "@agentbuild/sdk";
+
+const storage = new Storage("sqlite:///agent.db");
+const agent = new Agent({
+  model: "openai:gpt-5-mini",
+  storage,
+  // One memory per user: users/<user_id>. Facts are recalled before each
+  // model call; the model gets remember, forget and search tools.
+  memory: Memory.byState("user_id", "users"),
+});
+
+await agent.thread("monday").send("I'm vegetarian", { state: { user_id: "42" } });
+// A later conversation recalls it.
+await agent.thread("friday").send("Dinner ideas?", { state: { user_id: "42" } });
+
+// Your app can read and write memory too.
+await storage.remember("users/42", "allergy", "peanuts");
+const facts = await storage.search("users/42", "allergy");
+await storage.forgetAll("users/42"); // everything about one user
+// [/show]
