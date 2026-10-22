@@ -40,3 +40,13 @@ const testAgent = new Agent({
 const result = await testAgent.run("Refund my order");
 // [/show]
 export {};
+
+// [show subagents]
+const researcher = new Agent({ model: "openai:gpt-5-mini", instructions: "Find facts about orders. Be precise." });
+const support = new Agent({
+  model: "openai:gpt-5-mini",
+  instructions: "You are a support agent.",
+  // The researcher becomes a tool: it takes { input } and answers.
+  tools: [researcher.asTool("research", "Looks up facts about an order")],
+});
+// [/show subagents]

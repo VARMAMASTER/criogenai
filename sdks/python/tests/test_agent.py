@@ -20,6 +20,7 @@ from agentbuild import (
     FakeReply,
     LimitExceededError,
     Memory,
+    Retry,
     Storage,
     StorageError,
     ThreadSuspendedError,
@@ -164,6 +165,31 @@ def test_a_by_turn_model_serves_many_runs_at_once():
     for result in run(many()):
         assert result.text == "done"
         assert len(tool_results(result)) == 1
+
+
+def test_an_agent_as_a_tool_of_another():
+    researcher = Agent(FakeModel(["The order shipped on Monday."]), instructions="Find facts.")
+    writer = Agent(
+        FakeModel([FakeReply.tool_call("research", {"input": "When did A-1 ship?"}), "It shipped on Monday."]),
+        tools=[researcher.as_tool("research", "Looks things up")],
+    )
+    result = writer.run_sync("When did my order ship?")
+    assert result.text == "It shipped on Monday."
+    assert "Monday" in str(tool_results(result)[0]["content"])
+
+
+def test_fallback_models_and_retry_settings():
+    # The main model keeps failing with a transient error: after its retries
+    # the fallback answers.
+    agent = Agent(
+        FakeModel(["never"], fail_first=100),
+        fallbacks=[FakeModel(["from the fallback"])],
+        model_retry=Retry(max_attempts=2, initial_backoff=0.01, jitter=False),
+        max_retry_after=5,
+    )
+    assert agent.run_sync("hi").text == "from the fallback"
+    with pytest.raises(ValidationError):
+        Agent(FakeModel([]), fallback_on=["no_such_kind"])
 
 
 def test_the_engine_validates_arguments_before_the_tool_runs():

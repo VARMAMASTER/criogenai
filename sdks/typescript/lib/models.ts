@@ -67,14 +67,24 @@ export const FakeReply = {
 export class FakeModel {
   readonly replies: FakeReply[];
   readonly delayMs: number;
+  /** The first n calls fail with `rate_limited` (transient), to test retries. */
+  readonly failFirst: number;
+  /**
+   * Choose each reply by the conversation's turn (the first reply for a run's
+   * first model call, the second for its second, then the last repeats)
+   * instead of using replies up: one model serves many runs, also at once.
+   */
+  readonly byTurn: boolean;
 
-  constructor(replies: (string | FakeReply)[] = [], options: { delayMs?: number } = {}) {
+  constructor(replies: (string | FakeReply)[] = [], options: { delayMs?: number; failFirst?: number; byTurn?: boolean } = {}) {
     this.replies = replies.map((r) => (typeof r === "string" ? FakeReply.text(r) : r));
     this.delayMs = options.delayMs ?? 0;
+    this.failFirst = options.failFirst ?? 0;
+    this.byTurn = options.byTurn ?? false;
   }
 
   spec(): Record<string, unknown> {
-    return { kind: "fake", replies: this.replies, delayMs: this.delayMs };
+    return { kind: "fake", replies: this.replies, delayMs: this.delayMs, failFirst: this.failFirst, byTurn: this.byTurn };
   }
 }
 

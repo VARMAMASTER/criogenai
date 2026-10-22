@@ -85,3 +85,20 @@ pub async fn testing() -> Result<(), Error> {
     // [/show testing]
     Ok(())
 }
+
+pub async fn subagents() -> Result<(), Error> {
+    // [show subagents]
+    use agentbuild_agent::Agent;
+
+    let researcher = Agent::builder(model()?)
+        .instructions("Find facts about orders. Be precise.")
+        .build()?;
+    let support = Agent::builder(model()?)
+        .instructions("You are a support agent.")
+        // The researcher becomes a tool: it takes {"input": text} and answers.
+        .tool(researcher.as_tool("research", "Looks up facts about an order"))
+        .build()?;
+    // [/show subagents]
+    let _ = support;
+    Ok(())
+}

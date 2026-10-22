@@ -13,7 +13,7 @@ memory, and workflows, on a Rust engine (designs 0011, 0015).
 """
 
 from ._native import __version__
-from .agent import Agent, ApprovalRequest, Decision, Event, Reply, RunResult, Stream, Thread
+from .agent import Agent, AgentTool, ApprovalRequest, Decision, Event, Reply, Retry, RunResult, Stream, Thread
 from .errors import (
     AgentBuildError,
     CancelledError,
@@ -50,10 +50,10 @@ from .workflow import (
 )
 
 __all__ = [
-    "END", "Agent", "AgentBuildError", "Anthropic", "ApprovalRequest", "CancelledError",
+    "END", "Agent", "AgentBuildError", "AgentTool", "Anthropic", "ApprovalRequest", "CancelledError",
     "CompiledWorkflow", "Decision", "Event", "FakeModel", "FakeReply", "Gemini", "Interrupt",
     "LimitExceededError", "Memory", "ModelError", "NodeContext", "Ollama", "OpenAI",
-    "OpenAICompatible", "OpenRouter", "Reply", "RunResult", "StorageError", "Storage", "Stream",
+    "OpenAICompatible", "OpenRouter", "Reply", "Retry", "RunResult", "StorageError", "Storage", "Stream",
     "Thread", "ThreadBusyError", "ThreadSuspendedError", "Tool", "ToolContext", "ToolError",
     "ToolExecutionError", "ValidationError", "Workflow", "WorkflowResult", "WorkflowThread",
     "__version__", "goto", "suspend", "tool",

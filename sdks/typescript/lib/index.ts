@@ -1,8 +1,8 @@
 // AgentBuild for TypeScript: agents with tools, approvals, durable threads and
 // memory, on a Rust engine (design 0012).
 
-export { Agent, Decision, Stream, Thread } from "./agent";
-export type { AgentOptions, ApprovalRequest, CallOptions, Reply, RunOptions, RunResult, StreamEvent } from "./agent";
+export { Agent, AgentTool, Decision, Stream, Thread } from "./agent";
+export type { AgentOptions, ApprovalRequest, CallOptions, Reply, Retry, RunOptions, RunResult, StreamEvent } from "./agent";
 export {
   AgentBuildError,
   CancelledError,

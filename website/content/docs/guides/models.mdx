@@ -23,8 +23,11 @@ description: OpenAI, Anthropic, Gemini, OpenRouter and self-hosted models, with 
 - **Classified errors**: `rate_limited`, `overloaded`, `context_overflow`,
   `auth`, … ([all codes](/docs/reference/errors/)). Retries honour
   `Retry-After`; requests that never left are retried at once.
-- **Fallback** (Rust): rate limits, overload and outages move to the next
-  model.
+- **Fallback**: rate limits, overload and outages move to the next model
+  (`fallbacks`); other error kinds can too (`fallback_on` /
+  `fallbackOn`, e.g. `context_overflow` to a model with a longer context).
+- **Retries**: `model_retry` / `modelRetry` (attempts and backoff), and
+  `tool_retry` / `toolRetry` for tools marked read-only or idempotent.
 - **Keys stay secret**: removed from every error message.
 
 For self-hosted models nothing leaves your network, which is often the

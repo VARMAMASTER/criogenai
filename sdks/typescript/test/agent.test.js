@@ -134,6 +134,31 @@ test("tool errors and exceptions reach the model unless told to fail", async () 
   assert.throws(() => new Agent({ model: script(), onToolException: "ignore" }), ValidationError);
 });
 
+test("an agent as a tool of another", async () => {
+  const researcher = new Agent({ model: new FakeModel(["The order shipped on Monday."]), instructions: "Find facts." });
+  const writer = new Agent({
+    model: new FakeModel([FakeReply.toolCall("research", { input: "When did A-1 ship?" }), "It shipped on Monday."]),
+    tools: [researcher.asTool("research", "Looks things up")],
+  });
+  const result = await writer.run("When did my order ship?");
+  assert.equal(result.text, "It shipped on Monday.");
+  assert.match(JSON.stringify(toolResults(result)[0].content), /Monday/);
+});
+
+test("fallback models and retry settings", async () => {
+  // The main model keeps failing with a transient error: after its retries the fallback answers.
+  const agent = new Agent({
+    model: new FakeModel(["never"], { failFirst: 100 }),
+    fallbacks: [new FakeModel(["from the fallback"])],
+    modelRetry: { maxAttempts: 2, initialBackoffSecs: 0.01, jitter: false },
+    maxRetryAfterSecs: 5,
+  });
+  assert.equal((await agent.run("hi")).text, "from the fallback");
+  assert.throws(() => new Agent({ model: new FakeModel([]), fallbackOn: ["no_such_kind"] }), ValidationError);
+  // A transient error once, then the answer: retried by the agent itself.
+  assert.equal((await new Agent({ model: new FakeModel(["fine now"], { failFirst: 1 }) }).run("hi")).text, "fine now");
+});
+
 test("the engine validates arguments before the tool runs", async () => {
   const calls = [];
   const charge = tool({

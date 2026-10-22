@@ -65,6 +65,15 @@ First release, planned as 0.1.0 (Rust crates only).
   `ToolError::crashed` marks such a failure; `ToolError::fatal` still
   fails the run. Designs 0003 §5.1, 0004, 0011, 0012.
 
+### Sub-agents, retries and fallbacks in the SDKs (design 0017 §1–2)
+
+- `agent.as_tool(name, description)` / `agent.asTool(...)`: an agent as a
+  tool of another agent.
+- `fallbacks`, `fallback_on` / `fallbackOn`, `model_retry` / `modelRetry`,
+  `tool_retry` / `toolRetry` (`Retry`), `max_retry_after` /
+  `maxRetryAfterSecs` on `Agent`.
+- TypeScript `FakeModel` gains `failFirst` and `byTurn` (as in Python).
+
 ### Workflows in the TypeScript SDK (design 0015)
 
 - `new Workflow()` with `.node` / `.addNode` (functions or agents),

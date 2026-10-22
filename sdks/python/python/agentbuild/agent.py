@@ -108,6 +108,40 @@ def _run_sync(coroutine: Any) -> Any:
     raise RuntimeError("the *_sync methods cannot run inside an event loop: await the async method")
 
 
+@dataclass(frozen=True)
+class Retry:
+    """How often and how patiently to retry (design 0017 §2): attempts in
+    total (including the first), and an exponential backoff in seconds."""
+
+    max_attempts: int = 3
+    initial_backoff: float = 0.5
+    factor: float = 2.0
+    max_backoff: float = 20.0
+    jitter: bool = True
+
+    def _spec(self) -> Dict[str, Any]:
+        return {
+            "max_attempts": self.max_attempts,
+            "initial_backoff_secs": self.initial_backoff,
+            "factor": self.factor,
+            "max_backoff_secs": self.max_backoff,
+            "jitter": self.jitter,
+        }
+
+
+class AgentTool:
+    """An agent as a tool of another agent (``Agent.as_tool``): it takes
+    ``{"input": text}`` and returns the sub-agent's answer."""
+
+    def __init__(self, agent: "Agent", name: str, description: str):
+        self.agent = agent
+        self.name = name
+        self.description = description
+
+    def __repr__(self) -> str:
+        return f"AgentTool({self.name!r})"
+
+
 class Agent:
     """A model with tools, instructions and (optionally) approval, typed
     output, storage and memory. The loop runs in Rust.
@@ -120,22 +154,32 @@ class Agent:
     ``"fail"`` (the run fails with ``ToolExecutionError``, the exception as
     its ``__cause__``)."""
 
+    #: The native agent (internal).
+    _native: Any
+
     def __init__(
         self,
         model: Any,
         *,
         instructions: Optional[str] = None,
-        tools: Sequence[Tool] = (),
+        tools: Sequence[Union[Tool, AgentTool]] = (),
         approve: Sequence[str] = (),
         output: Any = None,
         limits: Optional[Dict[str, Any]] = None,
         storage: Union[None, str, Storage] = None,
         memory: Optional[Memory] = None,
         on_tool_exception: Optional[str] = None,
+        fallbacks: Sequence[Any] = (),
+        fallback_on: Sequence[str] = (),
+        model_retry: Optional[Retry] = None,
+        tool_retry: Optional[Retry] = None,
+        max_retry_after: Optional[float] = None,
     ):
         for t in tools:
-            if not isinstance(t, Tool):
-                raise TypeError(f"{t!r} is not a tool: decorate it with @tool")
+            if not isinstance(t, (Tool, AgentTool)):
+                raise TypeError(f"{t!r} is not a tool: decorate it with @tool, or use agent.as_tool(...)")
+        functions = [t for t in tools if isinstance(t, Tool)]
+        agents = [t for t in tools if isinstance(t, AgentTool)]
         if isinstance(storage, str):
             storage = Storage(storage)
         self.storage = storage
@@ -144,18 +188,24 @@ class Agent:
         config = {
             "model": model_spec(model),
             "instructions": instructions,
-            "tools": [t.spec() for t in tools],
+            "tools": [t.spec() for t in functions],
             "approve": list(approve),
             "output": schema,
             "limits": {**(limits or {}), "on_tool_exception": on_tool_exception}
             if on_tool_exception is not None
             else limits,
             "memory": memory._spec if memory is not None else None,
+            "fallbacks": [model_spec(m) for m in fallbacks],
+            "fallback_on": list(fallback_on) or None,
+            "model_retry": model_retry._spec() if model_retry is not None else None,
+            "tool_retry": tool_retry._spec() if tool_retry is not None else None,
+            "max_retry_after_secs": max_retry_after,
         }
         self._native = _native.NativeAgent(
             json.dumps(config),
-            [t.adapter() for t in tools],
+            [t.adapter() for t in functions],
             storage._native if storage is not None else None,
+            [(t.name, t.description, t.agent._native) for t in agents],
         )
 
     async def run(self, input: str, **state: Any) -> RunResult:
@@ -169,6 +219,12 @@ class Agent:
     def run_sync(self, input: str, **state: Any) -> RunResult:
         """:meth:`run` for scripts (not inside an event loop)."""
         return _run_sync(self.run(input, **state))
+
+    def as_tool(self, name: str, description: str) -> AgentTool:
+        """This agent as a tool of another agent: the tool takes ``input``
+        (text), runs this agent, and returns its answer. How deep agents may
+        call agents is bounded by the ``nesting`` limit (default 8)."""
+        return AgentTool(self, name, description)
 
     def thread(self, thread_id: str, actor: Optional[str] = None) -> "Thread":
         """The conversation ``thread_id`` (created on first use). ``actor``

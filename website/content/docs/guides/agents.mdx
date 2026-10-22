@@ -45,10 +45,19 @@ with no network. In Rust it can also fail on purpose (`failing_on`,
 
 <Sample name="agents" region="testing" only={["rust"]} />
 
+## Sub-agents
+
+An agent can be a tool of another agent: the tool takes a question
+(`input`) and returns the sub-agent's answer. How deep agents may call
+agents is limited (8 by default). An agent can also be one step of a
+[workflow](/docs/guides/workflows/).
+
+<Sample name="agents" region="subagents" />
+
+Retries and fallback models are on the [models](/docs/guides/models/) page.
+
 ## Rust only, for now
 
 Hooks around every model and tool call (`Hook`: redact text before it
-reaches a model, log, block a tool), fallback models, retry policies, and
-agents used as tools of other agents (`agent.as_tool`) or as workflow steps
-(`agent.as_node`) are in the Rust API today; see the
+reaches a model, log, block a tool) are in the Rust API today; see the
 [Rust reference](/docs/reference/api/). They come to the SDKs next.

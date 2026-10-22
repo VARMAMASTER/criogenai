@@ -36,3 +36,17 @@ test_agent = Agent(
 result = test_agent.run_sync("Refund my order")
 assert result.text == "Refunded."
 # [/show]
+
+
+def subagents() -> None:
+    # [show subagents]
+    from agentbuild import Agent
+
+    researcher = Agent("openai:gpt-5-mini", instructions="Find facts about orders. Be precise.")
+    support = Agent(
+        "openai:gpt-5-mini",
+        instructions="You are a support agent.",
+        # The researcher becomes a tool: it takes {"input": text} and answers.
+        tools=[researcher.as_tool("research", "Looks up facts about an order")],
+    )
+    # [/show subagents]

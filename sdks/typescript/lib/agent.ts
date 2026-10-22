@@ -48,10 +48,33 @@ export interface Reply<Output = unknown> extends RunResult<Output> {
   checkpointId: string;
 }
 
+/** How often and how patiently to retry (design 0017 §2); missing fields keep the defaults. */
+export interface Retry {
+  /** Attempts in total, including the first. Default 3. */
+  maxAttempts?: number;
+  /** Backoff before the second attempt, in seconds. Default 0.5. */
+  initialBackoffSecs?: number;
+  /** Multiplier for each further attempt. Default 2. */
+  factor?: number;
+  /** Upper bound on any backoff, in seconds. Default 20. */
+  maxBackoffSecs?: number;
+  /** Wait a random part of the backoff. Default true. */
+  jitter?: boolean;
+}
+
+/** An agent as a tool of another agent (`agent.asTool`): it takes `{ input }` and returns the sub-agent's answer. */
+export class AgentTool {
+  constructor(
+    readonly agent: Agent<any>,
+    readonly name: string,
+    readonly description: string,
+  ) {}
+}
+
 export interface AgentOptions {
   model: Model;
   instructions?: string;
-  tools?: Tool<any>[];
+  tools?: (Tool<any> | AgentTool)[];
   /** Tools that need human approval before they run. */
   approve?: string[];
   /** JSON Schema of the final answer (`result.output`). */
@@ -68,6 +91,16 @@ export interface AgentOptions {
   /** A Storage, a URL ("sqlite:///x.db", "postgres://…"), or in memory. */
   storage?: Storage | string;
   memory?: Memory;
+  /** Models tried in order when the previous one fails with a transient error (after its retries). */
+  fallbacks?: Model[];
+  /** Other error kinds that also move to the next model, e.g. "context_overflow". */
+  fallbackOn?: string[];
+  /** Retries of transient model errors (default: 3 attempts, backoff from 0.5 s). */
+  modelRetry?: Retry;
+  /** Retries of tools marked readOnly or idempotent (default: 3 attempts). */
+  toolRetry?: Retry;
+  /** The longest Retry-After the agent waits, in seconds (default 60). */
+  maxRetryAfterSecs?: number;
 }
 
 export interface CallOptions {
@@ -113,10 +146,14 @@ export class Agent<Output = unknown> {
   readonly crashes = new Map<string, unknown>();
 
   constructor(options: AgentOptions) {
-    const tools = options.tools ?? [];
-    for (const t of tools) {
-      if (!(t instanceof Tool)) throw new TypeError(`${String(t)} is not a tool: define it with tool({...})`);
+    const all = options.tools ?? [];
+    for (const t of all) {
+      if (!(t instanceof Tool) && !(t instanceof AgentTool)) {
+        throw new TypeError(`${String(t)} is not a tool: define it with tool({...}) or agent.asTool(...)`);
+      }
     }
+    const tools = all.filter((t): t is Tool<any> => t instanceof Tool);
+    const agentTools = all.filter((t): t is AgentTool => t instanceof AgentTool);
     this.storage = options.storage instanceof Storage ? options.storage : new Storage({ url: options.storage });
     const config = {
       model: modelSpec(options.model),
@@ -126,6 +163,12 @@ export class Agent<Output = unknown> {
       output: options.output,
       limits: options.onToolException ? { ...options.limits, onToolException: options.onToolException } : options.limits,
       memory: options.memory?.spec,
+      agentTools: agentTools.map((t) => ({ name: t.name, description: t.description, handle: t.agent.native.handle })),
+      fallbacks: (options.fallbacks ?? []).map(modelSpec),
+      fallbackOn: options.fallbackOn,
+      modelRetry: options.modelRetry,
+      toolRetry: options.toolRetry,
+      maxRetryAfterSecs: options.maxRetryAfterSecs,
     };
     try {
       this.native = new native.NativeAgent(
@@ -146,6 +189,15 @@ export class Agent<Output = unknown> {
     } catch (error) {
       throw translate(error, this.crashes);
     }
+  }
+
+  /**
+   * This agent as a tool of another agent: the tool takes `input` (text),
+   * runs this agent, and returns its answer. How deep agents may call agents
+   * is bounded by the nesting limit (default 8).
+   */
+  asTool(name: string, description: string): AgentTool {
+    return new AgentTool(this, name, description);
   }
 
   /** The conversation `threadId` (created on first use); `actor` names who acts, for the audit trail. */

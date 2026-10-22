@@ -17,11 +17,12 @@ use agentbuild_agent::{
     OnToolException, Reply, Thread, ThreadStream, ToolContext, ToolError, tool_fn,
 };
 use agentbuild_core::{
-    CancelToken, NodeContext, NodeError, NodeOutput, Reducer, RunError, RunErrorKind, RunOptions,
-    RunOutput, Snapshot, State, Update, Workflow, WorkflowBuilder, node_with_context, router_fn,
+    CancelToken, NodeContext, NodeError, NodeOutput, Reducer, RetryPolicy, RunError, RunErrorKind,
+    RunOptions, RunOutput, Snapshot, State, Update, Workflow, WorkflowBuilder, node_with_context,
+    router_fn,
 };
 use agentbuild_providers::{
-    Endpoint, FakeModel, FakeReply, Model, ProviderModel, ToolAnnotations, ToolSpec,
+    Endpoint, FakeModel, FakeReply, Model, ModelErrorKind, ProviderModel, ToolAnnotations, ToolSpec,
 };
 use agentbuild_storage::{
     AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
@@ -179,7 +180,14 @@ fn model(spec: &Value) -> napi::Result<Arc<dyn Model>> {
     let kind = text(spec, "kind").ok_or_else(|| bad("a model needs a `kind`"))?;
     if kind == "fake" {
         let delay = Duration::from_millis(spec["delayMs"].as_u64().unwrap_or(0));
-        let mut fake = FakeModel::with_delay(delay, delay);
+        // JavaScript cannot read the request log: keep none.
+        let mut fake = FakeModel::with_delay(delay, delay).without_request_log();
+        if let Some(calls) = spec["failFirst"].as_u64() {
+            fake = fake.flaky_first(calls as usize);
+        }
+        if spec["byTurn"].as_bool() == Some(true) {
+            fake = fake.by_turn();
+        }
         for reply in spec["replies"].as_array().cloned().unwrap_or_default() {
             fake = fake.then(fake_reply(&reply)?);
         }
@@ -295,6 +303,30 @@ fn memory(spec: &Value) -> napi::Result<Memory> {
         memory = memory.ttl(Duration::from_secs_f64(secs));
     }
     Ok(memory)
+}
+
+/// A retry policy from `{maxAttempts, initialBackoffSecs, factor,
+/// maxBackoffSecs, jitter}` (missing keys keep Rust's defaults).
+fn retry_policy(spec: &Value) -> RetryPolicy {
+    let defaults = RetryPolicy::default();
+    let mut policy = RetryPolicy::new();
+    if let Some(n) = spec["maxAttempts"].as_u64() {
+        policy = policy.max_attempts(n as u32);
+    }
+    let initial = spec["initialBackoffSecs"].as_f64().map_or(
+        Duration::from_millis(defaults.initial_backoff_ms),
+        Duration::from_secs_f64,
+    );
+    let factor = spec["factor"].as_f64().unwrap_or(defaults.backoff_factor);
+    let max = spec["maxBackoffSecs"].as_f64().map_or(
+        Duration::from_millis(defaults.max_backoff_ms),
+        Duration::from_secs_f64,
+    );
+    policy = policy.backoff(initial, factor, max);
+    if let Some(jitter) = spec["jitter"].as_bool() {
+        policy = policy.jitter(jitter);
+    }
+    policy
 }
 
 fn limits(spec: &Value) -> napi::Result<Limits> {
@@ -609,6 +641,36 @@ impl NativeAgent {
             builder = builder.tool(tool_fn(tool_spec, move |args, ctx: ToolContext| {
                 call_tool(tool.clone(), args, ctx)
             }));
+        }
+        // Agents as tools of this one (design 0017 §1), by handle.
+        for spec in config["agentTools"].as_array().cloned().unwrap_or_default() {
+            let handle = spec["handle"].as_u64().unwrap_or_default() as u32;
+            let agent = lock(agents())
+                .get(&handle)
+                .cloned()
+                .ok_or_else(|| bad("an agent tool's agent is gone"))?;
+            builder = builder.tool(agent.as_tool(
+                text(&spec, "name").unwrap_or_default(),
+                text(&spec, "description").unwrap_or_default(),
+            ));
+        }
+        // Retries and fallback models (design 0017 §2).
+        for spec in config["fallbacks"].as_array().cloned().unwrap_or_default() {
+            builder = builder.fallback_shared(model(&spec)?);
+        }
+        if let Some(kinds) = config.get("fallbackOn").filter(|k| k.is_array()) {
+            let kinds: Vec<ModelErrorKind> = serde_json::from_value(kinds.clone())
+                .map_err(|err| bad(format!("fallbackOn: {err}")))?;
+            builder = builder.fallback_on(kinds);
+        }
+        if let Some(spec) = config.get("modelRetry").filter(|s| s.is_object()) {
+            builder = builder.model_retry(retry_policy(spec));
+        }
+        if let Some(spec) = config.get("toolRetry").filter(|s| s.is_object()) {
+            builder = builder.tool_retry(retry_policy(spec));
+        }
+        if let Some(secs) = config["maxRetryAfterSecs"].as_f64() {
+            builder = builder.max_retry_after(Duration::from_secs_f64(secs));
         }
         if let Some(names) = config["approve"].as_array().filter(|n| !n.is_empty()) {
             let mut approval = Approval::new();
