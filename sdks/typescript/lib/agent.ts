@@ -2,6 +2,7 @@
 
 import { native, NativeAgent, NativeStream } from "./native";
 import { translate } from "./errors";
+import { Hook, hookAdapter } from "./hooks";
 import { Model, modelSpec } from "./models";
 import { Memory, Storage } from "./storage";
 import { JsonSchema, Tool } from "./tools";
@@ -103,6 +104,8 @@ export interface AgentOptions {
   maxRetryAfterSecs?: number;
   /** Exports every run of this agent (`Telemetry.langfuse()`, `Telemetry.otlp(url)`). */
   telemetry?: { readonly native: { readonly handle: number } };
+  /** Code around the loop (see `Hook`): `onStart`, `beforeModel`, `afterModel`, `beforeTool`, `afterTool`, `onEnd`. */
+  hooks?: Hook[];
 }
 
 export interface CallOptions {
@@ -157,6 +160,8 @@ export class Agent<Output = unknown> {
     const tools = all.filter((t): t is Tool<any> => t instanceof Tool);
     const agentTools = all.filter((t): t is AgentTool => t instanceof AgentTool);
     this.storage = options.storage instanceof Storage ? options.storage : new Storage({ url: options.storage });
+    const failOnCrash = options.onToolException === "fail";
+    const hooks = (options.hooks ?? []).map((h) => hookAdapter(h, this.crashes, failOnCrash));
     const config = {
       model: modelSpec(options.model),
       instructions: options.instructions,
@@ -172,12 +177,14 @@ export class Agent<Output = unknown> {
       toolRetry: options.toolRetry,
       maxRetryAfterSecs: options.maxRetryAfterSecs,
       telemetry: options.telemetry?.native.handle,
+      hooks: hooks.map((h) => h.spec),
     };
     try {
       this.native = new native.NativeAgent(
         JSON.stringify(config),
-        tools.map((t) => t.adapter(options.onToolException === "fail" ? this.crashes : null)),
+        tools.map((t) => t.adapter(failOnCrash ? this.crashes : null)),
         this.storage.native,
+        hooks.map((h) => h.adapter),
       );
     } catch (error) {
       throw translate(error);

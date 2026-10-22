@@ -36,6 +36,7 @@ from .models import (
     OpenAICompatible,
     OpenRouter,
 )
+from .hooks import HookAction, HookContext, ToolCall, ToolResult
 from .storage import Memory, Storage
 from .telemetry import Telemetry
 from .tools import Tool, ToolContext, ToolError, tool
@@ -53,10 +54,10 @@ from .workflow import (
 
 __all__ = [
     "END", "Agent", "AgentBuildError", "AgentTool", "Anthropic", "ApprovalRequest", "CancelledError",
-    "CompiledWorkflow", "Decision", "Embedder", "Event", "FakeModel", "FakeReply", "Gemini", "Interrupt",
+    "CompiledWorkflow", "Decision", "Embedder", "Event", "FakeModel", "FakeReply", "Gemini", "HookAction", "HookContext", "Interrupt",
     "LimitExceededError", "Memory", "ModelError", "NodeContext", "Ollama", "OpenAI",
     "OpenAICompatible", "OpenRouter", "Reply", "Retry", "RunResult", "StorageError", "Storage", "Stream",
-    "Telemetry", "Thread", "ThreadBusyError", "ThreadSuspendedError", "Tool", "ToolContext", "ToolError",
-    "ToolExecutionError", "ValidationError", "Workflow", "WorkflowResult", "WorkflowThread",
+    "Telemetry", "Thread", "ThreadBusyError", "ThreadSuspendedError", "Tool", "ToolCall", "ToolContext", "ToolError",
+    "ToolExecutionError", "ToolResult", "ValidationError", "Workflow", "WorkflowResult", "WorkflowThread",
     "__version__", "goto", "suspend", "tool",
 ]

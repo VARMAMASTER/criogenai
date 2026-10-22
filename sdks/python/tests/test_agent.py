@@ -13,6 +13,8 @@ import pytest
 
 from agentbuild import (
     Agent,
+    HookAction,
+    ToolResult,
     Embedder,
     Telemetry,
     AgentBuildError,
@@ -507,6 +509,107 @@ def test_telemetry_exports_runs_without_their_content():
         run(telemetry.shutdown())
     finally:
         server.shutdown()
+
+
+def test_hooks_change_what_they_may_in_order():
+    seen = []
+
+    @tool
+    def lookup(order_id: str) -> str:
+        "Looks up an order."
+        seen.append(order_id)
+        return f"order {order_id}: shipped, card 4111-1111"
+
+    @tool
+    def weather(city: str) -> str:
+        "The weather."
+        raise AssertionError("skipped by the hook")
+
+    class Guard:
+        name = "guard"
+
+        def on_start(self, ctx):
+            return HookAction(state={"runs": (ctx.hook_state or {}).get("runs", 0) + 1})
+
+        async def before_tool(self, call):
+            if call.name == "weather":
+                return ToolResult("sunny (cached)")
+            call.args["order_id"] = call.args["order_id"].upper()
+            return call
+
+        def after_tool(self, call, result):
+            return result.replace("4111-1111", "[card]") if isinstance(result, str) else None
+
+        def after_model(self, ctx):
+            text = ctx.messages[-1]["content"][0].get("text", "") if ctx.messages[-1]["content"] else ""
+            if "secret" in text:
+                redacted = dict(ctx.messages[-1], content=[{"type": "text", "text": "[redacted]"}])
+                return HookAction(message=redacted)
+            return None
+
+    ended = []
+
+    class Audit:
+        async def on_end(self, ctx, outcome):
+            ended.append((outcome, ctx.model_calls))
+
+    agent = Agent(
+        FakeModel(
+            [
+                FakeReply.tool_calls([("lookup", {"order_id": "a-1"}), ("weather", {"city": "Paris"})]),
+                "The secret answer",
+            ]
+        ),
+        tools=[lookup, weather],
+        hooks=[Guard(), Audit()],
+    )
+    result = agent.run_sync("where is it?")
+    assert seen == ["A-1"]  # before_tool changed the argument
+    results = [str(m["content"]) for m in tool_results(result)]
+    assert "[card]" in results[0] and "4111" not in results[0]  # after_tool redacted
+    assert "sunny (cached)" in results[1]  # skipped the tool
+    assert result.text == "[redacted]"  # after_model replaced the reply
+    assert ended == [("completed", 2)]
+
+
+def test_a_hook_can_end_the_run_and_its_exceptions_fail_it_with_the_cause():
+    class Budget:
+        def before_model(self, ctx):
+            if ctx.model_calls >= 1:
+                return HookAction(end=True, output="stopped by the budget hook")
+            return None
+
+    agent = Agent(FakeModel([FakeReply.tool_call("noop", {}), "never"], by_turn=True), hooks=[Budget()])
+    result = agent.run_sync("go")
+    assert result.output == "stopped by the budget hook"
+
+    class Broken:
+        def before_model(self, ctx):
+            raise KeyError("missing setting")
+
+    with pytest.raises(AgentBuildError) as caught:
+        Agent(FakeModel(["x"]), hooks=[Broken()]).run_sync("go")
+    assert caught.value.code == "hook_failed"
+    assert isinstance(caught.value.__cause__, KeyError)
+    with pytest.raises(TypeError):
+        Agent(FakeModel(["x"]), hooks=[object()])
+
+    # In a tool hook it is the tool's crash: with "fail", the run fails with it as the cause.
+    class Leaky:
+        def after_tool(self, call, result):
+            raise ValueError("cannot redact")
+
+    @tool
+    def ping() -> str:
+        "Pings."
+        return "pong"
+
+    crashing = Agent(
+        FakeModel([FakeReply.tool_call("ping", {}), "done"]), tools=[ping], hooks=[Leaky()], on_tool_exception="fail"
+    )
+    with pytest.raises(ToolExecutionError) as failed:
+        crashing.run_sync("go")
+    assert isinstance(failed.value.__cause__, ValueError)
 
 
 def test_limits_errors_and_the_sync_wrappers():

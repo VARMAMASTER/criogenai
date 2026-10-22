@@ -102,3 +102,55 @@ pub async fn subagents() -> Result<(), Error> {
     let _ = support;
     Ok(())
 }
+
+pub async fn hooks() -> Result<(), Error> {
+    // [show hooks]
+    use agentbuild_agent::{
+        Agent, Hook, HookAction, HookContext, HookError, ToolCallRequest, ToolError, ToolNext,
+        ToolOutput,
+    };
+    use agentbuild_providers::BoxFuture;
+
+    /// Blocks large refunds and stops long runs.
+    struct Guard;
+
+    impl Hook for Guard {
+        fn name(&self) -> &str {
+            "guard"
+        }
+
+        fn before_model<'a>(
+            &'a self,
+            ctx: &'a HookContext,
+        ) -> BoxFuture<'a, Result<HookAction, HookError>> {
+            Box::pin(async move {
+                if ctx.model_calls >= 10 {
+                    let output = "Stopped after 10 model calls.".into();
+                    return Ok(HookAction::proceed().end(Some(output)));
+                }
+                Ok(HookAction::proceed())
+            })
+        }
+
+        // Rust has one method around each tool call (and `wrap_model` around
+        // each model call); `next.call` runs the tool.
+        fn wrap_tool<'a>(
+            &'a self,
+            call: ToolCallRequest,
+            next: ToolNext<'a>,
+        ) -> BoxFuture<'a, Result<ToolOutput, ToolError>> {
+            Box::pin(async move {
+                let amount = call.args.get("amount").and_then(|a| a.as_f64());
+                if call.name == "issue_refund" && amount > Some(500.0) {
+                    return Err(ToolError::new("Refunds over 500 need a manager."));
+                }
+                next.call(call).await
+            })
+        }
+    }
+
+    let support = Agent::builder(model()?).hook(Guard).build()?;
+    // [/show hooks]
+    let _ = support;
+    Ok(())
+}

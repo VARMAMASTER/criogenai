@@ -14,8 +14,9 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
 use agentbuild_agent::{
-    Agent, AgentError, AgentEvent, AgentInput, AgentResult, Approval, Decision, Limits, Memory,
-    OnToolException, Reply, Thread, ThreadStream, ToolContext, ToolError, tool_fn,
+    Agent, AgentError, AgentEvent, AgentInput, AgentResult, Approval, Decision, Hook, HookAction,
+    HookContext, HookError, Limits, Memory, OnToolException, Reply, Thread, ThreadStream,
+    ToolCallRequest, ToolContext, ToolError, ToolNext, ToolOutput, tool_fn,
 };
 use agentbuild_core::{
     CancelToken, Node, NodeContext, NodeError, NodeOutput, Reducer, RetryPolicy, Router, RunError,
@@ -23,8 +24,8 @@ use agentbuild_core::{
     node_with_context, router_fn,
 };
 use agentbuild_providers::{
-    Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, Model, ModelErrorKind,
-    ProviderEmbedder, ProviderModel, ToolAnnotations, ToolSpec,
+    BoxFuture, Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, Message, Model,
+    ModelErrorKind, ProviderEmbedder, ProviderModel, ToolAnnotations, ToolSpec,
 };
 use agentbuild_storage::{
     AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
@@ -186,12 +187,19 @@ fn deliver(
             )?;
         }
         Err(failure) => {
-            let cause = failure
-                .details
-                .as_ref()
-                .and_then(|d| d.get("call_id").or_else(|| d.get("cause_key")))
-                .and_then(Value::as_str)
-                .and_then(|id| lock(tool_exceptions()).remove(id));
+            // A tool's exception by call id, a node's by cause_key, a hook's
+            // by its name and stage.
+            let key = failure.details.as_ref().and_then(|d| {
+                d.get("call_id")
+                    .or_else(|| d.get("cause_key"))
+                    .and_then(Value::as_str)
+                    .map(str::to_string)
+                    .or_else(|| match (d["hook"].as_str(), d["stage"].as_str()) {
+                        (Some(hook), Some(stage)) => Some(hook_cause_key(hook, stage)),
+                        _ => None,
+                    })
+            });
+            let cause = key.and_then(|key| lock(tool_exceptions()).remove(&key));
             event_loop.call_method1(
                 py,
                 "call_soon_threadsafe",
@@ -611,6 +619,240 @@ async fn call_tool(
     }
 }
 
+// ---------- hooks (design 0017 §5) ----------
+
+/// A Python hook: `adapter(stage, payload_json)` (async) returns an
+/// envelope. Only the stages the hook defines are called.
+struct PyHook {
+    name: String,
+    adapter: Arc<Py<PyAny>>,
+    stages: Vec<String>,
+    /// Keep exceptions of tool stages for `tool_failed` (`on_tool_exception="fail"`).
+    keep_tool_causes: bool,
+}
+
+/// Where a hook's exception waits for the run error (`hook_failed`).
+fn hook_cause_key(hook: &str, stage: &str) -> String {
+    format!("hook:{hook}:{stage}")
+}
+
+fn hook_ctx_json(ctx: &HookContext) -> String {
+    json!({
+        "run_id": ctx.run_id,
+        "messages": to_json(&ctx.messages),
+        "model_calls": ctx.model_calls,
+        "hook_state": ctx.hook_state,
+        "state": ctx.state.as_map(),
+    })
+    .to_string()
+}
+
+fn hook_action(envelope: &Value) -> Result<HookAction, HookError> {
+    let mut action = HookAction::proceed();
+    if let Some(state) = envelope.get("state").filter(|v| !v.is_null()) {
+        action = action.with_state(state.clone());
+    }
+    if let Some(messages) = envelope.get("messages").filter(|v| !v.is_null()) {
+        let messages: Vec<Message> = serde_json::from_value(messages.clone())
+            .map_err(|err| HookError::new(format!("unreadable messages: {err}")))?;
+        action = action.replace_messages(messages);
+    }
+    if let Some(message) = envelope.get("message").filter(|v| !v.is_null()) {
+        let message: Message = serde_json::from_value(message.clone())
+            .map_err(|err| HookError::new(format!("unreadable message: {err}")))?;
+        action = action.replace_message(message);
+    }
+    if envelope.get("end") == Some(&Value::Bool(true)) {
+        action = action.end(envelope.get("output").cloned().filter(|v| !v.is_null()));
+    }
+    Ok(action)
+}
+
+/// A tool output as a value for Python (`after_tool`).
+fn output_value(output: &ToolOutput) -> Value {
+    match output {
+        ToolOutput::Text(text) => json!(text),
+        ToolOutput::Json(value) => value.clone(),
+        ToolOutput::Blocks(blocks) => to_json(blocks),
+        ToolOutput::Rich { value, .. } => value.clone(),
+        _ => Value::Null,
+    }
+}
+
+/// `value` as the output, keeping the original's artifact and state changes.
+fn replaced(original: ToolOutput, value: Value) -> ToolOutput {
+    let new = match value {
+        Value::String(text) => ToolOutput::from(text),
+        other => ToolOutput::from(other),
+    };
+    match original {
+        ToolOutput::Rich {
+            artifact, state, ..
+        } => {
+            let new = match artifact {
+                Some(artifact) => new.with_artifact(artifact),
+                None => new,
+            };
+            state
+                .into_iter()
+                .fold(new, |output, (key, value)| output.with_state(key, value))
+        }
+        _ => new,
+    }
+}
+
+impl PyHook {
+    fn has(&self, stage: &str) -> bool {
+        self.stages.iter().any(|s| s == stage)
+    }
+
+    /// Calls the hook's `stage`; an exception is kept under `cause` (if
+    /// any) for the run error.
+    async fn call(
+        &self,
+        stage: &str,
+        payload: String,
+        metadata: Option<&Value>,
+        cause: Option<String>,
+    ) -> Result<Value, String> {
+        let answer = call_python(
+            self.adapter.clone(),
+            true,
+            stage.to_string(),
+            payload,
+            loop_of(metadata),
+        )
+        .await?;
+        match answer {
+            Answer::Envelope(envelope) => serde_json::from_str(&envelope)
+                .map_err(|err| format!("unreadable hook answer: {err}")),
+            Answer::Raised(exception, text) => {
+                if let Some(cause) = cause {
+                    lock(tool_exceptions()).insert(cause, exception);
+                }
+                Err(text)
+            }
+        }
+    }
+
+    async fn action(&self, stage: &str, ctx: &HookContext) -> Result<HookAction, HookError> {
+        if !self.has(stage) {
+            return Ok(HookAction::proceed());
+        }
+        let envelope = self
+            .call(
+                stage,
+                hook_ctx_json(ctx),
+                ctx.metadata.as_ref(),
+                Some(hook_cause_key(&self.name, stage)),
+            )
+            .await
+            .map_err(HookError::new)?;
+        hook_action(&envelope)
+    }
+}
+
+impl Hook for PyHook {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn on_start<'a>(
+        &'a self,
+        ctx: &'a HookContext,
+    ) -> BoxFuture<'a, Result<HookAction, HookError>> {
+        Box::pin(self.action("on_start", ctx))
+    }
+
+    fn before_model<'a>(
+        &'a self,
+        ctx: &'a HookContext,
+    ) -> BoxFuture<'a, Result<HookAction, HookError>> {
+        Box::pin(self.action("before_model", ctx))
+    }
+
+    fn after_model<'a>(
+        &'a self,
+        ctx: &'a HookContext,
+    ) -> BoxFuture<'a, Result<HookAction, HookError>> {
+        Box::pin(self.action("after_model", ctx))
+    }
+
+    fn wrap_tool<'a>(
+        &'a self,
+        mut call: ToolCallRequest,
+        next: ToolNext<'a>,
+    ) -> BoxFuture<'a, Result<ToolOutput, ToolError>> {
+        Box::pin(async move {
+            let metadata = next.context().metadata().cloned();
+            let cause = self.keep_tool_causes.then(|| call.call_id.clone());
+            let call_json = |call: &ToolCallRequest| json!({"call_id": call.call_id, "name": call.name, "args": call.args});
+            if self.has("before_tool") {
+                let envelope = self
+                    .call(
+                        "before_tool",
+                        call_json(&call).to_string(),
+                        metadata.as_ref(),
+                        cause.clone(),
+                    )
+                    .await
+                    .map_err(ToolError::crashed)?;
+                if let Some(message) = envelope.get("tool_error").and_then(Value::as_str) {
+                    return Err(ToolError::new(message));
+                }
+                if let Some(value) = envelope.get("result") {
+                    return Ok(replaced(ToolOutput::from(Value::Null), value.clone()));
+                }
+                if let Some(changed) = envelope.get("call").filter(|c| c.is_object()) {
+                    if let Some(name) = changed["name"].as_str() {
+                        call.name = name.to_string();
+                    }
+                    if let Some(args) = changed["args"].as_object() {
+                        call.args = args.clone();
+                    }
+                }
+            }
+            let snapshot = call_json(&call);
+            let output = next.call(call).await?;
+            if !self.has("after_tool") {
+                return Ok(output);
+            }
+            let payload = json!({"call": snapshot, "result": output_value(&output)}).to_string();
+            let envelope = self
+                .call("after_tool", payload, metadata.as_ref(), cause)
+                .await
+                .map_err(ToolError::crashed)?;
+            Ok(match envelope.get("result") {
+                Some(value) => replaced(output, value.clone()),
+                None => output,
+            })
+        })
+    }
+
+    fn on_end<'a>(
+        &'a self,
+        ctx: &'a HookContext,
+        outcome: agentbuild_agent::Outcome,
+    ) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            if !self.has("on_end") {
+                return;
+            }
+            let outcome = match outcome {
+                agentbuild_agent::Outcome::Completed => "completed",
+                agentbuild_agent::Outcome::Suspended => "suspended",
+                _ => "failed",
+            };
+            let mut payload: Value = serde_json::from_str(&hook_ctx_json(ctx)).unwrap_or_default();
+            payload["outcome"] = json!(outcome);
+            // on_end cannot change the outcome: its errors are dropped.
+            let _ = self
+                .call("on_end", payload.to_string(), ctx.metadata.as_ref(), None)
+                .await;
+        })
+    }
+}
+
 // ---------- the agent ----------
 
 /// A telemetry exporter (design 0017 §4): OTLP over HTTP, or Langfuse.
@@ -936,13 +1178,14 @@ impl NativeAgent {
     /// the configuration's order; without `storage` it keeps threads in
     /// memory.
     #[new]
-    #[pyo3(signature = (config, tools, storage=None, agent_tools=Vec::new(), telemetry=None))]
+    #[pyo3(signature = (config, tools, storage=None, agent_tools=Vec::new(), telemetry=None, hooks=Vec::new()))]
     fn new(
         config: &str,
         tools: Vec<(Py<PyAny>, bool)>,
         storage: Option<&NativeStorage>,
         agent_tools: Vec<(String, String, Py<NativeAgent>)>,
         telemetry: Option<&NativeTelemetry>,
+        hooks: Vec<(String, Py<PyAny>, Vec<String>)>,
     ) -> PyResult<Self> {
         let config: Value =
             serde_json::from_str(config).map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -973,6 +1216,16 @@ impl NativeAgent {
             builder = builder.tool(tool_fn(tool_spec, move |args, ctx: ToolContext| {
                 call_tool(adapter.clone(), is_async, keep_cause, args, ctx)
             }));
+        }
+        // Hooks, in order (design 0017 §5).
+        let keep_tool_causes = config["limits"]["on_tool_exception"].as_str() == Some("fail");
+        for (name, adapter, stages) in hooks {
+            builder = builder.hook(PyHook {
+                name,
+                adapter: Arc::new(adapter),
+                stages,
+                keep_tool_causes,
+            });
         }
         // Every run of this agent goes to the exporter (design 0017 §4).
         if let Some(telemetry) = telemetry {

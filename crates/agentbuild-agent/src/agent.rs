@@ -810,17 +810,23 @@ impl Agent {
     ) -> Result<AgentResult, AgentError> {
         options.max_steps = options.max_steps.max(self.max_steps);
         let run_id = String::new();
-        let hook_state = self.on_start(&run_id, &state).await?;
+        let metadata = options.metadata_value().cloned();
+        let hook_state = self.on_start(&run_id, &state, metadata.as_ref()).await?;
         if let Some(hook_state) = hook_state {
             state.insert(HOOKS, hook_state);
         }
         let result = self.workflow.run_with(state, options).await;
-        self.finish(result).await
+        self.finish(result, metadata.as_ref()).await
     }
 
     /// Runs every `on_start` hook (in order). Returns the hooks' state to
     /// store, if any hook set some.
-    async fn on_start(&self, run_id: &str, state: &State) -> Result<Option<Value>, AgentError> {
+    async fn on_start(
+        &self,
+        run_id: &str,
+        state: &State,
+        metadata: Option<&Value>,
+    ) -> Result<Option<Value>, AgentError> {
         if self.hooks.is_empty() {
             return Ok(None);
         }
@@ -828,7 +834,7 @@ impl Agent {
         let mut changed = false;
         let state = Arc::new(state.clone());
         for hook in self.hooks.iter() {
-            let ctx = hook_context(run_id, &state, hook.name(), &saved)
+            let ctx = hook_context(run_id, &state, hook.name(), &saved, metadata)
                 .map_err(AgentError::invalid_state)?;
             let action = hook.on_start(&ctx).await.map_err(|err| AgentError {
                 code: "hook_failed".into(),
@@ -845,7 +851,11 @@ impl Agent {
     }
 
     /// Runs every `on_end` hook (in reverse order) and builds the result.
-    async fn finish(&self, result: Result<RunOutput, RunError>) -> Result<AgentResult, AgentError> {
+    async fn finish(
+        &self,
+        result: Result<RunOutput, RunError>,
+        metadata: Option<&Value>,
+    ) -> Result<AgentResult, AgentError> {
         let (outcome, state, run_id) = match &result {
             Ok(output) if output.is_suspended() => (
                 Outcome::Suspended,
@@ -870,7 +880,7 @@ impl Agent {
             let saved = read_hooks(&state);
             let state = Arc::new(state);
             for hook in self.hooks.iter().rev() {
-                if let Ok(ctx) = hook_context(&run_id, &state, hook.name(), &saved) {
+                if let Ok(ctx) = hook_context(&run_id, &state, hook.name(), &saved, metadata) {
                     hook.on_end(&ctx, outcome).await;
                 }
             }
@@ -925,12 +935,14 @@ impl Agent {
         check_decisions(&requests, &decisions, &self.schemas)
             .map_err(AgentError::resume_invalid)?;
         options.max_steps = options.max_steps.max(self.max_steps);
-        self.on_start(&snapshot.run_id, &snapshot.state).await?;
+        let metadata = options.metadata_value().cloned();
+        self.on_start(&snapshot.run_id, &snapshot.state, metadata.as_ref())
+            .await?;
         let result = self
             .workflow
             .resume_with(snapshot, [(REVIEW_NODE, to_json(&decisions))], options)
             .await;
-        self.finish(result).await
+        self.finish(result, metadata.as_ref()).await
     }
 
     /// Continues a failed run from its snapshot. Tool calls that finished
@@ -946,9 +958,11 @@ impl Agent {
         mut options: RunOptions,
     ) -> Result<AgentResult, AgentError> {
         options.max_steps = options.max_steps.max(self.max_steps);
-        self.on_start(&snapshot.run_id, &snapshot.state).await?;
+        let metadata = options.metadata_value().cloned();
+        self.on_start(&snapshot.run_id, &snapshot.state, metadata.as_ref())
+            .await?;
         let result = self.workflow.retry_with(snapshot, options).await;
-        self.finish(result).await
+        self.finish(result, metadata.as_ref()).await
     }
 }
 
@@ -1309,6 +1323,7 @@ fn hook_context(
     state: &Arc<State>,
     hook: &str,
     saved: &Map<String, Value>,
+    metadata: Option<&Value>,
 ) -> Result<HookContext, NodeError> {
     Ok(HookContext {
         run_id: run_id.to_string(),
@@ -1316,6 +1331,7 @@ fn hook_context(
         model_calls: read_book(state)?.model_calls,
         hook_state: saved.get(hook).cloned(),
         state: state.clone(),
+        metadata: metadata.cloned(),
     })
 }
 
@@ -1435,6 +1451,7 @@ async fn model_step(
             model_calls: book.model_calls,
             hook_state: saved_hooks.get(hook.name()).cloned(),
             state: state.clone(),
+            metadata: ctx.metadata().cloned(),
         };
         let action = hook
             .before_model(&hook_ctx)
@@ -1569,6 +1586,7 @@ async fn model_step(
             model_calls: book.model_calls + 1,
             hook_state: saved_hooks.get(hook.name()).cloned(),
             state: state.clone(),
+            metadata: ctx.metadata().cloned(),
         };
         let action = hook
             .after_model(&hook_ctx)

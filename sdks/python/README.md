@@ -32,7 +32,8 @@ asyncio.run(main())
 **Status:** first slice: agents, tools, approvals, typed output, threads
 (send, approve, reject, decide, retry, history, rewind, delete, stream),
 storage (SQLite, Postgres, encryption, audit, retention) and memory.
-Workflows too (`Workflow`, design 0015). Hooks and the gateway client
-are planned. Tests use `FakeModel`; no real model is called.
+Workflows too (`Workflow`, design 0015), and from design 0017: agents as
+tools, retries and fallback models, memory by meaning, tracing and hooks.
+The gateway client is planned. Tests use `FakeModel`; no real model is called.
 
 Free to use, also commercially (see `LICENSE`).

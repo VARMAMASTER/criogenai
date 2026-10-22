@@ -13,8 +13,9 @@ use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
 use agentbuild_agent::{
-    Agent, AgentError, AgentEvent, AgentInput, AgentResult, Approval, Decision, Limits, Memory,
-    OnToolException, Reply, Thread, ThreadStream, ToolContext, ToolError, tool_fn,
+    Agent, AgentError, AgentEvent, AgentInput, AgentResult, Approval, Decision, Hook, HookAction,
+    HookContext, HookError, Limits, Memory, OnToolException, Outcome, Reply, Thread, ThreadStream,
+    ToolCallRequest, ToolContext, ToolError, ToolNext, ToolOutput, tool_fn,
 };
 use agentbuild_core::{
     CancelToken, NodeContext, NodeError, NodeOutput, Reducer, RetryPolicy, RunError, RunErrorKind,
@@ -22,8 +23,8 @@ use agentbuild_core::{
     router_fn,
 };
 use agentbuild_providers::{
-    Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, Model, ModelErrorKind,
-    ProviderEmbedder, ProviderModel, ToolAnnotations, ToolSpec,
+    BoxFuture, Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, Message, Model,
+    ModelErrorKind, ProviderEmbedder, ProviderModel, ToolAnnotations, ToolSpec,
 };
 use agentbuild_storage::{
     AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
@@ -554,6 +555,195 @@ async fn storage_operation(storage: Storage, op: &str, payload: Value) -> napi::
 
 // ---------- the agent ----------
 
+// ---------- hooks (design 0017 §5) ----------
+
+/// A JavaScript hook: one function `({stage, payload}) => Promise<envelope>`;
+/// only the stages it defines are called. A throw is `{"crash"}` (the
+/// TypeScript side keeps it under `hook:<name>:<stage>`).
+struct JsHook {
+    name: String,
+    function: Arc<JsTool>,
+    stages: Vec<String>,
+}
+
+fn js_hook_ctx(ctx: &HookContext) -> Value {
+    json!({
+        "runId": ctx.run_id,
+        "messages": to_json(&ctx.messages),
+        "modelCalls": ctx.model_calls,
+        "hookState": ctx.hook_state,
+        "state": ctx.state.as_map(),
+    })
+}
+
+fn js_hook_action(envelope: &Value) -> Result<HookAction, HookError> {
+    let mut action = HookAction::proceed();
+    if let Some(state) = envelope.get("state") {
+        action = action.with_state(state.clone());
+    }
+    if let Some(messages) = envelope.get("messages").filter(|v| !v.is_null()) {
+        let messages: Vec<Message> = serde_json::from_value(messages.clone())
+            .map_err(|err| HookError::new(format!("unreadable messages: {err}")))?;
+        action = action.replace_messages(messages);
+    }
+    if let Some(message) = envelope.get("message").filter(|v| !v.is_null()) {
+        let message: Message = serde_json::from_value(message.clone())
+            .map_err(|err| HookError::new(format!("unreadable message: {err}")))?;
+        action = action.replace_message(message);
+    }
+    if envelope.get("end") == Some(&Value::Bool(true)) {
+        action = action.end(envelope.get("output").cloned().filter(|v| !v.is_null()));
+    }
+    Ok(action)
+}
+
+fn js_output_value(output: &ToolOutput) -> Value {
+    match output {
+        ToolOutput::Text(text) => json!(text),
+        ToolOutput::Json(value) => value.clone(),
+        ToolOutput::Blocks(blocks) => to_json(blocks),
+        ToolOutput::Rich { value, .. } => value.clone(),
+        _ => Value::Null,
+    }
+}
+
+/// `value` as the output, keeping the original's artifact and state changes.
+fn js_replaced(original: ToolOutput, value: Value) -> ToolOutput {
+    let new = match value {
+        Value::String(text) => ToolOutput::from(text),
+        other => ToolOutput::from(other),
+    };
+    match original {
+        ToolOutput::Rich {
+            artifact, state, ..
+        } => {
+            let new = match artifact {
+                Some(artifact) => new.with_artifact(artifact),
+                None => new,
+            };
+            state
+                .into_iter()
+                .fold(new, |output, (key, value)| output.with_state(key, value))
+        }
+        _ => new,
+    }
+}
+
+impl JsHook {
+    fn has(&self, stage: &str) -> bool {
+        self.stages.iter().any(|s| s == stage)
+    }
+
+    async fn call(&self, stage: &str, payload: Value) -> Result<Value, String> {
+        let request = json!({"stage": stage, "payload": payload}).to_string();
+        let envelope = call_js(self.function.clone(), request).await?;
+        match envelope.get("crash").and_then(Value::as_str) {
+            Some(crash) => Err(crash.to_string()),
+            None => Ok(envelope),
+        }
+    }
+
+    async fn action(&self, stage: &str, ctx: &HookContext) -> Result<HookAction, HookError> {
+        if !self.has(stage) {
+            return Ok(HookAction::proceed());
+        }
+        let envelope = self
+            .call(stage, js_hook_ctx(ctx))
+            .await
+            .map_err(HookError::new)?;
+        js_hook_action(&envelope)
+    }
+}
+
+impl Hook for JsHook {
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn on_start<'a>(
+        &'a self,
+        ctx: &'a HookContext,
+    ) -> BoxFuture<'a, Result<HookAction, HookError>> {
+        Box::pin(self.action("on_start", ctx))
+    }
+
+    fn before_model<'a>(
+        &'a self,
+        ctx: &'a HookContext,
+    ) -> BoxFuture<'a, Result<HookAction, HookError>> {
+        Box::pin(self.action("before_model", ctx))
+    }
+
+    fn after_model<'a>(
+        &'a self,
+        ctx: &'a HookContext,
+    ) -> BoxFuture<'a, Result<HookAction, HookError>> {
+        Box::pin(self.action("after_model", ctx))
+    }
+
+    fn wrap_tool<'a>(
+        &'a self,
+        mut call: ToolCallRequest,
+        next: ToolNext<'a>,
+    ) -> BoxFuture<'a, Result<ToolOutput, ToolError>> {
+        Box::pin(async move {
+            let call_json = |call: &ToolCallRequest| json!({"callId": call.call_id, "name": call.name, "args": call.args});
+            if self.has("before_tool") {
+                let envelope = self
+                    .call("before_tool", call_json(&call))
+                    .await
+                    .map_err(ToolError::crashed)?;
+                if let Some(message) = envelope.get("toolError").and_then(Value::as_str) {
+                    return Err(ToolError::new(message));
+                }
+                if let Some(value) = envelope.get("result") {
+                    return Ok(js_replaced(ToolOutput::from(Value::Null), value.clone()));
+                }
+                if let Some(changed) = envelope.get("call").filter(|c| c.is_object()) {
+                    if let Some(name) = changed["name"].as_str() {
+                        call.name = name.to_string();
+                    }
+                    if let Some(args) = changed["args"].as_object() {
+                        call.args = args.clone();
+                    }
+                }
+            }
+            let snapshot = call_json(&call);
+            let output = next.call(call).await?;
+            if !self.has("after_tool") {
+                return Ok(output);
+            }
+            let envelope = self
+                .call(
+                    "after_tool",
+                    json!({"call": snapshot, "result": js_output_value(&output)}),
+                )
+                .await
+                .map_err(ToolError::crashed)?;
+            Ok(match envelope.get("result") {
+                Some(value) => js_replaced(output, value.clone()),
+                None => output,
+            })
+        })
+    }
+
+    fn on_end<'a>(&'a self, ctx: &'a HookContext, outcome: Outcome) -> BoxFuture<'a, ()> {
+        Box::pin(async move {
+            if !self.has("on_end") {
+                return;
+            }
+            let mut payload = js_hook_ctx(ctx);
+            payload["outcome"] = json!(match outcome {
+                Outcome::Completed => "completed",
+                Outcome::Suspended => "suspended",
+                _ => "failed",
+            });
+            // on_end cannot change the outcome: its errors are dropped.
+            let _ = self.call("on_end", payload).await;
+        })
+    }
+}
+
 // ---------- telemetry (design 0017 §4) ----------
 
 /// Exporters by handle, so an agent's configuration can name one.
@@ -750,7 +940,12 @@ impl NativeAgent {
     /// Builds the agent. `tools` holds one function per tool, in the
     /// configuration's order.
     #[napi(constructor)]
-    pub fn new(config: String, tools: Vec<JsTool>, storage: &NativeStorage) -> napi::Result<Self> {
+    pub fn new(
+        config: String,
+        tools: Vec<JsTool>,
+        storage: &NativeStorage,
+        hooks: Vec<JsTool>,
+    ) -> napi::Result<Self> {
         let config = parse(&config)?;
         let mut builder =
             Agent::builder_shared(model(&config["model"])?).storage(storage.storage.clone());
@@ -776,6 +971,19 @@ impl NativeAgent {
             builder = builder.tool(tool_fn(tool_spec, move |args, ctx: ToolContext| {
                 call_tool(tool.clone(), args, ctx)
             }));
+        }
+        // Hooks, in order (design 0017 §5): `config.hooks` names their
+        // stages, one function each.
+        let specs = config["hooks"].as_array().cloned().unwrap_or_default();
+        if specs.len() != hooks.len() {
+            return Err(bad("one function per hook"));
+        }
+        for (spec, function) in specs.iter().zip(hooks) {
+            builder = builder.hook(JsHook {
+                name: spec["name"].as_str().unwrap_or("hook").to_string(),
+                function: Arc::new(function),
+                stages: strings(&spec["stages"]),
+            });
         }
         // Every run of this agent goes to the exporter (design 0017 §4).
         if let Some(handle) = config["telemetry"].as_u64() {

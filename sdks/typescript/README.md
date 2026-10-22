@@ -26,8 +26,10 @@ console.log(reply.text);
 **Status:** first slice: agents, tools (JSON Schema input), approvals, typed
 output, threads (send, approve, reject, decide, retry, history, rewind,
 delete, stream, `AbortSignal`), storage (SQLite, Postgres, encryption,
-audit, retention) and memory. Workflows, hooks, Zod / Standard Schema
-input and prebuilt binaries for every platform are planned. Tests use
+audit, retention) and memory. Workflows (design 0015), and from design
+0017: agents as tools, retries and fallback models, memory by meaning,
+tracing and hooks. Zod / Standard Schema input is planned; prebuilt
+binaries for every platform come with the first release. Tests use
 `FakeModel`; no real model is called.
 
 Build from source (needs Rust 1.88+ and Node 18+): `npm install`,

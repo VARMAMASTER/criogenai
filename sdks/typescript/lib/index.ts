@@ -28,6 +28,8 @@ export {
   openrouter,
 } from "./models";
 export type { Model, ModelOptions } from "./models";
+export { ToolResult } from "./hooks";
+export type { Hook, HookAction, HookContext, ToolCall } from "./hooks";
 export { Memory, Storage } from "./storage";
 export { Telemetry } from "./telemetry";
 export type { TelemetryOptions } from "./telemetry";

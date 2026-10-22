@@ -27,6 +27,7 @@ const {
   ThreadSuspendedError,
   ToolError,
   ToolExecutionError,
+  ToolResult,
   ValidationError,
   isAgentBuildError,
   tool,
@@ -210,6 +211,112 @@ test("telemetry exports runs without their content", async () => {
   } finally {
     server.close();
   }
+});
+
+test("hooks change what they may, in order", async () => {
+  const seen = [];
+  const lookup = tool({
+    name: "lookup",
+    description: "Looks up an order.",
+    input: { type: "object", properties: { orderId: { type: "string" } }, required: ["orderId"] },
+    run: ({ orderId }) => {
+      seen.push(orderId);
+      return `order ${orderId}: shipped, card 4111-1111`;
+    },
+  });
+  const weather = tool({
+    name: "weather",
+    description: "The weather.",
+    input: { type: "object", properties: { city: { type: "string" } } },
+    run: () => {
+      throw new Error("skipped by the hook");
+    },
+  });
+  class Guard {
+    onStart(ctx) {
+      return { state: { runs: (ctx.hookState?.runs ?? 0) + 1 } };
+    }
+    async beforeTool(call) {
+      if (call.name === "weather") return new ToolResult("sunny (cached)");
+      return { ...call, args: { orderId: call.args.orderId.toUpperCase() } };
+    }
+    afterTool(call, result) {
+      return typeof result === "string" ? result.replace("4111-1111", "[card]") : undefined;
+    }
+    afterModel(ctx) {
+      const last = ctx.messages[ctx.messages.length - 1];
+      if (JSON.stringify(last.content).includes("secret")) {
+        return { message: { ...last, content: [{ type: "text", text: "[redacted]" }] } };
+      }
+    }
+  }
+  const ended = [];
+  const audit = { name: "audit", onEnd: async (ctx, outcome) => ended.push([outcome, ctx.modelCalls]) };
+  const agent = new Agent({
+    model: new FakeModel([
+      FakeReply.toolCalls([
+        ["lookup", { orderId: "a-1" }],
+        ["weather", { city: "Paris" }],
+      ]),
+      "The secret answer",
+    ]),
+    tools: [lookup, weather],
+    hooks: [new Guard(), audit],
+  });
+  const result = await agent.run("where is it?");
+  assert.deepEqual(seen, ["A-1"]); // beforeTool changed the argument
+  const results = toolResults(result).map((m) => JSON.stringify(m.content));
+  assert.match(results[0], /\[card\]/); // afterTool redacted
+  assert.doesNotMatch(results[0], /4111/);
+  assert.match(results[1], /sunny \(cached\)/); // skipped the tool
+  assert.equal(result.text, "[redacted]"); // afterModel replaced the reply
+  assert.deepEqual(ended, [["completed", 2]]);
+});
+
+test("a hook can end the run, and what it throws fails the run as the cause", async () => {
+  const budget = {
+    beforeModel(ctx) {
+      if (ctx.modelCalls >= 1) return { end: true, output: "stopped by the budget hook" };
+    },
+  };
+  const model = new FakeModel([FakeReply.toolCall("noop", {}), "never"], { byTurn: true });
+  const result = await new Agent({ model, hooks: [budget] }).run("go");
+  assert.equal(result.output, "stopped by the budget hook");
+
+  class MissingSetting extends Error {}
+  const broken = {
+    name: "broken",
+    beforeModel() {
+      throw new MissingSetting("no budget configured");
+    },
+  };
+  await assert.rejects(new Agent({ model: new FakeModel(["x"]), hooks: [broken] }).run("go"), (e) => {
+    assert.ok(e instanceof AgentBuildError);
+    assert.equal(e.code, "hook_failed");
+    assert.ok(e.cause instanceof MissingSetting);
+    return true;
+  });
+  assert.throws(() => new Agent({ model: new FakeModel(["x"]), hooks: [{}] }), TypeError);
+
+  // In a tool hook it is the tool's crash: with "fail", the run fails with it as the cause.
+  class CannotRedact extends Error {}
+  const leaky = {
+    afterTool() {
+      throw new CannotRedact("cannot redact");
+    },
+  };
+  const ping = tool({ name: "ping", description: "Pings.", input: { type: "object", properties: {} }, run: () => "pong" });
+  const crashing = new Agent({
+    model: new FakeModel([FakeReply.toolCall("ping", {}), "done"]),
+    tools: [ping],
+    hooks: [leaky],
+    onToolException: "fail",
+  });
+  await assert.rejects(crashing.run("go"), (e) => {
+    assert.ok(e instanceof ToolExecutionError);
+    assert.ok(e.cause instanceof CannotRedact);
+    return true;
+  });
 });
 
 test("the engine validates arguments before the tool runs", async () => {

@@ -78,6 +78,17 @@ First release, planned as 0.1.0 (Rust crates only).
   telemetry exporter) on the agent, applied by `Agent::run_options` to
   every run and thread.
 
+### Hooks in the SDKs (design 0017 §5)
+
+- Python `Agent(hooks=[...])` and TypeScript `new Agent({ hooks })`: an
+  object with any of `on_start`, `before_model`, `after_model`,
+  `before_tool`, `after_tool`, `on_end` (camelCase in TypeScript), sync or
+  async. Change or skip a tool call (`ToolResult`), raise `ToolError`,
+  replace a tool result, the transcript or a reply, keep state, end a run.
+- An exception in a start or model hook fails the run with `hook_failed`
+  (the exception is its cause); in a tool hook it is the tool's crash.
+- Rust: `HookContext::metadata` and `ToolNext::context` (hooks see the
+  run's metadata).
 ### Sub-agents, retries and fallbacks in the SDKs (design 0017 §1–2)
 
 - `agent.as_tool(name, description)` / `agent.asTool(...)`: an agent as a

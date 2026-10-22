@@ -173,8 +173,12 @@ fn codes_after(text: &str, prefix: &str, found: &mut BTreeMap<String, String>, o
         }
         let rest = &text[at + prefix.len()..];
         // Within the call's function: never past the next item.
-        let rest = &rest[..rest.find("
-fn ").unwrap_or(rest.len())];
+        let rest = &rest[..rest
+            .find(
+                "
+fn ",
+            )
+            .unwrap_or(rest.len())];
         let window: String = rest.chars().take(240).collect();
         // Complete literals only: the window may cut the last one.
         let pieces: Vec<&str> = window.split('"').collect();

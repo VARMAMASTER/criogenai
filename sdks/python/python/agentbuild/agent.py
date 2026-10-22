@@ -7,6 +7,7 @@ from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Sequence, 
 
 from . import _native
 from .models import model_spec
+from .hooks import hook_adapter
 from .storage import Memory, Storage
 from .tools import Tool
 
@@ -175,6 +176,7 @@ class Agent:
         tool_retry: Optional[Retry] = None,
         max_retry_after: Optional[float] = None,
         telemetry: Any = None,
+        hooks: Sequence[Any] = (),
     ):
         for t in tools:
             if not isinstance(t, (Tool, AgentTool)):
@@ -208,6 +210,7 @@ class Agent:
             storage._native if storage is not None else None,
             [(t.name, t.description, t.agent._native) for t in agents],
             telemetry._native if telemetry is not None else None,
+            [hook_adapter(h) for h in hooks],
         )
 
     async def run(self, input: str, **state: Any) -> RunResult:

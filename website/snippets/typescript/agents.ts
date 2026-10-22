@@ -50,3 +50,26 @@ const support = new Agent({
   tools: [researcher.asTool("research", "Looks up facts about an order")],
 });
 // [/show subagents]
+
+// [show hooks]
+import type { Hook } from "@agentbuild/sdk";
+
+const guard: Hook = {
+  name: "guard",
+  beforeTool(call) {
+    if (call.name === "issue_refund" && Number(call.args.amount) > 500) {
+      throw new ToolError("Refunds over 500 need a manager."); // the model sees this
+    }
+    return undefined;
+  },
+  afterTool(call, result) {
+    // The model sees the returned value instead (undefined keeps the result).
+    return typeof result === "string" ? result.replace("4111-1111-1111-1111", "[card]") : undefined;
+  },
+  beforeModel(ctx) {
+    if (ctx.modelCalls >= 10) return { end: true, output: "Stopped after 10 model calls." };
+    return undefined;
+  },
+};
+const guarded = new Agent({ model: "openai:gpt-5-mini", tools: [issueRefund], hooks: [guard] });
+// [/show hooks]

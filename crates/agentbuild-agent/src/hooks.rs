@@ -37,6 +37,9 @@ pub struct HookContext {
     pub hook_state: Option<Value>,
     /// The whole workflow state, read-only.
     pub state: Arc<State>,
+    /// The run's metadata ([`RunOptions::metadata`](agentbuild_core::RunOptions::metadata)),
+    /// e.g. a user or session id.
+    pub metadata: Option<Value>,
 }
 
 /// What a hook wants to happen. The default does nothing.
@@ -259,6 +262,12 @@ impl std::fmt::Debug for ToolNext<'_> {
 }
 
 impl<'a> ToolNext<'a> {
+    /// The context of the tool call going through the chain (its run, call
+    /// id and the run's metadata).
+    pub fn context(&self) -> &ToolContext {
+        &self.ctx
+    }
+
     /// Runs the remaining hooks and then the tool named in `call`.
     pub fn call(self, call: ToolCallRequest) -> BoxFuture<'a, Result<ToolOutput, ToolError>> {
         match self.hooks.split_first() {

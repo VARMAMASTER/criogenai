@@ -86,8 +86,13 @@ A hook is an object with any of these methods (sync or async):
 (the bridge calls them around `next`); Rust's `wrap_model` has no SDK form
 in this slice (retries and fallbacks cover its main uses). Order and
 semantics are Rust's (0004 §3): `on_start`/`before_model`/`before_tool` run
-in list order, the others in reverse. An exception in a hook fails the
-run with `hook_failed`, the exception as its cause.
+in list order, the others in reverse. An exception in `on_start`,
+`before_model` or `after_model` fails the run with `hook_failed`, the
+exception as its cause; one in `before_tool` / `after_tool` is the tool's
+own crash (`on_tool_exception` decides, and with `"fail"` the exception is
+the `tool_failed` error's cause). One in `on_end` is dropped. Hooks see the
+run's metadata in Rust (`HookContext::metadata`, `ToolNext::context`): the
+Python bridge finds the caller's event loop there.
 
 TypeScript: the same names in camelCase (`onStart`, `beforeModel`, …).
 

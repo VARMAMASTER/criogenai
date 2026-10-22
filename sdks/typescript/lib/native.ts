@@ -39,7 +39,7 @@ export interface NativeWorkflow {
 
 interface Addon {
   NativeStorage: new (spec: string) => NativeStorage;
-  NativeAgent: new (config: string, tools: NativeTool[], storage: NativeStorage) => NativeAgent;
+  NativeAgent: new (config: string, tools: NativeTool[], storage: NativeStorage, hooks: NativeTool[]) => NativeAgent;
   NativeTelemetry: new (spec: string) => NativeTelemetry;
   NativeWorkflow: new (config: string, nodes: NativeTool[], routers: NativeTool[], storage: NativeStorage) => NativeWorkflow;
   newCancelId(): number;

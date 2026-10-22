@@ -531,3 +531,82 @@ fn duplicate_hook_names_fail_the_build() {
         .unwrap_err();
     assert_eq!(err.to_string(), "hook `counter` is added more than once");
 }
+
+/// Records the run's metadata as each stage sees it.
+struct MetadataProbe(Log);
+
+impl MetadataProbe {
+    fn note(&self, stage: &str, metadata: Option<&Value>) {
+        let seen = metadata.map_or("none".to_string(), Value::to_string);
+        self.0.lock().unwrap().push(format!("{stage} {seen}"));
+    }
+}
+
+impl Hook for MetadataProbe {
+    fn name(&self) -> &str {
+        "probe"
+    }
+    fn on_start<'a>(
+        &'a self,
+        ctx: &'a HookContext,
+    ) -> BoxFuture<'a, Result<HookAction, HookError>> {
+        self.note("on_start", ctx.metadata.as_ref());
+        Box::pin(async { Ok(HookAction::proceed()) })
+    }
+    fn before_model<'a>(
+        &'a self,
+        ctx: &'a HookContext,
+    ) -> BoxFuture<'a, Result<HookAction, HookError>> {
+        self.note("before_model", ctx.metadata.as_ref());
+        Box::pin(async { Ok(HookAction::proceed()) })
+    }
+    fn wrap_tool<'a>(
+        &'a self,
+        call: ToolCallRequest,
+        next: ToolNext<'a>,
+    ) -> BoxFuture<'a, Result<ToolOutput, ToolError>> {
+        self.note("wrap_tool", next.context().metadata());
+        Box::pin(next.call(call))
+    }
+    fn on_end<'a>(&'a self, ctx: &'a HookContext, _: Outcome) -> BoxFuture<'a, ()> {
+        self.note("on_end", ctx.metadata.as_ref());
+        Box::pin(async {})
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn hooks_see_the_runs_metadata() {
+    let log: Log = Arc::default();
+    let agent = Agent::builder_shared(fake(vec![
+        FakeReply::tool_call("echo", json!({"text": "hi"})),
+        FakeReply::text("done"),
+    ]))
+    .tool(echo_tool(&log))
+    .hook(MetadataProbe(log.clone()))
+    .build()
+    .unwrap();
+    let options = agent.run_options().metadata(json!({"user": "ada"}));
+    agent.run_with("go", options).await.unwrap();
+    let seen: Vec<String> = log
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|e| !e.starts_with("tool "))
+        .cloned()
+        .collect();
+    let ada = r#"{"user":"ada"}"#;
+    assert_eq!(
+        seen,
+        [
+            format!("on_start {ada}"),
+            format!("before_model {ada}"),
+            format!("wrap_tool {ada}"),
+            format!("before_model {ada}"),
+            format!("on_end {ada}"),
+        ]
+    );
+    // Without metadata, hooks see none.
+    log.lock().unwrap().clear();
+    agent.run("go").await.unwrap();
+    assert!(log.lock().unwrap().iter().any(|e| e == "on_start none"));
+}
