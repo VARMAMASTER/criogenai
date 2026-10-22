@@ -19,12 +19,12 @@ if [[ ! -x "$(bin_of "$build")/python" && ! -x "$(bin_of "$build")/python.exe" ]
   "${PYTHON:-python}" -m venv "$build"
 fi
 py="$(bin_of "$build")/python"
-"$py" -m mypy --version >/dev/null 2>&1 || "$py" -m pip install --quiet mypy
+"$py" -m mypy --version >/dev/null 2>&1 || "$py" -m pip install --quiet --require-hashes -r "$root/scripts/locks/python-tools.txt"
 MYPYPATH="$root/sdks/python/python" "$py" -m mypy --ignore-missing-imports --no-error-summary website/snippets/python
 
 echo "+ typescript samples"
 if [[ ! -d sdks/typescript/node_modules ]]; then
-  (cd sdks/typescript && npm ci --silent)
+  (cd sdks/typescript && npm ci --silent --ignore-scripts)
 fi
 (cd sdks/typescript && npm run --silent build)
 sdks/typescript/node_modules/.bin/tsc -p website/snippets/typescript/tsconfig.json

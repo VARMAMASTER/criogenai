@@ -31,12 +31,12 @@ jobs:
           - { os: windows-latest, target: x64 }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: "3.12"
       - name: build the wheel
-        uses: PyO3/maturin-action@v1
+        uses: PyO3/maturin-action@e83996d129638aa358a18fbd1dfb82f0b0fb5d3b # v1
         with:
           target: ${{ matrix.target }}
           manylinux: ${{ matrix.manylinux || 'auto' }}
@@ -52,7 +52,7 @@ jobs:
           "$bin/python" "$GITHUB_WORKSPACE/sdks/python/examples/consumer.py"
           AGENTBUILD_ERROR_CATALOG="$GITHUB_WORKSPACE/schemas/error-codes.json" \
             "$bin/python" -m pytest -q -p no:cacheprovider tests
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: wheel-${{ matrix.os }}-${{ matrix.target }}
           path: dist/*.whl
@@ -70,9 +70,9 @@ jobs:
           - { os: windows-latest, platform: win32-x64 }
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
       - name: build and test the package on this platform
@@ -99,7 +99,7 @@ jobs:
             "cpu": ["$cpu"]
           }
           EOF
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: npm-${{ matrix.platform }}
           path: platform/${{ matrix.platform }}
@@ -113,33 +113,31 @@ jobs:
       contents: read
       id-token: write # PyPI trusted publishing
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
       - name: the wheels
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: wheel-*
           merge-multiple: true
           path: dist
       - name: the platform npm packages
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           pattern: npm-*
           path: artifacts
       - name: publish the wheels to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
         with:
           packages-dir: dist
-      - name: publish the platform packages, then the main one
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # Nothing is installed or built while a publishing token exists: the
+      # main package is prepared first, in a step without secrets, with
+      # exact installs (`npm ci`) and no dependency install scripts.
+      - name: prepare the main npm package
         run: |
-          for dir in artifacts/npm-*; do
-            (cd "$dir" && npm publish --access public)
-          done
           cd sdks/typescript
           version="$(node -p "require('./package.json').version")"
           # The main package depends on every platform package, optionally.
@@ -152,5 +150,15 @@ jobs:
             pkg.files = pkg.files.filter((f) => !f.startsWith("native"));
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           ' "$version"
-          npm install --no-audit --no-fund && npx tsc -p tsconfig.json
-          npm publish --access public
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx tsc -p tsconfig.json
+      - name: publish the platform packages, then the main one
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          # Only `npm publish` runs here. Once the packages exist, switch to
+          # npm trusted publishing (RELEASING.md) and delete NPM_TOKEN.
+          for dir in artifacts/npm-*; do
+            (cd "$dir" && npm publish --access public --provenance)
+          done
+          (cd sdks/typescript && npm publish --access public --provenance)

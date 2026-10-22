@@ -13,7 +13,7 @@ export CARGO_TARGET_DIR="$root/target/node"
 
 cargo build --release --quiet --manifest-path "$sdk/Cargo.toml"
 node "$sdk/scripts/copy-native.js" release
-(cd "$sdk" && npm install --silent --no-audit --no-fund && npx tsc -p tsconfig.json)
+(cd "$sdk" && npm ci --silent --ignore-scripts --no-audit --no-fund && npx tsc -p tsconfig.json)
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -27,7 +27,7 @@ npm init -y >/dev/null
 # Zod as a user would install it next to the SDK (the Standard Schema test);
 # the version the SDK's devDependencies pin.
 zod="zod@$(cd "$sdk" && node -p 'require("./package.json").devDependencies.zod')"
-npm install --silent --no-audit --no-fund "$tarball" "$zod"
+npm install --silent --ignore-scripts --no-audit --no-fund "$tarball" "$zod"
 cp "$sdk/examples/consumer.mjs" .
 node consumer.mjs
 cp -r "$sdk/test" ./test

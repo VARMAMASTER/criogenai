@@ -16,7 +16,8 @@ bin_of() { if [[ -d $1/Scripts ]]; then echo "$1/Scripts"; else echo "$1/bin"; f
 build="$root/target/py-build"
 if [[ ! -x "$(bin_of "$build")/maturin" && ! -x "$(bin_of "$build")/maturin.exe" ]]; then
   "$python" -m venv "$build"
-  "$(bin_of "$build")/python" -m pip install --quiet maturin pytest
+  # Exact versions with hashes (scripts/locks): a poisoned new release is not picked up.
+  "$(bin_of "$build")/python" -m pip install --quiet --require-hashes -r "$root/scripts/locks/python-tools.txt"
 fi
 
 wheels="$root/target/wheels"
@@ -30,7 +31,8 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 "$python" -m venv "$work/venv"
 venv_python="$(bin_of "$work/venv")/python"
-"$venv_python" -m pip install --quiet "$wheel" pytest mypy
+"$venv_python" -m pip install --quiet --require-hashes -r "$root/scripts/locks/python-tools.txt"
+"$venv_python" -m pip install --quiet --no-deps "$wheel"
 
 # From a directory without the sources: imports come from the wheel.
 cp -r "$root/sdks/python/tests" "$work/tests"

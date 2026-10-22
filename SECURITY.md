@@ -33,6 +33,31 @@ These are design commitments; a bug in any of them is a security issue.
 - **Storage is plain JSON**, never a serialized language object: loading a
   checkpoint cannot run code.
 
+## How AgentBuild is built and released
+
+LiteLLM was compromised twice in 2026 (March and October) through its release
+pipeline, not its code. What we do against the same attacks, checked on every
+change by `scripts/check-supply-chain.sh`:
+
+- **Every GitHub Action is pinned to a full commit hash**, never a tag or
+  branch (a tag can be rewritten, which is how the March attack worked).
+- **No install or build runs while a publishing secret exists.** Secrets are
+  only in steps that run `publish`; the package is built first, without them.
+- **Locked installs.** Python tools install from a hash-locked file
+  (`scripts/locks/python-tools.txt`, `pip --require-hashes`); Node packages
+  with `npm ci --ignore-scripts`, so a new poisoned release is not picked up
+  and install scripts do not run.
+- **Python publishes with trusted publishing** (no stored token); npm
+  publishes with provenance, moving to trusted publishing after the first
+  release ([RELEASING.md](RELEASING.md)).
+- **No `pull_request_target`**, and workflows are read-only unless a job
+  needs more.
+- **The gateway and the SDKs never log prompts, answers or keys**; a test
+  fails if a usage record or debug output contains any (October's attacker
+  found developers' tokens in logged response bodies).
+- Rust dependencies are checked by `cargo deny` (advisories, licences,
+  sources) on every change.
+
 ## Known limits
 
 - Checkpoints and the SQLite file are **not encrypted at rest** yet

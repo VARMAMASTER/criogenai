@@ -10,6 +10,8 @@
 #               `bash scripts/get-postgres.sh` fetches portable ones)
 #   msrv        cargo check on Rust 1.88 (skipped if that toolchain is not
 #               installed: `rustup toolchain install 1.88 --profile minimal`)
+#   supply      scripts/check-supply-chain.sh: Actions pinned by commit hash,
+#               no secrets in install steps, locked installs
 #   deps        cargo deny (skipped if cargo-deny is not installed)
 #   standalone  fmt + clippy of tests/live and the demo server
 #   package     docs, scripts/test-package.sh (with a throwaway Postgres
@@ -34,7 +36,7 @@ export CARGO_TERM_COLOR=always
 # Incremental build files take a lot of disk and do not help a full run.
 export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
 
-all=(rust postgres msrv deps standalone package python typescript website)
+all=(rust postgres msrv supply deps standalone package python typescript website)
 if [[ $# -eq 0 ]]; then
   steps=("${all[@]}")
 elif [[ $1 == --quick ]]; then
@@ -92,6 +94,10 @@ step_msrv() {
     return
   fi
   run cargo +1.88 check --all-targets --all-features
+}
+
+step_supply() {
+  run bash scripts/check-supply-chain.sh
 }
 
 step_deps() {
@@ -157,7 +163,7 @@ step_website() {
     skipped+=("website (no Node 20.9+)")
     return
   fi
-  [[ -d website/node_modules ]] || run npm --prefix website ci
+  [[ -d website/node_modules ]] || run npm --prefix website ci --ignore-scripts
   run npm --prefix website run check
   run bash website/scripts/check-snippets.sh
   run npm --prefix website run build
@@ -165,7 +171,7 @@ step_website() {
 
 for step in "${steps[@]}"; do
   case $step in
-    rust | postgres | msrv | deps | standalone | package | python | typescript | website) ;;
+    rust | postgres | msrv | supply | deps | standalone | package | python | typescript | website) ;;
     *)
       echo "unknown step: $step (steps: ${all[*]})" >&2
       exit 2
