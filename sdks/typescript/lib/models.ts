@@ -75,16 +75,29 @@ export class FakeModel {
    * instead of using replies up: one model serves many runs, also at once.
    */
   readonly byTurn: boolean;
+  /** The model name in replies ("fake:<name>"), to tell two fake models apart. */
+  readonly name: string | undefined;
 
-  constructor(replies: (string | FakeReply)[] = [], options: { delayMs?: number; failFirst?: number; byTurn?: boolean } = {}) {
+  constructor(
+    replies: (string | FakeReply)[] = [],
+    options: { delayMs?: number; failFirst?: number; byTurn?: boolean; name?: string } = {},
+  ) {
     this.replies = replies.map((r) => (typeof r === "string" ? FakeReply.text(r) : r));
     this.delayMs = options.delayMs ?? 0;
     this.failFirst = options.failFirst ?? 0;
     this.byTurn = options.byTurn ?? false;
+    this.name = options.name;
   }
 
   spec(): Record<string, unknown> {
-    return { kind: "fake", replies: this.replies, delayMs: this.delayMs, failFirst: this.failFirst, byTurn: this.byTurn };
+    return {
+      kind: "fake",
+      replies: this.replies,
+      delayMs: this.delayMs,
+      failFirst: this.failFirst,
+      byTurn: this.byTurn,
+      name: this.name,
+    };
   }
 }
 

@@ -24,6 +24,18 @@ export interface NativeAgent {
   stream(op: string, payload: string): NativeStream;
 }
 
+export interface NativeGateway {
+  chat(payload: string, cancelId: number): Promise<string>;
+  stream(payload: string): NativeChatStream;
+  embed(payload: string, cancelId: number): Promise<string>;
+}
+
+export interface NativeChatStream {
+  next(): Promise<string | null>;
+  reply(): Promise<string>;
+  cancel(): void;
+}
+
 export interface NativeTelemetry {
   readonly handle: number;
   flush(): Promise<void>;
@@ -41,6 +53,7 @@ interface Addon {
   NativeStorage: new (spec: string) => NativeStorage;
   NativeAgent: new (config: string, tools: NativeTool[], storage: NativeStorage, hooks: NativeTool[]) => NativeAgent;
   NativeTelemetry: new (spec: string) => NativeTelemetry;
+  NativeGateway: new (config: string) => NativeGateway;
   NativeWorkflow: new (config: string, nodes: NativeTool[], routers: NativeTool[], storage: NativeStorage) => NativeWorkflow;
   newCancelId(): number;
   cancelCall(id: number): void;

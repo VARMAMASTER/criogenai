@@ -36,6 +36,7 @@ from .models import (
     OpenAICompatible,
     OpenRouter,
 )
+from .gateway import ChatReply, ChatStream, Chunk, Gateway
 from .hooks import HookAction, HookContext, ToolCall, ToolResult
 from .storage import Memory, Storage
 from .telemetry import Telemetry
@@ -54,7 +55,8 @@ from .workflow import (
 
 __all__ = [
     "END", "Agent", "AgentBuildError", "AgentTool", "Anthropic", "ApprovalRequest", "CancelledError",
-    "CompiledWorkflow", "Decision", "Embedder", "Event", "FakeModel", "FakeReply", "Gemini", "HookAction", "HookContext", "Interrupt",
+    "ChatReply", "ChatStream", "Chunk", "CompiledWorkflow", "Decision", "Embedder", "Event", "FakeModel",
+    "FakeReply", "Gateway", "Gemini", "HookAction", "HookContext", "Interrupt",
     "LimitExceededError", "Memory", "ModelError", "NodeContext", "Ollama", "OpenAI",
     "OpenAICompatible", "OpenRouter", "Reply", "Retry", "RunResult", "StorageError", "Storage", "Stream",
     "Telemetry", "Thread", "ThreadBusyError", "ThreadSuspendedError", "Tool", "ToolCall", "ToolContext", "ToolError",

@@ -104,6 +104,7 @@ pub use memory::{
 };
 pub use nested::{AGENT_APPROVAL_INTERRUPT, AgentNode, AgentTool};
 pub use output::FINAL_OUTPUT_TOOL;
+pub use resilience::ResilientModel;
 pub use schema::validate as validate_arguments;
 pub use stream::{AgentEvent, AgentStream, ThreadStream};
 pub use thread::{Reply, Thread};

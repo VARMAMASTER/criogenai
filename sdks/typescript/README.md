@@ -28,7 +28,8 @@ output, threads (send, approve, reject, decide, retry, history, rewind,
 delete, stream, `AbortSignal`), storage (SQLite, Postgres, encryption,
 audit, retention) and memory. Workflows (design 0015), and from design
 0017: agents as tools, retries and fallback models, memory by meaning,
-tracing, hooks, and tool input from Zod or any Standard Schema. Prebuilt
+tracing, hooks, tool input from Zod or any Standard Schema, and
+`Gateway` for model calls without an agent (design 0018). Prebuilt
 binaries for every platform come with the first release. Tests use
 `FakeModel`; no real model is called.
 

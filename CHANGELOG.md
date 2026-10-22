@@ -99,6 +99,17 @@ First release, planned as 0.1.0 (Rust crates only).
   output, typed.
 - Rust: `ToolError::invalid_arguments` lets any tool reject its arguments
   the way the schema check does.
+
+### Calling a model directly (design 0018)
+
+- Python and TypeScript `Gateway`: `chat` (text or messages, instructions,
+  temperature, max tokens, JSON output checked against a schema),
+  `stream` (text chunks; a `restart` chunk when a retry starts over) and
+  `embed`, with an agent's retries and fallback models; `reply.model`
+  names the model that answered. Cancellation by task cancel or
+  `AbortSignal`. `FakeModel(name=…)` tells fake models apart.
+- Rust: `ResilientModel`, the agent's retry and fallback chain as a
+  `Model` of its own.
 ### Sub-agents, retries and fallbacks in the SDKs (design 0017 §1–2)
 
 - `agent.as_tool(name, description)` / `agent.asTool(...)`: an agent as a

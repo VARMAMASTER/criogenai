@@ -12,7 +12,7 @@
   "scripts": {
     "build:native": "cargo build --release && node scripts/copy-native.js",
     "build": "tsc -p tsconfig.json",
-    "test": "node --test test/agent.test.js test/workflow.test.js"
+    "test": "node --test test/agent.test.js test/workflow.test.js test/gateway.test.js"
   },
   "devDependencies": {
     "@types/node": "22.10.2",

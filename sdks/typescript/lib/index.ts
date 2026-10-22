@@ -28,6 +28,8 @@ export {
   openrouter,
 } from "./models";
 export type { Model, ModelOptions } from "./models";
+export { ChatStream, Gateway } from "./gateway";
+export type { ChatInput, ChatOptions, ChatReply, Chunk, GatewayOptions } from "./gateway";
 export { ToolResult } from "./hooks";
 export type { Hook, HookAction, HookContext, ToolCall } from "./hooks";
 export { Memory, Storage } from "./storage";

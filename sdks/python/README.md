@@ -33,7 +33,7 @@ asyncio.run(main())
 (send, approve, reject, decide, retry, history, rewind, delete, stream),
 storage (SQLite, Postgres, encryption, audit, retention) and memory.
 Workflows too (`Workflow`, design 0015), and from design 0017: agents as
-tools, retries and fallback models, memory by meaning, tracing and hooks.
-The gateway client is planned. Tests use `FakeModel`; no real model is called.
+tools, retries and fallback models, memory by meaning, tracing and hooks,
+and `Gateway` for model calls without an agent (design 0018). Tests use `FakeModel`; no real model is called.
 
 Free to use, also commercially (see `LICENSE`).

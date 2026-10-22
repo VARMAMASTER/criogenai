@@ -122,8 +122,9 @@ write our own implementation.
   Published as **`agentbuild-sdk`** on PyPI (import `agentbuild`; the
   name "agentbuild" there belongs to another project). Since then (0017):
   sub-agents, retries and fallbacks, semantic memory, telemetry and
-  hooks in both SDKs; Zod / Standard Schema tool input in TypeScript.
-  Not yet: the gateway client.
+  hooks in both SDKs; Zod / Standard Schema tool input in TypeScript;
+  `Gateway` (0018: chat, stream, embed without an agent, over Rust's
+  `ResilientModel`).
 - **Implemented: TypeScript SDK, first slice (0012).** `sdks/typescript`
   (crate `agentbuild-node`, not a workspace member; napi-rs 3, N-API 6,
   Node 18+; package `@agentbuild/sdk`, TypeScript in `lib/` compiled to
@@ -207,7 +208,7 @@ write our own implementation.
   landing page, docs (MDX in `content/docs`, code samples compiled from
   `snippets/`), benchmark lab, install counter. `npm run build` /
   `npm run preview` (port 4400); checked by `ci-local.sh` step `website`.
-- **Not started:** SDK gateway client, vector indexes
+- **Not started:** vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 
 ## Commands

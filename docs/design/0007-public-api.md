@@ -45,6 +45,9 @@ const reply = await gw.chat("anthropic:claude-sonnet-5-5", "Summarize this: …"
 for await (const chunk of gw.stream("openai:gpt-…", "Write a haiku")) process.stdout.write(chunk.text);
 ```
 
+(Built as [0018](0018-sdk-gateway-client.md), which settles the details;
+the `endpoints` map below became model objects.)
+
 A gateway or local server is just another endpoint:
 `Gateway(endpoints={"local": OpenAICompatible(base_url="http://localhost:11434/v1")})`,
 then `"local:llama-…"`.

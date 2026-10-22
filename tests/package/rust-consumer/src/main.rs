@@ -374,6 +374,23 @@ async fn agent_with_tools() {
     let codes: Vec<&str> = result.messages.iter().filter_map(|m| m.error.as_ref()).map(|e| e.code.as_str()).collect();
     assert_eq!(codes, ["invalid_arguments", "invalid_arguments"]);
     println!("  agent loop with tools and argument validation: ok");
+
+    // The same retries and fallbacks without an agent (design 0018).
+    let flaky = FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
+        .named("fake", "primary")
+        .flaky_first(5);
+    let backup = FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
+        .named("fake", "backup")
+        .then(FakeReply::text("from the backup"));
+    let model = agentbuild_agent::ResilientModel::new(std::sync::Arc::new(flaky))
+        .fallback(std::sync::Arc::new(backup));
+    let request = agentbuild_providers::ModelRequest::new(vec![agentbuild_providers::Message::user("hi")]);
+    let response = agentbuild_providers::Model::invoke(&model, &request)
+        .await
+        .expect("the fallback answers");
+    assert_eq!(response.message.text(), "from the backup");
+    assert_eq!(response.message.metadata.model.as_deref(), Some("backup"));
+    println!("  resilient model with a fallback: ok");
 }
 
 /// The telemetry crate: an exporter whose backend is down must not affect

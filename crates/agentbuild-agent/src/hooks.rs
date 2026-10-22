@@ -232,7 +232,7 @@ impl<'a> ModelNext<'a> {
             // The fallback chain and retry loop sit inside the hooks
             // (0003 §5.3).
             None => Box::pin(async move {
-                match self.chain.call(&request, self.env, &self.on_delta).await {
+                match self.chain.call(&request, self.env, &*self.on_delta).await {
                     Ok(response) => Ok(response),
                     Err(ChainError::Model(error)) => Err(*error),
                     Err(ChainError::Deadline(error)) => {

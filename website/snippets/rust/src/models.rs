@@ -24,3 +24,28 @@ pub async fn models() -> Result<(), Error> {
     // [/show]
     Ok(())
 }
+
+pub async fn direct() -> Result<(), Error> {
+    let key = std::env::var("OPENAI_API_KEY")?;
+    // [show direct]
+    use std::sync::Arc;
+
+    use agentbuild_agent::ResilientModel;
+    use agentbuild_core::RetryPolicy;
+    use agentbuild_providers::{Endpoint, Message, Model, ModelRequest, ProviderModel};
+
+    let openai = ProviderModel::new(Endpoint::openai(key), "gpt-5-mini")?;
+    let local = ProviderModel::new(Endpoint::ollama(), "llama3.2")?;
+    // Retries and fallbacks as for an agent.
+    let model = ResilientModel::new(Arc::new(openai))
+        .fallback(Arc::new(local))
+        .retry(RetryPolicy::new().max_attempts(4));
+    let request = ModelRequest::new(vec![
+        Message::system("Two sentences."),
+        Message::user("Summarize: …"),
+    ]);
+    let response = model.invoke(&request).await?;
+    println!("{}", response.message.text());
+    // [/show direct]
+    Ok(())
+}

@@ -112,7 +112,9 @@ class FakeModel:
     transient error the agent retries), to test retries. ``by_turn``: choose
     each reply by the conversation's turn (the first reply for a run's first
     model call, the second for its second, then the last repeats) instead
-    of using replies up, so one model serves many runs, also at once."""
+    of using replies up, so one model serves many runs, also at once.
+    ``name``: the model name in replies (``"fake:<name>"``), to tell two
+    fake models apart."""
 
     def __init__(
         self,
@@ -120,6 +122,7 @@ class FakeModel:
         delay: float = 0.0,
         fail_first: int = 0,
         by_turn: bool = False,
+        name: Optional[str] = None,
     ):
         self.replies: List[FakeReply] = [
             FakeReply.text(r) if isinstance(r, str) else r for r in replies
@@ -127,6 +130,7 @@ class FakeModel:
         self.delay = delay
         self.fail_first = fail_first
         self.by_turn = by_turn
+        self.name = name
 
     def spec(self) -> Dict[str, Any]:
         return {
@@ -135,6 +139,7 @@ class FakeModel:
             "delay_ms": int(self.delay * 1000),
             "fail_first": self.fail_first,
             "by_turn": self.by_turn,
+            "name": self.name,
         }
 
     def __repr__(self) -> str:

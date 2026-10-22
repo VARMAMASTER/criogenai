@@ -15,8 +15,9 @@ use std::time::Duration;
 
 use agentbuild_agent::{
     Agent, AgentError, AgentEvent, AgentInput, AgentResult, Approval, Decision, Hook, HookAction,
-    HookContext, HookError, Limits, Memory, OnToolException, Reply, Thread, ThreadStream,
-    ToolCallRequest, ToolContext, ToolError, ToolNext, ToolOutput, tool_fn,
+    HookContext, HookError, Limits, Memory, OnToolException, Reply, ResilientModel, Thread,
+    ThreadStream, ToolCallRequest, ToolContext, ToolError, ToolNext, ToolOutput, tool_fn,
+    validate_arguments,
 };
 use agentbuild_core::{
     CancelToken, Node, NodeContext, NodeError, NodeOutput, Reducer, RetryPolicy, Router, RunError,
@@ -24,8 +25,9 @@ use agentbuild_core::{
     node_with_context, router_fn,
 };
 use agentbuild_providers::{
-    BoxFuture, Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, Message, Model,
-    ModelErrorKind, ProviderEmbedder, ProviderModel, ToolAnnotations, ToolSpec,
+    BlockDelta, BoxFuture, Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, Message,
+    MessageDelta, Model, ModelError, ModelErrorKind, ModelRequest, ModelResponse, OutputSpec,
+    ProviderEmbedder, ProviderModel, Settings, ToolAnnotations, ToolSpec,
 };
 use agentbuild_storage::{
     AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
@@ -291,6 +293,9 @@ fn model(spec: &Value) -> Result<Arc<dyn Model>, Failure> {
         }
         if spec.get("by_turn").and_then(Value::as_bool) == Some(true) {
             fake = fake.by_turn();
+        }
+        if let Some(name) = text(spec, "name") {
+            fake = fake.named("fake", name);
         }
         for reply in spec["replies"].as_array().cloned().unwrap_or_default() {
             fake = fake.then(fake_reply(&reply)?);
@@ -850,6 +855,317 @@ impl Hook for PyHook {
                 .call("on_end", payload.to_string(), ctx.metadata.as_ref(), None)
                 .await;
         })
+    }
+}
+
+// ---------- the gateway (design 0018) ----------
+
+/// The messages of `input`: text, or messages whose `content` may be a
+/// string (one text block).
+fn gateway_messages(input: &Value) -> Result<Vec<Message>, Failure> {
+    match input {
+        Value::String(text) => Ok(vec![Message::user(text.clone())]),
+        Value::Array(items) => items
+            .iter()
+            .map(|item| {
+                let mut item = item.clone();
+                if let Some(text) = item.get("content").and_then(Value::as_str) {
+                    item["content"] = json!([{"type": "text", "text": text}]);
+                }
+                serde_json::from_value(item).map_err(|err| bad(format!("a message: {err}")))
+            })
+            .collect(),
+        _ => Err(bad("input is text or a list of messages")),
+    }
+}
+
+/// The request of a `chat` / `stream` payload.
+fn gateway_request(payload: &Value) -> Result<ModelRequest, Failure> {
+    let mut messages = gateway_messages(&payload["input"])?;
+    if let Some(instructions) = text(payload, "instructions") {
+        messages.insert(0, Message::system(instructions));
+    }
+    let mut settings = Settings::default();
+    settings.temperature = payload["temperature"].as_f64();
+    settings.max_tokens = payload["max_tokens"]
+        .as_u64()
+        .map(|n| u32::try_from(n).unwrap_or(u32::MAX));
+    let mut request = ModelRequest::new(messages).with_settings(settings);
+    if let Some(schema) = payload.get("output").filter(|o| !o.is_null()) {
+        request.output = Some(OutputSpec::new(schema.clone()));
+    }
+    Ok(request)
+}
+
+fn model_failure(error: ModelError) -> Failure {
+    Failure {
+        code: "model_failed".into(),
+        message: error.to_string(),
+        details: Some(json!({"model_error": error})),
+    }
+}
+
+/// The reply, with the parsed and checked output when one was asked for.
+fn chat_reply(response: ModelResponse, schema: Option<&Value>) -> Outcome {
+    let text = response.message.text();
+    let output = match schema {
+        None => Value::Null,
+        Some(schema) => {
+            let value: Value = serde_json::from_str(text.trim()).map_err(|err| {
+                Failure::new("output_invalid", format!("the reply is not JSON: {err}"))
+            })?;
+            let problems = validate_arguments(schema, &value);
+            if !problems.is_empty() {
+                return Err(Failure {
+                    code: "output_invalid".into(),
+                    message: format!(
+                        "the reply does not match the schema: {}",
+                        problems.join("; ")
+                    ),
+                    details: Some(json!({"problems": problems})),
+                });
+            }
+            value
+        }
+    };
+    let meta = &response.message.metadata;
+    let model = format!(
+        "{}:{}",
+        meta.provider.as_deref().unwrap_or_default(),
+        meta.model.as_deref().unwrap_or_default()
+    );
+    Ok(json!({
+        "text": text,
+        "message": to_json(&response.message),
+        "usage": to_json(&response.usage),
+        "stop_reason": to_json(&response.finish_reason),
+        "model": model,
+        "output": output,
+    }))
+}
+
+/// `work`, or `cancelled` once `cancel` fires (the HTTP request is dropped).
+async fn or_cancelled(work: impl Future<Output = Outcome>, cancel: CancelToken) -> Outcome {
+    let mut work = std::pin::pin!(work);
+    let mut cancelled = std::pin::pin!(cancel.cancelled());
+    std::future::poll_fn(|cx| {
+        if let std::task::Poll::Ready(outcome) = work.as_mut().poll(cx) {
+            return std::task::Poll::Ready(outcome);
+        }
+        if cancelled.as_mut().poll(cx).is_ready() {
+            return std::task::Poll::Ready(Err(Failure::new(
+                "cancelled",
+                "the call was cancelled",
+            )));
+        }
+        std::task::Poll::Pending
+    })
+    .await
+}
+
+/// Model calls without an agent: the agent's retries and fallbacks
+/// (`ResilientModel`) around the model each call names.
+#[pyclass(frozen)]
+struct NativeGateway {
+    fallbacks: Vec<Arc<dyn Model>>,
+    fallback_on: Vec<ModelErrorKind>,
+    retry: RetryPolicy,
+    max_retry_after: Duration,
+    /// Models by their spec: each provider client is made once.
+    models: Mutex<HashMap<String, Arc<dyn Model>>>,
+}
+
+impl NativeGateway {
+    fn chain(&self, spec: &Value) -> Result<ResilientModel, Failure> {
+        let key = spec.to_string();
+        // The guard must end before the insert below.
+        let cached = lock(&self.models).get(&key).cloned();
+        let primary = match cached {
+            Some(model) => model,
+            None => {
+                // A fake model's script goes on from call to call, as an agent's does.
+                let made = model(spec)?;
+                lock(&self.models).insert(key, made.clone());
+                made
+            }
+        };
+        let mut chain = ResilientModel::new(primary)
+            .retry(self.retry.clone())
+            .max_retry_after(self.max_retry_after);
+        for fallback in &self.fallbacks {
+            chain = chain.fallback(fallback.clone());
+        }
+        for kind in &self.fallback_on {
+            chain = chain.fallback_on(*kind);
+        }
+        Ok(chain)
+    }
+}
+
+#[pymethods]
+impl NativeGateway {
+    #[new]
+    fn new(config: &str) -> PyResult<Self> {
+        let config: Value =
+            serde_json::from_str(config).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let fallbacks = config["fallbacks"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default()
+            .iter()
+            .map(model)
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(py_failure)?;
+        let fallback_on = match config.get("fallback_on").filter(|k| k.is_array()) {
+            Some(kinds) => serde_json::from_value(kinds.clone())
+                .map_err(|err| py_failure(bad(format!("fallback_on: {err}"))))?,
+            None => Vec::new(),
+        };
+        Ok(Self {
+            fallbacks,
+            fallback_on,
+            retry: config
+                .get("retry")
+                .filter(|s| s.is_object())
+                .map_or_else(RetryPolicy::new, retry_policy),
+            max_retry_after: Duration::from_secs_f64(
+                config["max_retry_after_secs"].as_f64().unwrap_or(60.0),
+            ),
+            models: Mutex::default(),
+        })
+    }
+
+    /// One model call: payload `{model, input, instructions, temperature,
+    /// max_tokens, output}`.
+    fn chat<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+        payload: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let payload: Value =
+            serde_json::from_str(payload).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let chain = self.chain(&payload["model"]).map_err(py_failure)?;
+        let request = gateway_request(&payload).map_err(py_failure)?;
+        let cancel = CancelToken::new();
+        let token = cancel.clone();
+        spawn(py, event_loop, Some(cancel), async move {
+            let work = async {
+                let response = chain.invoke(&request).await.map_err(model_failure)?;
+                chat_reply(response, request.output.as_ref().map(|o| &o.schema))
+            };
+            or_cancelled(work, token).await
+        })
+    }
+
+    /// The same call, streamed: text chunks, then the reply.
+    fn stream(&self, payload: &str) -> PyResult<NativeChatStream> {
+        let payload: Value =
+            serde_json::from_str(payload).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let chain = self.chain(&payload["model"]).map_err(py_failure)?;
+        let request = gateway_request(&payload).map_err(py_failure)?;
+        let (chunks, receiver) = tokio::sync::mpsc::unbounded_channel();
+        let (reply, reply_receiver) = tokio::sync::oneshot::channel();
+        let cancel = CancelToken::new();
+        let token = cancel.clone();
+        runtime().spawn(async move {
+            let work = async {
+                // A new message id means a retry started over (design 0018 §2).
+                let mut current: Option<String> = None;
+                let mut sink = |delta: MessageDelta| {
+                    if current.as_deref() != Some(delta.message_id.as_str()) {
+                        if current.is_some() {
+                            let _ = chunks.send(json!({"type": "restart", "text": ""}));
+                        }
+                        current = Some(delta.message_id.clone());
+                    }
+                    if let BlockDelta::Text { text } = delta.delta {
+                        let _ = chunks.send(json!({"type": "text", "text": text}));
+                    }
+                };
+                let response = chain
+                    .stream(&request, &mut sink)
+                    .await
+                    .map_err(model_failure)?;
+                chat_reply(response, request.output.as_ref().map(|o| &o.schema))
+            };
+            let outcome = or_cancelled(work, token).await;
+            let _ = reply.send(outcome);
+        });
+        Ok(NativeChatStream {
+            chunks: Arc::new(tokio::sync::Mutex::new(receiver)),
+            reply: Arc::new(tokio::sync::Mutex::new(Some(reply_receiver))),
+            cancel,
+        })
+    }
+
+    /// Embeddings: payload `{embedder, texts}`.
+    fn embed<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+        payload: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let payload: Value =
+            serde_json::from_str(payload).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let embedder = embedder(&payload["embedder"]).map_err(py_failure)?;
+        let texts: Vec<String> = serde_json::from_value(payload["texts"].clone())
+            .map_err(|err| py_failure(bad(format!("texts: {err}"))))?;
+        let cancel = CancelToken::new();
+        let token = cancel.clone();
+        spawn(py, event_loop, Some(cancel), async move {
+            let work = async {
+                let vectors = embedder.embed(&texts).await.map_err(model_failure)?;
+                Ok(json!(vectors))
+            };
+            or_cancelled(work, token).await
+        })
+    }
+}
+
+/// A streamed gateway call.
+#[pyclass(frozen)]
+struct NativeChatStream {
+    chunks: Arc<tokio::sync::Mutex<tokio::sync::mpsc::UnboundedReceiver<Value>>>,
+    reply: Arc<tokio::sync::Mutex<Option<tokio::sync::oneshot::Receiver<Outcome>>>>,
+    cancel: CancelToken,
+}
+
+#[pymethods]
+impl NativeChatStream {
+    /// The next chunk as JSON, or `null` after the last.
+    fn next<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let chunks = self.chunks.clone();
+        spawn(py, event_loop, None, async move {
+            Ok(chunks.lock().await.recv().await.unwrap_or(Value::Null))
+        })
+    }
+
+    /// Waits for the call; its reply.
+    fn reply<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let reply = self.reply.clone();
+        spawn(py, event_loop, None, async move {
+            let taken = reply.lock().await.take();
+            let Some(receiver) = taken else {
+                return Err(bad("the reply was already taken"));
+            };
+            receiver
+                .await
+                .unwrap_or_else(|_| Err(Failure::new("cancelled", "the call was cancelled")))
+        })
+    }
+
+    /// Cancels the call.
+    fn cancel(&self) {
+        self.cancel.cancel();
     }
 }
 
@@ -1778,6 +2094,8 @@ impl NativeStream {
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NativeAgent>()?;
+    m.add_class::<NativeGateway>()?;
+    m.add_class::<NativeChatStream>()?;
     m.add_class::<NativeStorage>()?;
     m.add_class::<NativeWorkflow>()?;
     m.add_class::<NativeTelemetry>()?;

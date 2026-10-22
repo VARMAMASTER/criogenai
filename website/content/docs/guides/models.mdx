@@ -32,3 +32,18 @@ description: OpenAI, Anthropic, Gemini, OpenRouter and self-hosted models, with 
 
 For self-hosted models nothing leaves your network, which is often the
 simplest answer for patient data.
+
+## Call a model directly
+
+For one call without an agent (summarize, classify, draft, embed), use
+`Gateway`: `chat` returns the answer, `stream` yields it as it is
+written, `embed` turns texts into vectors. Retries and fallback models
+work as for an agent, and `reply.model` names the model that answered.
+With `output` (a JSON Schema) the answer is JSON, parsed and checked
+against the schema. A stream that a retry starts over yields a `restart`
+chunk, so a UI can drop the text it showed. `Gateway` runs in your
+process; the [gateway server](/docs/guides/gateway/) is a separate
+program.
+
+<Sample name="models" region="direct" />
+
