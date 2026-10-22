@@ -692,3 +692,121 @@ async fn think_tags_can_be_left_in_the_text() {
     assert_eq!(response.message.text(), "<think>x</think>Answer");
     assert_eq!(reasoning_of(&response.message), None);
 }
+
+// ---------- Gemini thought signatures (design 0006 §14) ----------
+
+fn extras_of(block: &ContentBlock) -> Option<&Value> {
+    match block {
+        ContentBlock::ToolCall { extras, .. } => extras.get("local"),
+        _ => None,
+    }
+}
+
+#[tokio::test]
+async fn tool_call_extra_content_is_kept_whole_and_streamed() {
+    let signed = r#"{"google": {"thought_signature": "c2lnbmF0dXJl"}}"#;
+    let (base, _server) = serve(vec![json_response(
+        200,
+        &format!(
+            r#"{{"choices": [{{"message": {{"role": "assistant", "content": null, "tool_calls": [
+                {{"id": "a", "type": "function", "function": {{"name": "weather", "arguments": "{{}}"}},
+                  "extra_content": {signed}}},
+                {{"id": "b", "type": "function", "function": {{"name": "weather", "arguments": "{{}}"}}}}
+            ]}}, "finish_reason": "tool_calls"}}]}}"#
+        ),
+    )])
+    .await;
+    let response = model_at(&base, None)
+        .invoke(&ModelRequest::new(vec![Message::user("weather?")]))
+        .await
+        .unwrap();
+    let blocks = &response.message.content;
+    assert_eq!(
+        extras_of(&blocks[0]).unwrap()["extra_content"]["google"]["thought_signature"],
+        "c2lnbmF0dXJl"
+    );
+    assert!(
+        extras_of(&blocks[1]).is_none(),
+        "only the first parallel call is signed"
+    );
+
+    let (base, _server) = serve(vec![
+        sse_head(),
+        sse_data(&format!(
+            r#"{{"choices":[{{"delta":{{"tool_calls":[{{"index":0,"id":"a","type":"function","function":{{"name":"weather","arguments":""}},"extra_content":{signed}}}]}}}}]}}"#
+        )),
+        sse_data(r#"{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{}"}}]}}]}"#),
+        sse_data(r#"{"choices":[{"delta":{},"finish_reason":"tool_calls"}]}"#),
+        Step::send("data: [DONE]\n\n"),
+    ])
+    .await;
+    let (result, _) = stream(&base, &ModelRequest::new(vec![Message::user("w")])).await;
+    let response = result.unwrap();
+    assert_eq!(
+        extras_of(&response.message.content[0]).unwrap()["extra_content"]["google"]["thought_signature"],
+        "c2lnbmF0dXJl"
+    );
+}
+
+#[test]
+fn signatures_go_back_to_their_endpoint_and_gemini_gets_a_placeholder() {
+    let signed = |provider: &str| {
+        let mut call = ContentBlock::tool_call("a", "weather", Map::new());
+        if let ContentBlock::ToolCall { extras, .. } = &mut call {
+            extras.insert(
+                provider.into(),
+                json!({"extra_content": {"google": {"thought_signature": "real"}}}),
+            );
+        }
+        call
+    };
+    let conversation = |calls: Vec<ContentBlock>| {
+        let ids: Vec<String> = calls
+            .iter()
+            .filter_map(|c| match c {
+                ContentBlock::ToolCall { id, .. } => Some(id.clone()),
+                _ => None,
+            })
+            .collect();
+        let mut messages = vec![
+            Message::user("weather?"),
+            Message::with_content(Role::Assistant, calls),
+        ];
+        for id in ids {
+            messages.push(Message::tool_result(
+                id,
+                "weather",
+                ToolStatus::Success,
+                vec![ContentBlock::text("sunny")],
+            ));
+        }
+        ModelRequest::new(messages)
+    };
+    let gemini = Endpoint::gemini("test-key");
+    let sent = |endpoint: &Endpoint, request: &ModelRequest| {
+        body_for(endpoint, request).0["messages"][1]["tool_calls"].clone()
+    };
+
+    // The real signature goes back to Gemini, as received.
+    let calls = sent(&gemini, &conversation(vec![signed("gemini")]));
+    assert_eq!(
+        calls[0]["extra_content"]["google"]["thought_signature"],
+        "real"
+    );
+    // Not to another endpoint, which gets no placeholder either.
+    let calls = sent(&compat(), &conversation(vec![signed("gemini")]));
+    assert!(calls[0].get("extra_content").is_none());
+
+    // History from another model: the placeholder, on the first call only.
+    let unsigned = conversation(vec![
+        ContentBlock::tool_call("a", "weather", Map::new()),
+        ContentBlock::tool_call("b", "weather", Map::new()),
+    ]);
+    let calls = sent(&gemini, &unsigned);
+    assert_eq!(
+        calls[0]["extra_content"]["google"]["thought_signature"],
+        "skip_thought_signature_validator"
+    );
+    assert!(calls[1].get("extra_content").is_none());
+    assert!(sent(&compat(), &unsigned)[0].get("extra_content").is_none());
+}

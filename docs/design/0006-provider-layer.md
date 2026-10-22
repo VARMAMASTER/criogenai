@@ -546,3 +546,35 @@ with the official `anthropic` Python SDK 2.1.0 through the gateway to a
 fake OpenAI-compatible upstream: text, tool use, tool results, streamed
 text and tool calls (`messages.stream`), and a rate-limit 429 that the SDK
 raises as `RateLimitError` with `Retry-After`.
+
+## 14. Gemini thought signatures on the OpenAI-compatible endpoint
+
+The `gemini` preset reaches Gemini through Google's OpenAI-compatible
+endpoint (§4). Gemini 3 models sign their reasoning: the first tool call
+of each step carries `extra_content: {"google": {"thought_signature":
+…}}`, and a later request that sends the call back without it fails with
+400 (Google's thought-signature documentation). Without handling this, a
+Gemini 3 agent fails at its second model call.
+
+- **Kept.** `openai_chat` keeps any tool call's `extra_content` (whole and
+  streamed) in the block's extras under the endpoint's name, and sends it
+  back unchanged on the same endpoint. Other endpoints never see it
+  (extras are keyed by provider).
+- **Placeholder.** History from another model (a fallback from OpenAI to
+  Gemini, a transcript written by hand) has no signature. With the new
+  quirk `thought_signatures` (on in the `gemini` preset), an assistant
+  message whose tool calls carry none gets Google's documented
+  placeholder, `skip_thought_signature_validator`, on its first tool call.
+  Google calls it a last resort that lowers quality; it is used only when
+  the real signature does not exist.
+- **Tests.** Decoding keeps the field (whole and streamed); encoding sends
+  it back on the same endpoint and not on another; the placeholder
+  appears only for the `gemini` quirk and only without a real signature.
+  Live (2026-10-22, `gemini-3.8-flash`): every tool scenario of
+  `tests/live` passes; without this change the first fails with
+  "Function call is missing a thought_signature".
+- **The gateway server** (§12–13) speaks OpenAI and Anthropic formats to
+  its clients, which have no field for the signature, so a gateway route
+  to Gemini 3 relies on the placeholder. Carrying signatures through the
+  gateway (as `extra_content` on its OpenAI endpoint) is a later
+  change.

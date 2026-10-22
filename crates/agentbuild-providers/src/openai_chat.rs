@@ -46,6 +46,12 @@ pub struct OpenAiQuirks {
     /// reasoning (reasoning models on servers without a reasoning parser,
     /// e.g. DeepSeek-R1 on Ollama 0.6). Default on.
     pub think_tags: bool,
+    /// Gemini (design 0006 §14): an assistant message whose tool calls
+    /// carry no thought signature (history from another model) gets
+    /// Google's placeholder on its first call, which Gemini 3 requires.
+    /// A tool call's own `extra_content` is always sent back, on every
+    /// endpoint.
+    pub thought_signatures: bool,
 }
 
 impl Default for OpenAiQuirks {
@@ -59,8 +65,21 @@ impl Default for OpenAiQuirks {
             system_role: "system".into(),
             reasoning_echo: None,
             think_tags: true,
+            thought_signatures: false,
         }
     }
+}
+
+/// Google's documented placeholder for a missing thought signature.
+const PLACEHOLDER_SIGNATURE: &str = "skip_thought_signature_validator";
+
+/// A tool call's `extra_content` (Gemini's thought signature), as block
+/// extras under the endpoint's name.
+fn extra_content(call: &Value, provider: &str) -> Option<Extras> {
+    let extra = call.get("extra_content").filter(|v| v.is_object())?;
+    let mut extras = Extras::new();
+    extras.insert(provider.to_string(), json!({"extra_content": extra}));
+    Some(extras)
 }
 
 impl OpenAiQuirks {
@@ -102,7 +121,7 @@ pub(crate) fn encode(
             })),
             Role::User => messages.push(encode_user(message, warnings)?),
             Role::Assistant => {
-                let (value, dropped) = encode_assistant(message, quirks, warnings);
+                let (value, dropped) = encode_assistant(message, provider, quirks, warnings);
                 reasoning_dropped += dropped;
                 messages.push(value);
             }
@@ -312,6 +331,7 @@ fn encode_user(message: &Message, warnings: &mut Vec<Warning>) -> Result<Value, 
 /// Returns the message and the number of reasoning blocks dropped.
 fn encode_assistant(
     message: &Message,
+    provider: &str,
     quirks: &OpenAiQuirks,
     warnings: &mut Vec<Warning>,
 ) -> (Value, usize) {
@@ -322,12 +342,23 @@ fn encode_assistant(
     for block in &message.content {
         match block {
             ContentBlock::Text { .. } => order_lost |= seen_call,
-            ContentBlock::ToolCall { id, name, args, .. } => {
+            ContentBlock::ToolCall {
+                id,
+                name,
+                args,
+                extras,
+                ..
+            } => {
                 seen_call = true;
-                tool_calls.push(json!({
+                let mut call = json!({
                     "id": id, "type": "function",
                     "function": {"name": name, "arguments": Value::Object(args.clone()).to_string()}
-                }));
+                });
+                // Sent back as received, on the endpoint that sent it.
+                if let Some(extra) = extras.get(provider).and_then(|e| e.get("extra_content")) {
+                    call["extra_content"] = extra.clone();
+                }
+                tool_calls.push(call);
             }
             // Sent as written, so the error result that answers it still
             // has a matching call.
@@ -368,6 +399,13 @@ fn encode_assistant(
     } else {
         json!(text)
     };
+    if quirks.thought_signatures
+        && !tool_calls.is_empty()
+        && tool_calls.iter().all(|c| c.get("extra_content").is_none())
+    {
+        tool_calls[0]["extra_content"] =
+            json!({"google": {"thought_signature": PLACEHOLDER_SIGNATURE}});
+    }
     if !tool_calls.is_empty() {
         value["tool_calls"] = Value::Array(tool_calls);
     }
@@ -543,6 +581,9 @@ pub(crate) fn decode(
                 args_fragment: arguments(function.get("arguments")),
             },
         });
+        if let Some(extras) = extra_content(call, provider) {
+            assembler.push(StreamItem::Extras { index: at, extras });
+        }
         assembler.push(StreamItem::BlockEnd { index: at });
     }
     if let Some(usage) = value.get("usage") {
@@ -582,13 +623,17 @@ pub(crate) struct ChunkDecoder {
     finished: Option<FinishReason>,
     /// Splits `<think>` reasoning out of the answer text, if enabled.
     think: Option<ThinkSplitter>,
+    /// The endpoint's name, for the extras of tool calls.
+    provider: String,
 }
 
 impl ChunkDecoder {
-    /// A decoder; `think_tags` as in [`OpenAiQuirks::think_tags`].
-    pub(crate) fn new(think_tags: bool) -> Self {
+    /// A decoder; `think_tags` as in [`OpenAiQuirks::think_tags`],
+    /// `provider` the endpoint's name.
+    pub(crate) fn new(think_tags: bool, provider: &str) -> Self {
         Self {
             think: think_tags.then(ThinkSplitter::default),
+            provider: provider.to_string(),
             ..Self::default()
         }
     }
@@ -755,6 +800,9 @@ impl ChunkDecoder {
                     args_fragment: arguments(function.get("arguments")),
                 },
             });
+            if let Some(extras) = extra_content(call, &self.provider) {
+                items.push(StreamItem::Extras { index, extras });
+            }
         }
         if let Some(raw) = choice.get("finish_reason").filter(|r| !r.is_null()) {
             self.flush_think(&mut items);

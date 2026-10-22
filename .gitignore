@@ -1,4 +1,5 @@
-/target
+# Build output of every Rust project here (the workspace, tests/live, consumers).
+target/
 **/*.rs.bk
 __pycache__/
 *.pyc

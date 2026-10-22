@@ -52,6 +52,17 @@ First release, planned as 0.1.0 (Rust crates only).
   `webpki-root-certs` 1.0.10 (RUSTSEC-2026-0381, -0382, -0383: distrusted
   intermediates could be accepted), in every lockfile.
 
+### Gemini 3 tool use works (design 0006 §14)
+
+- Fixed: with a Gemini 3 model, the second model call of a tool-using
+  agent failed with HTTP 400 ("Function call is missing a
+  thought_signature"). The OpenAI-format codec now keeps a tool call's
+  `extra_content` (whole and streamed) and sends it back to the same
+  endpoint; history from another model gets Google's placeholder
+  signature on the `gemini` preset (`OpenAiQuirks::thought_signatures`).
+  Checked live: every tool scenario of `tests/live` passes on
+  `gemini-3.8-flash`, and the first one fails without the fix.
+
 ### A tool's exception no longer stops the run
 
 - **Changed default:** an exception a tool did not handle (Python,

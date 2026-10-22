@@ -92,6 +92,9 @@ impl Endpoint {
             Some(api_key.into()),
         );
         endpoint.capabilities.tools = Some(true);
+        if let Protocol::OpenAiChat(quirks) = &mut endpoint.protocol {
+            quirks.thought_signatures = true;
+        }
         endpoint
     }
 
@@ -310,7 +313,9 @@ impl ProviderModel {
         let mut body = self.transport.open(&wire).await?;
         let mut parser = SseParser::new();
         let mut decoder = match &self.endpoint.protocol {
-            Protocol::OpenAiChat(quirks) => Decoder::OpenAi(ChunkDecoder::new(quirks.think_tags)),
+            Protocol::OpenAiChat(quirks) => {
+                Decoder::OpenAi(ChunkDecoder::new(quirks.think_tags, &self.endpoint.name))
+            }
             Protocol::AnthropicMessages(_) => Decoder::Anthropic(EventDecoder::default()),
         };
         let mut assembler = Assembler::new();
