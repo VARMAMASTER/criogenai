@@ -16,6 +16,7 @@ export {
   isAgentBuildError,
 } from "./errors";
 export {
+  Embedder,
   FakeModel,
   FakeReply,
   ProviderModel,
@@ -28,6 +29,8 @@ export {
 } from "./models";
 export type { Model, ModelOptions } from "./models";
 export { Memory, Storage } from "./storage";
+export { Telemetry } from "./telemetry";
+export type { TelemetryOptions } from "./telemetry";
 export type { MemoryOptions, RetentionOptions, StorageOptions } from "./storage";
 export { Tool, ToolError, tool } from "./tools";
 export type { JsonSchema, ToolContext, ToolDefinition } from "./tools";

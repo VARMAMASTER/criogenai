@@ -101,6 +101,8 @@ export interface AgentOptions {
   toolRetry?: Retry;
   /** The longest Retry-After the agent waits, in seconds (default 60). */
   maxRetryAfterSecs?: number;
+  /** Exports every run of this agent (`Telemetry.langfuse()`, `Telemetry.otlp(url)`). */
+  telemetry?: { readonly native: { readonly handle: number } };
 }
 
 export interface CallOptions {
@@ -169,6 +171,7 @@ export class Agent<Output = unknown> {
       modelRetry: options.modelRetry,
       toolRetry: options.toolRetry,
       maxRetryAfterSecs: options.maxRetryAfterSecs,
+      telemetry: options.telemetry?.native.handle,
     };
     try {
       this.native = new native.NativeAgent(

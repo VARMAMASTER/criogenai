@@ -61,8 +61,11 @@ Agent(model, telemetry=Telemetry.otlp("http://localhost:4318", headers={...}, ca
 
 Builds an `OtlpConfig` (`Langfuse::from_env` / `OtlpConfig::new`) and an
 exporter once per agent; every run of the agent (and its threads) gets it
-through `RunOptions::observe`. `capture_content` (default off) and masks
-follow 0009. TypeScript: `Telemetry.langfuse()`, `Telemetry.otlp(url,
+through `AgentBuilder::observe` (every run, threads included).
+`capture_content` is **off by default in the SDKs**, stricter than the Rust
+`OtlpConfig` default (on, 0009): message text, tool arguments and results
+stay in the process unless asked for (patient data, AGENTS.md). Masks are
+Rust-only for now. TypeScript: `Telemetry.langfuse()`, `Telemetry.otlp(url,
 { headers, captureContent })`.
 
 ## 5. Hooks

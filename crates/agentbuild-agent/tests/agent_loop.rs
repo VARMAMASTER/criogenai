@@ -525,6 +525,27 @@ async fn on_tool_exception_fail_fails_the_run_as_before() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn observers_on_the_agent_see_every_run_and_thread() {
+    let seen = Arc::new(std::sync::Mutex::new(Vec::<String>::new()));
+    let sink = seen.clone();
+    let agent = Agent::builder(
+        model(0)
+            .then(FakeReply::text("one"))
+            .then(FakeReply::text("two")),
+    )
+    .observe(move |event: &agentbuild_core::Event| {
+        if let EventKind::RunStarted { .. } = &event.kind {
+            sink.lock().unwrap().push(event.run_id.clone());
+        }
+    })
+    .build()
+    .unwrap();
+    agent.run("hi").await.unwrap();
+    agent.thread("t-1").send("again").await.unwrap();
+    assert_eq!(seen.lock().unwrap().len(), 2, "both runs observed");
+}
+
+#[tokio::test(start_paused = true)]
 async fn fatal_model_errors_fail_the_run_with_the_classified_error() {
     let error = ModelError::new(ModelErrorKind::ContextOverflow, "prompt is too long");
     let fake = Arc::new(model(0).then(FakeReply::Error(error)));

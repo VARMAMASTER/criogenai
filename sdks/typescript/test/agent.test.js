@@ -13,6 +13,8 @@ const crypto = require("node:crypto");
 const sdk = require(process.env.AGENTBUILD_SDK || path.join(__dirname, ".."));
 const {
   Agent,
+  Embedder,
+  Telemetry,
   AgentBuildError,
   CancelledError,
   Decision,
@@ -157,6 +159,57 @@ test("fallback models and retry settings", async () => {
   assert.throws(() => new Agent({ model: new FakeModel([]), fallbackOn: ["no_such_kind"] }), ValidationError);
   // A transient error once, then the answer: retried by the agent itself.
   assert.equal((await new Agent({ model: new FakeModel(["fine now"], { failFirst: 1 }) }).run("hi")).text, "fine now");
+});
+
+test("semantic memory finds facts by meaning and falls back to keywords", async () => {
+  const storage = new Storage();
+  const memory = Memory.shared("facts").semantic(Embedder.fake({ synonyms: { automobile: "car" } }));
+  const agent = new Agent({
+    model: new FakeModel([
+      FakeReply.toolCall("remember", { key: "vehicle", value: "The customer drives a red car" }),
+      "Noted.",
+      FakeReply.toolCall("search_memory", { query: "automobile" }),
+      "Found it.",
+    ]),
+    storage,
+    memory,
+  });
+  assert.equal((await agent.run("Remember my car")).text, "Noted.");
+  const found = await agent.run("Which automobile do I have?");
+  assert.match(JSON.stringify(toolResults(found)[0].content), /red car/); // no shared word: found by meaning
+  const broken = new Agent({
+    model: new FakeModel([FakeReply.toolCall("search_memory", { query: "red" }), "ok"]),
+    storage,
+    memory: Memory.shared("facts").semantic(Embedder.fake({ failing: true })),
+  });
+  assert.match(JSON.stringify(toolResults(await broken.run("search"))[0].content), /red car/);
+});
+
+test("telemetry exports runs without their content", async () => {
+  const http = require("node:http");
+  const received = [];
+  const server = http.createServer((req, res) => {
+    let body = "";
+    req.on("data", (chunk) => (body += chunk));
+    req.on("end", () => {
+      received.push(body);
+      res.writeHead(200).end();
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const telemetry = Telemetry.otlp(`http://127.0.0.1:${server.address().port}/v1/traces`, { serviceName: "test" });
+    const agent = new Agent({ model: new FakeModel(["fine"]), telemetry });
+    await agent.run("a private question");
+    await telemetry.flush();
+    const body = received.join("");
+    assert.match(body, /resourceSpans/);
+    assert.doesNotMatch(body, /a private question/); // content is left out by default
+    assert.ok(telemetry.stats().exported > 0);
+    await telemetry.shutdown();
+  } finally {
+    server.close();
+  }
 });
 
 test("the engine validates arguments before the tool runs", async () => {

@@ -65,6 +65,19 @@ First release, planned as 0.1.0 (Rust crates only).
   `ToolError::crashed` marks such a failure; `ToolError::fatal` still
   fails the run. Designs 0003 §5.1, 0004, 0011, 0012.
 
+### Memory by meaning and tracing in the SDKs (design 0017 §3–4)
+
+- `Embedder` (OpenAI, Gemini, Ollama, any OpenAI-compatible server, and a
+  fake one for tests) and `Memory.semantic(embedder)` in Python and
+  TypeScript.
+- `Telemetry.langfuse()` / `Telemetry.otlp(url)` with `flush`,
+  `shutdown` and `stats`; `Agent(telemetry=…)` / `{ telemetry }`. Message
+  content stays out of traces unless `capture_content` / `captureContent`
+  is set (the SDK default; Rust's `OtlpConfig` default is unchanged).
+- Rust: `AgentBuilder::observe` / `observe_shared`: observers (e.g. a
+  telemetry exporter) on the agent, applied by `Agent::run_options` to
+  every run and thread.
+
 ### Sub-agents, retries and fallbacks in the SDKs (design 0017 §1–2)
 
 - `agent.as_tool(name, description)` / `agent.asTool(...)`: an agent as a

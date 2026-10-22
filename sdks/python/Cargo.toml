@@ -17,6 +17,7 @@ agentbuild-core = { path = "../../crates/agentbuild-core" }
 agentbuild-providers = { path = "../../crates/agentbuild-providers" }
 agentbuild-storage = { path = "../../crates/agentbuild-storage", features = ["sqlite", "postgres", "encryption"] }
 agentbuild-agent = { path = "../../crates/agentbuild-agent", features = ["sqlite", "postgres", "encryption"] }
+agentbuild-telemetry = { path = "../../crates/agentbuild-telemetry" }
 # The stable ABI: one wheel for every Python from 3.9.
 pyo3 = { version = "0.29", features = ["extension-module", "abi3-py39"] }
 serde = "1"

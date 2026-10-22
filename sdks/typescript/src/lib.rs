@@ -22,12 +22,14 @@ use agentbuild_core::{
     router_fn,
 };
 use agentbuild_providers::{
-    Endpoint, FakeModel, FakeReply, Model, ModelErrorKind, ProviderModel, ToolAnnotations, ToolSpec,
+    Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, Model, ModelErrorKind,
+    ProviderEmbedder, ProviderModel, ToolAnnotations, ToolSpec,
 };
 use agentbuild_storage::{
     AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
     WorkflowThread,
 };
+use agentbuild_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
 use napi::Status;
 use napi::bindgen_prelude::{Promise, block_on, within_runtime_if_available};
 use napi::threadsafe_function::ThreadsafeFunction;
@@ -194,6 +196,15 @@ fn model(spec: &Value) -> napi::Result<Arc<dyn Model>> {
         return Ok(Arc::new(fake));
     }
     let name = text(spec, "model").ok_or_else(|| bad("a model needs a `model` name"))?;
+    ProviderModel::new(endpoint(spec)?, name)
+        .map(|m| Arc::new(m) as Arc<dyn Model>)
+        .map_err(|err| failure("model_failed", err.to_string(), None))
+}
+
+/// The provider endpoint of a model or embedder spec (`kind`, `apiKey`,
+/// `baseUrl`).
+fn endpoint(spec: &Value) -> napi::Result<Endpoint> {
+    let kind = text(spec, "kind").ok_or_else(|| bad("a model needs a `kind`"))?;
     let key = text(spec, "apiKey").map(str::to_string);
     let need_key = || {
         key.clone()
@@ -217,9 +228,33 @@ fn model(spec: &Value) -> napi::Result<Arc<dyn Model>> {
     {
         endpoint = endpoint.with_base_url(base);
     }
-    ProviderModel::new(endpoint, name)
-        .map(|m| Arc::new(m) as Arc<dyn Model>)
-        .map_err(|err| failure("model_failed", err.to_string(), None))
+    Ok(endpoint)
+}
+
+/// An embedder (design 0017 §3): a provider's `/embeddings`, or the fake
+/// one for tests (`{"kind": "fake", "synonyms": [[word, sameAs]],
+/// "failing": bool}`).
+fn embedder(spec: &Value) -> napi::Result<Arc<dyn Embedder>> {
+    if text(spec, "kind") == Some("fake") {
+        if spec["failing"].as_bool() == Some(true) {
+            return Ok(Arc::new(FakeEmbedder::failing()));
+        }
+        let mut fake = FakeEmbedder::new();
+        for pair in spec["synonyms"].as_array().cloned().unwrap_or_default() {
+            fake = fake.synonym(
+                pair[0].as_str().unwrap_or_default(),
+                pair[1].as_str().unwrap_or_default(),
+            );
+        }
+        return Ok(Arc::new(fake));
+    }
+    let name = text(spec, "model").ok_or_else(|| bad("an embedder needs a `model` name"))?;
+    let mut embedder = ProviderEmbedder::new(endpoint(spec)?, name)
+        .map_err(|err| failure("model_failed", err.to_string(), None))?;
+    if let Some(n) = spec["dimensions"].as_u64() {
+        embedder = embedder.dimensions(n as u32);
+    }
+    Ok(Arc::new(embedder))
 }
 
 fn fake_reply(reply: &Value) -> napi::Result<FakeReply> {
@@ -301,6 +336,9 @@ fn memory(spec: &Value) -> napi::Result<Memory> {
     }
     if let Some(secs) = spec["ttlSecs"].as_f64() {
         memory = memory.ttl(Duration::from_secs_f64(secs));
+    }
+    if let Some(spec) = spec.get("embedder").filter(|e| e.is_object()) {
+        memory = memory.semantic_shared(embedder(spec)?);
     }
     Ok(memory)
 }
@@ -516,6 +554,103 @@ async fn storage_operation(storage: Storage, op: &str, payload: Value) -> napi::
 
 // ---------- the agent ----------
 
+// ---------- telemetry (design 0017 §4) ----------
+
+/// Exporters by handle, so an agent's configuration can name one.
+fn exporters() -> &'static Mutex<HashMap<u32, Arc<OtlpExporter>>> {
+    static EXPORTERS: OnceLock<Mutex<HashMap<u32, Arc<OtlpExporter>>>> = OnceLock::new();
+    EXPORTERS.get_or_init(Mutex::default)
+}
+
+/// A telemetry exporter: OTLP over HTTP, or Langfuse. Agents built with
+/// its handle send every run to it.
+#[napi]
+pub struct NativeTelemetry {
+    exporter: Arc<OtlpExporter>,
+    handle: u32,
+}
+
+impl Drop for NativeTelemetry {
+    fn drop(&mut self) {
+        lock(exporters()).remove(&self.handle);
+    }
+}
+
+#[napi]
+impl NativeTelemetry {
+    /// `{"kind": "langfuse", publicKey?, secretKey?, baseUrl?}` (missing keys
+    /// from the LANGFUSE_* variables) or `{"kind": "otlp", endpoint,
+    /// headers}`; both take `serviceName` and `captureContent`.
+    #[napi(constructor)]
+    pub fn new(spec: String) -> napi::Result<Self> {
+        let spec = parse(&spec)?;
+        let mut config = match text(&spec, "kind") {
+            Some("langfuse") => match (text(&spec, "publicKey"), text(&spec, "secretKey")) {
+                (Some(public), Some(secret)) => Langfuse::config(
+                    public,
+                    secret,
+                    text(&spec, "baseUrl").unwrap_or(agentbuild_telemetry::DEFAULT_BASE_URL),
+                ),
+                _ => Langfuse::from_env().map_err(|err| bad(err.to_string()))?,
+            },
+            Some("otlp") => {
+                let mut config = OtlpConfig::new(
+                    text(&spec, "endpoint").ok_or_else(|| bad("otlp needs an endpoint"))?,
+                );
+                for (name, value) in spec["headers"].as_object().cloned().unwrap_or_default() {
+                    config = config.header(name, value.as_str().unwrap_or_default());
+                }
+                config
+            }
+            _ => return Err(bad("telemetry is \"langfuse\" or \"otlp\"")),
+        };
+        if let Some(name) = text(&spec, "serviceName") {
+            config = config.service_name(name);
+        }
+        if let Some(capture) = spec["captureContent"].as_bool() {
+            config = config.capture_content(capture);
+        }
+        let exporter = within_runtime_if_available(|| OtlpExporter::start(config))
+            .map_err(|err| bad(err.to_string()))?;
+        let exporter = Arc::new(exporter);
+        static NEXT: AtomicU32 = AtomicU32::new(1);
+        let handle = NEXT.fetch_add(1, Ordering::Relaxed);
+        lock(exporters()).insert(handle, exporter.clone());
+        Ok(Self { exporter, handle })
+    }
+
+    /// This exporter's handle, for an agent's configuration.
+    #[napi(getter)]
+    pub fn handle(&self) -> u32 {
+        self.handle
+    }
+
+    /// Waits until everything sent so far is exported.
+    #[napi]
+    pub async fn flush(&self) {
+        self.exporter.flush().await;
+    }
+
+    /// Exports what is left and stops.
+    #[napi]
+    pub async fn shutdown(&self) {
+        self.exporter.shutdown().await;
+    }
+
+    /// `{"exported", "failed", "dropped", "lastError"}`.
+    #[napi]
+    pub fn stats(&self) -> String {
+        let stats = self.exporter.stats();
+        json!({
+            "exported": stats.exported,
+            "failed": stats.failed,
+            "dropped": stats.dropped_events,
+            "lastError": self.exporter.last_error(),
+        })
+        .to_string()
+    }
+}
+
 /// An agent built from a TypeScript configuration.
 #[napi]
 pub struct NativeAgent {
@@ -641,6 +776,14 @@ impl NativeAgent {
             builder = builder.tool(tool_fn(tool_spec, move |args, ctx: ToolContext| {
                 call_tool(tool.clone(), args, ctx)
             }));
+        }
+        // Every run of this agent goes to the exporter (design 0017 §4).
+        if let Some(handle) = config["telemetry"].as_u64() {
+            let exporter = lock(exporters())
+                .get(&(handle as u32))
+                .cloned()
+                .ok_or_else(|| bad("the telemetry exporter is gone"))?;
+            builder = builder.observe(exporter.observer());
         }
         // Agents as tools of this one (design 0017 §1), by handle.
         for spec in config["agentTools"].as_array().cloned().unwrap_or_default() {

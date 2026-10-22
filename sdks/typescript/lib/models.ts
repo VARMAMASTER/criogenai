@@ -104,3 +104,57 @@ export function modelSpec(model: Model): Record<string, unknown> {
   if (model && typeof (model as { spec?: unknown }).spec === "function") return model.spec();
   throw new TypeError(`not a model: ${String(model)}`);
 }
+
+/**
+ * Turns text into vectors, for long-term memory searched by meaning
+ * (`memory.semantic(embedder)`, design 0017 §3). Built from the same
+ * providers as models; keys come from the same environment variables.
+ */
+export class Embedder {
+  /** @internal The JSON spec (with the key; never logged). */
+  readonly spec: Record<string, unknown>;
+
+  private constructor(spec: Record<string, unknown>) {
+    this.spec = spec;
+  }
+
+  private static provider(kind: string, model: string, options: ModelOptions & { dimensions?: number } = {}): Embedder {
+    const apiKey = options.apiKey ?? (KEYS[kind] ? process.env[KEYS[kind]] : undefined);
+    return new Embedder({ kind, model, apiKey, baseUrl: options.baseUrl, dimensions: options.dimensions });
+  }
+
+  /** OpenAI's /embeddings (key from OPENAI_API_KEY). */
+  static openai(model = "text-embedding-3-small", options: { apiKey?: string; dimensions?: number } = {}): Embedder {
+    return Embedder.provider("openai", model, options);
+  }
+
+  /** Gemini's OpenAI-compatible /embeddings (GEMINI_API_KEY). */
+  static gemini(model = "text-embedding-004", options: { apiKey?: string } = {}): Embedder {
+    return Embedder.provider("gemini", model, options);
+  }
+
+  /** Ollama on this machine (or `baseUrl`): nothing leaves your network. */
+  static ollama(model = "nomic-embed-text", options: { baseUrl?: string } = {}): Embedder {
+    return Embedder.provider("ollama", model, options);
+  }
+
+  /** Any OpenAI-compatible /embeddings (vLLM, a gateway). */
+  static openaiCompatible(model: string, options: { baseUrl: string; apiKey?: string; dimensions?: number }): Embedder {
+    const embedder = Embedder.provider("openai_compatible", model, options);
+    embedder.spec.name = "custom";
+    return embedder;
+  }
+
+  /**
+   * For tests, never a network call: texts sharing words are close;
+   * `synonyms` makes different words count as the same (`{ car: "automobile" }`);
+   * `failing` makes every call fail (search then falls back to keywords).
+   */
+  static fake(options: { synonyms?: Record<string, string>; failing?: boolean } = {}): Embedder {
+    return new Embedder({ kind: "fake", synonyms: Object.entries(options.synonyms ?? {}), failing: options.failing ?? false });
+  }
+
+  toJSON(): Record<string, unknown> {
+    return { kind: this.spec.kind, model: this.spec.model };
+  }
+}

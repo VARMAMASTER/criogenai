@@ -120,3 +120,9 @@ class Memory:
     def shared(namespace: str, recall: int = 5, tools: bool = True) -> "Memory":
         """One namespace for every run."""
         return Memory({"shared": namespace, "recall": recall, "tools": tools})
+
+    def semantic(self, embedder: Any) -> "Memory":
+        """Searches by meaning with ``embedder`` (an ``Embedder``): recall and
+        ``search_memory`` find facts that say the same thing in other words.
+        If the embedder fails, search falls back to keywords."""
+        return Memory({**self._spec, "embedder": embedder._spec})

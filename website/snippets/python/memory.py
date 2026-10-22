@@ -20,3 +20,13 @@ async def main() -> None:
     facts = await storage.search("users/42", "allergy")
     await storage.forget_all("users/42")  # everything about one user
     # [/show]
+
+
+def semantic() -> None:
+    # [show semantic]
+    from agentbuild import Agent, Embedder, Memory
+
+    memory = Memory.by_state("patient", "patients").semantic(Embedder.openai("text-embedding-3-small"))
+    # Or keep everything on your own servers: Embedder.ollama("nomic-embed-text")
+    agent = Agent("openai:gpt-5-mini", memory=memory)
+    # [/show semantic]

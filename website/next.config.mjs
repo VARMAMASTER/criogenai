@@ -16,6 +16,9 @@ const nextConfig = {
   turbopack: { root: path.dirname(fileURLToPath(import.meta.url)) },
   // `next dev` would otherwise write an AGENTS.md here; the repository has its own.
   agentRules: false,
+  // `next dev` seen through an ngrok tunnel (scripts/tunnel.sh): allow its
+  // domains to load the dev server's scripts and live reload.
+  allowedDevOrigins: ["*.ngrok-free.app", "*.ngrok-free.dev", "*.ngrok.app", "*.ngrok.dev"],
 };
 
 export default nextConfig;

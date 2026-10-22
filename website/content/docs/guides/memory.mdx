@@ -25,13 +25,16 @@ the same storage.
 - **Deleting a person.** `forget_all("users/42")` / `forgetAll` /
   `delete_namespace` removes every fact under the namespace.
 
-Search is by keywords in Python and TypeScript.
-
-## By meaning (Rust)
+## By meaning
 
 With an embedding model, a question such as "Which antibiotics should I
 avoid?" finds a fact saying "Severe penicillin reaction", with no word in
 common. Vectors are stored (and encrypted) with the facts. If the embedding
-model fails, recall falls back to keywords.
+model fails, recall falls back to keywords. Without an embedder, search is
+by keywords.
 
-<Sample name="memory" region="semantic" only={["rust"]} />
+<Sample name="memory" region="semantic" />
+
+Facts the agent saves (`remember`) get their vector automatically. In
+Python and TypeScript, facts your app saves itself (`storage.remember`)
+are found by keywords only for now; Rust has `put_embedded` for them.

@@ -6,8 +6,8 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use agentbuild_core::{
-    BoxFuture, BuildError, END, Node, NodeContext, NodeError, NodeOutput, Reducer, RetryPolicy,
-    RunError, RunErrorKind, RunOptions, RunOutput, Snapshot, State, Update, Workflow,
+    BoxFuture, BuildError, END, EventObserver, Node, NodeContext, NodeError, NodeOutput, Reducer,
+    RetryPolicy, RunError, RunErrorKind, RunOptions, RunOutput, Snapshot, State, Update, Workflow,
     WorkflowBuilder,
 };
 use agentbuild_providers::{
@@ -302,6 +302,7 @@ pub struct AgentBuilder {
     app: Option<Arc<dyn std::any::Any + Send + Sync>>,
     storage: Option<Storage>,
     memory: Option<Memory>,
+    observers: Vec<Arc<dyn EventObserver>>,
 }
 
 impl std::fmt::Debug for AgentBuilder {
@@ -413,6 +414,19 @@ impl AgentBuilder {
     /// [`output`](Self::output) with a fixed strategy.
     pub fn output_with(mut self, schema: Value, strategy: OutputStrategy) -> Self {
         self.output = Some((schema, Some(strategy)));
+        self
+    }
+
+    /// Passes every event of every run of this agent to `observer` (e.g. a
+    /// telemetry exporter: `OtlpExporter::observer()`), through
+    /// [`Agent::run_options`]. Several observers may be added.
+    pub fn observe(self, observer: impl EventObserver) -> Self {
+        self.observe_shared(Arc::new(observer))
+    }
+
+    /// [`observe`](Self::observe) with a shared observer.
+    pub fn observe_shared(mut self, observer: Arc<dyn EventObserver>) -> Self {
+        self.observers.push(observer);
         self
     }
 
@@ -578,6 +592,7 @@ impl AgentBuilder {
             schemas,
             hooks,
             storage,
+            observers: self.observers.into(),
         })
     }
 }
@@ -597,6 +612,7 @@ pub struct Agent {
     schemas: HashMap<String, Value>,
     hooks: Arc<[Arc<dyn Hook>]>,
     storage: Storage,
+    observers: Arc<[Arc<dyn EventObserver>]>,
 }
 
 impl std::fmt::Debug for Agent {
@@ -701,6 +717,7 @@ impl Agent {
             app: None,
             storage: None,
             memory: None,
+            observers: Vec::new(),
         }
     }
 
@@ -733,7 +750,10 @@ impl Agent {
 
     /// Run options with the step limit derived from [`Limits`].
     pub fn run_options(&self) -> RunOptions {
-        RunOptions::default().max_steps(self.max_steps)
+        self.observers.iter().fold(
+            RunOptions::default().max_steps(self.max_steps),
+            |options, observer| options.observe_shared(observer.clone()),
+        )
     }
 
     /// Runs the agent on `input` (text, a message or a transcript).

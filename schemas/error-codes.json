@@ -58,6 +58,7 @@
     {"code": "tool_error", "layers": ["tool_result"], "category": "model_recoverable", "retryable": false, "family": null, "description": "The tool reported a failure meant for the model (ToolError)."},
 
     {"code": "invalid_agent", "layers": ["build"], "category": "developer", "retryable": false, "family": "validation", "description": "An SDK agent configuration the engine could not build."},
+    {"code": "invalid_workflow", "layers": ["build"], "category": "developer", "retryable": false, "family": "validation", "description": "An SDK workflow that does not validate (`details.issues` lists the problems)."},
     {"code": "invalid_api_key", "layers": ["gateway"], "category": "developer", "retryable": false, "family": null, "http_status": 401, "description": "The gateway needs a valid virtual key."},
     {"code": "model_not_found", "layers": ["gateway"], "category": "developer", "retryable": false, "family": null, "http_status": 404, "description": "No route by that name, or the key may not use it."}
   ]

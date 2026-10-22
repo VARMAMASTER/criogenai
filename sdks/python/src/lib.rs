@@ -23,12 +23,14 @@ use agentbuild_core::{
     node_with_context, router_fn,
 };
 use agentbuild_providers::{
-    Endpoint, FakeModel, FakeReply, Model, ModelErrorKind, ProviderModel, ToolAnnotations, ToolSpec,
+    Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, Model, ModelErrorKind,
+    ProviderEmbedder, ProviderModel, ToolAnnotations, ToolSpec,
 };
 use agentbuild_storage::{
     AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
     WorkflowThread,
 };
+use agentbuild_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyCFunction, PyDict, PyTuple};
@@ -288,6 +290,15 @@ fn model(spec: &Value) -> Result<Arc<dyn Model>, Failure> {
         return Ok(Arc::new(fake));
     }
     let name = text(spec, "model").ok_or_else(|| bad("a model needs a `model` name"))?;
+    ProviderModel::new(endpoint(spec)?, name)
+        .map(|m| Arc::new(m) as Arc<dyn Model>)
+        .map_err(|err| Failure::new("model_failed", err.to_string()))
+}
+
+/// The provider endpoint of a model or embedder spec (`kind`, `api_key`,
+/// `base_url`).
+fn endpoint(spec: &Value) -> Result<Endpoint, Failure> {
+    let kind = text(spec, "kind").ok_or_else(|| bad("a model needs a `kind`"))?;
     let key = text(spec, "api_key").map(str::to_string);
     let need_key = || {
         key.clone()
@@ -311,9 +322,33 @@ fn model(spec: &Value) -> Result<Arc<dyn Model>, Failure> {
     {
         endpoint = endpoint.with_base_url(base);
     }
-    ProviderModel::new(endpoint, name)
-        .map(|m| Arc::new(m) as Arc<dyn Model>)
-        .map_err(|err| Failure::new("model_failed", err.to_string()))
+    Ok(endpoint)
+}
+
+/// An embedder (design 0017 §3): a provider's `/embeddings`, or the fake
+/// one for tests (`{"kind": "fake", "synonyms": [[word, same_as]],
+/// "failing": bool}`).
+fn embedder(spec: &Value) -> Result<Arc<dyn Embedder>, Failure> {
+    if text(spec, "kind") == Some("fake") {
+        if spec["failing"].as_bool() == Some(true) {
+            return Ok(Arc::new(FakeEmbedder::failing()));
+        }
+        let mut fake = FakeEmbedder::new();
+        for pair in spec["synonyms"].as_array().cloned().unwrap_or_default() {
+            fake = fake.synonym(
+                pair[0].as_str().unwrap_or_default(),
+                pair[1].as_str().unwrap_or_default(),
+            );
+        }
+        return Ok(Arc::new(fake));
+    }
+    let name = text(spec, "model").ok_or_else(|| bad("an embedder needs a `model` name"))?;
+    let mut embedder = ProviderEmbedder::new(endpoint(spec)?, name)
+        .map_err(|err| Failure::new("model_failed", err.to_string()))?;
+    if let Some(n) = spec["dimensions"].as_u64() {
+        embedder = embedder.dimensions(n as u32);
+    }
+    Ok(Arc::new(embedder))
 }
 
 fn fake_reply(reply: &Value) -> Result<FakeReply, Failure> {
@@ -392,6 +427,9 @@ fn memory(spec: &Value) -> Result<Memory, Failure> {
     }
     if let Some(secs) = spec["ttl_secs"].as_f64() {
         memory = memory.ttl(Duration::from_secs_f64(secs));
+    }
+    if let Some(spec) = spec.get("embedder").filter(|e| e.is_object()) {
+        memory = memory.semantic_shared(embedder(spec)?);
     }
     Ok(memory)
 }
@@ -574,6 +612,96 @@ async fn call_tool(
 }
 
 // ---------- the agent ----------
+
+/// A telemetry exporter (design 0017 §4): OTLP over HTTP, or Langfuse.
+/// Agents built with it send every run to it.
+#[pyclass(frozen)]
+struct NativeTelemetry {
+    exporter: Arc<OtlpExporter>,
+}
+
+#[pymethods]
+impl NativeTelemetry {
+    /// `{"kind": "langfuse", public_key?, secret_key?, base_url?}` (missing
+    /// keys from the LANGFUSE_* variables) or `{"kind": "otlp", endpoint,
+    /// headers}`; both take `service_name` and `capture_content`.
+    #[new]
+    fn new(spec: &str) -> PyResult<Self> {
+        let spec: Value =
+            serde_json::from_str(spec).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let mut config = match text(&spec, "kind") {
+            Some("langfuse") => match (text(&spec, "public_key"), text(&spec, "secret_key")) {
+                (Some(public), Some(secret)) => Langfuse::config(
+                    public,
+                    secret,
+                    text(&spec, "base_url").unwrap_or(agentbuild_telemetry::DEFAULT_BASE_URL),
+                ),
+                _ => Langfuse::from_env().map_err(|err| py_failure(bad(err.to_string())))?,
+            },
+            Some("otlp") => {
+                let mut config = OtlpConfig::new(
+                    text(&spec, "endpoint")
+                        .ok_or_else(|| py_failure(bad("otlp needs an endpoint")))?,
+                );
+                for (name, value) in spec["headers"].as_object().cloned().unwrap_or_default() {
+                    config = config.header(name, value.as_str().unwrap_or_default());
+                }
+                config
+            }
+            _ => return Err(py_failure(bad("telemetry is \"langfuse\" or \"otlp\""))),
+        };
+        if let Some(name) = text(&spec, "service_name") {
+            config = config.service_name(name);
+        }
+        if let Some(capture) = spec["capture_content"].as_bool() {
+            config = config.capture_content(capture);
+        }
+        let _runtime = runtime().enter();
+        let exporter =
+            OtlpExporter::start(config).map_err(|err| py_failure(bad(err.to_string())))?;
+        Ok(Self {
+            exporter: Arc::new(exporter),
+        })
+    }
+
+    /// Waits until everything sent so far is exported.
+    fn flush<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let exporter = self.exporter.clone();
+        spawn(py, event_loop, None, async move {
+            exporter.flush().await;
+            Ok(Value::Null)
+        })
+    }
+
+    /// Exports what is left and stops.
+    fn shutdown<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let exporter = self.exporter.clone();
+        spawn(py, event_loop, None, async move {
+            exporter.shutdown().await;
+            Ok(Value::Null)
+        })
+    }
+
+    /// `{"exported", "failed", "dropped", "last_error"}`.
+    fn stats(&self) -> String {
+        let stats = self.exporter.stats();
+        json!({
+            "exported": stats.exported,
+            "failed": stats.failed,
+            "dropped": stats.dropped_events,
+            "last_error": self.exporter.last_error(),
+        })
+        .to_string()
+    }
+}
 
 /// Storage built from a Python configuration; agents built with it share
 /// it (threads, memory, leases, audit trail).
@@ -808,12 +936,13 @@ impl NativeAgent {
     /// the configuration's order; without `storage` it keeps threads in
     /// memory.
     #[new]
-    #[pyo3(signature = (config, tools, storage=None, agent_tools=Vec::new()))]
+    #[pyo3(signature = (config, tools, storage=None, agent_tools=Vec::new(), telemetry=None))]
     fn new(
         config: &str,
         tools: Vec<(Py<PyAny>, bool)>,
         storage: Option<&NativeStorage>,
         agent_tools: Vec<(String, String, Py<NativeAgent>)>,
+        telemetry: Option<&NativeTelemetry>,
     ) -> PyResult<Self> {
         let config: Value =
             serde_json::from_str(config).map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -844,6 +973,10 @@ impl NativeAgent {
             builder = builder.tool(tool_fn(tool_spec, move |args, ctx: ToolContext| {
                 call_tool(adapter.clone(), is_async, keep_cause, args, ctx)
             }));
+        }
+        // Every run of this agent goes to the exporter (design 0017 §4).
+        if let Some(telemetry) = telemetry {
+            builder = builder.observe(telemetry.exporter.observer());
         }
         // Agents as tools of this one (design 0017 §1).
         for (name, description, agent) in agent_tools {
@@ -1394,6 +1527,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NativeAgent>()?;
     m.add_class::<NativeStorage>()?;
     m.add_class::<NativeWorkflow>()?;
+    m.add_class::<NativeTelemetry>()?;
     m.add_class::<NativeStream>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())

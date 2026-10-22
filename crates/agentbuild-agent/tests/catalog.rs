@@ -171,7 +171,11 @@ fn codes_after(text: &str, prefix: &str, found: &mut BTreeMap<String, String>, o
         if before.ends_with("fn ") || (joined && !prefix.starts_with('.')) {
             continue;
         }
-        let window: String = text[at + prefix.len()..].chars().take(240).collect();
+        let rest = &text[at + prefix.len()..];
+        // Within the call's function: never past the next item.
+        let rest = &rest[..rest.find("
+fn ").unwrap_or(rest.len())];
+        let window: String = rest.chars().take(240).collect();
         // Complete literals only: the window may cut the last one.
         let pieces: Vec<&str> = window.split('"').collect();
         let complete = pieces.len().saturating_sub(1);

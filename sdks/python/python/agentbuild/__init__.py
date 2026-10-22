@@ -27,6 +27,7 @@ from .errors import (
 )
 from .models import (
     Anthropic,
+    Embedder,
     FakeModel,
     FakeReply,
     Gemini,
@@ -36,6 +37,7 @@ from .models import (
     OpenRouter,
 )
 from .storage import Memory, Storage
+from .telemetry import Telemetry
 from .tools import Tool, ToolContext, ToolError, tool
 from .workflow import (
     END,
@@ -51,10 +53,10 @@ from .workflow import (
 
 __all__ = [
     "END", "Agent", "AgentBuildError", "AgentTool", "Anthropic", "ApprovalRequest", "CancelledError",
-    "CompiledWorkflow", "Decision", "Event", "FakeModel", "FakeReply", "Gemini", "Interrupt",
+    "CompiledWorkflow", "Decision", "Embedder", "Event", "FakeModel", "FakeReply", "Gemini", "Interrupt",
     "LimitExceededError", "Memory", "ModelError", "NodeContext", "Ollama", "OpenAI",
     "OpenAICompatible", "OpenRouter", "Reply", "Retry", "RunResult", "StorageError", "Storage", "Stream",
-    "Thread", "ThreadBusyError", "ThreadSuspendedError", "Tool", "ToolContext", "ToolError",
+    "Telemetry", "Thread", "ThreadBusyError", "ThreadSuspendedError", "Tool", "ToolContext", "ToolError",
     "ToolExecutionError", "ValidationError", "Workflow", "WorkflowResult", "WorkflowThread",
     "__version__", "goto", "suspend", "tool",
 ]

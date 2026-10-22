@@ -174,6 +174,7 @@ class Agent:
         model_retry: Optional[Retry] = None,
         tool_retry: Optional[Retry] = None,
         max_retry_after: Optional[float] = None,
+        telemetry: Any = None,
     ):
         for t in tools:
             if not isinstance(t, (Tool, AgentTool)):
@@ -206,6 +207,7 @@ class Agent:
             [t.adapter() for t in functions],
             storage._native if storage is not None else None,
             [(t.name, t.description, t.agent._native) for t in agents],
+            telemetry._native if telemetry is not None else None,
         )
 
     async def run(self, input: str, **state: Any) -> RunResult:

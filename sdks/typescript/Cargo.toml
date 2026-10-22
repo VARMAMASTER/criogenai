@@ -16,6 +16,7 @@ agentbuild-core = { path = "../../crates/agentbuild-core" }
 agentbuild-providers = { path = "../../crates/agentbuild-providers" }
 agentbuild-storage = { path = "../../crates/agentbuild-storage", features = ["sqlite", "postgres", "encryption"] }
 agentbuild-agent = { path = "../../crates/agentbuild-agent", features = ["sqlite", "postgres", "encryption"] }
+agentbuild-telemetry = { path = "../../crates/agentbuild-telemetry" }
 napi = { version = "3", default-features = false, features = ["napi6", "tokio_rt", "serde-json"] }
 napi-derive = "3"
 serde = "1"

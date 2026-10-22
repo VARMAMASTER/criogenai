@@ -13,6 +13,8 @@ import pytest
 
 from agentbuild import (
     Agent,
+    Embedder,
+    Telemetry,
     AgentBuildError,
     CancelledError,
     Decision,
@@ -442,6 +444,69 @@ def test_memory_by_state_recalls_per_user():
     with pytest.raises(AgentBuildError) as caught:
         agent.run_sync("no user")
     assert caught.value.code == "invalid_state"
+
+
+def test_semantic_memory_finds_facts_by_meaning_and_falls_back_to_keywords():
+    storage = Storage()
+    memory = Memory.shared("facts").semantic(Embedder.fake(synonyms={"automobile": "car"}))
+    agent = Agent(
+        FakeModel(
+            [
+                FakeReply.tool_call("remember", {"key": "vehicle", "value": "The customer drives a red car"}),
+                "Noted.",
+                FakeReply.tool_call("search_memory", {"query": "automobile"}),
+                "Found it.",
+            ]
+        ),
+        storage=storage,
+        memory=memory,
+    )
+    assert agent.run_sync("Remember my car").text == "Noted."
+    found = agent.run_sync("Which automobile do I have?")
+    assert "red car" in str(tool_results(found)[0]["content"])  # no shared word: found by meaning
+
+    broken = Agent(
+        FakeModel([FakeReply.tool_call("search_memory", {"query": "red"}), "ok"]),
+        storage=storage,
+        memory=Memory.shared("facts").semantic(Embedder.fake(failing=True)),
+    )
+    assert "red car" in str(tool_results(broken.run_sync("search"))[0]["content"])
+
+
+def test_telemetry_exports_runs_without_their_content():
+    import http.server
+    import threading
+
+    received = []
+
+    class Collector(http.server.BaseHTTPRequestHandler):
+        def do_POST(self):
+            received.append(self.rfile.read(int(self.headers["Content-Length"])).decode())
+            self.send_response(200)
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = http.server.HTTPServer(("127.0.0.1", 0), Collector)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        telemetry = Telemetry.otlp(f"http://127.0.0.1:{server.server_port}/v1/traces", service_name="test")
+        agent = Agent(FakeModel(["fine"]), telemetry=telemetry)
+
+        async def scenario():
+            await agent.run("a private question")
+            await telemetry.flush()
+
+        run(scenario())
+        assert received, "nothing exported"
+        body = "".join(received)
+        assert "resourceSpans" in body
+        assert "a private question" not in body  # content is left out by default
+        assert telemetry.stats()["exported"] > 0
+        run(telemetry.shutdown())
+    finally:
+        server.shutdown()
 
 
 def test_limits_errors_and_the_sync_wrappers():

@@ -46,6 +46,7 @@ dependencies = [
  "agentbuild-core",
  "agentbuild-providers",
  "agentbuild-storage",
+ "agentbuild-telemetry",
  "pyo3",
  "serde",
  "serde_json",
@@ -66,6 +67,17 @@ dependencies = [
  "thiserror",
  "tokio",
  "uuid",
+]
+
+[[package]]
+name = "agentbuild-telemetry"
+version = "0.1.0"
+dependencies = [
+ "agentbuild-core",
+ "reqwest",
+ "serde_json",
+ "thiserror",
+ "tokio",
 ]
 
 [[package]]

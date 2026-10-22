@@ -4,10 +4,6 @@ description: Every run as a trace, with model calls as generations; content capt
 ---
 
 
-<Aside type="note" title="Rust today">
-Tracing is in the Rust API (`agentbuild-telemetry`); the SDKs get it next.
-</Aside>
-
 Every run becomes a trace: workflow nodes are spans, model calls are
 *generations* (model, input, output, tokens), tool calls are tool
 observations, failures are marked as errors. Export goes over OTLP/HTTP to
@@ -17,6 +13,9 @@ Langfuse or any OpenTelemetry collector.
 
 - **Never slows or breaks a run**: the observer only queues events; a
   background task batches and sends them, and retries on transient errors.
-- **Sensitive data**: `capture_content(false)` sends structure and timing
-  only, no prompts or answers; a `mask` function can redact instead.
+- **Sensitive data**: in Python and TypeScript, prompts, answers and tool
+  data stay out of traces unless you set `capture_content=True` /
+  `captureContent: true`; structure, timing, usage and status always go.
+  In Rust content capture is on by default (`capture_content(false)` turns
+  it off), and a `mask` function can redact instead.
 - **Metadata** (`user_id`, `session_id`, any JSON) is attached to the trace.

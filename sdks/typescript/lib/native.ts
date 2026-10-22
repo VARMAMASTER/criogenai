@@ -24,6 +24,13 @@ export interface NativeAgent {
   stream(op: string, payload: string): NativeStream;
 }
 
+export interface NativeTelemetry {
+  readonly handle: number;
+  flush(): Promise<void>;
+  shutdown(): Promise<void>;
+  stats(): string;
+}
+
 export interface NativeWorkflow {
   run(payload: string, cancelId: number): Promise<string>;
   resume(payload: string, cancelId: number): Promise<string>;
@@ -33,6 +40,7 @@ export interface NativeWorkflow {
 interface Addon {
   NativeStorage: new (spec: string) => NativeStorage;
   NativeAgent: new (config: string, tools: NativeTool[], storage: NativeStorage) => NativeAgent;
+  NativeTelemetry: new (spec: string) => NativeTelemetry;
   NativeWorkflow: new (config: string, nodes: NativeTool[], routers: NativeTool[], storage: NativeStorage) => NativeWorkflow;
   newCancelId(): number;
   cancelCall(id: number): void;

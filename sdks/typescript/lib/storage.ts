@@ -114,4 +114,13 @@ export class Memory {
   static shared(namespace: string, options: MemoryOptions = {}): Memory {
     return new Memory({ shared: namespace, ...options });
   }
+
+  /**
+   * Searches by meaning with `embedder`: recall and `search_memory` find facts
+   * that say the same thing in other words. If the embedder fails, search
+   * falls back to keywords.
+   */
+  semantic(embedder: { readonly spec: Record<string, unknown> }): Memory {
+    return new Memory({ ...this.spec, embedder: embedder.spec });
+  }
 }

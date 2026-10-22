@@ -1,5 +1,5 @@
 // [show]
-import { Agent, Memory, Storage } from "@agentbuild/sdk";
+import { Agent, Embedder, Memory, Storage } from "@agentbuild/sdk";
 
 const storage = new Storage("sqlite:///agent.db");
 const agent = new Agent({
@@ -19,3 +19,9 @@ await storage.remember("users/42", "allergy", "peanuts");
 const facts = await storage.search("users/42", "allergy");
 await storage.forgetAll("users/42"); // everything about one user
 // [/show]
+
+// [show semantic]
+const meaning = Memory.byState("patient", "patients").semantic(Embedder.openai("text-embedding-3-small"));
+// Or keep everything on your own servers: Embedder.ollama("nomic-embed-text")
+const clinician = new Agent({ model: "openai:gpt-5-mini", memory: meaning });
+// [/show semantic]

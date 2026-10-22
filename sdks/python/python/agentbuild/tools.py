@@ -12,8 +12,8 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 
 class ToolError(Exception):
-    """A failure the model should see (and may recover from), unlike a
-    crash, which fails the run with ``tool_failed``."""
+    """A failure the model should see (and may recover from). Any other
+    exception counts as the tool crashing: see ``Agent(on_tool_exception=…)``."""
 
     def __init__(self, message: str, retryable: bool = False):
         super().__init__(message)

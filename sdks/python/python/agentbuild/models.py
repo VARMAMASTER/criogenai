@@ -160,3 +160,57 @@ def model_spec(model: Any) -> Dict[str, Any]:
     if not hasattr(model, "spec"):
         raise TypeError(f"not a model: {model!r}")
     return model.spec()
+
+
+class Embedder:
+    """Turns text into vectors, for long-term memory searched by meaning
+    (``Memory.semantic``, design 0017 §3). Built from the same providers as
+    models; keys come from the same environment variables."""
+
+    def __init__(self, spec: Dict[str, Any]):
+        self._spec = spec
+
+    @staticmethod
+    def _provider(kind: str, model: str, api_key: Optional[str], base_url: Optional[str], dimensions: Optional[int]) -> "Embedder":
+        spec: Dict[str, Any] = {"kind": kind, "model": model}
+        key = api_key if api_key is not None else _env_key(kind)
+        if key:
+            spec["api_key"] = key
+        if base_url:
+            spec["base_url"] = base_url
+        if dimensions is not None:
+            spec["dimensions"] = dimensions
+        return Embedder(spec)
+
+    @staticmethod
+    def openai(model: str = "text-embedding-3-small", api_key: Optional[str] = None, dimensions: Optional[int] = None) -> "Embedder":
+        """OpenAI's ``/embeddings`` (key from ``OPENAI_API_KEY``)."""
+        return Embedder._provider("openai", model, api_key, None, dimensions)
+
+    @staticmethod
+    def gemini(model: str = "text-embedding-004", api_key: Optional[str] = None) -> "Embedder":
+        """Gemini's OpenAI-compatible ``/embeddings`` (``GEMINI_API_KEY``)."""
+        return Embedder._provider("gemini", model, api_key, None, None)
+
+    @staticmethod
+    def ollama(model: str = "nomic-embed-text", base_url: Optional[str] = None) -> "Embedder":
+        """Ollama on this machine (or ``base_url``): nothing leaves your network."""
+        return Embedder._provider("ollama", model, None, base_url, None)
+
+    @staticmethod
+    def openai_compatible(model: str, base_url: str, api_key: Optional[str] = None, dimensions: Optional[int] = None) -> "Embedder":
+        """Any OpenAI-compatible ``/embeddings`` (vLLM, a gateway)."""
+        spec = Embedder._provider("openai_compatible", model, api_key, base_url, dimensions)._spec
+        spec["name"] = "custom"
+        return Embedder(spec)
+
+    @staticmethod
+    def fake(synonyms: Optional[Dict[str, str]] = None, failing: bool = False) -> "Embedder":
+        """For tests, never a network call: texts sharing words are close;
+        ``synonyms`` makes different words count as the same (``{"car":
+        "automobile"}``); ``failing`` makes every call fail (search then
+        falls back to keywords)."""
+        return Embedder({"kind": "fake", "synonyms": [[k, v] for k, v in (synonyms or {}).items()], "failing": failing})
+
+    def __repr__(self) -> str:  # never shows the key
+        return f"Embedder({self._spec.get('kind')!r}, {self._spec.get('model')!r})"

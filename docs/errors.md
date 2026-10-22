@@ -90,6 +90,7 @@ Generated from [`schemas/error-codes.json`](../schemas/error-codes.json) (design
 | Code | Category | Retryable | SDK class | HTTP | Meaning |
 |---|---|---|---|---|---|
 | `invalid_agent` | developer | no | `ValidationError` | - | An SDK agent configuration the engine could not build. |
+| `invalid_workflow` | developer | no | `ValidationError` | - | An SDK workflow that does not validate (`details.issues` lists the problems). |
 
 ## Gateway errors (`error.code` in the HTTP body)
 
