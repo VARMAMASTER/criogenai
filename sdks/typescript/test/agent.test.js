@@ -339,6 +339,53 @@ test("the engine validates arguments before the tool runs", async () => {
   assert.match(JSON.stringify(toolResults(result)[0].content), /Invalid arguments/);
 });
 
+test("tool input from Zod: the model sees its JSON Schema and its issues; the tool gets its output", async () => {
+  const { z } = require("zod");
+  const seen = [];
+  const order = tool({
+    name: "order",
+    description: "Orders an item.",
+    input: z
+      .object({ sku: z.string().regex(/^SKU-\d+$/), qty: z.number().int().min(1).default(1) })
+      .refine((o) => o.qty <= 5, { message: "at most 5 per order", path: ["qty"] }),
+    run: (args) => {
+      seen.push(args);
+      return "ordered";
+    },
+  });
+  // The model is offered the JSON Schema Zod makes.
+  assert.deepEqual(order.jsonSchema.required, ["sku"]);
+  assert.equal(order.jsonSchema.properties.sku.pattern, "^SKU-\\d+$");
+  assert.equal(order.jsonSchema.$schema, undefined);
+
+  const model = new FakeModel([
+    FakeReply.toolCall("order", { sku: "SKU-1", qty: 9 }), // passes JSON Schema, fails the refinement
+    FakeReply.toolCall("order", { sku: "SKU-1" }),
+    "Ordered one.",
+  ]);
+  const result = await new Agent({ model, tools: [order] }).run("order SKU-1");
+  assert.equal(result.text, "Ordered one.");
+  const [rejected, accepted] = toolResults(result);
+  assert.equal(rejected.error.code, "invalid_arguments");
+  assert.match(rejected.error.message, /qty: at most 5 per order/);
+  assert.equal(accepted.status, "success");
+  assert.deepEqual(seen, [{ sku: "SKU-1", qty: 1 }]); // the default, applied by Zod
+
+  // The engine still checks the JSON Schema first (the pattern).
+  const bad = await new Agent({
+    model: new FakeModel([FakeReply.toolCall("order", { sku: "nope" }), "ok"]),
+    tools: [order],
+  }).run("x");
+  assert.match(toolResults(bad)[0].error.message, /sku/);
+  assert.equal(seen.length, 1);
+
+  // A Standard Schema without a JSON Schema needs one given.
+  const bare = { "~standard": { version: 1, vendor: "bare", validate: (value) => ({ value }) } };
+  assert.throws(() => tool({ name: "bare", description: "", input: bare, run: () => null }), /jsonSchema/);
+  const given = tool({ name: "bare", description: "", input: bare, jsonSchema: { type: "object" }, run: () => null });
+  assert.deepEqual(given.spec().input, { type: "object" });
+});
+
 test("typed output with a JSON Schema", async () => {
   const output = {
     type: "object",

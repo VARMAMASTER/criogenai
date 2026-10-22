@@ -24,7 +24,10 @@ echo "packed $(basename "$tarball")"
 mkdir "$work/consumer"
 cd "$work/consumer"
 npm init -y >/dev/null
-npm install --silent --no-audit --no-fund "$tarball"
+# Zod as a user would install it next to the SDK (the Standard Schema test);
+# the version the SDK's devDependencies pin.
+zod="zod@$(cd "$sdk" && node -p 'require("./package.json").devDependencies.zod')"
+npm install --silent --no-audit --no-fund "$tarball" "$zod"
 cp "$sdk/examples/consumer.mjs" .
 node consumer.mjs
 cp -r "$sdk/test" ./test

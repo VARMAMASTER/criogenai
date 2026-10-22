@@ -73,3 +73,19 @@ const guard: Hook = {
 };
 const guarded = new Agent({ model: "openai:gpt-5-mini", tools: [issueRefund], hooks: [guard] });
 // [/show hooks]
+
+// [show zod]
+import { z } from "zod";
+
+const refund = tool({
+  name: "issue_refund",
+  description: "Refund an order.",
+  // The model sees the JSON Schema Zod makes; the engine checks it, then
+  // Zod checks the rest (the refinement) and its issues go back to the model.
+  input: z
+    .object({ orderId: z.string(), amount: z.number().positive(), reason: z.string().default("customer request") })
+    .refine((r) => r.amount <= 500, { message: "over 500 needs a manager", path: ["amount"] }),
+  // args is { orderId: string; amount: number; reason: string }, with the default applied.
+  run: async ({ orderId, amount, reason }) => ({ refunded: amount, orderId, reason }),
+});
+// [/show zod]

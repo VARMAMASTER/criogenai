@@ -400,7 +400,8 @@ fn limits(spec: &Value) -> napi::Result<Limits> {
 // ---------- tools ----------
 
 /// Calls a JavaScript tool and reads its envelope: `{"ok": value}`,
-/// `{"toolError", "retryable"}` (the model sees it) or `{"crash"}` (an
+/// `{"toolError", "retryable"}` (the model sees it), `{"invalidArguments"}`
+/// (a Standard Schema's issues, design 0017 §6) or `{"crash"}` (an
 /// exception the tool did not handle: `onToolException` decides; when the
 /// run fails on it, the TypeScript side keeps the exception as its cause).
 async fn call_tool(
@@ -420,6 +421,9 @@ async fn call_tool(
         .map_err(|err| ToolError::fatal(format!("unreadable tool answer: {err}")))?;
     if let Some(crash) = envelope.get("crash").and_then(Value::as_str) {
         return Err(ToolError::crashed(crash));
+    }
+    if let Some(problems) = envelope.get("invalidArguments").and_then(Value::as_str) {
+        return Err(ToolError::invalid_arguments(problems));
     }
     if let Some(message) = envelope.get("toolError").and_then(Value::as_str) {
         let error = ToolError::new(message);

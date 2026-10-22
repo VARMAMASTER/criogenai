@@ -89,6 +89,16 @@ First release, planned as 0.1.0 (Rust crates only).
   (the exception is its cause); in a tool hook it is the tool's crash.
 - Rust: `HookContext::metadata` and `ToolNext::context` (hooks see the
   run's metadata).
+
+### TypeScript tool input from Zod and Standard Schema (design 0017 §6)
+
+- `tool({ input })` takes a Zod 4 schema or any Standard Schema v1
+  (ArkType, Valibot with an explicit `jsonSchema`). The engine checks the
+  JSON Schema the library makes; the library's issues (refinements) go
+  back to the model as `invalid_arguments`; `run` gets the library's
+  output, typed.
+- Rust: `ToolError::invalid_arguments` lets any tool reject its arguments
+  the way the schema check does.
 ### Sub-agents, retries and fallbacks in the SDKs (design 0017 §1–2)
 
 - `agent.as_tool(name, description)` / `agent.asTool(...)`: an agent as a

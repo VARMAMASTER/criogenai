@@ -26,6 +26,17 @@ In Rust, typed output is a JSON Schema:
   problems. Models with a JSON mode answer in it; others call a reserved
   `final_output` tool.
 
+In TypeScript, a tool's `input` can also be a Zod schema, or any
+[Standard Schema](https://standardschema.dev) (ArkType, Valibot). The
+engine checks the JSON Schema the library makes; then the library checks
+what JSON Schema cannot say (refinements), and its issues go back to the
+model as invalid arguments. `run` receives the library's output, with
+defaults and transforms applied, and its type is inferred. Valibot cannot
+make a JSON Schema itself: pass `jsonSchema: toJsonSchema(schema)` (from
+`@valibot/to-json-schema`).
+
+<Sample name="agents" region="zod" only={["typescript"]} />
+
 ## The result
 
 | Field (Python / TypeScript) | Rust | Meaning |

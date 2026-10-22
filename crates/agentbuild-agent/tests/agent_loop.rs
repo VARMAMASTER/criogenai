@@ -141,6 +141,41 @@ async fn parallel_calls_run_concurrently_and_results_keep_call_order() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_tool_can_reject_its_arguments_like_the_schema_does() {
+    let fake = Arc::new(
+        model(0)
+            .then(FakeReply::tool_call("book", json!({"day": "Sunday"})))
+            .then(FakeReply::text("Let me pick a weekday.")),
+    );
+    let book = tool_fn(
+        ToolSpec::new(
+            "book",
+            "Books a day.",
+            json!({"type": "object", "properties": {"day": {"type": "string"}}}),
+        ),
+        |args, _| async move {
+            if args["day"] == "Sunday" {
+                return Err(ToolError::invalid_arguments("day: closed on Sundays"));
+            }
+            Ok(json!("booked"))
+        },
+    );
+    let agent = Agent::builder_shared(fake.clone())
+        .tool(book)
+        .build()
+        .unwrap();
+    let result = agent.run("x").await.unwrap();
+    let error = result
+        .messages
+        .iter()
+        .find_map(|m| m.error.as_ref())
+        .unwrap();
+    assert_eq!(error.code, "invalid_arguments");
+    assert_eq!(error.message, "Invalid arguments: day: closed on Sundays");
+    assert_eq!(result.text(), Some("Let me pick a weekday."));
+}
+
+#[tokio::test(start_paused = true)]
 async fn unknown_tools_and_bad_arguments_go_back_to_the_model() {
     let fake = Arc::new(
         model(0)

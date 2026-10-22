@@ -342,6 +342,7 @@ async fn agent_with_tools() {
         .then(FakeReply::tool_calls([
             ("double", json!({"n": 21})),
             ("double", json!({"n": "x"})),
+            ("double", json!({"n": -1})),
         ]))
         .then(FakeReply::text("21 doubled is 42"));
     let double = tool_fn(
@@ -350,19 +351,28 @@ async fn agent_with_tools() {
             "Double a number",
             json!({"type": "object", "properties": {"n": {"type": "integer"}}, "required": ["n"]}),
         ),
-        |args, _ctx| async move { Ok::<_, ToolError>(json!(args["n"].as_i64().unwrap_or(0) * 2)) },
+        |args, _ctx| async move {
+            let n = args["n"].as_i64().unwrap_or(0);
+            if n < 0 {
+                // The tool's own check: the model sees `invalid_arguments`.
+                return Err(ToolError::invalid_arguments("n: must not be negative"));
+            }
+            Ok(json!(n * 2))
+        },
     );
     let agent = Agent::builder(model).tool(double).build().expect("valid agent");
     let result = agent.run("double 21").await.expect("agent run");
     assert_eq!(result.text(), Some("21 doubled is 42"));
-    assert_eq!((result.model_calls, result.tool_calls), (2, 1));
+    assert_eq!((result.model_calls, result.tool_calls), (2, 2));
     let statuses: Vec<Option<ToolStatus>> = result
         .messages
         .iter()
         .filter(|m| m.role == agentbuild_providers::Role::Tool)
         .map(|m| m.status)
         .collect();
-    assert_eq!(statuses, [Some(ToolStatus::Success), Some(ToolStatus::Error)]);
+    assert_eq!(statuses, [Some(ToolStatus::Success), Some(ToolStatus::Error), Some(ToolStatus::Error)]);
+    let codes: Vec<&str> = result.messages.iter().filter_map(|m| m.error.as_ref()).map(|e| e.code.as_str()).collect();
+    assert_eq!(codes, ["invalid_arguments", "invalid_arguments"]);
     println!("  agent loop with tools and argument validation: ok");
 }
 

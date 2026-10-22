@@ -35,6 +35,6 @@ export { Telemetry } from "./telemetry";
 export type { TelemetryOptions } from "./telemetry";
 export type { MemoryOptions, RetentionOptions, StorageOptions } from "./storage";
 export { Tool, ToolError, tool } from "./tools";
-export type { JsonSchema, ToolContext, ToolDefinition } from "./tools";
+export type { JsonSchema, StandardIssue, StandardResult, StandardSchema, ToolContext, ToolDefinition } from "./tools";
 export { CompiledWorkflow, END, Workflow, WorkflowThread, goto, suspend } from "./workflow";
 export type { Goto, Interrupt, NodeContext, NodeFunction, Router, Suspend, WorkflowResult, WorkflowRunOptions } from "./workflow";

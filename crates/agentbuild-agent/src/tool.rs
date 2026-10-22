@@ -256,6 +256,9 @@ pub struct ToolError {
     /// `true`: the tool did not handle this failure (an exception or a
     /// panic); `on_tool_exception` decides what happens.
     pub crashed: bool,
+    /// `true`: the arguments were wrong; the model sees an
+    /// `invalid_arguments` error, as for arguments that fail the schema.
+    pub invalid_arguments: bool,
 }
 
 impl ToolError {
@@ -266,6 +269,17 @@ impl ToolError {
             fatal: false,
             retryable: false,
             crashed: false,
+            invalid_arguments: false,
+        }
+    }
+
+    /// Arguments the tool's own checks reject (e.g. a rule the JSON Schema
+    /// cannot express): the model sees `invalid_arguments` with `problems`
+    /// and may correct the call.
+    pub fn invalid_arguments(problems: impl Into<String>) -> Self {
+        Self {
+            invalid_arguments: true,
+            ..Self::new(problems)
         }
     }
 
@@ -274,8 +288,7 @@ impl ToolError {
         Self {
             message: message.into(),
             fatal: true,
-            retryable: false,
-            crashed: false,
+            ..Self::new("")
         }
     }
 
@@ -284,9 +297,8 @@ impl ToolError {
     pub fn crashed(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
-            fatal: false,
-            retryable: false,
             crashed: true,
+            ..Self::new("")
         }
     }
 

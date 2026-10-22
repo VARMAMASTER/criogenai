@@ -8,7 +8,10 @@
     "skipLibCheck": true,
     "types": ["node"],
     "typeRoots": ["../../../sdks/typescript/node_modules/@types"],
-    "paths": { "@agentbuild/sdk": ["../../../sdks/typescript/dist/index.d.ts"] }
+    "paths": {
+      "@agentbuild/sdk": ["../../../sdks/typescript/dist/index.d.ts"],
+      "zod": ["../../../sdks/typescript/node_modules/zod/index.d.ts"]
+    }
   },
   "include": ["*.ts"]
 }

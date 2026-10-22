@@ -106,7 +106,9 @@ schema object); without one, `tool` throws asking for an explicit
 `jsonSchema`. The engine validates arguments with that JSON Schema (rule 3);
 the library's own `~standard.validate` then runs too, for what JSON Schema
 cannot say (refinements, transforms), and its issues go back to the model
-as an `invalid_arguments` error; the tool receives the library's output
+as an `invalid_arguments` error (Rust: `ToolError::invalid_arguments`,
+which any tool may return; the `$schema` key is dropped from what the
+model sees); the tool receives the library's output
 (e.g. transformed values). Types: `tool<z.infer<typeof schema>>` is
 inferred.
 

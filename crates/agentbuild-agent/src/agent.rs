@@ -2284,6 +2284,15 @@ async fn tools_step(
                         None,
                     ),
                 },
+                Ok(Err(error)) if error.invalid_arguments => (
+                    error_result(
+                        &call.call_id,
+                        &call.name,
+                        "invalid_arguments",
+                        format!("Invalid arguments: {}", error.message),
+                    ),
+                    None,
+                ),
                 Ok(Err(error)) => {
                     let mut message =
                         error_result(&call.call_id, &call.name, "tool_error", error.message);
