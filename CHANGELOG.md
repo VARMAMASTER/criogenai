@@ -100,6 +100,17 @@ First release, planned as 0.1.0 (Rust crates only).
 - Rust: `ToolError::invalid_arguments` lets any tool reject its arguments
   the way the schema check does.
 
+### The gateway: Anthropic clients, rate limits, budgets (design 0006 §13)
+
+- `POST /v1/messages`: the Anthropic Messages API (streaming with
+  Anthropic's events, tools and tool results, images, `system`), in
+  front of any upstream; keys may come as `x-api-key`; errors in
+  Anthropic's shape.
+- Per-key `requests_per_minute`, `tokens_per_minute` and `budget`
+  (tokens per UTC day, month or in total), in memory: 429 with
+  `Retry-After`, codes `key_rate_limited` and `budget_exceeded`;
+  `GatewayBuilder::key_limits`, `KeyLimits`, `Gateway::spent`.
+
 ### Calling a model directly (design 0018)
 
 - Python and TypeScript `Gateway`: `chat` (text or messages, instructions,

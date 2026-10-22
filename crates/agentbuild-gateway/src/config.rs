@@ -7,7 +7,7 @@ use std::sync::Arc;
 use agentbuild_providers::{Endpoint, Model, ProviderModel};
 use serde::Deserialize;
 
-use crate::{Gateway, GatewayBuilder, GatewayError};
+use crate::{BudgetPeriod, Gateway, GatewayBuilder, GatewayError, KeyLimits};
 
 /// A config file that could not be used.
 #[derive(Debug, thiserror::Error)]
@@ -79,6 +79,26 @@ pub struct KeyConfig {
     pub key_env: String,
     /// Routes it may use.
     pub routes: Vec<String>,
+    /// Requests per minute (design 0006 §13.2).
+    #[serde(default)]
+    pub requests_per_minute: Option<u32>,
+    /// Input plus output tokens per minute.
+    #[serde(default)]
+    pub tokens_per_minute: Option<u64>,
+    /// A token budget (design 0006 §13.3).
+    #[serde(default)]
+    pub budget: Option<BudgetConfig>,
+}
+
+/// `budget = { tokens = 5000000, period = "month" }`.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+#[non_exhaustive]
+pub struct BudgetConfig {
+    /// Input plus output tokens per period.
+    pub tokens: u64,
+    /// `"day"`, `"month"` (UTC calendar) or `"total"`.
+    pub period: String,
 }
 
 impl Config {
@@ -154,7 +174,25 @@ impl Config {
             builder = builder.route_with_fallbacks(route.name, models);
         }
         for key in self.keys {
-            builder = builder.key(key.name, var(&key.key_env)?, key.routes);
+            let mut limits = KeyLimits::new();
+            if let Some(n) = key.requests_per_minute {
+                limits = limits.requests_per_minute(n);
+            }
+            if let Some(n) = key.tokens_per_minute {
+                limits = limits.tokens_per_minute(n);
+            }
+            if let Some(budget) = &key.budget {
+                let period = BudgetPeriod::parse(&budget.period).ok_or_else(|| {
+                    GatewayError::Config(format!(
+                        "key `{}`: budget period `{}` is not day, month or total",
+                        key.name, budget.period
+                    ))
+                })?;
+                limits = limits.budget(budget.tokens, period);
+            }
+            builder = builder
+                .key(&key.name, var(&key.key_env)?, key.routes)
+                .key_limits(key.name, limits);
         }
         Ok(builder)
     }
@@ -192,6 +230,9 @@ mod tests {
         name = "team-a"
         key_env = "TEST_KEY_A"
         routes = ["support"]
+        requests_per_minute = 60
+        tokens_per_minute = 100000
+        budget = { tokens = 5000000, period = "month" }
     "#;
 
     fn env(name: &str) -> Option<String> {
@@ -210,6 +251,7 @@ mod tests {
             .unwrap();
         assert!(gateway.has_keys());
         assert_eq!(gateway.inner.routes["support"].len(), 2);
+        assert_eq!(gateway.spent("team-a"), Some(0));
         // The Debug output names routes, never keys.
         let shown = format!("{gateway:?}");
         assert!(

@@ -99,3 +99,5 @@ Generated from [`schemas/error-codes.json`](../schemas/error-codes.json) (design
 | `invalid_request` | provider_fatal | no | - | 400 | The provider (or the gateway) rejected the request as malformed. |
 | `invalid_api_key` | developer | no | - | 401 | The gateway needs a valid virtual key. |
 | `model_not_found` | developer | no | - | 404 | No route by that name, or the key may not use it. |
+| `key_rate_limited` | transient | yes | - | 429 | The key's requests or tokens per minute are used up; Retry-After says when to try again. |
+| `budget_exceeded` | policy | no | - | 429 | The key's token budget is spent for the current day or month (Retry-After: until it ends), or in total. |

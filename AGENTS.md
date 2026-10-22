@@ -146,8 +146,11 @@ write our own implementation.
   (stream and not; OpenAI wire format in and out, any upstream protocol),
   `GET /v1/models`, `GET /health`; the upstream call is aborted when the
   client goes away. Checked live with the official `openai` Python SDK
-  against OpenAI and Gemini upstreams. Not yet: relay fast path,
-  `/v1/messages`, budgets, rate limits.
+  against OpenAI and Gemini upstreams. Second slice (0006 §13):
+  `POST /v1/messages` (Anthropic wire format, streaming), per-key rate
+  limits and token budgets in memory (`KeyLimits`, `Gateway::spent`);
+  checked by hand with the official `anthropic` Python SDK.
+  Not yet: relay fast path, shared counters, budgets in money.
 - **Implemented: error catalog and JSON Schemas (0013).**
   `schemas/error-codes.json` (every stable code: layers, category,
   retryable, SDK family, gateway HTTP status) and

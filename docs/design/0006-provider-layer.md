@@ -452,3 +452,97 @@ and call it with AgentBuild's own OpenAI-compatible client
 HTTP for the wire details (SSE framing, `[DONE]`, error bodies, keys).
 A manual check runs the official `openai` Python SDK against the gateway
 with real OpenAI and Gemini upstreams.
+
+## 13. The gateway, second slice: `/v1/messages`, rate limits, budgets
+
+Roadmap task 18. §12 stays as built; this adds an Anthropic-format
+endpoint and per-key limits. The relay fast path (§7) gets its own slice:
+it bypasses the provider layer, and its only reason is latency, which §7
+says must be measured against the LiteLLM proxy before it is claimed.
+
+### 13.1 `POST /v1/messages` (Anthropic wire format)
+
+Clients written for the Anthropic Messages API (the official SDKs, Claude
+tooling) use the gateway unchanged; the upstream can be any provider, as
+with `/v1/chat/completions`. The key may also come as `x-api-key`.
+
+- **Request.** `model` (the route), `max_tokens` (required, as Anthropic
+  requires it), `system` (text or text blocks), `messages` (`user` /
+  `assistant`; content as text or blocks: `text`, `image` with a base64 or
+  URL source, `tool_use`, `tool_result` with text or blocks and
+  `is_error`), `tools` (`name`, `description`, `input_schema`),
+  `tool_choice` (`auto`, `any`, `tool` with `name`, `none`),
+  `temperature`, `stop_sequences`, `stream`. Other fields (`metadata`,
+  `top_k`, `thinking`, …) are ignored, as an OpenAI-compatible upstream
+  could not honour them.
+- **Response.** `{"id": "msg_…", "type": "message", "role": "assistant",
+  "model": <route>, "content": [text and tool_use blocks], "stop_reason":
+  "end_turn" | "max_tokens" | "stop_sequence" | "tool_use",
+  "stop_sequence": null, "usage": {"input_tokens", "output_tokens"}}`.
+- **Streaming.** Server-sent events with event names, in Anthropic's
+  order: `message_start`, then per block `content_block_start`,
+  `content_block_delta` (`text_delta` or `input_json_delta`),
+  `content_block_stop`, then `message_delta` (stop reason, output tokens)
+  and `message_stop`. A failure after the stream started is an `error`
+  event. Fallback works as in §12.4 (before the first byte only).
+- **Errors** use Anthropic's shape, `{"type": "error", "error": {"type",
+  "message"}}`, with the same HTTP statuses as §12.5; `type` follows the
+  status (`invalid_request_error` 400, `authentication_error` 401,
+  `not_found_error` 404, `rate_limit_error` 429, `overloaded_error` 503,
+  `api_error` otherwise).
+
+### 13.2 Rate limits (per key)
+
+```toml
+[[keys]]
+name = "team-a"
+key_env = "GATEWAY_KEY_TEAM_A"
+routes = ["support"]
+requests_per_minute = 60
+tokens_per_minute = 100000
+```
+
+Token buckets that refill continuously (a full minute's allowance at
+most). A request needs one request token and a non-negative token
+balance; its tokens (input + output) are charged when the answer is
+complete, so one request may take the balance below zero and the next
+ones wait. Refused: 429, code `key_rate_limited`, with `Retry-After` (whole
+seconds until a request would pass). OpenAI and Anthropic SDKs honour it.
+
+### 13.3 Budgets (per key)
+
+```toml
+budget = { tokens = 5000000, period = "month" }   # "day", "month" or "total"
+```
+
+Input plus output tokens per UTC calendar day or month, or in total.
+Checked before a request, charged after it (a request in flight may go
+past the budget; the next one is refused). Refused: 429, code
+`budget_exceeded`, with `Retry-After` until the period ends (none for
+`total`). Budgets in money need prices per model (§10's catalog) and
+come later.
+
+Limits and spending live in memory: they start over when the gateway
+restarts, and two gateway processes count separately. This is stated in
+the guide; shared counters (Postgres, Redis) are a later plugin (§7).
+`Gateway::spent(key)` reports a key's spending in the current period.
+
+### 13.4 Usage records
+
+A refused request also produces a `UsageRecord`, with zero tokens, an
+empty `model` and `outcome` `key_rate_limited` or `budget_exceeded`.
+
+### 13.5 Tests
+
+On the paused clock: buckets refill at the configured rate; a refused
+request carries `Retry-After`; tokens charged after an answer hold back
+the next request; a budget refuses the request after the one that spent
+it, and a new period (day) starts over. `/v1/messages`: AgentBuild's own
+Anthropic client (`ProviderModel` with the Anthropic protocol) against the
+gateway, so both codecs run end to end (text, tools, tool results,
+streaming with tool calls), plus raw HTTP for event names, error bodies,
+`x-api-key` and the missing `max_tokens`. Checked by hand (2026-10-22)
+with the official `anthropic` Python SDK 2.1.0 through the gateway to a
+fake OpenAI-compatible upstream: text, tool use, tool results, streamed
+text and tool calls (`messages.stream`), and a rate-limit 429 that the SDK
+raises as `RateLimitError` with `Retry-After`.

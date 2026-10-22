@@ -20,3 +20,7 @@ models = [{ provider = "ollama", model = "llama3.2" }]
 name = "team-a"
 key_env = "GATEWAY_KEY_TEAM_A"
 routes = ["support", "local"]
+# Optional limits (design 0006 §13), counted in memory.
+requests_per_minute = 60
+tokens_per_minute = 100000
+budget = { tokens = 5000000, period = "month" }

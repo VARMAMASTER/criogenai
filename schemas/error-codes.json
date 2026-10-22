@@ -60,6 +60,8 @@
     {"code": "invalid_agent", "layers": ["build"], "category": "developer", "retryable": false, "family": "validation", "description": "An SDK agent configuration the engine could not build."},
     {"code": "invalid_workflow", "layers": ["build"], "category": "developer", "retryable": false, "family": "validation", "description": "An SDK workflow that does not validate (`details.issues` lists the problems)."},
     {"code": "invalid_api_key", "layers": ["gateway"], "category": "developer", "retryable": false, "family": null, "http_status": 401, "description": "The gateway needs a valid virtual key."},
-    {"code": "model_not_found", "layers": ["gateway"], "category": "developer", "retryable": false, "family": null, "http_status": 404, "description": "No route by that name, or the key may not use it."}
+    {"code": "model_not_found", "layers": ["gateway"], "category": "developer", "retryable": false, "family": null, "http_status": 404, "description": "No route by that name, or the key may not use it."},
+    {"code": "key_rate_limited", "layers": ["gateway"], "category": "transient", "retryable": true, "family": null, "http_status": 429, "description": "The key's requests or tokens per minute are used up; Retry-After says when to try again."},
+    {"code": "budget_exceeded", "layers": ["gateway"], "category": "policy", "retryable": false, "family": null, "http_status": 429, "description": "The key's token budget is spent for the current day or month (Retry-After: until it ends), or in total."}
   ]
 }

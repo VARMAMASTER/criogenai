@@ -849,7 +849,7 @@ async fn thread_stream() {
 }
 
 async fn llm_gateway() {
-    use agentbuild_gateway::{Config, Gateway};
+    use agentbuild_gateway::{BudgetPeriod, Config, Gateway, KeyLimits};
     use agentbuild_providers::{Endpoint, Model, ModelRequest, ProviderModel};
 
     // A config names environment variables, never secrets.
@@ -863,11 +863,18 @@ models = [{ provider = \"ollama\", model = \"llama3.2\" }]",
 
     let upstream = Arc::new(
         FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
-            .then(FakeReply::text("through the gateway")),
+            .then(FakeReply::text("through the gateway"))
+            .then(FakeReply::text("an Anthropic client too")),
     );
     let gateway = Gateway::builder()
         .route("support", upstream)
         .key("team", "a-key-long-enough-for-the-test", ["support"])
+        .key_limits(
+            "team",
+            KeyLimits::new()
+                .requests_per_minute(10)
+                .budget(1_000_000, BudgetPeriod::Month),
+        )
         .build()
         .expect("gateway");
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
@@ -875,7 +882,7 @@ models = [{ provider = \"ollama\", model = \"llama3.2\" }]",
     let router = gateway.router();
     tokio::spawn(async move { axum::serve(listener, router).await });
     let client = ProviderModel::new(
-        Endpoint::openai_compatible("gateway", base, Some("a-key-long-enough-for-the-test".into())),
+        Endpoint::openai_compatible("gateway", &base, Some("a-key-long-enough-for-the-test".into())),
         "support",
     )
     .expect("client");
@@ -884,7 +891,19 @@ models = [{ provider = \"ollama\", model = \"llama3.2\" }]",
         .await
         .expect("answer");
     assert_eq!(answer.message.text(), "through the gateway");
-    println!("  LLM gateway (OpenAI wire format, keys): ok");
+    // The same route for an Anthropic client, on /v1/messages.
+    let anthropic = ProviderModel::new(
+        Endpoint::anthropic_compatible("gateway", &base, Some("a-key-long-enough-for-the-test".into())),
+        "support",
+    )
+    .expect("client");
+    let answer = anthropic
+        .invoke(&ModelRequest::new(vec![Message::user("hi")]))
+        .await
+        .expect("answer");
+    assert_eq!(answer.message.text(), "an Anthropic client too");
+    assert!(gateway.spent("team").expect("limits") > 0);
+    println!("  LLM gateway (OpenAI and Anthropic wire formats, keys, limits): ok");
 }
 
 async fn workflow_threads() {

@@ -1,14 +1,15 @@
 ---
 title: The LLM gateway
-description: One OpenAI-compatible endpoint in front of every provider, with keys, fallback and usage records.
+description: One OpenAI- and Anthropic-compatible endpoint in front of every provider, with keys, limits, budgets, fallback and usage records.
 ---
 
 
 `agentbuild-gateway` is a server that speaks the OpenAI Chat Completions
-API. Any OpenAI client (the official SDKs, curl, LangChain, AgentBuild
-itself) can use it, and behind it each **route** can be any model
-AgentBuild supports: a client written for OpenAI can use Claude, Gemini or
-a model on your own GPUs.
+API and the Anthropic Messages API. Any OpenAI or Anthropic client (the
+official SDKs, curl, LangChain, Claude tooling, AgentBuild itself) can use
+it, and behind it each **route** can be any model AgentBuild supports: a
+client written for OpenAI can use Claude, one written for Claude can use
+Gemini or a model on your own GPUs.
 
 ## Run it
 
@@ -26,6 +27,9 @@ models = [
 name = "team-a"
 key_env = "GATEWAY_KEY_TEAM_A"
 routes = ["support"]
+requests_per_minute = 60                          # optional
+tokens_per_minute = 100000                        # optional
+budget = { tokens = 5000000, period = "month" }   # optional: "day", "month" or "total"
 ```
 
 ```sh
@@ -45,7 +49,22 @@ reply = client.chat.completions.create(
 ```
 
 Streaming (`stream=True`, with `stream_options.include_usage`), tool calls
-and `response_format` work as with OpenAI.
+and `response_format` work as with OpenAI. Anthropic's SDK works the same
+way, on `/v1/messages`:
+
+```python
+from anthropic import Anthropic
+
+client = Anthropic(base_url="http://localhost:4000", api_key="<team-a key>")
+reply = client.messages.create(
+    model="support", max_tokens=512,
+    messages=[{"role": "user", "content": "Hello"}],
+)
+```
+
+Streaming, tools and tool results, images and `system` work as with
+Anthropic; fields another provider could not honour (`thinking`,
+`top_k`, …) are ignored.
 
 ## Or embed it
 
@@ -57,10 +76,16 @@ and `response_format` work as with OpenAI.
 |---|---|
 | Routes | The `model` a client asks for; each lists models tried in order |
 | Fallback | On rate limits, overload, outages or exhausted quota; a stream only before its first byte |
-| Keys | Bearer keys per route, stored as SHA-256 digests; without keys the server only listens on localhost unless `--allow-open` |
-| Errors | OpenAI's error format, with AgentBuild's [codes](/docs/reference/errors/) and matching HTTP statuses |
+| Keys | Keys per route (`Authorization: Bearer` or `x-api-key`), stored as SHA-256 digests; without keys the server only listens on localhost unless `--allow-open` |
+| Rate limits | Requests and tokens per minute per key; over the limit: 429 `key_rate_limited` with `Retry-After` |
+| Budgets | Tokens per UTC day, month or in total per key; spent: 429 `budget_exceeded`, with `Retry-After` until the period ends |
+| Errors | OpenAI's or Anthropic's error format (by endpoint), with AgentBuild's [codes](/docs/reference/errors/) and matching HTTP statuses |
 | Usage | One record per request: key, route, model, tokens, latency, outcome; **no content**; never slows a request |
 | Disconnects | When a client goes away, the call to the provider stops |
 
-Planned: the Anthropic-format `/v1/messages`, rate limits and budgets per
-key, and a pass-through mode.
+Limits and budgets are counted in memory: they start over when the
+gateway restarts, and two gateway processes count separately. A request
+in flight may go past a budget; the next one is refused.
+
+Planned: shared counters (Postgres, Redis), budgets in money, and a
+pass-through mode.

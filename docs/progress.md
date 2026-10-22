@@ -64,7 +64,7 @@ remaining tasks one by one"), same full cycle:
 | 15 | Semantic memory and telemetry in the SDKs | 0017 §3–4 | Done |
 | 16 | `Gateway` client in the SDKs | 0018 | Done |
 | 17 | TypeScript tool input with Standard Schema (Zod) | 0017 §6 | Done |
-| 18 | Gateway: `/v1/messages`, relay path, rate limits, budgets | 0006 §7 | Planned |
+| 18 | Gateway: `/v1/messages`, rate limits, budgets (relay path: own slice) | 0006 §13 | Done |
 | 19 | Providers: OpenAI Responses, native Gemini | 0006 §11 step 7 | Planned |
 | 20 | Vector indexes (pgvector, sqlite-vec) | 0008 §16 | Planned |
 
