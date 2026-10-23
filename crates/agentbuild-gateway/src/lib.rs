@@ -34,9 +34,11 @@ use std::convert::Infallible;
 use std::fmt;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
-use std::time::{Instant, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-use agentbuild_providers::{Model, ModelError, ModelErrorKind, ModelResponse};
+use agentbuild_providers::{
+    MessageDelta, Model, ModelError, ModelErrorKind, ModelRequest, ModelResponse,
+};
 use axum::Router;
 use axum::body::{Body, Bytes};
 use axum::extract::{DefaultBodyLimit, State};
@@ -46,13 +48,23 @@ use axum::routing::{get, post};
 use serde::Serialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
-use tokio::sync::mpsc;
+use tokio::sync::{Notify, OwnedSemaphorePermit, Semaphore, mpsc};
 
 pub use config::{BudgetConfig, Config, ConfigError, KeyConfig, ModelConfig, RouteConfig};
 pub use limits::{BudgetPeriod, KeyLimits};
 
 /// Largest request body by default (images arrive base64-encoded).
 pub const DEFAULT_BODY_LIMIT: usize = 20 * 1024 * 1024;
+
+/// Requests in flight at once, over all keys, by default.
+pub const DEFAULT_MAX_CONCURRENT: usize = 1024;
+
+/// The largest `max_tokens` a client may ask for, by default.
+pub const DEFAULT_MAX_TOKENS: u32 = 200_000;
+
+/// What a request without `max_tokens` is assumed to produce, for the
+/// reservation (the real usage replaces it when the answer is complete).
+const ASSUMED_OUTPUT_TOKENS: u64 = 8_192;
 
 /// Why a gateway could not be built, or a request was refused.
 #[derive(Debug, thiserror::Error)]
@@ -96,6 +108,8 @@ struct Key {
     routes: BTreeSet<String>,
     /// Limits and what was used; `None` without limits.
     usage: Option<Mutex<limits::Usage>>,
+    /// Requests in flight (`max_concurrent`).
+    slots: Option<Arc<Semaphore>>,
 }
 
 struct Inner {
@@ -105,6 +119,10 @@ struct Inner {
     usage: Option<mpsc::Sender<UsageRecord>>,
     dropped: AtomicU64,
     body_limit: usize,
+    /// Requests in flight over all keys.
+    slots: Arc<Semaphore>,
+    max_tokens: u32,
+    expose_model: bool,
 }
 
 /// The gateway: build with [`Gateway::builder`] or
@@ -131,6 +149,9 @@ pub struct GatewayBuilder {
     limits: BTreeMap<String, KeyLimits>,
     usage: Option<mpsc::Sender<UsageRecord>>,
     body_limit: Option<usize>,
+    max_concurrent: Option<usize>,
+    max_tokens: Option<u32>,
+    expose_model: bool,
 }
 
 impl fmt::Debug for GatewayBuilder {
@@ -196,6 +217,29 @@ impl GatewayBuilder {
         self
     }
 
+    /// Most requests in flight at once over all keys (default
+    /// [`DEFAULT_MAX_CONCURRENT`]); more are refused with 429
+    /// `concurrency_limited`. A stream counts until it ends.
+    pub fn max_concurrent_requests(mut self, n: usize) -> Self {
+        self.max_concurrent = Some(n);
+        self
+    }
+
+    /// The largest `max_tokens` a client may ask for (default
+    /// [`DEFAULT_MAX_TOKENS`]); larger values are lowered to it.
+    pub fn max_tokens(mut self, cap: u32) -> Self {
+        self.max_tokens = Some(cap);
+        self
+    }
+
+    /// Send the upstream's `provider/model` in an `x-agentbuild-model`
+    /// response header. Off by default: it tells every caller which
+    /// provider and model you use.
+    pub fn expose_model_header(mut self, expose: bool) -> Self {
+        self.expose_model = expose;
+        self
+    }
+
     /// Checks the routes and keys.
     pub fn build(self) -> Result<Gateway, GatewayError> {
         if self.routes.is_empty() {
@@ -219,13 +263,15 @@ impl GatewayBuilder {
                     "key `{name}` names an unknown route `{unknown}`"
                 )));
             }
+            let own = limits.remove(&name).filter(|l| !l.is_empty());
             let key = Key {
                 name: name.clone(),
                 routes: routes.into_iter().collect(),
-                usage: limits
-                    .remove(&name)
-                    .filter(|l| !l.is_empty())
-                    .map(|l| Mutex::new(limits::Usage::new(&l))),
+                slots: own
+                    .as_ref()
+                    .and_then(|l| l.max_concurrent)
+                    .map(|n| Arc::new(Semaphore::new(n as usize))),
+                usage: own.map(|l| Mutex::new(limits::Usage::new(&l))),
             };
             if keys.insert(digest(&secret), key).is_some() {
                 return Err(GatewayError::Config(format!(
@@ -245,6 +291,11 @@ impl GatewayBuilder {
                 usage: self.usage,
                 dropped: AtomicU64::new(0),
                 body_limit: self.body_limit.unwrap_or(DEFAULT_BODY_LIMIT),
+                slots: Arc::new(Semaphore::new(
+                    self.max_concurrent.unwrap_or(DEFAULT_MAX_CONCURRENT),
+                )),
+                max_tokens: self.max_tokens.unwrap_or(DEFAULT_MAX_TOKENS),
+                expose_model: self.expose_model,
             }),
         })
     }
@@ -314,18 +365,54 @@ impl Gateway {
         self.inner.keys.values().find(|k| k.name == name)
     }
 
-    /// Admits a request under its key's limits.
-    fn admit(&self, key: Option<&str>) -> Result<(), limits::Refusal> {
-        match self.key_named(key).and_then(|k| k.usage.as_ref()) {
-            Some(usage) => lock(usage).admit(),
-            None => Ok(()),
+    /// Admits a request under the gateway's and its key's limits. Its
+    /// estimated tokens are reserved at once, so requests in flight count
+    /// (design 0006 §13.3).
+    fn admit(&self, key: Option<&str>, estimate: u64) -> Result<Permit, limits::Refusal> {
+        let slot = |semaphore: &Arc<Semaphore>| {
+            semaphore
+                .clone()
+                .try_acquire_owned()
+                .map_err(|_| limits::Refusal::Concurrency)
+        };
+        let global = slot(&self.inner.slots)?;
+        let found = self.key_named(key);
+        let own = found.and_then(|k| k.slots.as_ref()).map(slot).transpose()?;
+        let mut reserved = 0;
+        if let Some(usage) = found.and_then(|k| k.usage.as_ref()) {
+            let mut usage = lock(usage);
+            usage.admit()?;
+            usage.reserve(estimate);
+            reserved = estimate;
+        }
+        Ok(Permit {
+            gateway: self.clone(),
+            key: key.map(str::to_string),
+            reserved,
+            _slots: (global, own),
+        })
+    }
+
+    /// The tokens a request may use: its input (about one token per three
+    /// bytes of body, a deliberate over-estimate) and its output limit.
+    fn estimate(&self, body_bytes: usize, max_tokens: Option<u32>) -> u64 {
+        let output = max_tokens.map_or(ASSUMED_OUTPUT_TOKENS, u64::from);
+        (body_bytes as u64 / 3).saturating_add(output)
+    }
+
+    /// Lowers a request's `max_tokens` to the gateway's limit.
+    fn clamp_max_tokens(&self, request: &mut ModelRequest) {
+        if let Some(n) = &mut request.settings.max_tokens {
+            *n = (*n).min(self.inner.max_tokens);
         }
     }
 
-    /// Charges an answer's tokens to its key.
-    fn charge(&self, key: Option<&str>, tokens: u64) {
-        if let Some(usage) = self.key_named(key).and_then(|k| k.usage.as_ref()) {
-            lock(usage).charge(tokens);
+    /// The `x-agentbuild-model` header, if the gateway is set to send it.
+    fn tag_model(&self, response: &mut Response, model: &str) {
+        if self.inner.expose_model
+            && let Ok(value) = HeaderValue::from_str(model)
+        {
+            response.headers_mut().insert("x-agentbuild-model", value);
         }
     }
 
@@ -340,6 +427,43 @@ impl Gateway {
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+/// A request admitted under the limits, holding its slots and the tokens
+/// reserved for it.
+///
+/// [`settle`](Self::settle) replaces the reservation by the real usage. A
+/// permit dropped without it (the client went away, a stream stalled
+/// mid-answer) keeps the reservation charged: the upstream may have billed
+/// those tokens, and a client must not escape the budget by disconnecting.
+struct Permit {
+    gateway: Gateway,
+    key: Option<String>,
+    reserved: u64,
+    _slots: (OwnedSemaphorePermit, Option<OwnedSemaphorePermit>),
+}
+
+impl Permit {
+    fn settle(self, actual: u64) {
+        let found = self.gateway.key_named(self.key.as_deref());
+        if let Some(usage) = found.and_then(|k| k.usage.as_ref()) {
+            lock(usage).settle(self.reserved, actual);
+        }
+    }
+}
+
+/// What a client may be told about an upstream failure: the text of errors
+/// it can act on, and only the kind for the rest (an upstream's body can
+/// name accounts, organisations and internal hosts).
+fn client_message(error: &ModelError) -> String {
+    match error.kind {
+        ModelErrorKind::InvalidRequest
+        | ModelErrorKind::ContextOverflow
+        | ModelErrorKind::ContentFilter
+        | ModelErrorKind::RateLimited
+        | ModelErrorKind::Timeout => error.message.clone(),
+        other => format!("the upstream provider failed ({})", other.code()),
+    }
 }
 
 // ---------- errors ----------
@@ -360,7 +484,11 @@ impl Dialect {
     }
 
     fn model_error(self, error: &ModelError) -> Response {
-        self.error_response(status_for(error.kind), error.kind.code(), &error.message)
+        self.error_response(
+            status_for(error.kind),
+            error.kind.code(),
+            &client_message(error),
+        )
     }
 }
 
@@ -474,7 +602,7 @@ async fn models(State(gateway): State<Gateway>, headers: HeaderMap) -> Response 
 type KeyRoutes = Option<(String, BTreeSet<String>)>;
 
 /// An admitted request: its key's name and the route's models.
-type Admitted = (Option<String>, Vec<Arc<dyn Model>>);
+type Admitted = (Permit, Vec<Arc<dyn Model>>);
 
 /// The key and the body of a request, or the response refusing it.
 fn read(
@@ -503,13 +631,14 @@ fn read(
     Ok((key, body))
 }
 
-/// The route's models, once the key may use the route and its limits
-/// admit the request (a refusal is recorded).
+/// The route's models, once the key may use the route and the limits admit
+/// the request, which then holds a [`Permit`] (a refusal is recorded).
 fn admit(
     gateway: &Gateway,
     key: KeyRoutes,
     route: &str,
     stream: bool,
+    estimate: u64,
     dialect: Dialect,
 ) -> Result<Admitted, Box<Response>> {
     let allowed = key
@@ -523,66 +652,117 @@ fn admit(
         )));
     };
     let key = key.map(|(name, _)| name);
-    if let Err(refusal) = gateway.admit(key.as_deref()) {
-        gateway.record(UsageRecord {
-            key,
-            route: route.to_string(),
-            model: String::new(),
-            input_tokens: 0,
-            output_tokens: 0,
-            latency_ms: 0,
-            outcome: refusal.code().to_string(),
-            fallbacks: 0,
-            stream,
-        });
-        return Err(Box::new(refusal_response(dialect, refusal)));
+    match gateway.admit(key.as_deref(), estimate) {
+        Ok(permit) => Ok((permit, models)),
+        Err(refusal) => {
+            gateway.record(UsageRecord {
+                key,
+                route: route.to_string(),
+                model: String::new(),
+                input_tokens: 0,
+                output_tokens: 0,
+                latency_ms: 0,
+                outcome: refusal.code().to_string(),
+                fallbacks: 0,
+                stream,
+            });
+            Err(Box::new(refusal_response(dialect, refusal)))
+        }
     }
-    Ok((key, models))
 }
 
 async fn chat(State(gateway): State<Gateway>, headers: HeaderMap, body: Bytes) -> Response {
     let dialect = Dialect::OpenAi;
+    let size = body.len();
     let (key, body) = match read(&gateway, &headers, &body, dialect) {
         Ok(read) => read,
         Err(response) => return *response,
     };
-    let chat = match openai::decode_request(&body) {
+    let mut chat = match openai::decode_request(&body) {
         Ok(chat) => chat,
         Err(err) => {
             return error_response(StatusCode::BAD_REQUEST, "invalid_request", &err.to_string());
         }
     };
-    let (key, models) = match admit(&gateway, key, &chat.route, chat.stream, dialect) {
+    gateway.clamp_max_tokens(&mut chat.request);
+    let estimate = gateway.estimate(size, chat.request.settings.max_tokens);
+    let (permit, models) = match admit(&gateway, key, &chat.route, chat.stream, estimate, dialect) {
         Ok(admitted) => admitted,
         Err(response) => return *response,
     };
     let id = format!("chatcmpl-{}", uuid::Uuid::now_v7().simple());
     if chat.stream {
-        stream(gateway, key, models, chat, id)
+        let encoder = OpenAiEvents {
+            encoder: openai::ChunkEncoder::new(id, now_secs(), chat.route.clone()),
+            include_usage: chat.include_usage,
+        };
+        stream(gateway, permit, models, chat.request, chat.route, encoder)
     } else {
-        complete(gateway, key, models, chat, id).await
+        let started = Instant::now();
+        let route = chat.route.clone();
+        let (result, model, fallbacks) = invoke(&models, &chat.request).await;
+        let response = match &result {
+            Ok(answer) => {
+                axum::Json(openai::encode_response(&id, now_secs(), &route, answer)).into_response()
+            }
+            Err(error) => dialect.model_error(error),
+        };
+        finish(
+            &gateway, permit, route, model, fallbacks, started, result, response,
+        )
     }
 }
 
 async fn messages(State(gateway): State<Gateway>, headers: HeaderMap, body: Bytes) -> Response {
     let dialect = Dialect::Anthropic;
+    let size = body.len();
     let (key, body) = match read(&gateway, &headers, &body, dialect) {
         Ok(read) => read,
         Err(response) => return *response,
     };
-    let request = match anthropic::decode_request(&body) {
+    let mut request = match anthropic::decode_request(&body) {
         Ok(request) => request,
         Err(err) => return anthropic_error_response(StatusCode::BAD_REQUEST, &err.to_string()),
     };
-    let (key, models) = match admit(&gateway, key, &request.route, request.stream, dialect) {
+    gateway.clamp_max_tokens(&mut request.request);
+    let estimate = gateway.estimate(size, request.request.settings.max_tokens);
+    let (permit, models) = match admit(
+        &gateway,
+        key,
+        &request.route,
+        request.stream,
+        estimate,
+        dialect,
+    ) {
         Ok(admitted) => admitted,
         Err(response) => return *response,
     };
     let id = format!("msg_{}", uuid::Uuid::now_v7().simple());
     if request.stream {
-        stream_messages(gateway, key, models, request, id)
+        let encoder = AnthropicEvents {
+            encoder: anthropic::EventEncoder::new(id, request.route.clone()),
+        };
+        stream(
+            gateway,
+            permit,
+            models,
+            request.request,
+            request.route,
+            encoder,
+        )
     } else {
-        complete_messages(gateway, key, models, request, id).await
+        let started = Instant::now();
+        let route = request.route.clone();
+        let (result, model, fallbacks) = invoke(&models, &request.request).await;
+        let response = match &result {
+            Ok(answer) => {
+                axum::Json(anthropic::encode_response(&id, &route, answer)).into_response()
+            }
+            Err(error) => dialect.model_error(error),
+        };
+        finish(
+            &gateway, permit, route, model, fallbacks, started, result, response,
+        )
     }
 }
 
@@ -590,7 +770,7 @@ async fn messages(State(gateway): State<Gateway>, headers: HeaderMap, body: Byte
 /// (or failed last) and how many fell back.
 async fn invoke(
     models: &[Arc<dyn Model>],
-    request: &agentbuild_providers::ModelRequest,
+    request: &ModelRequest,
 ) -> (Result<ModelResponse, ModelError>, String, u32) {
     let mut fallbacks = 0;
     for (i, model) in models.iter().enumerate() {
@@ -602,23 +782,28 @@ async fn invoke(
     unreachable!("a route has at least one model")
 }
 
-async fn complete(
-    gateway: Gateway,
-    key: Option<String>,
-    models: Vec<Arc<dyn Model>>,
-    chat: openai::ChatRequest,
-    id: String,
+/// Settles a whole (non-streamed) answer: the real tokens replace the
+/// reservation, the usage record goes out, the model header is added.
+#[allow(clippy::too_many_arguments)]
+fn finish(
+    gateway: &Gateway,
+    permit: Permit,
+    route: String,
+    model: String,
+    fallbacks: u32,
+    started: Instant,
+    result: Result<ModelResponse, ModelError>,
+    mut response: Response,
 ) -> Response {
-    let started = Instant::now();
-    let (result, model, fallbacks) = invoke(&models, &chat.request).await;
     let (usage, outcome) = match &result {
-        Ok(response) => (response.usage, "ok".to_string()),
+        Ok(answer) => (answer.usage, "ok".to_string()),
         Err(error) => (Default::default(), error.kind.code().to_string()),
     };
-    gateway.charge(key.as_deref(), usage.input_tokens + usage.output_tokens);
+    let key = permit.key.clone();
+    permit.settle(usage.input_tokens.saturating_add(usage.output_tokens));
     gateway.record(UsageRecord {
         key,
-        route: chat.route.clone(),
+        route,
         model: model.clone(),
         input_tokens: usage.input_tokens,
         output_tokens: usage.output_tokens,
@@ -627,19 +812,7 @@ async fn complete(
         fallbacks,
         stream: false,
     });
-    let mut response = match result {
-        Ok(answer) => axum::Json(openai::encode_response(
-            &id,
-            now_secs(),
-            &chat.route,
-            &answer,
-        ))
-        .into_response(),
-        Err(error) => Dialect::OpenAi.model_error(&error),
-    };
-    if let Ok(value) = HeaderValue::from_str(&model) {
-        response.headers_mut().insert("x-agentbuild-model", value);
-    }
+    gateway.tag_model(&mut response, &model);
     response
 }
 
@@ -657,160 +830,140 @@ fn sse(value: &Value) -> Bytes {
     Bytes::from(format!("data: {value}\n\n"))
 }
 
-fn stream(
-    gateway: Gateway,
-    key: Option<String>,
-    models: Vec<Arc<dyn Model>>,
-    chat: openai::ChatRequest,
-    id: String,
-) -> Response {
-    let (sender, receiver) = mpsc::unbounded_channel::<Bytes>();
-    let task = tokio::spawn(async move {
-        let started = Instant::now();
-        let mut encoder = openai::ChunkEncoder::new(id, now_secs(), chat.route.clone());
-        let mut fallbacks = 0;
-        let mut last = (Err(None), String::new());
-        for (i, model) in models.iter().enumerate() {
-            let mut sent = false;
-            let result = {
-                let sender = &sender;
-                let encoder = &mut encoder;
-                let sent = &mut sent;
-                let mut on_delta = |delta: agentbuild_providers::MessageDelta| {
-                    *sent = true;
-                    for chunk in encoder.delta(&delta) {
-                        let _ = sender.send(sse(&chunk));
-                    }
-                };
-                model.stream(&chat.request, &mut on_delta).await
-            };
-            let fall_back =
-                matches!(&result, Err(e) if falls_back(e.kind) && !sent && i + 1 < models.len());
-            last = (result.map_err(Some), name_of(model.as_ref()));
-            if fall_back {
-                fallbacks += 1;
-                continue;
-            }
-            break;
-        }
-        let (result, model) = last;
-        let (usage, outcome) = match &result {
-            Ok(response) => {
-                for chunk in encoder.finish(response, chat.include_usage) {
-                    let _ = sender.send(sse(&chunk));
-                }
-                (response.usage, "ok".to_string())
-            }
-            Err(Some(error)) => {
-                // Mid-stream (or before): an error event, as OpenAI sends.
-                let body = json!({"error": {
-                    "message": error.message, "type": "api_error", "code": error.kind.code(),
-                }});
-                let _ = sender.send(sse(&body));
-                (Default::default(), error.kind.code().to_string())
-            }
-            Err(None) => (Default::default(), "unknown".to_string()),
-        };
-        let _ = sender.send(Bytes::from_static(b"data: [DONE]\n\n"));
-        gateway.charge(key.as_deref(), usage.input_tokens + usage.output_tokens);
-        gateway.record(UsageRecord {
-            key,
-            route: chat.route.clone(),
-            model,
-            input_tokens: usage.input_tokens,
-            output_tokens: usage.output_tokens,
-            latency_ms: started.elapsed().as_millis() as u64,
-            outcome,
-            fallbacks,
-            stream: true,
-        });
-    });
-    let body = futures_util::stream::unfold(
-        (receiver, AbortOnDrop(task)),
-        |(mut receiver, guard)| async move {
-            receiver
-                .recv()
-                .await
-                .map(|bytes| (Ok::<_, Infallible>(bytes), (receiver, guard)))
-        },
-    );
-    Response::builder()
-        .header(header::CONTENT_TYPE, "text/event-stream")
-        .header(header::CACHE_CONTROL, "no-cache")
-        .body(Body::from_stream(body))
-        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())
-}
-
-async fn complete_messages(
-    gateway: Gateway,
-    key: Option<String>,
-    models: Vec<Arc<dyn Model>>,
-    request: anthropic::MessagesRequest,
-    id: String,
-) -> Response {
-    let started = Instant::now();
-    let (result, model, fallbacks) = invoke(&models, &request.request).await;
-    let (usage, outcome) = match &result {
-        Ok(response) => (response.usage, "ok".to_string()),
-        Err(error) => (Default::default(), error.kind.code().to_string()),
-    };
-    gateway.charge(key.as_deref(), usage.input_tokens + usage.output_tokens);
-    gateway.record(UsageRecord {
-        key,
-        route: request.route.clone(),
-        model: model.clone(),
-        input_tokens: usage.input_tokens,
-        output_tokens: usage.output_tokens,
-        latency_ms: started.elapsed().as_millis() as u64,
-        outcome,
-        fallbacks,
-        stream: false,
-    });
-    let mut response = match result {
-        Ok(answer) => {
-            axum::Json(anthropic::encode_response(&id, &request.route, &answer)).into_response()
-        }
-        Err(error) => Dialect::Anthropic.model_error(&error),
-    };
-    if let Ok(value) = HeaderValue::from_str(&model) {
-        response.headers_mut().insert("x-agentbuild-model", value);
-    }
-    response
-}
-
 fn sse_event((name, value): anthropic::Event) -> Bytes {
     Bytes::from(format!("event: {name}\ndata: {value}\n\n"))
 }
 
-fn stream_messages(
+/// One wire format's stream: what each delta, the end, and a failure look
+/// like on the wire.
+trait StreamEncoder: Send + 'static {
+    fn delta(&mut self, delta: &MessageDelta) -> Vec<Bytes>;
+    fn finish(&mut self, response: &ModelResponse) -> Vec<Bytes>;
+    fn error(&self, error: &ModelError) -> Bytes;
+    fn trailer(&self) -> Option<Bytes>;
+}
+
+struct OpenAiEvents {
+    encoder: openai::ChunkEncoder,
+    include_usage: bool,
+}
+
+impl StreamEncoder for OpenAiEvents {
+    fn delta(&mut self, delta: &MessageDelta) -> Vec<Bytes> {
+        self.encoder.delta(delta).iter().map(sse).collect()
+    }
+
+    fn finish(&mut self, response: &ModelResponse) -> Vec<Bytes> {
+        self.encoder
+            .finish(response, self.include_usage)
+            .iter()
+            .map(sse)
+            .collect()
+    }
+
+    fn error(&self, error: &ModelError) -> Bytes {
+        sse(&json!({"error": {
+            "message": client_message(error), "type": "api_error", "code": error.kind.code(),
+        }}))
+    }
+
+    fn trailer(&self) -> Option<Bytes> {
+        Some(Bytes::from_static(b"data: [DONE]\n\n"))
+    }
+}
+
+struct AnthropicEvents {
+    encoder: anthropic::EventEncoder,
+}
+
+impl StreamEncoder for AnthropicEvents {
+    fn delta(&mut self, delta: &MessageDelta) -> Vec<Bytes> {
+        self.encoder
+            .delta(delta)
+            .into_iter()
+            .map(sse_event)
+            .collect()
+    }
+
+    fn finish(&mut self, response: &ModelResponse) -> Vec<Bytes> {
+        self.encoder
+            .finish(response)
+            .into_iter()
+            .map(sse_event)
+            .collect()
+    }
+
+    fn error(&self, error: &ModelError) -> Bytes {
+        sse_event((
+            "error",
+            json!({"type": "error", "error": {
+                "type": anthropic_error_type(status_for(error.kind)),
+                "message": client_message(error),
+            }}),
+        ))
+    }
+
+    fn trailer(&self) -> Option<Bytes> {
+        None
+    }
+}
+
+/// Events waiting for a slow client: a client that stops reading is cut off
+/// once this many are queued, instead of the answer piling up in memory.
+const STREAM_QUEUE: usize = 256;
+
+/// The longest the end of a stream waits for a slow client.
+const STREAM_SEND_TIMEOUT: Duration = Duration::from_secs(30);
+
+async fn push(sender: &mpsc::Sender<Bytes>, bytes: Bytes) {
+    let _ = tokio::time::timeout(STREAM_SEND_TIMEOUT, sender.send(bytes)).await;
+}
+
+/// Streams the route's answer in one wire format. The reservation is
+/// settled to the real usage when the answer completes; one that starts and
+/// then fails keeps the estimate.
+fn stream<E: StreamEncoder>(
     gateway: Gateway,
-    key: Option<String>,
+    permit: Permit,
     models: Vec<Arc<dyn Model>>,
-    request: anthropic::MessagesRequest,
-    id: String,
+    request: ModelRequest,
+    route: String,
+    mut encoder: E,
 ) -> Response {
-    let (sender, receiver) = mpsc::unbounded_channel::<Bytes>();
+    let (sender, receiver) = mpsc::channel::<Bytes>(STREAM_QUEUE);
+    let stalled = Arc::new(Notify::new());
     let task = tokio::spawn(async move {
         let started = Instant::now();
-        let mut encoder = anthropic::EventEncoder::new(id, request.route.clone());
         let mut fallbacks = 0;
         let mut last = (Err(None), String::new());
+        let mut any_sent = false;
+        let mut client_stalled = false;
         for (i, model) in models.iter().enumerate() {
             let mut sent = false;
             let result = {
-                let sender = &sender;
-                let encoder = &mut encoder;
-                let sent = &mut sent;
-                let mut on_delta = |delta: agentbuild_providers::MessageDelta| {
+                let (sender, encoder, sent, stalled) = (&sender, &mut encoder, &mut sent, &stalled);
+                let mut on_delta = |delta: MessageDelta| {
                     *sent = true;
-                    for event in encoder.delta(&delta) {
-                        let _ = sender.send(sse_event(event));
+                    for chunk in encoder.delta(&delta) {
+                        if sender.try_send(chunk).is_err() {
+                            stalled.notify_one();
+                        }
                     }
                 };
-                model.stream(&request.request, &mut on_delta).await
+                tokio::select! {
+                    result = model.stream(&request, &mut on_delta) => result,
+                    () = stalled.notified() => {
+                        client_stalled = true;
+                        Err(ModelError::new(
+                            ModelErrorKind::Timeout,
+                            "the client stopped reading the stream",
+                        ))
+                    }
+                }
             };
-            let fall_back =
-                matches!(&result, Err(e) if falls_back(e.kind) && !sent && i + 1 < models.len());
+            any_sent |= sent;
+            let fall_back = !client_stalled
+                && matches!(&result, Err(e) if falls_back(e.kind) && !sent && i + 1 < models.len());
             last = (result.map_err(Some), name_of(model.as_ref()));
             if fall_back {
                 fallbacks += 1;
@@ -819,28 +972,36 @@ fn stream_messages(
             break;
         }
         let (result, model) = last;
-        let (usage, outcome) = match &result {
+        let (usage, outcome, settle) = match &result {
             Ok(response) => {
-                for event in encoder.finish(response) {
-                    let _ = sender.send(sse_event(event));
+                for chunk in encoder.finish(response) {
+                    push(&sender, chunk).await;
                 }
-                (response.usage, "ok".to_string())
+                (response.usage, "ok".to_string(), true)
             }
             Err(Some(error)) => {
-                // Before or after the first event: an `error` event.
-                let status = status_for(error.kind);
-                let body = json!({"type": "error", "error": {
-                    "type": anthropic_error_type(status), "message": error.message,
-                }});
-                let _ = sender.send(sse_event(("error", body)));
-                (Default::default(), error.kind.code().to_string())
+                if !client_stalled {
+                    push(&sender, encoder.error(error)).await;
+                }
+                let outcome = if client_stalled {
+                    "client_stalled".to_string()
+                } else {
+                    error.kind.code().to_string()
+                };
+                (Default::default(), outcome, !any_sent)
             }
-            Err(None) => (Default::default(), "unknown".to_string()),
+            Err(None) => (Default::default(), "unknown".to_string(), true),
         };
-        gateway.charge(key.as_deref(), usage.input_tokens + usage.output_tokens);
+        if !client_stalled && let Some(trailer) = encoder.trailer() {
+            push(&sender, trailer).await;
+        }
+        let key = permit.key.clone();
+        if settle {
+            permit.settle(usage.input_tokens.saturating_add(usage.output_tokens));
+        }
         gateway.record(UsageRecord {
             key,
-            route: request.route.clone(),
+            route,
             model,
             input_tokens: usage.input_tokens,
             output_tokens: usage.output_tokens,

@@ -23,6 +23,9 @@ pub struct HttpConfig {
     pub idle_timeout: Duration,
     /// The whole attempt, body included. Default 120 s.
     pub total_timeout: Duration,
+    /// The most bytes of one response body (the timeouts bound time, not
+    /// memory): a larger one fails with `invalid_response`. Default 64 MiB.
+    pub max_response_bytes: usize,
 }
 
 impl Default for HttpConfig {
@@ -32,6 +35,7 @@ impl Default for HttpConfig {
             first_byte_timeout: None,
             idle_timeout: Duration::from_secs(60),
             total_timeout: Duration::from_secs(120),
+            max_response_bytes: 64 * 1024 * 1024,
         }
     }
 }
@@ -60,10 +64,16 @@ impl HttpConfig {
         self.total_timeout = timeout;
         self
     }
+
+    /// Sets [`max_response_bytes`](Self::max_response_bytes).
+    pub fn max_response_bytes(mut self, bytes: usize) -> Self {
+        self.max_response_bytes = bytes;
+        self
+    }
 }
 
 /// A request ready to send: what a protocol's `encode` produces.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct WireRequest {
     /// Full URL.
@@ -72,6 +82,21 @@ pub struct WireRequest {
     pub headers: Vec<(String, String)>,
     /// JSON body.
     pub body: Vec<u8>,
+}
+
+impl std::fmt::Debug for WireRequest {
+    /// Header values and the body are not shown: they hold the API key and
+    /// the prompt.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("WireRequest")
+            .field("url", &self.url)
+            .field(
+                "headers",
+                &self.headers.iter().map(|(n, _)| n).collect::<Vec<_>>(),
+            )
+            .field("body_bytes", &self.body.len())
+            .finish()
+    }
 }
 
 impl WireRequest {
@@ -92,18 +117,31 @@ impl WireRequest {
 }
 
 /// Sends [`WireRequest`]s. Cheap to clone; clones share the connection pool.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Transport {
     client: reqwest::Client,
     config: HttpConfig,
     secrets: Vec<String>,
 }
 
+impl std::fmt::Debug for Transport {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Transport")
+            .field("config", &self.config)
+            .field("secrets", &self.secrets.len())
+            .finish_non_exhaustive()
+    }
+}
+
 impl Transport {
     /// A transport with its own connection pool.
     pub fn new(config: HttpConfig) -> Result<Self, ModelError> {
+        // No redirects: an LLM API never needs one, and a redirected POST
+        // would carry the prompt and any non-standard auth header (such as
+        // `x-api-key`) to another host.
         let client = reqwest::Client::builder()
             .connect_timeout(config.connect_timeout)
+            .redirect(reqwest::redirect::Policy::none())
             .build()
             .map_err(|err| {
                 ModelError::new(
@@ -172,7 +210,19 @@ impl Transport {
             transport: self.clone(),
             deadline,
             streaming: false,
+            received: 0,
         };
+        // A redirect is an error: it was not followed (see `new`).
+        if (300..400).contains(&status) {
+            return Err(ModelError::new(
+                ModelErrorKind::InvalidRequest,
+                format!(
+                    "the server answered {status}, a redirect; redirects are not followed \
+                     (check the base URL)"
+                ),
+            )
+            .with_dispatch(Dispatch::Sent));
+        }
         if (200..300).contains(&status) {
             body.streaming = true;
             return Ok(body);
@@ -234,6 +284,8 @@ pub struct Body {
     deadline: Instant,
     /// Body of a success response (errors are `Streaming`, not `Sent`).
     streaming: bool,
+    /// Bytes read so far, against `max_response_bytes`.
+    received: usize,
 }
 
 impl Body {
@@ -248,7 +300,21 @@ impl Body {
             Dispatch::Sent
         };
         match tokio::time::timeout_at(limit, self.response.chunk()).await {
-            Ok(Ok(chunk)) => Ok(chunk.map(|bytes| bytes.to_vec())),
+            Ok(Ok(chunk)) => {
+                let chunk = chunk.map(|bytes| bytes.to_vec());
+                self.received = self
+                    .received
+                    .saturating_add(chunk.as_ref().map_or(0, Vec::len));
+                let max = self.transport.config.max_response_bytes;
+                if self.received > max {
+                    return Err(ModelError::new(
+                        ModelErrorKind::InvalidResponse,
+                        format!("the response is larger than the limit of {max} bytes"),
+                    )
+                    .with_dispatch(dispatch));
+                }
+                Ok(chunk)
+            }
             Ok(Err(err)) => Err(self.transport.request_error(err, dispatch)),
             Err(_) => {
                 let config = &self.transport.config;

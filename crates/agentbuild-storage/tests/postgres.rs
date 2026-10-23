@@ -141,7 +141,7 @@ async fn migrations_run_once_even_when_processes_start_together() {
     .await;
     for store in &opened {
         let store = store.as_ref().unwrap();
-        assert_eq!(store.schema_version().await.unwrap(), 5);
+        assert_eq!(store.schema_version().await.unwrap(), 6);
     }
     for store in opened {
         store.unwrap().close().await;
@@ -151,7 +151,7 @@ async fn migrations_run_once_even_when_processes_start_together() {
         .fetch_one(&pool)
         .await
         .unwrap();
-    assert_eq!(applied, 5);
+    assert_eq!(applied, 6);
     sqlx::query("INSERT INTO agentbuild_schema_migrations VALUES (99, 0)")
         .execute(&pool)
         .await

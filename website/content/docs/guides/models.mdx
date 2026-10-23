@@ -13,7 +13,7 @@ description: OpenAI, Anthropic, Gemini, OpenRouter and self-hosted models, with 
 | Google Gemini | Its OpenAI-compatible endpoint | `GEMINI_API_KEY` |
 | OpenRouter | OpenAI-compatible | `OPENROUTER_API_KEY` |
 | Ollama, LM Studio | Local, OpenAI-compatible | none |
-| vLLM and any OpenAI-compatible server | Your URL | optional |
+| vLLM and any OpenAI-compatible server | Your URL (a key is never sent over plain `http://` to another machine unless you pass `allow_insecure_http` / `allowInsecureHttp`) | optional |
 | Any Anthropic-compatible server | Your URL (Rust) | optional |
 
 ## What every model gets
@@ -28,7 +28,9 @@ description: OpenAI, Anthropic, Gemini, OpenRouter and self-hosted models, with 
   `fallbackOn`, e.g. `context_overflow` to a model with a longer context).
 - **Retries**: `model_retry` / `modelRetry` (attempts and backoff), and
   `tool_retry` / `toolRetry` for tools marked read-only or idempotent.
-- **Keys stay secret**: removed from every error message.
+- **Keys stay secret**: removed from every error message and from `Debug`
+  output; never sent to another host (redirects are not followed).
+- **Bounded**: a response larger than 64 MiB fails instead of filling memory.
 
 For self-hosted models nothing leaves your network, which is often the
 simplest answer for patient data.

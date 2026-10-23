@@ -234,6 +234,9 @@ fn endpoint(spec: &Value) -> napi::Result<Endpoint> {
     {
         endpoint = endpoint.with_base_url(base);
     }
+    if spec["allowInsecureHttp"].as_bool() == Some(true) {
+        endpoint = endpoint.allow_insecure_http();
+    }
     Ok(endpoint)
 }
 
@@ -643,11 +646,22 @@ impl JsHook {
         self.stages.iter().any(|s| s == stage)
     }
 
-    async fn call(&self, stage: &str, payload: Value) -> Result<Value, String> {
+    /// Calls the hook's `stage`. A throw is `Err((text, cause key))`: the
+    /// key is unique to that throw, and names where the TypeScript side
+    /// keeps what was thrown.
+    async fn call(&self, stage: &str, payload: Value) -> Result<Value, (String, Option<String>)> {
         let request = json!({"stage": stage, "payload": payload}).to_string();
-        let envelope = call_js(self.function.clone(), request).await?;
+        let envelope = call_js(self.function.clone(), request)
+            .await
+            .map_err(|text| (text, None))?;
         match envelope.get("crash").and_then(Value::as_str) {
-            Some(crash) => Err(crash.to_string()),
+            Some(crash) => Err((
+                crash.to_string(),
+                envelope
+                    .get("causeKey")
+                    .and_then(Value::as_str)
+                    .map(str::to_string),
+            )),
             None => Ok(envelope),
         }
     }
@@ -659,7 +673,13 @@ impl JsHook {
         let envelope = self
             .call(stage, js_hook_ctx(ctx))
             .await
-            .map_err(HookError::new)?;
+            .map_err(|(text, key)| {
+                let error = HookError::new(text);
+                match key {
+                    Some(key) => error.with_cause_key(key),
+                    None => error,
+                }
+            })?;
         js_hook_action(&envelope)
     }
 }
@@ -701,7 +721,7 @@ impl Hook for JsHook {
                 let envelope = self
                     .call("before_tool", call_json(&call))
                     .await
-                    .map_err(ToolError::crashed)?;
+                    .map_err(|(text, _)| ToolError::crashed(text))?;
                 if let Some(message) = envelope.get("toolError").and_then(Value::as_str) {
                     return Err(ToolError::new(message));
                 }
@@ -728,7 +748,7 @@ impl Hook for JsHook {
                     json!({"call": snapshot, "result": js_output_value(&output)}),
                 )
                 .await
-                .map_err(ToolError::crashed)?;
+                .map_err(|(text, _)| ToolError::crashed(text))?;
             Ok(match envelope.get("result") {
                 Some(value) => js_replaced(output, value.clone()),
                 None => output,
@@ -1425,12 +1445,6 @@ async fn call_js(function: Arc<JsTool>, request: String) -> Result<Value, String
     serde_json::from_str(&envelope).map_err(|err| format!("unreadable answer: {err}"))
 }
 
-/// A node's or router's exception, for the run error: the TypeScript side
-/// keeps what was thrown under this key.
-fn cause_key(node: &str, message: &str) -> String {
-    format!("node:{node}:{message}")
-}
-
 /// A JavaScript function as a node. Envelopes: `{"update"}`,
 /// `{"suspend", "update"}`, `{"goto", "update"}` or `{"crash"}`.
 fn js_node(name: String, function: Arc<JsTool>) -> impl agentbuild_core::Node {
@@ -1448,7 +1462,9 @@ fn js_node(name: String, function: Arc<JsTool>) -> impl agentbuild_core::Node {
             .to_string();
             let envelope = call_js(function, request).await.map_err(NodeError::new)?;
             if let Some(crash) = envelope.get("crash").and_then(Value::as_str) {
-                return Err(NodeError::new(crash));
+                // The exception's key travels in the error (unique to it).
+                return Err(NodeError::new(crash)
+                    .with_details(json!({"cause_key": envelope.get("causeKey")})));
             }
             let update = match envelope.get("update") {
                 Some(Value::Object(map)) => Update::from(map.clone()),
@@ -1482,7 +1498,9 @@ fn js_router(from: String, function: Arc<JsTool>) -> impl agentbuild_core::Route
             let request = json!({"node": from, "state": state.as_map()}).to_string();
             let envelope = call_js(function, request).await.map_err(NodeError::new)?;
             if let Some(crash) = envelope.get("crash").and_then(Value::as_str) {
-                return Err(NodeError::new(crash));
+                // The exception's key travels in the error (unique to it).
+                return Err(NodeError::new(crash)
+                    .with_details(json!({"cause_key": envelope.get("causeKey")})));
             }
             envelope
                 .get("label")
@@ -1503,7 +1521,12 @@ fn run_failure(error: RunError) -> napi::Error {
     match &error.kind {
         RunErrorKind::NodeFailed { node, source } | RunErrorKind::RouterFailed { node, source } => {
             details["node"] = json!(node);
-            details["cause_key"] = json!(cause_key(node, &source.message));
+            details["cause_key"] = source
+                .details
+                .as_ref()
+                .and_then(|d| d.get("cause_key"))
+                .cloned()
+                .unwrap_or(Value::Null);
         }
         RunErrorKind::NodeTimeout { node, .. } | RunErrorKind::NodePanicked { node, .. } => {
             details["node"] = json!(node);

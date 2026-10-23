@@ -71,6 +71,9 @@ export interface Hook {
   onEnd?(ctx: HookContext, outcome: "completed" | "suspended" | "failed"): void | Promise<void>;
 }
 
+/** Counts throws, for keys unique to each. */
+let throws = 0;
+
 const STAGES = {
   on_start: "onStart",
   before_model: "beforeModel",
@@ -139,11 +142,16 @@ export function hookAdapter(
       }
       if (stage === "before_tool" || stage === "after_tool") {
         if (keepToolCrashes) crashes.set(stage === "before_tool" ? payload.callId : payload.call.callId, error);
-      } else if (stage !== "on_end") {
-        crashes.set(`hook:${name}:${stage}`, error);
+      }
+      // A key unique to this throw: the run error repeats it, so a run gets
+      // its own exception and never one thrown for a run at the same time.
+      let causeKey: string | undefined;
+      if (stage !== "on_end" && stage !== "before_tool" && stage !== "after_tool") {
+        causeKey = `hook:${name}:${stage}:${++throws}`;
+        crashes.set(causeKey, error);
       }
       const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-      return JSON.stringify({ crash: text });
+      return JSON.stringify({ crash: text, causeKey });
     }
   };
   return { spec: { name, stages }, adapter };

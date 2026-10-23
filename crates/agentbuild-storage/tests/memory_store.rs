@@ -442,7 +442,7 @@ mod sqlite {
         pool.close().await;
 
         let checkpointer = SqliteCheckpointer::connect(&url).await.unwrap();
-        assert_eq!(checkpointer.schema_version().await.unwrap(), 5);
+        assert_eq!(checkpointer.schema_version().await.unwrap(), 6);
         let store = checkpointer.memory_store();
         store
             .put(&ns("users/ada"), "diet", json!("vegan"), None)

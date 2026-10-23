@@ -48,11 +48,19 @@ impl Checker<'_> {
                 path.to_string()
             }
         };
-        if let Some(reference) = schema.get("$ref").and_then(Value::as_str)
-            && let Some(target) = reference
+        if let Some(reference) = schema.get("$ref").and_then(Value::as_str) {
+            let Some(target) = reference
                 .strip_prefix('#')
                 .and_then(|pointer| self.root.pointer(pointer))
-        {
+            else {
+                // A reference that cannot be followed would let the value
+                // through unchecked.
+                errors.push(format!(
+                    "{}: the schema refers to `{reference}`, which it does not define",
+                    at(path)
+                ));
+                return;
+            };
             if self.depth >= MAX_REF_DEPTH {
                 errors.push(format!(
                     "{}: the schema refers to itself too deeply",
@@ -321,9 +329,12 @@ mod tests {
             validate(&schema, &json!({"pick": "x"})),
             ["pick: expected integer, got \"x\""]
         );
-        // Unknown or remote references are ignored, and a schema that
-        // refers to itself cannot loop.
-        assert!(validate(&json!({"$ref": "https://example.com/s.json"}), &json!(1)).is_empty());
+        // A reference that cannot be followed (unknown, or remote: nothing is
+        // fetched) is a problem, not a pass; and a schema that refers to
+        // itself cannot loop.
+        let remote = validate(&json!({"$ref": "https://example.com/s.json"}), &json!(1));
+        assert_eq!(remote.len(), 1, "{remote:?}");
+        assert!(remote[0].contains("which it does not define"), "{remote:?}");
         let looping = validate(&json!({"$ref": "#"}), &json!(1));
         assert_eq!(
             looping,

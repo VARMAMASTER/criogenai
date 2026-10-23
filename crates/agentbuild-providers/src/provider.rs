@@ -4,7 +4,7 @@
 use serde_json::Value;
 
 use crate::anthropic_messages::{self, AnthropicOptions, EventDecoder};
-use crate::error::{Dispatch, ModelError};
+use crate::error::{Dispatch, ModelError, ModelErrorKind};
 use crate::model::{BoxFuture, DeltaSink, Model};
 use crate::openai_chat::{self, ChunkDecoder, OpenAiQuirks};
 use crate::request::{Capabilities, ModelRequest, ModelResponse};
@@ -24,7 +24,7 @@ pub enum Protocol {
 
 /// Where and how to reach a provider. Plain data; presets cover common
 /// servers. The provider is never guessed from a model name.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Endpoint {
     /// Short name, used as `provider` in messages and errors (e.g. `ollama`).
@@ -40,9 +40,102 @@ pub struct Endpoint {
     pub headers: Vec<(String, String)>,
     /// What models behind this endpoint support (unknown = `None`).
     pub capabilities: Capabilities,
+    /// Allow sending credentials over plain `http://` to a host that is not
+    /// this machine. Off by default: see [`Endpoint::allow_insecure_http`].
+    pub insecure_http: bool,
+}
+
+impl std::fmt::Debug for Endpoint {
+    /// The key and header values are not shown.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Endpoint")
+            .field("name", &self.name)
+            .field("protocol", &self.protocol)
+            .field("base_url", &self.base_url)
+            .field("api_key", &self.api_key.as_ref().map(|_| "[redacted]"))
+            .field(
+                "headers",
+                &self.headers.iter().map(|(n, _)| n).collect::<Vec<_>>(),
+            )
+            .field("capabilities", &self.capabilities)
+            .field("insecure_http", &self.insecure_http)
+            .finish()
+    }
+}
+
+/// Header names that carry credentials.
+fn is_secret_header(name: &str) -> bool {
+    let name = name.to_ascii_lowercase();
+    name == "authorization"
+        || name == "proxy-authorization"
+        || name.contains("api-key")
+        || name.contains("apikey")
+        || name.contains("token")
+        || name.contains("secret")
+}
+
+/// `true` for `localhost`, `127.x.x.x` and `::1`.
+fn is_loopback_host(host: &str) -> bool {
+    let host = host.trim_start_matches('[').trim_end_matches(']');
+    host == "localhost"
+        || host.ends_with(".localhost")
+        || host == "::1"
+        || host
+            .parse::<std::net::Ipv4Addr>()
+            .is_ok_and(|ip| ip.is_loopback())
+}
+
+/// The scheme and host of a URL.
+fn url_host(url: &str) -> Option<(&str, &str)> {
+    let (scheme, rest) = url.split_once("://")?;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    let authority = authority.rsplit('@').next()?;
+    let host = if let Some(inner) = authority.strip_prefix('[') {
+        inner.split(']').next()?
+    } else {
+        authority.split(':').next()?
+    };
+    Some((scheme, host))
 }
 
 impl Endpoint {
+    /// Allows credentials over plain `http://` to another machine (for
+    /// example a vLLM server on your LAN). Without this, building a model
+    /// for such an endpoint fails: a key sent over `http` is readable by
+    /// anyone on the path.
+    pub fn allow_insecure_http(mut self) -> Self {
+        self.insecure_http = true;
+        self
+    }
+
+    /// The HTTP transport for this endpoint: refuses credentials over plain
+    /// `http` to another machine, and removes every credential (the key and
+    /// auth-like header values) from error messages.
+    pub(crate) fn transport(&self, config: HttpConfig) -> Result<Transport, ModelError> {
+        let has_credentials =
+            self.api_key.is_some() || self.headers.iter().any(|(name, _)| is_secret_header(name));
+        if has_credentials
+            && !self.insecure_http
+            && let Some(("http", host)) = url_host(&self.base_url)
+            && !is_loopback_host(host)
+        {
+            return Err(ModelError::new(
+                ModelErrorKind::InvalidRequest,
+                format!(
+                    "refusing to send credentials over plain http to `{host}`: use https, or                      `Endpoint::allow_insecure_http` for a trusted network"
+                ),
+            )
+            .with_dispatch(Dispatch::NotSent));
+        }
+        let secrets = self.api_key.iter().cloned().chain(
+            self.headers
+                .iter()
+                .filter(|(name, _)| is_secret_header(name))
+                .map(|(_, value)| value.clone()),
+        );
+        Ok(Transport::new(config)?.redacting(secrets))
+    }
+
     /// Any OpenAI-compatible server.
     pub fn openai_compatible(
         name: impl Into<String>,
@@ -59,6 +152,7 @@ impl Endpoint {
                 streaming: Some(true),
                 ..Capabilities::default()
             },
+            insecure_http: false,
         }
     }
 
@@ -129,6 +223,7 @@ impl Endpoint {
                 streaming: Some(true),
                 ..Capabilities::default()
             },
+            insecure_http: false,
         }
     }
 
@@ -200,7 +295,7 @@ impl ProviderModel {
         model: impl Into<String>,
         config: HttpConfig,
     ) -> Result<Self, ModelError> {
-        let transport = Transport::new(config)?.redacting(endpoint.api_key.clone());
+        let transport = endpoint.transport(config)?;
         Ok(Self {
             endpoint,
             model: model.into(),
@@ -507,7 +602,7 @@ impl ProviderEmbedder {
                 ),
             ));
         }
-        let transport = Transport::new(config)?.redacting(endpoint.api_key.clone());
+        let transport = endpoint.transport(config)?;
         Ok(Self {
             endpoint,
             model: model.into(),

@@ -43,6 +43,7 @@
 
 mod audit;
 mod checkpoint;
+mod seal;
 // Without a SQL backend only the keys are used.
 #[cfg_attr(not(any(feature = "sqlite", feature = "postgres")), allow(dead_code))]
 mod crypto;
@@ -63,7 +64,7 @@ mod workflow_thread;
 mod writer;
 
 pub use audit::{
-    AuditEvent, AuditLog, AuditQuery, AuditRecord, AuditVerification, GENESIS_HASH,
+    AuditAnchor, AuditEvent, AuditLog, AuditQuery, AuditRecord, AuditVerification, GENESIS_HASH,
     InMemoryAuditLog, sha256_hex,
 };
 pub use checkpoint::{
@@ -81,6 +82,7 @@ pub use postgres::{
     PostgresThreadLocks,
 };
 pub use retention::{PruneReport, Pruner, Retention};
+pub use seal::{MIN_SEAL_KEY_BYTES, open_snapshot, seal_snapshot};
 #[cfg(feature = "sqlite")]
 pub use sqlite::{SqliteAuditLog, SqliteCheckpointer, SqliteMemoryStore};
 pub use storage::{Durability, OnBusy, Storage, ThreadLease};

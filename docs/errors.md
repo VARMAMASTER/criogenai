@@ -29,7 +29,7 @@ Generated from [`schemas/error-codes.json`](../schemas/error-codes.json) (design
 | `output_invalid` | policy | no | `AgentBuildError` | - | The structured output was still invalid after the allowed retries. |
 | `hook_failed` | developer | no | `AgentBuildError` | - | A hook returned an error. |
 | `invalid_state` | developer | no | `ValidationError` | - | The run state is not an agent's, or memory cannot find the run's namespace. |
-| `invalid_input` | developer | no | `ValidationError` | - | The input names one of the agent's own state keys. |
+| `invalid_input` | developer | no | `ValidationError` | - | The input names one of the agent's own state keys, or tries to change the value that scopes the thread's memory. |
 | `audit_failed` | transient | yes | `StorageError` | - | An audit record could not be written, so the action it describes failed. |
 
 ## Thread errors
@@ -100,4 +100,5 @@ Generated from [`schemas/error-codes.json`](../schemas/error-codes.json) (design
 | `invalid_api_key` | developer | no | - | 401 | The gateway needs a valid virtual key. |
 | `model_not_found` | developer | no | - | 404 | No route by that name, or the key may not use it. |
 | `key_rate_limited` | transient | yes | - | 429 | The key's requests or tokens per minute are used up; Retry-After says when to try again. |
+| `concurrency_limited` | transient | yes | - | 429 | Too many requests are in flight, over the gateway or for this key; Retry-After says when to retry. |
 | `budget_exceeded` | policy | no | - | 429 | The key's token budget is spent for the current day or month (Retry-After: until it ends), or in total. |

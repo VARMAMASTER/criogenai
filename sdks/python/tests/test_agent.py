@@ -701,3 +701,69 @@ def test_every_catalog_code_raises_its_family_class():
         assert error.code == entry["code"]
         checked += 1
     assert checked > 20
+
+
+def test_concurrent_runs_get_their_own_hook_exception():
+    # Two runs of one agent fail in the same hook at the same moment: each
+    # must get the exception raised for it, never the other's (security audit).
+    class Flaky:
+        name = "flaky"
+
+        async def before_model(self, ctx):
+            text = ctx.messages[-1]["content"][0]["text"]
+            await asyncio.sleep(0.2 if text == "slow" else 0.02)
+            raise ValueError(f"for {text}")
+
+    agent = Agent(FakeModel(["never"]), hooks=[Flaky()])
+
+    async def both():
+        return await asyncio.gather(agent.run("slow"), agent.run("fast"), return_exceptions=True)
+
+    slow, fast = run(both())
+    assert isinstance(slow.__cause__, ValueError) and str(slow.__cause__) == "for slow"
+    assert isinstance(fast.__cause__, ValueError) and str(fast.__cause__) == "for fast"
+
+
+def test_credentials_are_not_sent_over_plain_http_to_another_machine():
+    from agentbuild import OpenAICompatible
+
+    with pytest.raises(AgentBuildError) as refused:
+        Agent(OpenAICompatible("m", base_url="http://gpu-box:8000/v1", api_key="a-secret-key-1234"))
+    assert "plain http" in str(refused.value) and "a-secret-key-1234" not in str(refused.value)
+    # Explicitly allowed for a trusted network; this machine and https need nothing.
+    Agent(OpenAICompatible("m", base_url="http://gpu-box:8000/v1", api_key="k-12345678", allow_insecure_http=True))
+    Agent(OpenAICompatible("m", base_url="http://localhost:11434/v1", api_key="k-12345678"))
+    Agent(OpenAICompatible("m", base_url="https://gpu-box/v1", api_key="k-12345678"))
+
+
+def test_nested_type_definitions_are_hoisted_so_the_engine_checks_them():
+    class Patient:
+        """Stands in for a Pydantic model: it only needs these two."""
+
+        @staticmethod
+        def model_json_schema():
+            return {
+                "type": "object",
+                "properties": {"name": {"type": "string"}, "address": {"$ref": "#/$defs/Address"}},
+                "required": ["name"],
+                "$defs": {"Address": {"type": "object", "properties": {"city": {"type": "string"}}}},
+            }
+
+        @staticmethod
+        def model_validate(value):
+            return value
+
+    @tool
+    def admit(patient: Patient) -> str:
+        "Admits a patient."
+        return "admitted"
+
+    # `$defs` sit at the root, where `#/$defs/Address` is resolved.
+    assert admit.schema["$defs"]["Address"]["type"] == "object"
+    assert "$defs" not in admit.schema["properties"]["patient"]
+    # A wrong nested value reaches the model as invalid arguments.
+    result = Agent(
+        FakeModel([FakeReply.tool_call("admit", {"patient": {"name": "Ada", "address": {"city": 5}}}), "ok"]),
+        tools=[admit],
+    ).run_sync("go")
+    assert tool_results(result)[0]["error"]["code"] == "invalid_arguments"

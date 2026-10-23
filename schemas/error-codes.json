@@ -23,7 +23,7 @@
     {"code": "output_invalid", "layers": ["run"], "category": "policy", "retryable": false, "family": "other", "description": "The structured output was still invalid after the allowed retries."},
     {"code": "hook_failed", "layers": ["run"], "category": "developer", "retryable": false, "family": "other", "description": "A hook returned an error."},
     {"code": "invalid_state", "layers": ["run"], "category": "developer", "retryable": false, "family": "validation", "description": "The run state is not an agent's, or memory cannot find the run's namespace."},
-    {"code": "invalid_input", "layers": ["run"], "category": "developer", "retryable": false, "family": "validation", "description": "The input names one of the agent's own state keys."},
+    {"code": "invalid_input", "layers": ["run"], "category": "developer", "retryable": false, "family": "validation", "description": "The input names one of the agent's own state keys, or tries to change the value that scopes the thread's memory."},
     {"code": "audit_failed", "layers": ["run", "storage"], "category": "transient", "retryable": true, "family": "storage", "description": "An audit record could not be written, so the action it describes failed."},
 
     {"code": "thread_busy", "layers": ["thread", "storage"], "category": "transient", "retryable": true, "family": "busy", "description": "Another run holds the thread (OnBusy reject, or the wait timed out)."},
@@ -62,6 +62,7 @@
     {"code": "invalid_api_key", "layers": ["gateway"], "category": "developer", "retryable": false, "family": null, "http_status": 401, "description": "The gateway needs a valid virtual key."},
     {"code": "model_not_found", "layers": ["gateway"], "category": "developer", "retryable": false, "family": null, "http_status": 404, "description": "No route by that name, or the key may not use it."},
     {"code": "key_rate_limited", "layers": ["gateway"], "category": "transient", "retryable": true, "family": null, "http_status": 429, "description": "The key's requests or tokens per minute are used up; Retry-After says when to try again."},
+    {"code": "concurrency_limited", "layers": ["gateway"], "category": "transient", "retryable": true, "family": null, "http_status": 429, "description": "Too many requests are in flight, over the gateway or for this key; Retry-After says when to retry."},
     {"code": "budget_exceeded", "layers": ["gateway"], "category": "policy", "retryable": false, "family": null, "http_status": 429, "description": "The key's token budget is spent for the current day or month (Retry-After: until it ends), or in total."}
   ]
 }

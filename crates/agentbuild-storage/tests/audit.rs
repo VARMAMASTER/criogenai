@@ -124,6 +124,49 @@ async fn contract(log: &dyn AuditLog) {
 }
 
 #[tokio::test]
+async fn signed_anchors_catch_a_cut_tail_and_a_recomputed_chain() {
+    let key = b"anchor-key-kept-outside-the-database";
+    let event = |n: u32| AuditEvent::new("tool.executed").subject(format!("call-{n}"));
+    let log = InMemoryAuditLog::new();
+    for n in 1..=5 {
+        log.append(event(n)).await.unwrap();
+    }
+    let anchor = log.anchor(key).await.unwrap().unwrap();
+    assert_eq!(anchor.seq, 5);
+    // More records after the anchor: still fine.
+    log.append(event(6)).await.unwrap();
+    assert!(log.verify_anchor(&anchor, key).await.unwrap().ok);
+
+    // The tail cut off: a valid, shorter chain.
+    let cut = InMemoryAuditLog::new();
+    for n in 1..=3 {
+        cut.append(event(n)).await.unwrap();
+    }
+    assert!(cut.verify().await.unwrap().ok);
+    assert!(!cut.verify_anchor(&anchor, key).await.unwrap().ok);
+
+    // Records rewritten and the whole chain recomputed, as anyone who can
+    // write the table can: the chain is valid, the anchor's hash is not.
+    let forged = InMemoryAuditLog::new();
+    for n in 1..=6 {
+        let rewritten = if n == 3 { event(99) } else { event(n) };
+        forged.append(rewritten).await.unwrap();
+    }
+    assert!(forged.verify().await.unwrap().ok);
+    let verdict = forged.verify_anchor(&anchor, key).await.unwrap();
+    assert!(!verdict.ok);
+    assert_eq!(verdict.first_broken, Some(5));
+
+    // An anchor made up without the key, or checked with the wrong key.
+    let made_up = agentbuild_storage::AuditAnchor::sign(5, anchor.hash.clone(), b"guess");
+    assert_eq!(
+        log.verify_anchor(&made_up, key).await.unwrap_err().code(),
+        "invalid_value"
+    );
+    assert!(log.verify_anchor(&anchor, b"other-key").await.is_err());
+}
+
+#[tokio::test]
 async fn the_in_memory_log_keeps_the_contract_and_detects_edits() {
     let log = InMemoryAuditLog::new();
     contract(&log).await;
@@ -276,6 +319,24 @@ mod sqlite {
         assert_eq!(storage.audit().unwrap().head().await.unwrap().unwrap().0, 6);
 
         let raw = sqlx::SqlitePool::connect(&db.url()).await.unwrap();
+        // The database refuses plain edits and deletions...
+        for statement in [
+            "UPDATE agentbuild_audit SET actor = 'someone-else' WHERE seq = 1",
+            "DELETE FROM agentbuild_audit WHERE seq = 4",
+        ] {
+            let refused = sqlx::query(statement).execute(&raw).await.unwrap_err();
+            assert!(refused.to_string().contains("append-only"), "{refused}");
+        }
+        assert!(log.verify().await.unwrap().ok);
+        // ...so what follows needs schema rights: the triggers are dropped.
+        let anchor = log.anchor(b"anchor-key").await.unwrap().unwrap();
+        assert_eq!(anchor.seq, 6);
+        for trigger in ["agentbuild_audit_no_update", "agentbuild_audit_no_delete"] {
+            sqlx::query(&format!("DROP TRIGGER {trigger}"))
+                .execute(&raw)
+                .await
+                .unwrap();
+        }
         sqlx::query("UPDATE agentbuild_audit SET actor = 'someone-else' WHERE seq = 1")
             .execute(&raw)
             .await
@@ -291,6 +352,18 @@ mod sqlite {
             .await
             .unwrap();
         assert_eq!(log.verify().await.unwrap().first_broken, Some(5));
+        // A tail cut off keeps the chain valid, which only an anchor sees.
+        sqlx::query("DELETE FROM agentbuild_audit WHERE seq >= 4")
+            .execute(&raw)
+            .await
+            .unwrap();
+        assert!(
+            log.verify().await.unwrap().ok,
+            "a cut tail is a valid chain"
+        );
+        let cut = log.verify_anchor(&anchor, b"anchor-key").await.unwrap();
+        assert!(!cut.ok);
+        assert_eq!(cut.first_broken, Some(6));
         raw.close().await;
         checkpointer.close().await;
     }
@@ -326,6 +399,21 @@ mod postgres {
         let log = checkpointer.audit_log();
         contract(&log).await;
         let raw = db.raw().await;
+        // The database refuses plain edits, deletions and truncation.
+        for statement in [
+            "UPDATE agentbuild_audit SET outcome = 'failed' WHERE seq = 2",
+            "DELETE FROM agentbuild_audit WHERE seq = 2",
+            "TRUNCATE agentbuild_audit",
+        ] {
+            let refused = sqlx::query(statement).execute(&raw).await.unwrap_err();
+            assert!(refused.to_string().contains("append-only"), "{refused}");
+        }
+        assert!(log.verify().await.unwrap().ok);
+        // ...so tampering needs ownership of the table.
+        sqlx::query("ALTER TABLE agentbuild_audit DISABLE TRIGGER USER")
+            .execute(&raw)
+            .await
+            .unwrap();
         sqlx::query("UPDATE agentbuild_audit SET outcome = 'failed' WHERE seq = 2")
             .execute(&raw)
             .await

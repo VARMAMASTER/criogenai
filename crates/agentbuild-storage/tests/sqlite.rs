@@ -147,11 +147,11 @@ async fn a_long_chat_stores_each_message_once() {
 async fn migrations_run_once_and_refuse_newer_databases() {
     let db = TempDb::new();
     let store = db.open().await;
-    assert_eq!(store.schema_version().await.unwrap(), 5);
+    assert_eq!(store.schema_version().await.unwrap(), 6);
     drop(store);
     // Opening again applies nothing new.
     let store = db.open().await;
-    assert_eq!(store.schema_version().await.unwrap(), 5);
+    assert_eq!(store.schema_version().await.unwrap(), 6);
     drop(store);
 
     let pool = raw(&db).await;
@@ -418,4 +418,21 @@ async fn close_releases_the_database_file() {
     }
     // In memory there is nothing to close.
     Storage::in_memory().close().await;
+}
+
+#[tokio::test]
+async fn a_path_is_a_path_not_url_options() {
+    // `#`, `%20` (and `?` where file names may hold it) in a file name must
+    // not turn into connection options or be decoded.
+    let odd = if cfg!(unix) { "a?b#c%20d" } else { "a#b%20c" };
+    let path = std::env::temp_dir().join(format!("agentbuild-{odd}-{}.db", uuid::Uuid::now_v7()));
+    let store = SqliteCheckpointer::open(&path).await.unwrap();
+    assert_eq!(store.schema_version().await.unwrap(), 6);
+    store.close().await;
+    assert!(path.exists(), "the file has exactly the name asked for");
+    for suffix in ["", "-wal", "-shm"] {
+        let mut file = path.clone().into_os_string();
+        file.push(suffix);
+        let _ = std::fs::remove_file(file);
+    }
 }

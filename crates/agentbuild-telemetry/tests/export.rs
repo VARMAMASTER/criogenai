@@ -217,7 +217,8 @@ fn str_attr(span: &serde_json::Value, key: &str) -> Option<String> {
 #[tokio::test]
 async fn an_agent_run_becomes_a_langfuse_trace() {
     let collector = Collector::start(vec![]).await;
-    let exporter = OtlpExporter::start(fast(OtlpConfig::new(&collector.url))).unwrap();
+    let exporter =
+        OtlpExporter::start(fast(OtlpConfig::new(&collector.url).capture_content(true))).unwrap();
     let agent = quick_agent();
     let options = agent
         .run_options()
@@ -273,7 +274,7 @@ async fn an_agent_run_becomes_a_langfuse_trace() {
 #[tokio::test]
 async fn masks_rewrite_content_before_export() {
     let collector = Collector::start(vec![]).await;
-    let config = fast(OtlpConfig::new(&collector.url)).mask(|value| {
+    let config = fast(OtlpConfig::new(&collector.url).capture_content(true)).mask(|value| {
         let text = value.to_string().replace("Paris", "[CITY]");
         serde_json::from_str(&text).unwrap_or(value)
     });
@@ -302,7 +303,8 @@ async fn masks_rewrite_content_before_export() {
 #[tokio::test]
 async fn a_failed_node_is_an_error_and_the_trace_still_arrives() {
     let collector = Collector::start(vec![]).await;
-    let exporter = OtlpExporter::start(fast(OtlpConfig::new(&collector.url))).unwrap();
+    let exporter =
+        OtlpExporter::start(fast(OtlpConfig::new(&collector.url).capture_content(true))).unwrap();
     let mut builder = WorkflowBuilder::new();
     builder
         .add_node(
@@ -384,4 +386,46 @@ async fn suspend_and_resume_share_one_trace() {
         "one trace"
     );
     assert_ne!(roots[0]["spanId"], roots[1]["spanId"]);
+}
+
+#[tokio::test]
+async fn by_default_no_error_text_and_no_identity_leaves_the_process() {
+    // The defaults protect: a failing node's message (it echoes what
+    // failed), the run's user and session ids and custom metadata are not
+    // exported; names, timings and the error code still are.
+    let collector = Collector::start(vec![]).await;
+    let exporter = OtlpExporter::start(fast(OtlpConfig::new(&collector.url))).unwrap();
+    let mut builder = WorkflowBuilder::new();
+    builder
+        .add_node(
+            "broken",
+            node_with_context(|_, _| async {
+                Err::<NodeOutput, _>(agentbuild_core::NodeError::new(
+                    "no record for patient Jane Doe, dsn postgres://admin:hunter2@db/prod",
+                ))
+            }),
+        )
+        .set_entry("broken")
+        .add_edge("broken", END);
+    let options = RunOptions::default()
+        .observe(exporter.observer())
+        .metadata(json!({"user_id": "patient-4711", "session_id": "s-9", "ward": "oncology"}));
+    builder
+        .build()
+        .unwrap()
+        .run_with(State::new(), options)
+        .await
+        .unwrap_err();
+    exporter.flush().await;
+    let all = serde_json::to_string(&collector.spans()).unwrap();
+    for secret in ["Jane Doe", "hunter2", "patient-4711", "s-9", "oncology"] {
+        assert!(!all.contains(secret), "`{secret}` was exported: {all}");
+    }
+    let spans = collector.spans();
+    let broken = spans.iter().find(|s| s["name"] == "broken").unwrap();
+    assert_eq!(broken["status"]["code"], 2, "still an error");
+    assert_eq!(
+        str_attr(broken, "langfuse.observation.status_message").as_deref(),
+        Some("node_failed")
+    );
 }

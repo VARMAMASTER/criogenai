@@ -219,3 +219,20 @@ fn models_are_usable_as_trait_objects() {
     assert_eq!((model.provider(), model.model()), ("fake", "fake"));
     assert_eq!(model.capabilities().tools, Some(true));
 }
+
+#[test]
+fn error_messages_with_non_ascii_urls_do_not_panic() {
+    // A hostile or buggy upstream controls this text (security audit).
+    for text in [
+        "see https://x.example/é",
+        "see https://x.example/世界",
+        "key sk-abcdéfghijklmnopqrstuvé",
+        "https://日本語.example/路径?q=é.",
+    ] {
+        let error = agentbuild_providers::ModelError::new(
+            agentbuild_providers::ModelErrorKind::Server,
+            text,
+        );
+        assert!(!error.message.is_empty());
+    }
+}

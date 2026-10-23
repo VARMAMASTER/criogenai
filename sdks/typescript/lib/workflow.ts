@@ -101,11 +101,17 @@ function nodeAdapter(fn: NodeFunction, causes: Map<string, unknown>): (request: 
       return JSON.stringify({ update: value ?? null });
     } catch (error) {
       const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-      causes.set(`node:${node}:${text}`, error);
-      return JSON.stringify({ crash: text });
+      // A key unique to this throw: the run error repeats it, so concurrent
+      // runs that fail the same way never take each other's exception.
+      const causeKey = `node:${node}:${++throws}`;
+      causes.set(causeKey, error);
+      return JSON.stringify({ crash: text, causeKey });
     }
   };
 }
+
+/** Counts throws, for keys unique to each. */
+let throws = 0;
 
 function routerAdapter(router: Router, causes: Map<string, unknown>): (request: string) => Promise<string> {
   return async (request: string) => {
@@ -116,8 +122,11 @@ function routerAdapter(router: Router, causes: Map<string, unknown>): (request: 
       return JSON.stringify({ label });
     } catch (error) {
       const text = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-      causes.set(`node:${node}:${text}`, error);
-      return JSON.stringify({ crash: text });
+      // A key unique to this throw: the run error repeats it, so concurrent
+      // runs that fail the same way never take each other's exception.
+      const causeKey = `node:${node}:${++throws}`;
+      causes.set(causeKey, error);
+      return JSON.stringify({ crash: text, causeKey });
     }
   };
 }

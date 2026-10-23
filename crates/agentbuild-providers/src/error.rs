@@ -491,6 +491,7 @@ pub fn sanitize_message(text: &str, secrets: &[&str]) -> String {
     for secret in secrets.iter().filter(|s| s.len() >= 4) {
         out = out.replace(secret, "[redacted]");
     }
+    let out = redact_key_shapes(&out);
     let mut cleaned = String::with_capacity(out.len());
     let mut after_bearer = false;
     for piece in out.split_inclusive(char::is_whitespace) {
@@ -510,8 +511,9 @@ pub fn sanitize_message(text: &str, secrets: &[&str]) -> String {
             Some(r) => {
                 // Keep punctuation that follows a URL or key, e.g. "url."
                 let trailing: &str = word
-                    .rfind(|c: char| c.is_alphanumeric() || c == '/' || c == '_' || c == '-')
-                    .map_or("", |i| &word[i + 1..]);
+                    .char_indices()
+                    .rfind(|(_, c)| c.is_alphanumeric() || *c == '/' || *c == '_' || *c == '-')
+                    .map_or("", |(i, c)| &word[i + c.len_utf8()..]);
                 cleaned.push_str(r);
                 cleaned.push_str(trailing);
             }
@@ -522,9 +524,41 @@ pub fn sanitize_message(text: &str, secrets: &[&str]) -> String {
     truncate(cleaned, MAX_MESSAGE_BYTES)
 }
 
+const KEY_PREFIXES: [&str; 8] = ["sk-", "sk_", "pk-", "AIza", "xai-", "gsk_", "ghp_", "AKIA"];
+
+/// Replaces every run of key characters that starts like an API key
+/// (`sk-…`, `AIza…`, …) wherever it sits: in JSON, after `=` or `:`, inside
+/// quotes, or glued to other text.
+fn redact_key_shapes(text: &str) -> String {
+    let is_key_char = |c: char| c.is_ascii_alphanumeric() || c == '-' || c == '_';
+    let mut out = String::with_capacity(text.len());
+    let mut run_start: Option<usize> = None;
+    let flush = |out: &mut String, from: usize, to: usize| {
+        let run = &text[from..to];
+        let keyed = KEY_PREFIXES
+            .iter()
+            .any(|p| run.starts_with(p) && run.len() >= p.len() + 12);
+        out.push_str(if keyed { "[redacted]" } else { run });
+    };
+    for (i, c) in text.char_indices() {
+        if is_key_char(c) {
+            run_start.get_or_insert(i);
+        } else {
+            if let Some(from) = run_start.take() {
+                flush(&mut out, from, i);
+            }
+            out.push(c);
+        }
+    }
+    if let Some(from) = run_start {
+        flush(&mut out, from, text.len());
+    }
+    out
+}
+
 fn looks_like_key(word: &str) -> bool {
     let word = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '_');
-    ["sk-", "sk_", "pk-", "AIza", "xai-", "gsk_"]
+    KEY_PREFIXES
         .iter()
         .any(|prefix| word.starts_with(prefix) && word.len() >= prefix.len() + 12)
 }

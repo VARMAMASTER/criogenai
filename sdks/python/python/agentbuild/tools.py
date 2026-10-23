@@ -93,13 +93,21 @@ class Tool:
         self._context_param: Optional[str] = None
         self._models: Dict[str, Any] = {}
         properties: Dict[str, Any] = {}
+        defs: Dict[str, Any] = {}
         required: List[str] = []
         for param in inspect.signature(func).parameters.values():
             annotation = hints.get(param.name, param.annotation)
             if annotation is ToolContext:
                 self._context_param = param.name
                 continue
-            properties[param.name] = _schema(annotation)
+            schema = _schema(annotation)
+            # `$defs` belong at the root: `#/$defs/X` is resolved against it.
+            for name, definition in schema.pop("$defs", {}).items():
+                if defs.setdefault(name, definition) != definition:
+                    raise TypeError(
+                        f"two different types are both called {name!r} in the arguments of {self.name}"
+                    )
+            properties[param.name] = schema
             if hasattr(annotation, "model_validate"):
                 self._models[param.name] = annotation
             if param.default is inspect.Parameter.empty:
@@ -110,6 +118,8 @@ class Tool:
             "required": required,
             "additionalProperties": False,
         }
+        if defs:
+            self.schema["$defs"] = defs
 
     def spec(self) -> Dict[str, Any]:
         return {

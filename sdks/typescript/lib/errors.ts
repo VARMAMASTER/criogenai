@@ -80,8 +80,7 @@ export function translate(error: unknown, causes?: Map<string, unknown>): unknow
   if (typeof parsed?.code !== "string") return error;
   let cause: unknown;
   const d = parsed.details;
-  const hookKey = typeof d?.["hook"] === "string" ? `hook:${d["hook"]}:${d["stage"]}` : undefined;
-  for (const key of [d?.["call_id"], d?.["cause_key"], hookKey]) {
+  for (const key of [d?.["call_id"], d?.["cause_key"]]) {
     if (typeof key === "string" && causes?.has(key)) {
       cause = causes.get(key);
       causes.delete(key);

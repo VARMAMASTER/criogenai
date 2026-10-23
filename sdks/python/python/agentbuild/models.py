@@ -76,13 +76,25 @@ class OpenAICompatible(_Model):
 
     kind = "openai_compatible"
 
-    def __init__(self, model: str, base_url: str, api_key: Optional[str] = None, name: str = "custom"):
+    def __init__(
+        self,
+        model: str,
+        base_url: str,
+        api_key: Optional[str] = None,
+        name: str = "custom",
+        allow_insecure_http: bool = False,
+    ):
+        """``allow_insecure_http``: send the key over plain ``http://`` to
+        another machine (a vLLM server on your LAN). Refused by default: a
+        key sent over http is readable by anyone on the path."""
         super().__init__(model, api_key, base_url)
         self.name = name
+        self.allow_insecure_http = allow_insecure_http
 
     def spec(self) -> Dict[str, Any]:
         spec = super().spec()
         spec["name"] = self.name
+        spec["allow_insecure_http"] = self.allow_insecure_http
         return spec
 
 

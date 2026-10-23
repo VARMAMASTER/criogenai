@@ -189,17 +189,13 @@ fn deliver(
             )?;
         }
         Err(failure) => {
-            // A tool's exception by call id, a node's by cause_key, a hook's
-            // by its name and stage.
+            // A tool's exception by call id; a node's or a hook's by the
+            // `cause_key` of its failure (unique to it).
             let key = failure.details.as_ref().and_then(|d| {
                 d.get("call_id")
                     .or_else(|| d.get("cause_key"))
                     .and_then(Value::as_str)
                     .map(str::to_string)
-                    .or_else(|| match (d["hook"].as_str(), d["stage"].as_str()) {
-                        (Some(hook), Some(stage)) => Some(hook_cause_key(hook, stage)),
-                        _ => None,
-                    })
             });
             let cause = key.and_then(|key| lock(tool_exceptions()).remove(&key));
             event_loop.call_method1(
@@ -334,6 +330,9 @@ fn endpoint(spec: &Value) -> Result<Endpoint, Failure> {
         && kind != "openai_compatible"
     {
         endpoint = endpoint.with_base_url(base);
+    }
+    if spec["allow_insecure_http"].as_bool() == Some(true) {
+        endpoint = endpoint.allow_insecure_http();
     }
     Ok(endpoint)
 }
@@ -636,9 +635,12 @@ struct PyHook {
     keep_tool_causes: bool,
 }
 
-/// Where a hook's exception waits for the run error (`hook_failed`).
+/// Where a hook's exception waits for the run error (`hook_failed`): a key
+/// unique to this failure, so concurrent runs never take each other's.
 fn hook_cause_key(hook: &str, stage: &str) -> String {
-    format!("hook:{hook}:{stage}")
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("hook:{hook}:{stage}:{n}")
 }
 
 fn hook_ctx_json(ctx: &HookContext) -> String {
@@ -744,15 +746,16 @@ impl PyHook {
         if !self.has(stage) {
             return Ok(HookAction::proceed());
         }
+        let key = hook_cause_key(&self.name, stage);
         let envelope = self
             .call(
                 stage,
                 hook_ctx_json(ctx),
                 ctx.metadata.as_ref(),
-                Some(hook_cause_key(&self.name, stage)),
+                Some(key.clone()),
             )
             .await
-            .map_err(HookError::new)?;
+            .map_err(|text| HookError::new(text).with_cause_key(key))?;
         hook_action(&envelope)
     }
 }
@@ -1681,7 +1684,12 @@ fn run_failure(error: RunError) -> Failure {
     match &error.kind {
         RunErrorKind::NodeFailed { node, source } | RunErrorKind::RouterFailed { node, source } => {
             details["node"] = json!(node);
-            details["cause_key"] = json!(cause_key(node, &source.message));
+            details["cause_key"] = source
+                .details
+                .as_ref()
+                .and_then(|d| d.get("cause_key"))
+                .cloned()
+                .unwrap_or(Value::Null);
             if let Some(kind) = &source.kind {
                 details["kind"] = json!(kind);
             }
@@ -1698,10 +1706,13 @@ fn run_failure(error: RunError) -> Failure {
     }
 }
 
-/// Where a node's or router's exception waits for its error: the node and
-/// the message are known on both sides.
-fn cause_key(node: &str, message: &str) -> String {
-    format!("node:{node}:{message}")
+/// Where a node's or router's exception waits for its error: a key unique
+/// to this failure, carried by the node's error, so concurrent runs that
+/// fail the same way never take each other's exception.
+fn cause_key(node: &str) -> String {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    format!("node:{node}:{n}")
 }
 
 fn thread_failure(error: ThreadError) -> Failure {
@@ -1735,8 +1746,9 @@ fn python_node(name: String, adapter: Arc<Py<PyAny>>, is_async: bool) -> impl No
             let envelope = match answer {
                 Answer::Envelope(envelope) => envelope,
                 Answer::Raised(exception, text) => {
-                    lock(tool_exceptions()).insert(cause_key(&name, &text), exception);
-                    return Err(NodeError::new(text));
+                    let key = cause_key(&name);
+                    lock(tool_exceptions()).insert(key.clone(), exception);
+                    return Err(NodeError::new(text).with_details(json!({"cause_key": key})));
                 }
             };
             let envelope: Value = serde_json::from_str(&envelope)
@@ -1788,8 +1800,9 @@ fn python_router(from: String, adapter: Arc<Py<PyAny>>) -> impl Router {
                         .ok_or_else(|| NodeError::new("a router returns a label (a string)"))
                 }
                 Answer::Raised(exception, text) => {
-                    lock(tool_exceptions()).insert(cause_key(&from, &text), exception);
-                    Err(NodeError::new(text))
+                    let key = cause_key(&from);
+                    lock(tool_exceptions()).insert(key.clone(), exception);
+                    Err(NodeError::new(text).with_details(json!({"cause_key": key})))
                 }
             }
         }

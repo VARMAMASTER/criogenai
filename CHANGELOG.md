@@ -52,6 +52,60 @@ First release, planned as 0.1.0 (Rust crates only).
   `webpki-root-certs` 1.0.10 (RUSTSEC-2026-0381, -0382, -0383: distrusted
   intermediates could be accepted), in every lockfile.
 
+### Security audit, October 2026
+
+An audit of the whole codebase (four independent reviewers; each finding
+checked against the code) and what changed. **Behaviour changes:**
+
+- **Encrypted databases refuse plain rows** (`storage_corrupt`): a database
+  written before encryption was turned on must be converted with
+  `reencrypt()` before it can be read with keys.
+- **Telemetry exports no content by default in Rust too**
+  (`OtlpConfig::capture_content` is now `false`), and with it off no error
+  text, `user_id`, `session_id` or custom metadata, only error codes.
+- **Credentials are not sent over plain `http://` to another machine**
+  unless `allow_insecure_http` is set (SDK models, `Endpoint`, gateway
+  config); loopback and `https://` are unaffected.
+- **HTTP redirects are not followed** by the provider client.
+- **The gateway reserves tokens at admission**, caps `max_tokens`, limits
+  requests in flight (new code `concurrency_limited`), cuts off clients
+  that stop reading, shows clients only the kind of upstream failures and
+  no longer sends `x-agentbuild-model` unless `expose_model_header` is set.
+- A thread keeps the value that scopes its memory (`Memory::by_state`): a
+  later turn that changes it is `invalid_input`.
+- A `$ref` a tool schema does not define is a validation problem (it used
+  to let the value through unchecked); Pydantic `$defs` are hoisted to the
+  schema root so nested arguments are checked.
+
+**Fixed:** a panic on a non-ASCII character after a URL in a provider's
+error text; keys inside JSON or other punctuation are now redacted from
+errors; `extras` can no longer override `model`, `stream` or `messages`;
+response size, SSE and stream buffers are bounded; an exception reaches
+its own run's error, never a concurrent run's (hooks and workflow nodes);
+exception text shown to the model has URLs and credentials removed;
+memory recalled into the system prompt is one bounded line per fact;
+Postgres thread locks use SHA-256 keys; a SQLite path is a path, not URL
+options (and the file is owner-only on Unix); a recursive query on a
+tampered checkpoint chain is bounded; a stored vector's size cannot
+overflow.
+
+**Added:** the audit log refuses `UPDATE`/`DELETE` (and `TRUNCATE` on
+Postgres) in the database, and signed anchors (`AuditLog::anchor`,
+`verify_anchor`) detect a cut tail or a recomputed chain;
+`seal_snapshot` / `open_snapshot` sign a suspended run for apps that let
+users hold one; `KeyLimits::max_concurrent`,
+`GatewayBuilder::max_concurrent_requests`, `max_tokens`,
+`expose_model_header`; `HttpConfig::max_response_bytes`;
+`Endpoint::allow_insecure_http`; `HookError::cause_key`.
+
+**Not changed, and documented** (SECURITY.md, design 0008 §15.2, 0010
+§5.1): replay of an older valid thread head by someone with database write
+access (needs an anchor outside the database), key and plaintext buffers
+are not zeroised, encrypted memory search cost grows with the namespace,
+SQLite's WAL can hold deleted content until it is checkpointed, and any
+role on the same Postgres database can take advisory locks or send
+interrupts (use a dedicated role).
+
 ### Gemini 3 tool use works (design 0006 §14)
 
 - Fixed: with a Gemini 3 model, the second model call of a tool-using

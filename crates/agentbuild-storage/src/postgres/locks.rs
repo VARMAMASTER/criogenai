@@ -14,9 +14,14 @@ use crate::locks::{HeldLock, InterruptHandler, ThreadLocks};
 /// (a process still waiting for the lock may hear it too).
 const INTERRUPT_CHANNEL: &str = "agentbuild_interrupt";
 
-/// A thread's lock key, computed by the server so every process (any
-/// language, any build) agrees on it.
-const LOCK_KEY: &str = "hashtextextended('agentbuild/thread/' || $1, 0)";
+/// A thread's lock key: the first eight bytes of the SHA-256 of its id, so
+/// every process (any language, any build) agrees on it and nobody who picks
+/// thread ids can craft two that collide.
+fn lock_key(thread: &str) -> i64 {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(format!("agentbuild/thread/{thread}").as_bytes());
+    i64::from_be_bytes(digest[..8].try_into().expect("8 bytes"))
+}
 
 /// Thread locks for every process on one Postgres database (design 0008
 /// §5.2): session advisory locks, so a crashed process's locks go with its
@@ -80,17 +85,17 @@ impl PostgresThreadLocks {
         // A bigint advisory lock shows in `pg_locks` as its high half
         // (`classid`) and low half (`objid`), with `objsubid` 1. No holder:
         // nothing to interrupt.
-        sqlx::query(&format!(
-            "WITH k AS (SELECT {LOCK_KEY} AS key)
+        sqlx::query(
+            "WITH k AS (SELECT $1::BIGINT AS key)
             SELECT pg_notify($2, k.key::TEXT || ':' || l.pid::TEXT)
                 FROM k JOIN pg_locks l
                     ON l.locktype = 'advisory' AND l.granted AND l.objsubid = 1
                     AND l.classid::BIGINT = (k.key >> 32) & 4294967295
                     AND l.objid::BIGINT = k.key & 4294967295
                     AND l.database = (SELECT oid FROM pg_database
-                        WHERE datname = current_database())"
-        ))
-        .bind(thread)
+                        WHERE datname = current_database())",
+        )
+        .bind(lock_key(thread))
         .bind(INTERRUPT_CHANNEL)
         .execute(&self.pool)
         .await
@@ -180,11 +185,7 @@ async fn lock(
     thread: &str,
     deadline: Option<Instant>,
 ) -> Result<Option<i64>, StorageError> {
-    let key: i64 = sqlx::query_scalar(&format!("SELECT {LOCK_KEY}"))
-        .bind(thread)
-        .fetch_one(&mut *listener)
-        .await
-        .map_err(sql_error)?;
+    let key = lock_key(thread);
     let Some(deadline) = deadline else {
         let taken: bool = sqlx::query_scalar("SELECT pg_try_advisory_lock($1)")
             .bind(key)

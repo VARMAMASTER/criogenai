@@ -104,6 +104,14 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX agentbuild_audit_thread ON agentbuild_audit (thread_id, seq);
     CREATE INDEX agentbuild_audit_time ON agentbuild_audit (at_ms)",
+    // 6: the audit trail is append-only in the database too (design 0010
+    // §1.4): plain UPDATE and DELETE statements fail. Dropping a trigger
+    // takes schema rights; `verify_anchor` still catches what follows.
+    "CREATE TRIGGER agentbuild_audit_no_update BEFORE UPDATE ON agentbuild_audit
+    BEGIN SELECT RAISE(ABORT, 'agentbuild_audit is append-only'); END
+    --@@
+    CREATE TRIGGER agentbuild_audit_no_delete BEFORE DELETE ON agentbuild_audit
+    BEGIN SELECT RAISE(ABORT, 'agentbuild_audit is append-only'); END",
 ];
 
 /// Checkpoint `?1` of thread `?2` and its ancestors up to the nearest
@@ -114,9 +122,25 @@ const CHAIN: &str = "WITH RECURSIVE chain (id, parent_id, kind, depth, body, n) 
         UNION ALL
         SELECT c.id, c.parent_id, c.kind, c.depth, c.body, chain.n + 1
             FROM agentbuild_checkpoints c JOIN chain ON c.id = chain.parent_id
-            WHERE chain.kind = 'delta'
+            WHERE chain.kind = 'delta' AND chain.n < 100000
     )
     SELECT id, kind, depth, body FROM chain ORDER BY n DESC";
+
+/// The database file and its journal readable by their owner only (Unix;
+/// elsewhere the directory's permissions apply). They hold conversations.
+fn restrict_permissions(path: &std::path::Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        for suffix in ["", "-wal", "-shm"] {
+            let mut file = path.as_os_str().to_owned();
+            file.push(suffix);
+            let _ = std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o600));
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
 
 /// Rows deleted or rewritten per statement or batch.
 const BATCH: usize = 200;
@@ -179,13 +203,22 @@ impl SqliteCheckpointer {
 
     async fn open_with(url: &str, sealer: Sealer) -> Result<Self, StorageError> {
         let in_memory = url.contains(":memory:") || url.contains("mode=memory");
-        let options = SqliteConnectOptions::from_str(url)
-            .map_err(|err| {
-                StorageError::new(
-                    StorageErrorKind::Unavailable,
-                    format!("invalid SQLite URL `{url}`: {err}"),
-                )
-            })?
+        let options = SqliteConnectOptions::from_str(url).map_err(|err| {
+            StorageError::new(
+                StorageErrorKind::Unavailable,
+                format!("invalid SQLite URL `{url}`: {err}"),
+            )
+        })?;
+        Self::open_options(options, in_memory, sealer).await
+    }
+
+    async fn open_options(
+        options: SqliteConnectOptions,
+        in_memory: bool,
+        sealer: Sealer,
+    ) -> Result<Self, StorageError> {
+        let path = options.get_filename().to_path_buf();
+        let options = options
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
             .busy_timeout(Duration::from_secs(5))
@@ -214,12 +247,17 @@ impl SqliteCheckpointer {
         };
         checkpointer.migrate().await?;
         checkpointer.check_settings().await?;
+        if !in_memory {
+            restrict_permissions(&path);
+        }
         Ok(checkpointer)
     }
 
-    /// Opens (or creates) the database file at `path`.
+    /// Opens (or creates) the database file at `path`. The path is used as
+    /// it is: `?` and `#` in it are part of the file name, not URL options.
     pub async fn open(path: impl AsRef<std::path::Path>) -> Result<Self, StorageError> {
-        Self::connect(&format!("sqlite://{}", path.as_ref().display())).await
+        let options = SqliteConnectOptions::new().filename(path.as_ref());
+        Self::open_options(options, false, Sealer::default()).await
     }
 
     /// Writes the full state at least every `interval` checkpoints of a
@@ -287,13 +325,11 @@ impl SqliteCheckpointer {
             // One statement at a time: `raw_sql`'s future is not `Send` for
             // every lifetime, which would stop callers from opening storage
             // inside `tokio::spawn`. Migrations have no `;` inside literals.
-            for statement in migration.split(';').map(str::trim) {
-                if !statement.is_empty() {
-                    sqlx::query(statement)
-                        .execute(&mut *tx)
-                        .await
-                        .map_err(sql_error)?;
-                }
+            for statement in crate::sql::statements(migration) {
+                sqlx::query(statement)
+                    .execute(&mut *tx)
+                    .await
+                    .map_err(sql_error)?;
             }
             sqlx::query(
                 "INSERT INTO agentbuild_schema_migrations (version, applied_at_ms) VALUES (?, ?)",
@@ -791,6 +827,7 @@ impl SqliteCheckpointer {
                 "reencrypt needs keys: open the storage with `connect_encrypted`",
             ));
         };
+        let migrating = self.sealer.for_migration();
         let mut report = crate::ReencryptReport::default();
         for column in ["body", "snapshot"] {
             let aad = if column == "body" {
@@ -816,7 +853,7 @@ impl SqliteCheckpointer {
                 after = last.0.clone();
                 for (id, thread, stored) in rows {
                     let aad = aad(&thread, &id);
-                    let plain = self.sealer.open(&aad, stored.clone(), column)?;
+                    let plain = migrating.open(&aad, stored.clone(), column)?;
                     let sealed = self.sealer.seal(&aad, plain)?;
                     report.checkpoints += sqlx::query(&format!(
                         "UPDATE agentbuild_checkpoints SET {column} = ?1
@@ -851,7 +888,7 @@ impl SqliteCheckpointer {
             after = last.0;
             for (seq, checkpoint, thread, node, stored) in rows {
                 let aad = write_aad(&thread, &checkpoint, &node);
-                let plain = self.sealer.open(&aad, stored, "task write")?;
+                let plain = migrating.open(&aad, stored, "task write")?;
                 let sealed = self.sealer.seal(&aad, plain)?;
                 report.task_writes +=
                     sqlx::query("UPDATE agentbuild_pending_writes SET write = ? WHERE seq = ?")

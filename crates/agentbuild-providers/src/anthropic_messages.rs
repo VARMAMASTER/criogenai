@@ -274,6 +274,10 @@ pub(crate) fn encode(
                     betas.extend(flags.iter().filter_map(Value::as_str).map(str::to_string));
                 }
                 ("tools", Value::Array(hosted)) => tools.extend(hosted.iter().cloned()),
+                ("model" | "stream" | "messages", _) => warnings.push(Warning::new(
+                    "extras_ignored",
+                    format!("the `{name}` field cannot be set through extras"),
+                )),
                 _ => {
                     body.insert(name.clone(), value.clone());
                 }

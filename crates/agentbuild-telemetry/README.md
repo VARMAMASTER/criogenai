@@ -14,8 +14,9 @@ export every run as an OpenTelemetry trace, with a one-line preset for
   `name`, `environment`, `release`, anything else as metadata
 - never slows or breaks a run: events are queued and exported in the
   background; a full queue or an unreachable backend only drops telemetry
-- sensitive data: `capture_content(false)` sends no messages, arguments or
-  results; `mask(...)` rewrites them before they leave the process
+- sensitive data stays home by default: no messages, arguments, results,
+  error text, `user_id` or `session_id` leave the process unless you ask
+  (`capture_content(true)`); `mask(...)` rewrites what is sent
 - standard OTLP/HTTP (JSON), so it also works with Jaeger, Grafana Tempo,
   Datadog, Arize Phoenix or an OpenTelemetry Collector
 
@@ -41,8 +42,10 @@ async fn traced() -> Result<(), TelemetryError> {
 }
 ```
 
-For sensitive data, start from `Langfuse::from_env()?.capture_content(false)`
-(names, timings, usage and status only) or add `.mask(|value| ...)`.
+Content is off by default: traces carry names, timings, usage, status and
+error codes only. To see prompts and answers, use
+`Langfuse::from_env()?.capture_content(true)`, and add `.mask(|value| ...)`
+for what must not leave (patient identifiers).
 
 Try it: `cargo run -p agentbuild-telemetry --example langfuse` with your
 Langfuse keys set.

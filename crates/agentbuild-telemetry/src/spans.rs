@@ -41,6 +41,26 @@ impl ContentPolicy {
     }
 }
 
+impl ContentPolicy {
+    /// An error as it is exported: `code: message`, masked and bounded,
+    /// when content capture is on; **the code alone** when it is off. Error
+    /// text echoes what failed (a rejected value, an exception's message,
+    /// a path), which is content.
+    fn detail(&self, code: &str, message: &str) -> String {
+        match self.render(&Value::String(message.to_string())) {
+            Some(message) => format!("{code}: {message}"),
+            None => code.to_string(),
+        }
+    }
+
+    /// A run-metadata value as exported: `None` for identities and free
+    /// fields (`user_id`, `session_id`, custom keys) when content capture is
+    /// off, masked and bounded when it is on.
+    fn metadata(&self, value: String) -> Option<String> {
+        self.render(&Value::String(value))
+    }
+}
+
 fn truncate(mut text: String, max_chars: usize) -> String {
     if text.chars().count() <= max_chars {
         return text;
@@ -220,14 +240,14 @@ impl SpanBuilder {
             }
             EventKind::NodeFailed { code, message, .. } => {
                 if let Some(mut span) = run.nodes.remove(&node_key()) {
-                    fail(&mut span, format!("{code}: {message}"), event.ts_ms);
+                    fail(&mut span, policy.detail(code, message), event.ts_ms);
                     span.set_str("agentbuild.error_code", code.clone());
                     done.push(span);
                 }
             }
             EventKind::NodeCancelled { reason } => {
                 if let Some(mut span) = run.nodes.remove(&node_key()) {
-                    fail(&mut span, format!("cancelled: {reason}"), event.ts_ms);
+                    fail(&mut span, policy.detail("cancelled", reason), event.ts_ms);
                     done.push(span);
                 }
             }
@@ -249,7 +269,8 @@ impl SpanBuilder {
                 span.set_str(
                     "langfuse.observation.status_message",
                     format!(
-                        "attempt {attempt} failed ({code}): {message}; retry in {retry_in_ms} ms"
+                        "attempt {attempt} failed: {}; retry in {retry_in_ms} ms",
+                        policy.detail(code, message)
                     ),
                 );
                 span.set("agentbuild.attempt", Attr::Int(i64::from(*attempt)));
@@ -270,6 +291,7 @@ impl SpanBuilder {
                 steps,
             } => {
                 let mut run = self.runs.remove(&event.run_id).expect("present above");
+                let error = error.as_deref().map(|e| policy.detail("error", e));
                 done.extend(run.finish(event.ts_ms, status, error.as_deref(), *steps));
             }
             _ => {}
@@ -298,11 +320,17 @@ impl SpanBuilder {
                 };
                 match key.as_str() {
                     "name" => name = text(),
+                    // Who the run is for: an identity, so exported only
+                    // with content capture on (masked like content).
                     "user_id" => {
-                        trace_attributes.push(("langfuse.user.id".into(), Attr::Str(text())))
+                        if let Some(id) = self.policy.metadata(text()) {
+                            trace_attributes.push(("langfuse.user.id".into(), Attr::Str(id)));
+                        }
                     }
                     "session_id" => {
-                        trace_attributes.push(("langfuse.session.id".into(), Attr::Str(text())))
+                        if let Some(id) = self.policy.metadata(text()) {
+                            trace_attributes.push(("langfuse.session.id".into(), Attr::Str(id)));
+                        }
                     }
                     "release" => {
                         trace_attributes.push(("langfuse.release".into(), Attr::Str(text())))
@@ -322,10 +350,14 @@ impl SpanBuilder {
                             .unwrap_or_default();
                         trace_attributes.push(("langfuse.trace.tags".into(), Attr::StrList(tags)));
                     }
-                    other => trace_attributes.push((
-                        format!("langfuse.trace.metadata.{other}"),
-                        Attr::Str(text()),
-                    )),
+                    other => {
+                        if let Some(value) = self.policy.metadata(text()) {
+                            trace_attributes.push((
+                                format!("langfuse.trace.metadata.{other}"),
+                                Attr::Str(value),
+                            ));
+                        }
+                    }
                 }
             }
         }
@@ -511,7 +543,7 @@ impl RunTrace {
                 if let Some(mut span) = self.generations.remove(&key) {
                     fail(
                         &mut span,
-                        format!("stream aborted: {}", text("reason")),
+                        policy.detail("stream_aborted", &text("reason")),
                         event.ts_ms,
                     );
                     done.push(span);
@@ -546,11 +578,9 @@ impl RunTrace {
                             let code = error.get("code").and_then(Value::as_str).unwrap_or("error");
                             // The model may recover: a warning, not a failure.
                             span.set_str("langfuse.observation.level", "WARNING");
-                            span.set_str(
-                                "langfuse.observation.status_message",
-                                format!("{code}: {message}"),
-                            );
-                            span.status = Status::Error(format!("{code}: {message}"));
+                            let detail = policy.detail(code, message);
+                            span.set_str("langfuse.observation.status_message", detail.clone());
+                            span.status = Status::Error(detail);
                         }
                         _ => span.status = Status::Ok,
                     }
@@ -568,7 +598,7 @@ impl RunTrace {
                     span.set_str("langfuse.observation.level", "WARNING");
                     span.set_str(
                         "langfuse.observation.status_message",
-                        format!("{}: {}", text("code"), text("message")),
+                        policy.detail(&text("code"), &text("message")),
                     );
                 } else if let Some(rendered) = policy.render(payload) {
                     span.set_str("langfuse.observation.input", rendered);

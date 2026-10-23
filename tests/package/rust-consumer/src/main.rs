@@ -690,7 +690,7 @@ async fn postgres_threads_across_processes() {
     assert_eq!(second.result.messages.len(), 4);
     assert!(b.thread(&thread).delete().await.expect("delete"));
     let store = PostgresCheckpointer::connect(&url).await.expect("connect");
-    assert_eq!(store.schema_version().await.expect("version"), 5);
+    assert_eq!(store.schema_version().await.expect("version"), 6);
     store.close().await;
     println!("  Postgres threads across processes: ok");
 }

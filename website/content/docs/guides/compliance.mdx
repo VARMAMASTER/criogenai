@@ -19,6 +19,11 @@ stored as keyed hashes.
 - **No accidental plain text.** Once a database is encrypted, opening it
   without its keys fails (`encryption_key_missing`), so an app started
   without keys cannot write plain text into it.
+- **No planted plain text.** With keys, a content row that is *not*
+  encrypted is refused (`storage_corrupt`) instead of read: someone who can
+  write to the database file cannot slip in a forged checkpoint, approval
+  decision or memory fact. A database written before encryption was on
+  must be converted first with `reencrypt()`.
 - **Key rotation.** Put the new key first (`k2:…,k1:…`): new data uses it,
   old data still reads. `reencrypt()` rewrites old data with the new key.
 - **What stays readable**: thread ids, memory namespaces, timestamps. Use
@@ -36,8 +41,14 @@ rewinds, deletions and memory writes (the key only as a hash). Records hold
 
 - Each record names the `actor` set on the thread (`user:dr-rao`).
 - Records are chained by SHA-256: `verify` reports the first changed or
-  missing record. To also detect a rewrite of the whole chain, copy the
-  latest hash (`head`) to another system now and then.
+  missing record, and the database refuses plain `UPDATE`, `DELETE` and
+  `TRUNCATE` on the table (triggers).
+- Someone with schema rights can drop the triggers and recompute the whole
+  chain, which no hash chain can show by itself. Sign the head with a key
+  kept **outside** the database (`audit.anchor(key)`), store the anchor
+  where the database's writers cannot reach, and later
+  `audit.verify_anchor(&anchor, key)`: it fails if the chain was cut short
+  or recomputed.
 - **Fail closed**: if a record cannot be written, the action fails
   (`audit_failed`) rather than happening unrecorded.
 

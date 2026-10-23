@@ -190,7 +190,7 @@ impl Thread {
             Some(head) => head.state.clone(),
             None => State::new(),
         };
-        let state = next_turn(state, input.into())?;
+        let state = next_turn(state, input.into(), self.agent.memory_scope_key())?;
         let (writer, options) = self.prepare(&lease, head.as_ref(), options);
         let result = self.agent.run_state(state, options).await;
         self.commit(&writer, result, "send").await
@@ -597,10 +597,27 @@ impl Thread {
 
 /// The state a new turn starts from: the stored state without the last
 /// run's bookkeeping, plus the input messages.
-fn next_turn(state: State, input: AgentInput) -> Result<State, AgentError> {
+///
+/// `pinned` is the state key that scopes the agent's memory: a thread keeps
+/// the value it started with. Otherwise whoever can name a thread id could
+/// send into someone else's thread under their own memory namespace (the
+/// app decides who may use a thread; this keeps the thread's memory with it).
+fn next_turn(state: State, input: AgentInput, pinned: Option<&str>) -> Result<State, AgentError> {
     input.check()?;
     let (new_messages, values) = input.into_parts();
     let mut map = state.into_map();
+    if let Some(key) = pinned
+        && let (Some(old), Some(new)) = (map.get(key), values.get(key))
+        && old != new
+    {
+        return Err(AgentError::new(
+            "invalid_input",
+            format!(
+                "`{key}` scopes this thread's memory and was set when the thread started: a \
+                 later turn cannot change it"
+            ),
+        ));
+    }
     map.remove(AGENT);
     map.remove(HOOKS);
     let mut messages = match map.remove(MESSAGES) {

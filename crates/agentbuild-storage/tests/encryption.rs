@@ -352,7 +352,17 @@ async fn turning_it_on_later(
     let storage = Storage::connect_encrypted(url, ring(&[("k1", 1)]))
         .await
         .unwrap();
-    read_secrets(&storage, "old").await;
+    // Until `reencrypt` seals them, plaintext rows are refused: in a
+    // database that is encrypted, a plaintext row is a planted one.
+    let refused = storage.checkpointer().load("old", None).await.unwrap_err();
+    assert_eq!(refused.code(), "storage_corrupt");
+    assert!(refused.message.contains("reencrypt"), "{}", refused.message);
+    let refused = storage
+        .memory()
+        .search(&ns("patients/old"), &SearchQuery::new())
+        .await
+        .unwrap_err();
+    assert_eq!(refused.code(), "storage_corrupt");
     let report = storage.reencrypt().await.unwrap();
     assert_eq!(report.memory_items, 2);
     assert_eq!(report.task_writes, 1);
@@ -405,6 +415,34 @@ mod sqlite {
     async fn encryption_on_sqlite() {
         let db = TempDb::new();
         story(&db.url(), db.raw()).await;
+    }
+
+    #[tokio::test]
+    async fn plaintext_planted_in_an_encrypted_database_is_refused() {
+        let db = TempDb::new();
+        let storage = Storage::connect_encrypted(&db.url(), ring(&[("k1", 1)]))
+            .await
+            .unwrap();
+        write_secrets(&storage, "t").await;
+        read_secrets(&storage, "t").await;
+        // Someone with write access to the file replaces content with their
+        // own: no sealed row, no authentication to fail, unless it is refused.
+        let pool = sqlx::SqlitePool::connect(&db.url()).await.unwrap();
+        for sql in [
+            "UPDATE agentbuild_checkpoints SET body = '{\"messages\": [\"forged\"]}'",
+            "UPDATE agentbuild_memory SET value = '\"a forged fact\"'",
+        ] {
+            sqlx::query(sql).execute(&pool).await.unwrap();
+        }
+        pool.close().await;
+        let refused = storage.checkpointer().load("t", None).await.unwrap_err();
+        assert_eq!(refused.code(), "storage_corrupt");
+        let refused = storage
+            .memory()
+            .search(&ns("patients/t"), &SearchQuery::new())
+            .await
+            .unwrap_err();
+        assert_eq!(refused.code(), "storage_corrupt");
     }
 
     #[tokio::test]

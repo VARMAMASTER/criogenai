@@ -578,3 +578,38 @@ Gemini 3 agent fails at its second model call.
   to Gemini 3 relies on the placeholder. Carrying signatures through the
   gateway (as `extra_content` on its OpenAI endpoint) is a later
   change.
+
+## 15. Hardening from the security audit (October 2026)
+
+**Providers.** Redirects are not followed (a redirected POST would carry the
+prompt and non-standard auth headers such as `x-api-key` to another host; a
+3xx is an `invalid_request` that says so). Credentials (the key, and header
+values whose names look like credentials) are not sent over plain `http://`
+to a host that is not this machine unless `Endpoint::allow_insecure_http`
+(SDK: `allow_insecure_http` / `allowInsecureHttp`; gateway config:
+`allow_insecure_http`); building the model fails otherwise. A body over
+`HttpConfig::max_response_bytes` (64 MiB) fails with `invalid_response`,
+which also bounds the SSE parser's line buffer and the assembled message.
+`Debug` of `Endpoint`, `WireRequest`, `Transport` and `ProviderModel` shows
+neither keys nor header values nor prompts. Error text is scrubbed of the
+configured secrets and of key-shaped runs (`sk-`, `AIza`, `ghp_`, `AKIA`, …)
+anywhere in the text, and no longer panics on non-ASCII after a URL.
+`extras` cannot set `model`, `stream` or `messages` (warning
+`extras_ignored`).
+
+**Gateway.** A request's tokens (a third of its body bytes plus its
+`max_tokens`, or 8192 without one) are reserved when it is admitted and
+replaced by the real usage when the answer completes; a request dropped by
+its client, or a stream that fails after starting, keeps the reservation.
+Requests in flight are limited (default 1024 overall; `max_concurrent` per
+key): over the limit is 429 `concurrency_limited` with `Retry-After: 1`.
+`max_tokens` is lowered to a cap (default 200000). A stream's queue is
+bounded (256 events); a client that stops reading is cut off and recorded
+as `client_stalled`. Clients are shown the text of upstream errors they can
+act on (invalid request, context overflow, content filter, rate limit,
+timeout) and only the kind of the rest; the `x-agentbuild-model` header is
+sent only with `expose_model_header`.
+
+**Telemetry** (design 0009): with content capture off (now the default in
+Rust too), error text, run metadata identities and free fields are not
+exported either, only error codes.

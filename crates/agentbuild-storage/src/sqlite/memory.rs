@@ -316,6 +316,11 @@ impl SqliteMemoryStore {
     /// `enc:v1:<active id>:`). A concurrent `put` of the same item wins.
     #[cfg(feature = "encryption")]
     pub(crate) async fn reencrypt(&self, prefix: &str) -> Result<u64, StorageError> {
+        // Items still in plaintext are read on purpose: they are sealed here.
+        let lenient = Self {
+            pool: self.pool.clone(),
+            sealer: self.sealer.for_migration(),
+        };
         let mut done = 0;
         let mut after = (String::new(), String::new());
         loop {
@@ -342,8 +347,8 @@ impl SqliteMemoryStore {
                 let path: String = get(row, "namespace")?;
                 let old_key: String = get(row, "key")?;
                 let old_value: String = get(row, "value")?;
-                let (item, _) = self.read_item(row)?;
-                let embedding = self.read_embedding(row)?;
+                let (item, _) = lenient.read_item(row)?;
+                let embedding = lenient.read_embedding(row)?;
                 let text = serde_json::to_string(&item.value).map_err(crate::sql::encode_error)?;
                 let (column, stored, search) =
                     encode_memory(&self.sealer, &path, &item.key, text, &item.value)?;

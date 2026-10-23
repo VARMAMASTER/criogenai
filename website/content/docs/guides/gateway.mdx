@@ -81,7 +81,19 @@ Anthropic; fields another provider could not honour (`thinking`,
 | Budgets | Tokens per UTC day, month or in total per key; spent: 429 `budget_exceeded`, with `Retry-After` until the period ends |
 | Errors | OpenAI's or Anthropic's error format (by endpoint), with AgentBuild's [codes](/docs/reference/errors/) and matching HTTP statuses |
 | Usage | One record per request: key, route, model, tokens, latency, outcome; **no content**; never slows a request |
-| Disconnects | When a client goes away, the call to the provider stops |
+| Disconnects | When a client goes away, the call to the provider stops, and the tokens it may have used stay charged to its key |
+| Concurrency | At most 1024 requests in flight over all keys (`max_concurrent_requests`), and `max_concurrent` per key; over: 429 `concurrency_limited` |
+| `max_tokens` | A client's value is lowered to a cap (`max_tokens`, default 200000) before it reaches the provider |
+| Slow clients | A client that stops reading a stream is cut off, not buffered |
+| Upstream errors | A client sees the text of errors it can act on (bad request, too long, rate limit, timeout) and only the kind of the rest; the upstream model is revealed only with `expose_model_header = true` |
+
+A request's tokens are **reserved when it is admitted** (its input size and
+its `max_tokens`) and replaced by the real usage when the answer is
+complete, so many requests at once cannot overshoot a budget by more than
+one request, and a client that hangs up still pays for what it started.
+Add `allow_insecure_http = true` to a model only when it is a server on
+your own network reached over plain `http://` with a key; otherwise the
+gateway refuses to start rather than send the key unencrypted.
 
 Limits and budgets are counted in memory: they start over when the
 gateway restarts, and two gateway processes count separately. A request

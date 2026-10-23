@@ -49,6 +49,8 @@ pub struct KeyLimits {
     pub tokens_per_minute: Option<u64>,
     /// Input plus output tokens per period.
     pub budget: Option<(u64, BudgetPeriod)>,
+    /// Requests in flight at once.
+    pub max_concurrent: Option<u32>,
 }
 
 impl KeyLimits {
@@ -75,6 +77,13 @@ impl KeyLimits {
         self
     }
 
+    /// At most `n` requests in flight at once (a stream counts until it
+    /// ends).
+    pub fn max_concurrent(mut self, n: u32) -> Self {
+        self.max_concurrent = Some(n);
+        self
+    }
+
     pub(crate) fn is_empty(&self) -> bool {
         self == &Self::default()
     }
@@ -88,6 +97,8 @@ pub(crate) enum Refusal {
     /// `budget_exceeded`; the period ends after the duration (none for
     /// `total`).
     Budget(Option<Duration>),
+    /// `concurrency_limited`: too many requests in flight; retry soon.
+    Concurrency,
 }
 
 impl Refusal {
@@ -95,6 +106,7 @@ impl Refusal {
         match self {
             Self::RateLimited(_) => "key_rate_limited",
             Self::Budget(_) => "budget_exceeded",
+            Self::Concurrency => "concurrency_limited",
         }
     }
 
@@ -102,6 +114,7 @@ impl Refusal {
         match self {
             Self::RateLimited(_) => "this key's rate limit is reached; retry after the given time",
             Self::Budget(_) => "this key's token budget is spent for the current period",
+            Self::Concurrency => "too many requests are in flight; retry shortly",
         }
     }
 
@@ -110,6 +123,7 @@ impl Refusal {
         let wait = match self {
             Self::RateLimited(wait) => Some(wait),
             Self::Budget(wait) => wait,
+            Self::Concurrency => Some(Duration::from_secs(1)),
         }?;
         Some(wait.as_secs_f64().ceil().max(1.0) as u64)
     }
@@ -248,6 +262,22 @@ impl Usage {
         Ok(())
     }
 
+    /// Takes `tokens` before the answer exists, so requests in flight count
+    /// against the budget and the per-minute allowance at once.
+    pub(crate) fn reserve(&mut self, tokens: u64) {
+        self.charge(tokens);
+    }
+
+    /// Replaces a reservation by the tokens really used.
+    pub(crate) fn settle(&mut self, reserved: u64, actual: u64) {
+        self.roll_over();
+        self.spent = self.spent.saturating_sub(reserved).saturating_add(actual);
+        if let Some(bucket) = &mut self.tokens {
+            bucket.refill(Instant::now());
+            bucket.level = (bucket.level + reserved as f64 - actual as f64).min(bucket.per_minute);
+        }
+    }
+
     /// Charges an answer's tokens.
     pub(crate) fn charge(&mut self, tokens: u64) {
         self.roll_over();
@@ -331,6 +361,37 @@ mod tests {
         assert_eq!(refusal.retry_after_secs(), Some(30));
         tokio::time::advance(Duration::from_secs(30)).await;
         assert!(usage.admit().is_ok());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn reservations_hold_back_concurrent_requests_and_settle_to_the_real_usage() {
+        let mut usage = Usage::new(&KeyLimits::new().budget(1_000, BudgetPeriod::Total));
+        // Four requests in flight, each reserving 400: the third finds the
+        // budget spent, however slowly the answers arrive.
+        let mut admitted = 0;
+        for _ in 0..4 {
+            if usage.admit().is_ok() {
+                usage.reserve(400);
+                admitted += 1;
+            }
+        }
+        assert_eq!(admitted, 3, "overshoot is bounded by one request");
+        // An answer that used less gives the difference back.
+        usage.settle(400, 50);
+        assert_eq!(usage.spent(), 850);
+        assert!(usage.admit().is_ok());
+
+        let mut per_minute = Usage::new(&KeyLimits::new().tokens_per_minute(1_000));
+        per_minute.reserve(900);
+        per_minute.settle(900, 100);
+        assert!(
+            per_minute.admit().is_ok(),
+            "the refund restored the allowance"
+        );
+        // The refund never exceeds a full minute's allowance.
+        per_minute.settle(0, 0);
+        per_minute.settle(100, 0);
+        assert!(per_minute.admit().is_ok());
     }
 
     #[tokio::test(start_paused = true)]

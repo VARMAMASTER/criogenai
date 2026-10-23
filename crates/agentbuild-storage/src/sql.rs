@@ -225,7 +225,8 @@ pub(crate) fn decode_embedding(
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(&stored.vector)
         .map_err(|err| corrupt(format!("unreadable memory embedding: {err}")))?;
-    if bytes.len() != stored.dims * 4 {
+    // `dims` comes from stored JSON: no multiplication that can overflow.
+    if stored.dims.checked_mul(4) != Some(bytes.len()) {
         return Err(corrupt(format!(
             "memory embedding has {} bytes for {} dimensions",
             bytes.len(),
@@ -288,6 +289,9 @@ pub(crate) fn decode_memory(
     expires_at_ms: Option<i64>,
 ) -> Result<(MemoryItem, String), StorageError> {
     if !value_column.starts_with(PREFIX) {
+        if sealer.rejects_plaintext() {
+            return Err(crate::crypto::plaintext_in_encrypted("memory value"));
+        }
         let item = memory_item(
             namespace,
             key_column,
@@ -369,4 +373,19 @@ pub(crate) fn conflict(message: String) -> StorageError {
 
 pub(crate) fn encode_error(err: serde_json::Error) -> StorageError {
     corrupt(format!("cannot encode as JSON: {err}"))
+}
+
+/// Splits a migration into statements: at the marker `--@@` if it has one
+/// (trigger and function bodies contain `;`), else at every `;`.
+pub(crate) fn statements(migration: &str) -> Vec<&str> {
+    let parts: Vec<&str> = if migration.contains("--@@") {
+        migration.split("--@@").collect()
+    } else {
+        migration.split(';').collect()
+    };
+    parts
+        .into_iter()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .collect()
 }

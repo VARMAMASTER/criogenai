@@ -124,6 +124,26 @@ If an audit record cannot be written, the action it describes fails:
 
 New error code: `audit_failed` (transient, 0003 §9).
 
+## 5.1 Signed anchors, and the database's own protection (audit, October 2026)
+
+The SHA-256 chain has no secret, so anyone who can write to the table can
+cut off the tail, or edit records and recompute every later hash, and
+`verify` still says `ok`. Two additions, neither replacing the chain:
+
+- **The table refuses edits.** Migration 6 adds triggers (SQLite) and a
+  trigger function (Postgres) that make `UPDATE`, `DELETE` and, on
+  Postgres, `TRUNCATE` fail with "agentbuild_audit is append-only". They
+  stop SQL injection elsewhere in an app and careless tooling; dropping a
+  trigger takes schema rights.
+- **Anchors.** `AuditLog::anchor(key)` signs the head (`seq`, `hash`) with
+  HMAC-SHA256 under a key kept outside the database;
+  `verify_anchor(&anchor, key)` checks the chain **and** that the record
+  the anchor names is still there with the same hash. A cut tail (the
+  record is missing) or a recomputed chain (its hash differs) makes it
+  report `ok: false` at the anchor's `seq`; an anchor `key` did not sign is
+  an `invalid_value` error. Store anchors where the database's writers
+  cannot reach, and make them often.
+
 ## 5. The hash chain
 
 `hash = SHA-256(canonical JSON of [seq, at_ms, action, actor, thread_id,

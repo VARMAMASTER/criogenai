@@ -106,6 +106,18 @@ const MIGRATIONS: &[&str] = &[
     );
     CREATE INDEX agentbuild_audit_thread ON agentbuild_audit (thread_id, seq);
     CREATE INDEX agentbuild_audit_time ON agentbuild_audit (at_ms)",
+    // 6: the audit trail is append-only in the database too (design 0010
+    // §1.4): UPDATE, DELETE and TRUNCATE fail. Dropping the trigger takes
+    // ownership of the table; `verify_anchor` still catches what follows.
+    "CREATE FUNCTION agentbuild_audit_append_only() RETURNS trigger AS $$
+    BEGIN RAISE EXCEPTION 'agentbuild_audit is append-only'; END
+    $$ LANGUAGE plpgsql
+    --@@
+    CREATE TRIGGER agentbuild_audit_no_change BEFORE UPDATE OR DELETE ON agentbuild_audit
+    FOR EACH ROW EXECUTE FUNCTION agentbuild_audit_append_only()
+    --@@
+    CREATE TRIGGER agentbuild_audit_no_truncate BEFORE TRUNCATE ON agentbuild_audit
+    FOR EACH STATEMENT EXECUTE FUNCTION agentbuild_audit_append_only()",
 ];
 
 /// Checkpoint `$1` of thread `$2` and its ancestors up to the nearest
@@ -330,7 +342,7 @@ impl PostgresCheckpointer {
         for (index, migration) in MIGRATIONS.iter().enumerate().skip(current as usize) {
             // One statement at a time (prepared statements); migrations have
             // no `;` inside literals.
-            for statement in migration.split(';').map(str::trim) {
+            for statement in crate::sql::statements(migration) {
                 if !statement.is_empty() {
                     sqlx::query(statement)
                         .execute(&mut *tx)
@@ -830,6 +842,7 @@ impl PostgresCheckpointer {
                 "reencrypt needs keys: connect with `PostgresOptions::encryption`",
             ));
         };
+        let migrating = self.sealer.for_migration();
         let mut report = crate::ReencryptReport::default();
         for column in ["body", "snapshot"] {
             let aad = if column == "body" {
@@ -859,7 +872,7 @@ impl PostgresCheckpointer {
                 after = last.0.clone();
                 for (id, thread, stored) in rows {
                     let aad = aad(&thread, &id);
-                    let plain = self.sealer.open(&aad, stored.clone(), column)?;
+                    let plain = migrating.open(&aad, stored.clone(), column)?;
                     let sealed = self.sealer.seal(&aad, plain)?;
                     report.checkpoints += sqlx::query(&update)
                         .bind(sealed)
@@ -891,7 +904,7 @@ impl PostgresCheckpointer {
             after = last.0;
             for (seq, checkpoint, thread, node, stored) in rows {
                 let aad = write_aad(&thread, &checkpoint, &node);
-                let plain = self.sealer.open(&aad, stored, "task write")?;
+                let plain = migrating.open(&aad, stored, "task write")?;
                 let sealed = self.sealer.seal(&aad, plain)?;
                 report.task_writes +=
                     sqlx::query("UPDATE agentbuild_pending_writes SET write = $1 WHERE seq = $2")

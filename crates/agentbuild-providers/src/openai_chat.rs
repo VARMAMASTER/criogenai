@@ -230,10 +230,19 @@ pub(crate) fn encode(
         }
     }
 
-    // Provider-specific fields go last, so the caller wins.
+    // Provider-specific fields go last, so the caller wins, except for the
+    // fields that make the request what it is: a changed `stream` would
+    // desynchronise the decoder from the response.
     for key in ["openai", provider] {
         if let Some(Value::Object(extra)) = request.extras.get(key) {
             for (name, value) in extra {
+                if matches!(name.as_str(), "model" | "stream" | "messages") {
+                    warnings.push(Warning::new(
+                        "extras_ignored",
+                        format!("the `{name}` field cannot be set through extras"),
+                    ));
+                    continue;
+                }
                 body.insert(name.clone(), value.clone());
             }
         }

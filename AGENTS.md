@@ -211,6 +211,9 @@ write our own implementation.
   landing page, docs (MDX in `content/docs`, code samples compiled from
   `snippets/`), benchmark lab, install counter. `npm run build` /
   `npm run preview` (port 4400); checked by `ci-local.sh` step `website`.
+- **Security audit (2026-10-22):** four reviewers, findings verified and
+  fixed (CHANGELOG "Security audit"); `scripts/check-supply-chain.sh`
+  guards the build and release. New rules below (10–12).
 - **Not started:** vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 
@@ -317,6 +320,20 @@ git-ignored. REA is not registered as an MCP server in any agent config.
    Linux and Windows. When the Python and TypeScript SDKs exist, the same rule
    applies: install the built wheel / npm tarball into a clean environment and
    run a consumer script against it.
+
+10. **Secrets and content never leave by default.** A key is never in
+    `Debug`, an error, a log, a URL or a redirect; telemetry and the gateway
+    export no content, error text or identity unless asked; credentials are
+    not sent over plain `http` to another machine. A test fails if one does.
+11. **Everything that comes from outside is bounded.** Response bodies,
+    streams, request bodies, `max_tokens`, requests in flight, recursion
+    depth: each has a limit with a test. Input from a provider, a model, a
+    tool or a database row is data, never trusted to be well-formed (no
+    slicing at byte offsets, no unchecked arithmetic).
+12. **The database is not trusted either.** Content rows in an encrypted
+    database are authenticated or refused; the audit trail has anchors; an
+    exception, a hook error or a node error carries its own key, never one
+    derived from a name or message that two runs can share.
 
 ## Git and GitHub
 

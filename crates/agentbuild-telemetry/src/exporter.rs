@@ -23,8 +23,11 @@ pub struct OtlpConfig {
     pub headers: Vec<(String, String)>,
     /// `service.name` of the exported resource. Default `agentbuild`.
     pub service_name: String,
-    /// Export messages, tool arguments and results. Default `true`. Turn it
-    /// off for sensitive data: names, timings, usage and status still go.
+    /// Export messages, tool arguments and results, error messages, and the
+    /// run's `user_id`, `session_id` and custom metadata. Default `false`:
+    /// names, timings, usage, status and error **codes** still go. Turn it
+    /// on for data that may leave your network, and set a [`mask`](Self::mask)
+    /// for what must not.
     pub capture_content: bool,
     /// Applied to every captured payload before export (e.g. to remove
     /// patient identifiers).
@@ -65,7 +68,7 @@ impl OtlpConfig {
             endpoint: endpoint.into(),
             headers: Vec::new(),
             service_name: "agentbuild".into(),
-            capture_content: true,
+            capture_content: false,
             mask: None,
             max_attribute_chars: 100_000,
             queue_capacity: 10_000,

@@ -24,7 +24,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 use crate::approval::{APPROVAL_INTERRUPT, Approval, ApprovalRequest, Decision, check_decisions};
-use crate::hooks::{Hook, HookContext, ModelNext, Outcome, ToolCallRequest, ToolNext};
+use crate::hooks::{Hook, HookContext, HookError, ModelNext, Outcome, ToolCallRequest, ToolNext};
 use crate::memory::{self, FORGET_TOOL, Memory, REMEMBER_TOOL};
 use crate::output::{FINAL_OUTPUT_TOOL, OutputConfig};
 use crate::resilience::{CallEnv, ModelChain};
@@ -467,6 +467,10 @@ impl AgentBuilder {
         {
             self.tools.extend(memory.tool_list());
         }
+        let memory_key = self
+            .memory
+            .as_ref()
+            .and_then(|m| m.scope_key().map(str::to_string));
         let memory: Option<Arc<(Memory, Arc<dyn MemoryStore>)>> = self
             .memory
             .take()
@@ -593,6 +597,7 @@ impl AgentBuilder {
             hooks,
             storage,
             observers: self.observers.into(),
+            memory_key,
         })
     }
 }
@@ -613,6 +618,8 @@ pub struct Agent {
     hooks: Arc<[Arc<dyn Hook>]>,
     storage: Storage,
     observers: Arc<[Arc<dyn EventObserver>]>,
+    /// The state key that scopes the memory (`Memory::by_state`), if any.
+    memory_key: Option<String>,
 }
 
 impl std::fmt::Debug for Agent {
@@ -756,6 +763,12 @@ impl Agent {
         )
     }
 
+    /// The state key that scopes this agent's memory, if it is kept per
+    /// state value (`Memory::by_state`).
+    pub(crate) fn memory_scope_key(&self) -> Option<&str> {
+        self.memory_key.as_deref()
+    }
+
     /// Runs the agent on `input` (text, a message or a transcript).
     pub async fn run(&self, input: impl Into<AgentInput>) -> Result<AgentResult, AgentError> {
         self.run_with(input, self.run_options()).await
@@ -839,7 +852,9 @@ impl Agent {
             let action = hook.on_start(&ctx).await.map_err(|err| AgentError {
                 code: "hook_failed".into(),
                 message: format!("hook `{}` failed in on_start: {err}", hook.name()),
-                details: Some(json!({"hook": hook.name(), "stage": "on_start"})),
+                details: Some(json!({
+                    "hook": hook.name(), "stage": "on_start", "cause_key": err.cause_key,
+                })),
                 run_error: None,
             })?;
             if let Some(value) = action.state {
@@ -1335,10 +1350,10 @@ fn hook_context(
     })
 }
 
-fn hook_failed(hook: &str, stage: &str, error: impl std::fmt::Display) -> NodeError {
+fn hook_failed(hook: &str, stage: &str, error: &HookError) -> NodeError {
     NodeError::new(format!("hook `{hook}` failed in {stage}: {error}"))
         .with_kind("hook_failed")
-        .with_details(json!({"hook": hook, "stage": stage}))
+        .with_details(json!({"hook": hook, "stage": stage, "cause_key": error.cause_key}))
 }
 
 fn to_json<T: Serialize>(value: &T) -> Value {
@@ -1456,7 +1471,7 @@ async fn model_step(
         let action = hook
             .before_model(&hook_ctx)
             .await
-            .map_err(|err| hook_failed(hook.name(), "before_model", err))?;
+            .map_err(|err| hook_failed(hook.name(), "before_model", &err))?;
         if let Some(value) = action.state {
             saved_hooks.insert(hook.name().to_string(), value);
             hooks_changed = true;
@@ -1591,7 +1606,7 @@ async fn model_step(
         let action = hook
             .after_model(&hook_ctx)
             .await
-            .map_err(|err| hook_failed(hook.name(), "after_model", err))?;
+            .map_err(|err| hook_failed(hook.name(), "after_model", &err))?;
         if let Some(value) = action.state {
             saved_hooks.insert(hook.name().to_string(), value);
             hooks_changed = true;
@@ -2278,7 +2293,11 @@ async fn tools_step(
                             "tool_failed",
                             format!(
                                 "The tool failed with an unexpected error: {}",
-                                error.message
+                                // An exception's text can hold a connection
+                                // string or a key: the model gets it
+                                // redacted (the raw text stays in the
+                                // result's artifact only with ReturnGeneric).
+                                agentbuild_providers::sanitize_message(&error.message, &[])
                             ),
                         ),
                         None,

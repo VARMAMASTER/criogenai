@@ -12,6 +12,65 @@ use sha2::{Digest, Sha256};
 use crate::checkpoint::now_ms;
 use crate::error::{StorageError, StorageErrorKind};
 
+/// The head of the chain, signed with a key that is not in the database
+/// (design 0010 §5): a copy to keep elsewhere. With it,
+/// [`AuditLog::verify_anchor`] detects what the chain alone cannot: a tail
+/// cut off, or a whole chain recomputed after edits (the SHA-256 chain has
+/// no secret, so someone who can write to the table can make any edit
+/// consistent).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub struct AuditAnchor {
+    /// The record's number.
+    pub seq: u64,
+    /// The record's hash.
+    pub hash: String,
+    /// HMAC-SHA256 (hex) of `seq` and `hash` under the signing key.
+    pub mac: String,
+}
+
+impl AuditAnchor {
+    /// Signs `(seq, hash)` with `key`.
+    pub fn sign(seq: u64, hash: impl Into<String>, key: &[u8]) -> Self {
+        let hash = hash.into();
+        let mac = hex(&hmac_sha256(key, anchor_message(seq, &hash).as_bytes()));
+        Self { seq, hash, mac }
+    }
+
+    /// `true` if `key` signed this anchor (compared in constant time).
+    pub fn is_authentic(&self, key: &[u8]) -> bool {
+        let message = anchor_message(self.seq, &self.hash);
+        let expected = hex(&hmac_sha256(key, message.as_bytes()));
+        constant_time_eq(expected.as_bytes(), self.mac.as_bytes())
+    }
+}
+
+fn anchor_message(seq: u64, hash: &str) -> String {
+    format!("agentbuild-audit-anchor:v1:{seq}:{hash}")
+}
+
+/// HMAC-SHA256 (RFC 2104).
+pub(crate) fn hmac_sha256(key: &[u8], message: &[u8]) -> [u8; 32] {
+    const BLOCK: usize = 64;
+    let mut padded = [0u8; BLOCK];
+    if key.len() > BLOCK {
+        padded[..32].copy_from_slice(&Sha256::digest(key));
+    } else {
+        padded[..key.len()].copy_from_slice(key);
+    }
+    let mut inner = Sha256::new();
+    inner.update(padded.map(|b| b ^ 0x36));
+    inner.update(message);
+    let mut outer = Sha256::new();
+    outer.update(padded.map(|b| b ^ 0x5c));
+    outer.update(inner.finalize());
+    outer.finalize().into()
+}
+
+pub(crate) fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    a.len() == b.len() && a.iter().zip(b).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
+}
+
 /// The `prev_hash` of the first record.
 pub const GENESIS_HASH: &str = "0000000000000000000000000000000000000000000000000000000000000000";
 
@@ -173,7 +232,7 @@ fn canonical(value: &Value, out: &mut String) {
     }
 }
 
-fn hex(bytes: &[u8]) -> String {
+pub(crate) fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
 
@@ -347,6 +406,56 @@ pub trait AuditLog: Send + Sync + 'static {
     /// The last record's `(seq, hash)`: copy it elsewhere now and then, to
     /// detect a rewritten chain.
     fn head(&self) -> BoxFuture<'_, Result<Option<(u64, String)>, StorageError>>;
+
+    /// The head, signed with `key` (keep the key outside the database, and
+    /// the anchor where the database's writers cannot reach). `None` for an
+    /// empty trail.
+    fn anchor<'a>(
+        &'a self,
+        key: &'a [u8],
+    ) -> BoxFuture<'a, Result<Option<AuditAnchor>, StorageError>> {
+        Box::pin(async move {
+            Ok(self
+                .head()
+                .await?
+                .map(|(seq, hash)| AuditAnchor::sign(seq, hash, key)))
+        })
+    }
+
+    /// Checks the whole chain **and** that the record the anchor names is
+    /// still there with the same hash. `ok` is false (`first_broken` the
+    /// anchor's `seq`) if the chain was cut short or recomputed; an anchor
+    /// that `key` did not sign is an `invalid_value` error.
+    fn verify_anchor<'a>(
+        &'a self,
+        anchor: &'a AuditAnchor,
+        key: &'a [u8],
+    ) -> BoxFuture<'a, Result<AuditVerification, StorageError>> {
+        Box::pin(async move {
+            if !anchor.is_authentic(key) {
+                return Err(StorageError::new(
+                    StorageErrorKind::InvalidValue,
+                    "the audit anchor was not signed with this key",
+                ));
+            }
+            let mut report = self.verify().await?;
+            if !report.ok {
+                return Ok(report);
+            }
+            let query = AuditQuery::new()
+                .after_seq(anchor.seq.saturating_sub(1))
+                .limit(1);
+            let found = self.query(&query).await?;
+            let matches = found
+                .first()
+                .is_some_and(|r| r.seq == anchor.seq && r.hash == anchor.hash);
+            if !matches {
+                report.ok = false;
+                report.first_broken = Some(anchor.seq);
+            }
+            Ok(report)
+        })
+    }
 }
 
 /// The audit trail in process memory: for tests and in-memory storage.
@@ -512,5 +621,38 @@ mod tests {
             sha256_hex("abc"),
             "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
+    }
+}
+
+#[cfg(test)]
+mod hmac_tests {
+    use super::*;
+
+    #[test]
+    fn hmac_sha256_matches_the_rfc_4231_vectors() {
+        let mac = hex(&hmac_sha256(b"Jefe", b"what do ya want for nothing?"));
+        assert_eq!(
+            mac,
+            "5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843"
+        );
+        // A key longer than the block size is hashed first (case 6).
+        let mac = hex(&hmac_sha256(
+            &[0xaa; 131],
+            b"Test Using Larger Than Block-Size Key - Hash Key First",
+        ));
+        assert_eq!(
+            mac,
+            "60e431591ee0b67f0d8a26aacbf5b77f8e0bc6213728c5140546040f0ee37f54"
+        );
+    }
+
+    #[test]
+    fn anchors_are_authentic_only_under_their_key() {
+        let anchor = AuditAnchor::sign(7, "abc", b"key-one");
+        assert!(anchor.is_authentic(b"key-one"));
+        assert!(!anchor.is_authentic(b"key-two"));
+        let mut edited = anchor.clone();
+        edited.seq = 8;
+        assert!(!edited.is_authentic(b"key-one"));
     }
 }

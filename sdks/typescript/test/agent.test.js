@@ -590,6 +590,7 @@ test("limits, construction errors and model names", async () => {
       apiKey: "sk-test-not-real",
       baseUrl: undefined,
       name: undefined,
+      allowInsecureHttp: undefined,
     });
     assert.ok(!JSON.stringify(sdk.openai("gpt-5-mini")).includes("sk-test"));
   } finally {
@@ -622,4 +623,40 @@ test("every catalog code raises its family class", () => {
     checked += 1;
   }
   assert.ok(checked > 20);
+});
+
+test("concurrent runs get their own hook exception", async () => {
+  // Two runs of one agent fail in the same hook at the same moment: each
+  // must get the exception thrown for it, never the other's (security audit).
+  class Mine extends Error {}
+  const flaky = {
+    name: "flaky",
+    async beforeModel(ctx) {
+      const text = ctx.messages[ctx.messages.length - 1].content[0].text;
+      await new Promise((resolve) => setTimeout(resolve, text === "slow" ? 200 : 20));
+      throw new Mine(`for ${text}`);
+    },
+  };
+  const agent = new Agent({ model: new FakeModel(["never"]), hooks: [flaky] });
+  const [slow, fast] = await Promise.allSettled([agent.run("slow"), agent.run("fast")]);
+  assert.ok(slow.reason.cause instanceof Mine);
+  assert.equal(slow.reason.cause.message, "for slow");
+  assert.equal(fast.reason.cause.message, "for fast");
+});
+
+test("credentials are not sent over plain http to another machine", () => {
+  const { openaiCompatible } = sdk;
+  assert.throws(
+    () => new Agent({ model: openaiCompatible("m", { baseUrl: "http://gpu-box:8000/v1", apiKey: "a-secret-key-1234" }) }),
+    (error) => {
+      assert.ok(error instanceof AgentBuildError);
+      assert.match(error.message, /plain http/);
+      assert.doesNotMatch(error.message, /a-secret-key-1234/);
+      return true;
+    },
+  );
+  // Explicitly allowed for a trusted network; this machine and https need nothing.
+  new Agent({ model: openaiCompatible("m", { baseUrl: "http://gpu-box:8000/v1", apiKey: "k-12345678", allowInsecureHttp: true }) });
+  new Agent({ model: openaiCompatible("m", { baseUrl: "http://localhost:11434/v1", apiKey: "k-12345678" }) });
+  new Agent({ model: openaiCompatible("m", { baseUrl: "https://gpu-box/v1", apiKey: "k-12345678" }) });
 });

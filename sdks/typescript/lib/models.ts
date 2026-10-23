@@ -22,17 +22,27 @@ export class ProviderModel {
   readonly #apiKey?: string;
   readonly #name?: string;
 
-  constructor(kind: string, model: string, options: ModelOptions & { name?: string } = {}) {
+  readonly #allowInsecureHttp?: boolean;
+
+  constructor(kind: string, model: string, options: ModelOptions & { name?: string; allowInsecureHttp?: boolean } = {}) {
     this.kind = kind;
     this.model = model;
     this.baseUrl = options.baseUrl;
     this.#apiKey = options.apiKey ?? (KEYS[kind] ? process.env[KEYS[kind]] : undefined);
     this.#name = options.name;
+    this.#allowInsecureHttp = options.allowInsecureHttp;
   }
 
   /** The JSON spec (with the key; never logged). */
   spec(): Record<string, unknown> {
-    return { kind: this.kind, model: this.model, apiKey: this.#apiKey, baseUrl: this.baseUrl, name: this.#name };
+    return {
+      kind: this.kind,
+      model: this.model,
+      apiKey: this.#apiKey,
+      baseUrl: this.baseUrl,
+      name: this.#name,
+      allowInsecureHttp: this.#allowInsecureHttp,
+    };
   }
 
   toJSON(): Record<string, unknown> {
@@ -46,8 +56,15 @@ export const anthropic = (model: string, options?: ModelOptions) => new Provider
 export const openrouter = (model: string, options?: ModelOptions) => new ProviderModel("openrouter", model, options);
 export const ollama = (model: string, options?: { baseUrl?: string }) => new ProviderModel("ollama", model, options);
 /** Any OpenAI-compatible server (vLLM, LM Studio, a gateway). */
-export const openaiCompatible = (model: string, options: ModelOptions & { baseUrl: string; name?: string }) =>
-  new ProviderModel("openai_compatible", model, options);
+/**
+ * Any OpenAI-compatible server. `allowInsecureHttp`: send the key over plain
+ * `http://` to another machine (a vLLM server on your LAN); refused by
+ * default, because a key sent over http is readable by anyone on the path.
+ */
+export const openaiCompatible = (
+  model: string,
+  options: ModelOptions & { baseUrl: string; name?: string; allowInsecureHttp?: boolean },
+) => new ProviderModel("openai_compatible", model, options);
 
 /** One scripted answer of a FakeModel. */
 export type FakeReply = { text: string } | { toolCalls: { name: string; args: Record<string, unknown> }[] };

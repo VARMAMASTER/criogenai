@@ -899,7 +899,24 @@ key; old rows still read. `reencrypt()` rewrites every row that is plain
 or uses an older key, in batches; afterwards old keys can be removed. A
 concurrent write wins over the rewrite of the same row (each rewrite is
 compare-and-set on the old text). The same call encrypts a database
-written before encryption was turned on. Old plain copies can survive
+written before encryption was turned on. Until it has run, such a
+database refuses to read its plain rows (`storage_corrupt`): in a database
+that is encrypted, a content row without the `enc:v1:` prefix is not
+trusted (security audit, October 2026), because anyone who can write to the
+file could plant one to skip the authentication of every sealed row. Only
+`reencrypt` reads plain rows, on purpose, to seal them.
+
+**What encryption does not protect (audit, October 2026).** The columns
+that are not content (thread ids, `parent_id`, `kind`, `depth`, `status`,
+the thread's head pointer) are not authenticated, so someone with write
+access can replay an older, valid head of a thread (for example to undo a
+rejection) or reorder the delta chain of a checkpoint; a MAC would not help
+against replay, only an anchor kept outside the database does (the audit
+log's signed anchors, design 0010 §5). The SQLite file and its `-wal` are
+created readable by the owner only on Unix; the WAL can still hold deleted
+content until it is checkpointed. Encrypted memory search decrypts every
+live item under the namespace prefix, so search a narrow namespace.
+Key and plaintext buffers are not zeroised on drop. Old plain copies can survive
 where the rewrite does not reach (backups, the Postgres WAL, dead rows
 until `VACUUM`): turn encryption on for a new database where possible.
 

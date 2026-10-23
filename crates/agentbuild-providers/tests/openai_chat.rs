@@ -810,3 +810,123 @@ fn signatures_go_back_to_their_endpoint_and_gemini_gets_a_placeholder() {
     assert!(calls[1].get("extra_content").is_none());
     assert!(sent(&compat(), &unsigned)[0].get("extra_content").is_none());
 }
+
+// ---------- hardening (security audit, October 2026) ----------
+
+#[tokio::test]
+async fn redirects_are_not_followed_so_keys_and_prompts_stay_put() {
+    // The second address would receive the prompt (and an `x-api-key`)
+    // if the redirect were followed.
+    let (elsewhere, other) = serve(vec![json_response(200, r#"{"choices": []}"#)]).await;
+    let redirect = Step::send(format!(
+        "HTTP/1.1 307 Temporary Redirect\r\nlocation: {elsewhere}/chat/completions\r\n\
+         content-length: 0\r\nconnection: close\r\n\r\n"
+    ));
+    let (base, _server) = serve(vec![redirect]).await;
+    let error = model_at(&base, Some("sk-test"))
+        .invoke(&ModelRequest::new(vec![Message::user("secret prompt")]))
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind, ModelErrorKind::InvalidRequest);
+    assert!(error.message.contains("redirect"), "{}", error.message);
+    other.abort();
+}
+
+#[tokio::test]
+async fn a_response_over_the_size_limit_fails_instead_of_filling_memory() {
+    let big = "x".repeat(4096);
+    let body = format!(
+        r#"{{"choices": [{{"message": {{"role": "assistant", "content": "{big}"}}, "finish_reason": "stop"}}]}}"#
+    );
+    let (base, _server) = serve(vec![json_response(200, &body)]).await;
+    let endpoint = Endpoint::openai_compatible("local", &base, None);
+    let config = HttpConfig::default().max_response_bytes(1024);
+    let model = ProviderModel::with_config(endpoint, "m", config).unwrap();
+    let error = model
+        .invoke(&ModelRequest::new(vec![Message::user("hi")]))
+        .await
+        .unwrap_err();
+    assert_eq!(error.kind, ModelErrorKind::InvalidResponse);
+    assert!(error.message.contains("limit"), "{}", error.message);
+}
+
+#[test]
+fn debug_output_never_shows_keys_or_header_values() {
+    let endpoint = Endpoint::openai_compatible(
+        "corp",
+        "https://llm.example/v1",
+        Some("sk-very-secret-key-123456".into()),
+    )
+    .with_header("api-key", "header-secret-value-9");
+    let model = ProviderModel::new(endpoint.clone(), "m").unwrap();
+    let wire = agentbuild_providers::WireRequest::post("https://x", b"prompt".to_vec())
+        .header("authorization", "Bearer sk-very-secret-key-123456");
+    for shown in [
+        format!("{endpoint:?}"),
+        format!("{model:?}"),
+        format!("{wire:?}"),
+    ] {
+        assert!(
+            !shown.contains("very-secret") && !shown.contains("header-secret"),
+            "{shown}"
+        );
+    }
+}
+
+#[test]
+fn credentials_over_plain_http_to_another_machine_are_refused() {
+    // `Ok` or the refusal's error, boxed (the error type is large).
+    let build = |endpoint: Endpoint| ProviderModel::new(endpoint, "m").map_err(Box::new);
+    // Another machine, with a key: refused; with an explicit opt-in: allowed.
+    let lan = Endpoint::openai_compatible("lan", "http://gpu-box:8000/v1", Some("key-1234".into()));
+    let error = *build(lan.clone()).unwrap_err();
+    assert_eq!(error.kind, ModelErrorKind::InvalidRequest);
+    assert!(error.message.contains("gpu-box") && !error.message.contains("key-1234"));
+    assert!(build(lan.clone().allow_insecure_http()).is_ok());
+    // An auth-like header counts as a credential too.
+    let by_header = Endpoint::openai_compatible("lan", "http://gpu-box:8000/v1", None)
+        .with_header("x-api-key", "k");
+    assert!(build(by_header).is_err());
+    // This machine, no key, or https: fine.
+    for ok in [
+        Endpoint::openai_compatible("l", "http://localhost:11434/v1", Some("k-1234".into())),
+        Endpoint::openai_compatible("l", "http://127.0.0.1:9/v1", Some("k-1234".into())),
+        Endpoint::openai_compatible("l", "http://[::1]:9/v1", Some("k-1234".into())),
+        Endpoint::openai_compatible("l", "http://gpu-box:8000/v1", None),
+        Endpoint::openai_compatible("l", "https://gpu-box/v1", Some("k-1234".into())),
+    ] {
+        assert!(build(ok).is_ok());
+    }
+}
+
+#[test]
+fn extras_cannot_change_model_stream_or_messages() {
+    let mut request = ModelRequest::new(vec![Message::user("hi")]);
+    request.extras.insert(
+        "local".into(),
+        json!({"model": "other", "stream": true, "messages": [], "seed": 7}),
+    );
+    let (body, warnings) = body_for(&compat(), &request);
+    assert_eq!(body["model"], "m");
+    assert!(body.get("stream").is_none());
+    assert_eq!(body["messages"].as_array().unwrap().len(), 1);
+    assert_eq!(body["seed"], 7, "other extras still apply");
+    assert_eq!(
+        warnings.iter().filter(|w| *w == "extras_ignored").count(),
+        3
+    );
+}
+
+#[test]
+fn keys_are_removed_wherever_they_appear_in_an_error() {
+    let message = r#"{"error":"bad key sk-abcdefghijklmnopqrstuv","hint":"x=AIzaSyA1234567890abcdefgh;ok"} also ghp_abcdefghijklmnopqrstuvwxyz0123"#;
+    let error = agentbuild_providers::ModelError::new(ModelErrorKind::InvalidRequest, message);
+    for key in [
+        "sk-abcdefghijklmnopqrstuv",
+        "AIzaSyA1234567890abcdefgh",
+        "ghp_abcdefghijklmnopqrstuvwxyz0123",
+    ] {
+        assert!(!error.message.contains(key), "{}", error.message);
+    }
+    assert!(error.message.contains("[redacted]"));
+}

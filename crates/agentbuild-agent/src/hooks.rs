@@ -97,6 +97,10 @@ impl HookAction {
 pub struct HookError {
     /// What went wrong.
     pub message: String,
+    /// A key unique to this failure, repeated in the run error's
+    /// `details.cause_key`: the SDKs keep the exception that was thrown under
+    /// it, so a run's error carries its own exception and no other run's.
+    pub cause_key: Option<String>,
 }
 
 impl HookError {
@@ -104,7 +108,14 @@ impl HookError {
     pub fn new(message: impl Into<String>) -> Self {
         Self {
             message: message.into(),
+            cause_key: None,
         }
+    }
+
+    /// Sets [`cause_key`](Self::cause_key).
+    pub fn with_cause_key(mut self, key: impl Into<String>) -> Self {
+        self.cause_key = Some(key.into());
+        self
     }
 }
 

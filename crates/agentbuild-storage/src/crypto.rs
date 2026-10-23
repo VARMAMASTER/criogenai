@@ -21,6 +21,17 @@ pub(crate) fn aad(parts: &[&str]) -> String {
     serde_json::to_string(parts).unwrap_or_default()
 }
 
+/// A content column that should be sealed is not.
+pub(crate) fn plaintext_in_encrypted(what: &str) -> StorageError {
+    StorageError::new(
+        StorageErrorKind::Corrupt,
+        format!(
+            "the {what} is not encrypted, but this database is: it was changed outside \
+             AgentBuild, or written before encryption was on (`reencrypt` converts it)"
+        ),
+    )
+}
+
 pub(crate) fn key_missing(message: impl Into<String>) -> StorageError {
     StorageError::new(StorageErrorKind::EncryptionKeyMissing, message)
 }
@@ -32,6 +43,10 @@ pub(crate) fn key_missing(message: impl Into<String>) -> StorageError {
 pub(crate) struct Sealer {
     #[cfg(feature = "encryption")]
     keys: Option<std::sync::Arc<Keyring>>,
+    /// Set only by `reencrypt`, which converts a database that holds
+    /// plaintext rows (see [`Sealer::open`]).
+    #[cfg(feature = "encryption")]
+    migrating: bool,
 }
 
 impl std::fmt::Debug for Sealer {
@@ -47,7 +62,30 @@ impl Sealer {
     pub(crate) fn new(keys: Option<Keyring>) -> Self {
         Self {
             keys: keys.map(std::sync::Arc::new),
+            migrating: false,
         }
+    }
+
+    /// The same keys, for `reencrypt` only: it reads rows that are still
+    /// plaintext in order to seal them.
+    #[cfg(feature = "encryption")]
+    pub(crate) fn for_migration(&self) -> Self {
+        Self {
+            keys: self.keys.clone(),
+            migrating: true,
+        }
+    }
+
+    /// `true` if a stored content column without the encryption prefix is
+    /// an error: the keys are set, and this is not `reencrypt`. Without it
+    /// anyone who can write to the database could plant plaintext rows
+    /// (a forged checkpoint, decision or memory fact) that skip the
+    /// authentication of every sealed one.
+    pub(crate) fn rejects_plaintext(&self) -> bool {
+        #[cfg(feature = "encryption")]
+        return self.keys.is_some() && !self.migrating;
+        #[cfg(not(feature = "encryption"))]
+        return false;
     }
 
     /// `true` if new writes are encrypted.
@@ -85,6 +123,9 @@ impl Sealer {
         what: &str,
     ) -> Result<String, StorageError> {
         let Some(rest) = stored.strip_prefix(PREFIX) else {
+            if self.rejects_plaintext() {
+                return Err(plaintext_in_encrypted(what));
+            }
             return Ok(stored);
         };
         let id = rest.split(':').next().unwrap_or_default();
@@ -508,9 +549,21 @@ mod tests {
             plain.open(&row, sealed, "body").unwrap_err().code(),
             "encryption_key_missing"
         );
-        // Plain text reads as it is, with or without keys.
-        assert_eq!(sealer.open(&row, "[1]".into(), "body").unwrap(), "[1]");
+        // Plain text reads as it is without keys. With keys it is refused:
+        // a planted plaintext row would skip every check on a sealed one.
+        // Only `reencrypt` reads it, to seal it.
+        assert_eq!(plain.open(&row, "[1]".into(), "body").unwrap(), "[1]");
         assert_eq!(plain.seal(&row, "[1]".into()).unwrap(), "[1]");
+        let err = sealer.open(&row, "[1]".into(), "body").unwrap_err();
+        assert_eq!(err.code(), "storage_corrupt");
+        assert!(err.message.contains("reencrypt"), "{}", err.message);
+        assert_eq!(
+            sealer
+                .for_migration()
+                .open(&row, "[1]".into(), "body")
+                .unwrap(),
+            "[1]"
+        );
     }
 
     #[test]

@@ -37,6 +37,17 @@ pub struct Config {
     /// Largest request body in bytes.
     #[serde(default)]
     pub body_limit: Option<usize>,
+    /// Most requests in flight at once, over all keys (default 1024).
+    #[serde(default)]
+    pub max_concurrent_requests: Option<usize>,
+    /// Largest `max_tokens` a client may ask for; larger values are
+    /// lowered to it (default 200000).
+    #[serde(default)]
+    pub max_tokens: Option<u32>,
+    /// Send the upstream's `provider/model` in an `x-agentbuild-model`
+    /// response header (default off: it tells every caller what you use).
+    #[serde(default)]
+    pub expose_model_header: bool,
 }
 
 /// `[[routes]]`.
@@ -66,6 +77,10 @@ pub struct ModelConfig {
     /// Another base URL (required for `openai_compatible`).
     #[serde(default)]
     pub base_url: Option<String>,
+    /// Send the key over plain `http://` to another machine (a vLLM server
+    /// on your LAN). Refused by default.
+    #[serde(default)]
+    pub allow_insecure_http: bool,
 }
 
 /// `[[keys]]`.
@@ -88,6 +103,9 @@ pub struct KeyConfig {
     /// A token budget (design 0006 §13.3).
     #[serde(default)]
     pub budget: Option<BudgetConfig>,
+    /// Requests in flight at once for this key.
+    #[serde(default)]
+    pub max_concurrent: Option<u32>,
 }
 
 /// `budget = { tokens = 5000000, period = "month" }`.
@@ -127,6 +145,13 @@ impl Config {
         if let Some(limit) = self.body_limit {
             builder = builder.body_limit(limit);
         }
+        if let Some(n) = self.max_concurrent_requests {
+            builder = builder.max_concurrent_requests(n);
+        }
+        if let Some(n) = self.max_tokens {
+            builder = builder.max_tokens(n);
+        }
+        builder = builder.expose_model_header(self.expose_model_header);
         for route in self.routes {
             let mut models: Vec<Arc<dyn Model>> = Vec::new();
             for m in route.models {
@@ -167,6 +192,9 @@ impl Config {
                 {
                     endpoint = endpoint.with_base_url(base);
                 }
+                if m.allow_insecure_http {
+                    endpoint = endpoint.allow_insecure_http();
+                }
                 let model = ProviderModel::new(endpoint, &m.model)
                     .map_err(|err| GatewayError::Config(err.to_string()))?;
                 models.push(Arc::new(model));
@@ -180,6 +208,9 @@ impl Config {
             }
             if let Some(n) = key.tokens_per_minute {
                 limits = limits.tokens_per_minute(n);
+            }
+            if let Some(n) = key.max_concurrent {
+                limits = limits.max_concurrent(n);
             }
             if let Some(budget) = &key.budget {
                 let period = BudgetPeriod::parse(&budget.period).ok_or_else(|| {
