@@ -214,6 +214,15 @@ write our own implementation.
 - **Security audit (2026-10-22):** four reviewers, findings verified and
   fixed (CHANGELOG "Security audit"); `scripts/check-supply-chain.sh`
   guards the build and release. New rules below (10–12).
+- **Implemented (Python, TypeScript, Rust): patterns, specialists, web tools (0019).**
+  `agentbuild.patterns` (12 designs from Google Cloud's agentic-pattern guide
+  as functions, plus `quick("a > b")`), `agentbuild.specialists` (extendable
+  default agent recipes and a registry), `agentbuild.web` (Tavily/Brave search,
+  safe page fetch). Tests: `sdks/python/tests/test_patterns.py`, `test_web.py`;
+  `sdks/typescript/test/patterns.test.js`, `web.test.js`;
+  `crates/agentbuild-agent/tests/patterns.rs`, `web.rs` (feature `web`). Website: `/playground/`,
+  `/demo/` (`demos/feature-tour/`: `tour.py` records scripted and `--live`
+  tours into `website/public/demo/`; `chat_server.py` is the chat backend).
 - **Not started:** vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 

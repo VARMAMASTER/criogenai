@@ -11,6 +11,27 @@ All crates in this repository share one version number.
 
 First release, planned as 0.1.0 (Rust crates only).
 
+### Patterns, specialists and web tools in Python, TypeScript and Rust (design 0019)
+
+- `agentbuild.patterns`: sequential, parallel, loop, review and critique,
+  iterative refinement, coordinator, hierarchical, swarm, human review, react,
+  custom, and `quick("researcher > writer")`. Built from agents and workflows
+  (no engine change); every loop has a cap (ceiling 50) and a `stop_reason`.
+- `agentbuild.specialists`: default agent recipes (researcher, summarizer,
+  classifier, extractor, planner, writer, critic, fact checker, code reviewer,
+  translator, support agent) with `build`, `extend`, `register`, `get`.
+- `agentbuild.web`: `search()` (Tavily or Brave, from the environment), `fetch()`
+  (public pages only, no redirects, bounded); the researcher uses them when a key is set.
+- TypeScript: `patterns`, `specialists`, `web` (same shapes, camelCase). Rust:
+  `agentbuild_agent::{patterns, specialists}` and `web` behind the cargo feature `web`.
+- Private-network addresses are refused by the page reader in every spelling
+  (IPv4 inside IPv6, NAT64, 6to4), in all three languages.
+- Fixed: the default Gemini embedding model (`text-embedding-004`) no longer
+  exists; it is now `gemini-embedding-001` (Python and TypeScript).
+- Website: `/playground/` and `/demo/` (feature tour with a scripted and a real
+  model, and a chat); `demos/feature-tour/`.
+
+
 ### agentbuild-core: the workflow engine
 
 - Workflows as graphs of async nodes over a JSON state, run in supersteps:
