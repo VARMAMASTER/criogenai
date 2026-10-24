@@ -205,7 +205,7 @@ class Embedder:
         return Embedder._provider("openai", model, api_key, None, dimensions)
 
     @staticmethod
-    def gemini(model: str = "text-embedding-004", api_key: Optional[str] = None) -> "Embedder":
+    def gemini(model: str = "gemini-embedding-001", api_key: Optional[str] = None) -> "Embedder":
         """Gemini's OpenAI-compatible ``/embeddings`` (``GEMINI_API_KEY``)."""
         return Embedder._provider("gemini", model, api_key, None, None)
 

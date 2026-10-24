@@ -159,7 +159,7 @@ export class Embedder {
   }
 
   /** Gemini's OpenAI-compatible /embeddings (GEMINI_API_KEY). */
-  static gemini(model = "text-embedding-004", options: { apiKey?: string } = {}): Embedder {
+  static gemini(model = "gemini-embedding-001", options: { apiKey?: string } = {}): Embedder {
     return Embedder.provider("gemini", model, options);
   }
 
