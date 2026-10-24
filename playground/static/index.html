@@ -1,0 +1,340 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Playground: AgentBuild and LangChain</title>
+<style>
+  :root {
+    --bg:#f5f6f8; --card:#fff; --ink:#14171c; --muted:#5f6876; --line:#e3e6eb; --soft:#eef0f4;
+    --ab:#2563eb; --lc:#d97706; --good:#0f7b4d; --bad:#b42318; --focus:#2563eb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#0e1013; --card:#171a1f; --ink:#e8ebf0; --muted:#98a1b0; --line:#2a2f37; --soft:#20242b;
+            --ab:#6b9bff; --lc:#f2a33a; --good:#4cc38a; --bad:#ff7b6e; --focus:#6b9bff; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:1100px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; letter-spacing:-.01em; }
+  h2 { font-size:15px; margin:0 0 10px; }
+  .sub { color:var(--muted); margin:0 0 20px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; }
+  .grid { display:grid; gap:16px; }
+  .two { grid-template-columns:1fr 1fr; }
+  @media (max-width:760px) { .two { grid-template-columns:1fr; } }
+  textarea { width:100%; min-height:74px; resize:vertical; font:inherit; padding:10px 12px; border-radius:10px;
+             border:1px solid var(--line); background:var(--bg); color:var(--ink); }
+  label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--muted); }
+  input[type=number] { font:inherit; width:100%; padding:7px 9px; border-radius:8px; border:1px solid var(--line);
+                       background:var(--bg); color:var(--ink); }
+  .options { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; margin:12px 0; }
+  .buttons { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  button { font:inherit; padding:10px 16px; border-radius:10px; border:1px solid var(--line); background:var(--card);
+           color:var(--ink); cursor:pointer; }
+  button.primary { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  button:disabled { opacity:.5; cursor:default; }
+  button:focus-visible, textarea:focus-visible, input:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+  .hint { color:var(--muted); font-size:13px; }
+  .fw-head { display:flex; justify-content:space-between; align-items:baseline; gap:8px; margin-bottom:8px; }
+  .fw-name { font-weight:650; display:flex; align-items:center; gap:8px; }
+  .dot { width:10px; height:10px; border-radius:3px; display:inline-block; }
+  .ab .dot { background:var(--ab); } .lc .dot { background:var(--lc); }
+  .badge { font-size:12px; padding:2px 8px; border-radius:99px; background:var(--soft); color:var(--muted); }
+  .badge.run { color:var(--ink); } .badge.err { color:var(--bad); }
+  .ver { color:var(--muted); font-size:12px; }
+  .answer { min-height:48px; padding:10px 12px; border-radius:10px; background:var(--soft); white-space:pre-wrap; overflow-wrap:anywhere; }
+  .answer.empty { color:var(--muted); }
+  .timeline { margin-top:12px; font-size:12px; }
+  .row { display:grid; grid-template-columns:96px 1fr; align-items:center; gap:8px; height:20px; }
+  .row .name { color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .lane { position:relative; height:12px; background:var(--soft); border-radius:6px; }
+  .bar { position:absolute; top:0; height:12px; border-radius:6px; min-width:3px; }
+  .ab .bar { background:var(--ab); } .lc .bar { background:var(--lc); }
+  .bar.model { opacity:.45; }
+  .axis { display:flex; justify-content:space-between; color:var(--muted); font-size:11px; margin-left:104px; }
+  canvas { width:100%; height:190px; display:block; }
+  .legend { display:flex; gap:16px; font-size:13px; margin-top:6px; color:var(--muted); }
+  .legend i { display:inline-block; width:12px; height:3px; border-radius:2px; margin-right:6px; vertical-align:middle; }
+  table { width:100%; border-collapse:collapse; font-size:14px; }
+  th, td { text-align:right; padding:8px 10px; border-bottom:1px solid var(--line); }
+  th:first-child, td:first-child { text-align:left; }
+  th { font-weight:600; color:var(--muted); font-size:12px; }
+  td.win { font-weight:650; color:var(--good); }
+  td.note { color:var(--muted); font-size:12px; text-align:left; }
+  .chips { display:flex; gap:10px; flex-wrap:wrap; margin-bottom:12px; }
+  .chip { background:var(--soft); border-radius:10px; padding:8px 12px; font-size:14px; }
+  .chip b { color:var(--good); }
+  .err-box { color:var(--bad); margin-top:10px; }
+  .note-box { margin-top:10px; font-size:13px; color:var(--muted); }
+  .note-box b { color:var(--ink); }
+  .foot { color:var(--muted); font-size:12.5px; margin-top:12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Playground: AgentBuild and LangChain</h1>
+  <p class="sub">One message, both frameworks, the same fake model server and tools, measured live. <span id="machine"></span></p>
+
+  <section class="card" aria-labelledby="ask">
+    <h2 id="ask">Your message</h2>
+    <textarea id="message" maxlength="2000" aria-label="Your message">Where is my refund for order A-1001?</textarea>
+    <div class="options">
+      <label>Tools the agent uses (0–5)<input id="tools" type="number" min="0" max="5" value="3"></label>
+      <label>Model delay (ms)<input id="model_delay" type="number" min="0" max="5000" value="200"></label>
+      <label>Tool delay (ms)<input id="tool_delay" type="number" min="0" max="5000" value="100"></label>
+      <label>Benchmark runs<input id="runs" type="number" min="1" max="200" value="30"></label>
+      <label>At the same time (1–100)<input id="concurrency" type="number" min="1" max="100" value="1"></label>
+    </div>
+    <div class="buttons">
+      <button class="primary" id="live" type="button">Run both at once</button>
+      <button id="bench" type="button">Benchmark (one after the other)</button>
+      <button id="overhead" type="button" title="No simulated waiting: what the frameworks themselves cost">Overhead only (no waiting)</button>
+      <button id="stop" type="button" disabled>Stop</button>
+      <span class="hint" id="status" role="status" aria-live="polite"></span>
+    </div>
+    <p class="hint" style="margin:10px 0 0">“Run both at once” is live and side by side: both frameworks start together and share this computer, so they disturb each other. “Benchmark” and “Overhead only” run one framework, then the other, for numbers you can trust. “At the same time” is how many agent runs go together inside each framework (up to 100): with “Run both at once” it is one burst of that many runs.</p>
+    <div class="err-box" id="error" role="alert"></div>
+    <div class="note-box" id="limited" role="status"></div>
+  </section>
+
+  <div class="grid two" style="margin-top:16px" id="panels"></div>
+
+  <section class="card" style="margin-top:16px" aria-labelledby="usage">
+    <h2 id="usage">CPU and memory while it ran</h2>
+    <div class="grid two">
+      <div><canvas id="cpu" aria-label="CPU use over time"></canvas><div class="hint">CPU, % of one core (over 100% means several cores)</div></div>
+      <div><canvas id="mem" aria-label="Memory over time"></canvas><div class="hint">Memory, MB (the whole process)</div></div>
+    </div>
+    <div class="legend"><span><i style="background:var(--ab)"></i>AgentBuild</span><span><i style="background:var(--lc)"></i>LangChain</span></div>
+  </section>
+
+  <section class="card" style="margin-top:16px" aria-labelledby="cmp">
+    <h2 id="cmp">Comparison</h2>
+    <div class="chips" id="chips"></div>
+    <table>
+      <thead><tr><th>What was measured</th><th>AgentBuild</th><th>LangChain</th><th style="text-align:left">Lower is better</th></tr></thead>
+      <tbody id="table"></tbody>
+    </table>
+    <p class="foot" id="foot">Run something to see numbers.</p>
+  </section>
+</main>
+
+<script>
+const FW = { agentbuild: { label: "AgentBuild", cls: "ab", color: "--ab" }, langchain: { label: "LangChain", cls: "lc", color: "--lc" } };
+const $ = (id) => document.getElementById(id);
+const fmt = (n, d = 0) => n == null ? "–" : Number(n).toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
+let state, controller;
+
+function fresh() {
+  state = {};
+  for (const id of Object.keys(FW)) state[id] = { status: "waiting", tools: [], samples: [], runs: [], answer: "", metrics: {}, passes: [] };
+}
+
+function panels() {
+  $("panels").replaceChildren();
+  for (const [id, f] of Object.entries(FW)) {
+    const s = state[id];
+    const el = document.createElement("section");
+    el.className = `card ${f.cls}`;
+    const first = s.metrics.first_ms;
+    const span = Math.max(first || 0, ...s.tools.map((t) => t.end_ms), 1);
+    const bars = [];
+    if (s.tools.length) {
+      const begin = Math.min(...s.tools.map((t) => t.start_ms));
+      const end = Math.max(...s.tools.map((t) => t.end_ms));
+      bars.push(["model", 0, begin, "model"], ...s.tools.map((t) => [t.name, t.start_ms, t.end_ms, "tool"]));
+      if (first != null) bars.push(["model", end, first, "model"]);
+    } else if (first != null) bars.push(["model", 0, first, "model"]);
+    const rows = bars.map(([name, a, b, kind]) => `<div class="row"><span class="name">${name}</span><div class="lane"><div class="bar ${kind}" style="left:${(a / span) * 100}%;width:${Math.max(0.5, ((b - a) / span) * 100)}%"></div></div></div>`).join("");
+    el.innerHTML = `
+      <div class="fw-head"><div class="fw-name"><span class="dot"></span>${f.label}</div><span class="badge ${s.status === "running" ? "run" : s.status === "error" ? "err" : ""}">${s.status}</span></div>
+      <div class="ver">${s.version || ""}</div>
+      <div class="answer ${s.answer ? "" : "empty"}" aria-label="${f.label} answer">${s.answer ? escapeHtml(s.answer) : "The answer appears here."}</div>
+      ${rows ? `<div class="timeline"><div class="hint" style="margin:10px 0 4px">First run: what happened when (the model waits, then the tools run)</div>${rows}<div class="axis"><span>0</span><span>${fmt(span)} ms</span></div></div>` : ""}`;
+    $("panels").appendChild(el);
+  }
+}
+const escapeHtml = (t) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function stats(runs) {
+  if (!runs.length) return {};
+  const sorted = [...runs].sort((a, b) => a - b);
+  const at = (q) => sorted[Math.min(sorted.length - 1, Math.round((sorted.length - 1) * q))];
+  return { median: at(0.5), p95: at(0.95) };
+}
+
+function table() {
+  const rows = [
+    ["Ready: imported and built (after Python started)", "ready_ms", " ms", 0],
+    ["First run (everything cold)", "first_ms", " ms", 0],
+    ["Typical run (median)", "median", " ms", 1],
+    ["Slow runs (95th percentile)", "p95", " ms", 1],
+    ["Runs per second", "throughput", "", 1, true],
+    ["Peak memory", "peak_rss_mb", " MB", 1],
+    ["CPU time used", "cpu_time_s", " s", 2],
+  ];
+  const a = state.agentbuild.metrics, l = state.langchain.metrics;
+  $("table").replaceChildren();
+  const chips = [];
+  let any = false;
+  for (const [label, key, unit, digits, higher] of rows) {
+    const x = a[key], y = l[key];
+    if (x == null && y == null) continue;
+    any = true;
+    let win = null, note = "";
+    if (x != null && y != null && x > 0 && y > 0) {
+      const better = higher ? x > y : x < y;
+      const ratio = better ? (higher ? x / y : y / x) : (higher ? y / x : x / y);
+      if (ratio >= 1.1) { win = better ? "ab" : "lc"; note = `${FW[better ? "agentbuild" : "langchain"].label} ${fmt(ratio, ratio < 10 ? 1 : 0)}× ${higher ? "more" : "less"}`; }
+      else note = "about the same";
+      if (win && ["ready_ms", "median", "peak_rss_mb", "cpu_time_s"].includes(key)) chips.push(`<div class="chip">${label}: <b>${note}</b></div>`);
+    }
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${label}</td><td class="${win === "ab" ? "win" : ""}">${fmt(x, digits)}${x != null ? unit : ""}</td><td class="${win === "lc" ? "win" : ""}">${fmt(y, digits)}${y != null ? unit : ""}</td><td class="note">${note}</td>`;
+    $("table").appendChild(tr);
+  }
+  $("chips").innerHTML = chips.join("");
+  if (any) {
+    const j = state.job;
+    const single = a.median == null && l.median == null;
+    $("foot").textContent = (single ? "This run was one run each, so memory, CPU and “ready” are mostly the cost of loading the framework, not speed under load: press Benchmark (or set “At the same time” above 1) to measure that. " : "") + `Both talk to the same local fake model server (${j.model_delay_ms} ms per call) with their own real clients, and use the same ${j.tools} tools (${j.tool_delay_ms} ms each); no real model is called. ${j.order === "parallel" ? "They ran at the same time on this computer, so they affected each other: use Benchmark for exact numbers. " : j.balanced ? "They ran A, B, B, A (each twice, new process each time) and the numbers are the average of both passes, so going first or second cancels out. " : "They ran one after the other. "}One computer: not a verdict. The recorded benchmarks are on the Benchmarks page.`;
+  }
+}
+
+const mean = (list) => { const v = list.filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : undefined; };
+
+/** One framework's numbers from all its passes (side by side: one; A B B A: two). */
+function derive(id) {
+  const s = state[id], passes = s.passes.filter(Boolean), m = s.metrics = {};
+  if (!passes.length) return;
+  const first = passes[0];
+  s.tools = first.tools; s.samples = first.samples; s.answer = first.answer || "";
+  const expected = state.job && state.job.order === "sequential" && state.job.balanced ? 2 : 1;
+  if (s.status !== "error") s.status = passes.length < expected ? "running" : passes.every((p) => p.exited) ? "done" : "running";
+  m.ready_ms = mean(passes.map((p) => p.ready_ms));
+  m.first_ms = mean(passes.map((p) => p.first_ms));
+  m.peak_rss_mb = mean(passes.map((p) => p.peak_rss_mb));
+  m.cpu_time_s = mean(passes.map((p) => p.cpu_time_s));
+  s.runs = passes.flatMap((p) => p.runs);
+  const wall = passes.reduce((a, p) => a + (p.wall_ms || 0), 0);
+  Object.assign(m, stats(s.runs));
+  if (wall && s.runs.length) m.throughput = (s.runs.length / wall) * 1000;
+}
+
+function handle(e) {
+  if (e.e === "job") {
+    state.job = e.job; state.cores = e.cores;
+    const names = { tools: "tools", model_delay_ms: "model delay", tool_delay_ms: "tool delay", runs: "benchmark runs", concurrency: "at the same time", message: "message length" };
+    const limited = Object.entries(e.job.limited || {});
+    $("limited").innerHTML = limited.length ? "Limited to what this computer allows: " + limited.map(([k, [asked, used]]) => `<b>${names[k]}</b> ${asked} → ${used}`).join(", ") + "." : "";
+    const fields = { tools: "tools", model_delay_ms: "model_delay", tool_delay_ms: "tool_delay", concurrency: "concurrency" };
+    for (const [k, id] of Object.entries(fields)) if (e.job.limited && e.job.limited[k]) $(id).value = e.job.limited[k][1];
+    return;
+  }
+  if (e.e === "end" || e.e === "timeout") { if (e.e === "timeout") $("error").textContent = "Stopped: it took too long."; return; }
+  const s = state[e.fw];
+  if (!s) return;
+  const p = (s.passes[e.pass || 0] ||= { tools: [], samples: [], runs: [] });
+  switch (e.e) {
+    case "start": s.version = e.version; p.ready_ms = e.ready_ms; break;
+    case "tool": p.tools.push(e); break;
+    case "first_run": p.answer = e.answer; p.first_ms = e.ms; break;
+    case "run": p.runs.push(e.ms); break;
+    case "done": p.runs = e.runs; p.wall_ms = e.wall_ms; break;
+    case "sample": p.samples.push({ t: e.t, cpu: e.cpu, rss: e.rss_mb }); break;
+    case "error": s.status = "error"; $("error").textContent = `${FW[e.fw].label}: ${e.error}`; break;
+    case "exit": p.peak_rss_mb = e.peak_rss_mb; p.cpu_time_s = e.cpu_time_s; p.exited = true; if (e.code !== 0) s.status = "error"; break;
+  }
+  derive(e.fw);
+}
+
+async function run(kind) {
+  if (kind === "overhead") { $("model_delay").value = 0; $("tool_delay").value = 0; if (+$("runs").value < 100) $("runs").value = 100; }
+  const body = {
+    message: $("message").value,
+    tools: +$("tools").value, model_delay_ms: +$("model_delay").value, tool_delay_ms: +$("tool_delay").value,
+    // "Run both at once" is one run, or one burst of `concurrency` runs; the other buttons repeat `runs` times.
+    runs: kind === "live" ? (+$("concurrency").value > 1 ? Math.min(+$("concurrency").value, 100) : 0) : +$("runs").value,
+    concurrency: +$("concurrency").value,
+    order: kind === "live" ? "parallel" : "sequential",
+  };
+  fresh(); panels(); table(); draw();
+  $("error").textContent = ""; $("limited").textContent = ""; $("status").textContent = "running…";
+  $("live").disabled = $("bench").disabled = $("overhead").disabled = true; $("stop").disabled = false;
+  controller = new AbortController();
+  try {
+    const response = await fetch("/api/run", { method: "POST", body: JSON.stringify(body), signal: controller.signal });
+    if (!response.ok) throw new Error((await response.json()).error);
+    const reader = response.body.getReader(), decoder = new TextDecoder();
+    let buffer = "", last = 0;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n"); buffer = lines.pop();
+      for (const line of lines) if (line.trim()) handle(JSON.parse(line));
+      if (performance.now() - last > 120) { panels(); table(); draw(); last = performance.now(); }
+    }
+    $("status").textContent = "done";
+  } catch (error) {
+    if (error.name !== "AbortError") $("error").textContent = error.message; else $("status").textContent = "stopped";
+  }
+  panels(); table(); draw();
+  $("live").disabled = $("bench").disabled = $("overhead").disabled = false; $("stop").disabled = true;
+}
+
+/* ---- charts ---- */
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+function chart(canvasId, key, unit) {
+  const canvas = $(canvasId), dpr = devicePixelRatio || 1;
+  const w = canvas.clientWidth, h = canvas.clientHeight;
+  canvas.width = w * dpr; canvas.height = h * dpr;
+  const g = canvas.getContext("2d"); g.scale(dpr, dpr);
+  const pad = { l: 44, r: 14, t: 10, b: 22 };
+  // Each line starts at its own zero, so one-after-the-other runs overlay.
+  const series = Object.entries(FW).map(([id, f]) => {
+    const raw = state[id].samples, zero = raw.length ? raw[0].t : 0;
+    return { id, color: css(f.color), pts: raw.map((p) => ({ ...p, t: p.t - zero })) };
+  });
+  const tmax = Math.max(1000, ...series.flatMap((s) => s.pts.map((p) => p.t)));
+  const vmax = niceMax(Math.max(1, ...series.flatMap((s) => s.pts.map((p) => p[key]))));
+  const X = (t) => pad.l + (t / tmax) * (w - pad.l - pad.r), Y = (v) => h - pad.b - (v / vmax) * (h - pad.t - pad.b);
+  g.strokeStyle = css("--line"); g.fillStyle = css("--muted"); g.font = "11px system-ui"; g.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const v = (vmax / 4) * i, y = Y(v);
+    g.beginPath(); g.moveTo(pad.l, y); g.lineTo(w - pad.r, y); g.stroke();
+    g.textAlign = "right"; g.fillText(fmt(v, vmax < 10 ? 1 : 0), pad.l - 6, y + 4);
+  }
+  g.textAlign = "center";
+  for (let i = 0; i <= 4; i++) g.fillText(`${fmt((tmax / 4000) * i, 1)} s`, X((tmax / 4) * i), h - 6);
+  for (const s of series) {
+    if (!s.pts.length) continue;
+    g.strokeStyle = s.color; g.lineWidth = 2; g.lineJoin = "round"; g.beginPath();
+    s.pts.forEach((p, i) => (i ? g.lineTo(X(p.t), Y(p[key])) : g.moveTo(X(p.t), Y(p[key]))));
+    g.stroke();
+    const last = s.pts[s.pts.length - 1];
+    g.fillStyle = s.color; g.textAlign = "left";
+    g.fillText(`${fmt(last[key], vmax < 10 ? 1 : 0)}${unit}`, Math.min(X(last.t) + 4, w - 40), Y(last[key]) - 5);
+  }
+}
+function niceMax(v) { const p = Math.pow(10, Math.floor(Math.log10(v))); for (const m of [1, 2, 5, 10]) if (v <= m * p) return m * p; return v; }
+function draw() { chart("cpu", "cpu", "%"); chart("mem", "rss", " MB"); }
+
+$("live").addEventListener("click", () => run("live"));
+$("bench").addEventListener("click", () => run("bench"));
+$("overhead").addEventListener("click", () => run("overhead"));
+$("stop").addEventListener("click", () => controller && controller.abort());
+addEventListener("resize", draw);
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", draw);
+
+fresh(); panels(); table(); draw();
+fetch("/api/info").then((r) => r.json()).then((info) => {
+  const m = info.machine;
+  $("machine").textContent = `This computer: ${m.cores} cores, ${m.ram_gb} GB, ${m.os}.`;
+  const missing = Object.entries(info.frameworks).filter(([, v]) => !v.ready).map(([, v]) => v.label);
+  if (missing.length) $("error").textContent = `Not set up: ${missing.join(", ")}. Run: python benches/compare/setup.py`;
+});
+</script>
+</body>
+</html>

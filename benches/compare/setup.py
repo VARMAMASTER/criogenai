@@ -28,7 +28,7 @@ AGENTBUILD = "agentbuild-sdk==0.1.0"
 # Pinned: the latest stable releases when the comparison was set up.
 PSUTIL = "psutil==7.2.2"
 PACKAGES = {
-    "langgraph": ["langgraph==1.2.16", "langchain==1.4.6", "langgraph-checkpoint-sqlite==3.1.2", PSUTIL],
+    "langgraph": ["langgraph==1.2.16", "langchain==1.4.6", "langchain-openai==1.7.2", "langgraph-checkpoint-sqlite==3.1.2", PSUTIL],
     "crewai": ["crewai==1.15.28", PSUTIL],
 }
 

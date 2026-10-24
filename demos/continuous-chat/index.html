@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Continuous chat</title>
+<style>
+  :root { color-scheme: light dark; --bg:#f6f7f9; --card:#fff; --ink:#15181d; --muted:#6a7280; --you:#2f6df6; --bot:#eceff3; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0f1115; --card:#171a20; --ink:#e7eaf0; --muted:#8b93a1; --you:#3b78ff; --bot:#232833; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:16px/1.45 system-ui, sans-serif; min-height:100dvh; display:flex; justify-content:center; }
+  main { width:100%; max-width:720px; display:flex; flex-direction:column; height:100dvh; padding:0 16px; }
+  header { display:flex; gap:12px; align-items:center; justify-content:space-between; padding:14px 0; }
+  h1 { font-size:18px; margin:0; }
+  header span { color:var(--muted); font-size:13px; }
+  #log { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px; padding:4px 0 12px; }
+  .msg { max-width:85%; padding:10px 14px; border-radius:16px; white-space:pre-wrap; overflow-wrap:anywhere; }
+  .you { align-self:flex-end; background:var(--you); color:#fff; border-bottom-right-radius:4px; }
+  .bot { align-self:flex-start; background:var(--bot); border-bottom-left-radius:4px; }
+  form { display:flex; gap:8px; padding:12px 0 16px; }
+  input[type=text] { flex:1; font:inherit; padding:12px 14px; border-radius:12px; border:1px solid var(--bot); background:var(--card); color:var(--ink); }
+  button { font:inherit; padding:12px 18px; border-radius:12px; border:0; background:var(--you); color:#fff; cursor:pointer; }
+  button.quiet { background:transparent; color:var(--muted); padding:6px 10px; border:1px solid var(--bot); }
+  button:disabled { opacity:.5; cursor:default; }
+  input:focus-visible, button:focus-visible { outline:2px solid var(--you); outline-offset:2px; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div><h1>Continuous chat</h1><span id="who"></span></div>
+    <div><button class="quiet" id="switch" type="button">Switch name</button> <button class="quiet" id="forget" type="button">Forget</button></div>
+  </header>
+  <div id="log" aria-live="polite"></div>
+  <form id="form">
+    <input id="text" type="text" placeholder="Say something…" autocomplete="off" maxlength="8000" aria-label="Message">
+    <button id="send" type="submit">Send</button>
+  </form>
+</main>
+<script>
+  const log = document.getElementById("log"), form = document.getElementById("form");
+  const text = document.getElementById("text"), send = document.getElementById("send");
+  let name = localStorage.getItem("chat-name") || "";
+  const ask = () => {
+    const given = (prompt("Your name (letters, digits, - and _). The same name gets the same conversation back:", name || "me") || "").trim();
+    if (/^[A-Za-z0-9_-]{1,40}$/.test(given)) { name = given; localStorage.setItem("chat-name", name); }
+    else if (!name) name = "me";
+  };
+  const add = (who, content) => {
+    const el = document.createElement("div");
+    el.className = "msg " + who;
+    el.textContent = content;
+    log.appendChild(el);
+    log.scrollTop = log.scrollHeight;
+    return el;
+  };
+  async function load() {
+    log.replaceChildren();
+    document.getElementById("who").textContent = "chatting as " + name;
+    const turns = await (await fetch("/api/messages?name=" + encodeURIComponent(name))).json();
+    for (const t of turns) { add("you", t.you); add("bot", t.bot); }
+  }
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const said = text.value.trim();
+    if (!said) return;
+    text.value = ""; send.disabled = true;
+    add("you", said);
+    const answer = add("bot", "…");
+    try {
+      const response = await fetch("/api/send", { method: "POST", body: JSON.stringify({ name, text: said }) });
+      if (!response.ok) throw new Error((await response.json()).error);
+      const reader = response.body.getReader(), decoder = new TextDecoder();
+      answer.textContent = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        answer.textContent += decoder.decode(value, { stream: true });
+        log.scrollTop = log.scrollHeight;
+      }
+    } catch (error) {
+      answer.textContent = "(failed: " + error.message + ")";
+    }
+    send.disabled = false; text.focus();
+  });
+  document.getElementById("switch").addEventListener("click", () => { ask(); load(); });
+  document.getElementById("forget").addEventListener("click", async () => {
+    if (!confirm("Forget this whole conversation?")) return;
+    await fetch("/api/forget", { method: "POST", body: JSON.stringify({ name }) });
+    load();
+  });
+  if (!name) ask();
+  load();
+</script>
+</body>
+</html>
