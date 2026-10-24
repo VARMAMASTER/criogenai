@@ -1,5 +1,5 @@
 {
-  "name": "@agentbuild/sdk",
+  "name": "agentbuild-sdk",
   "version": "0.1.0",
   "description": "Agents with tools, approvals, durable threads and memory on a Rust engine",
   "license": "SEE LICENSE IN LICENSE",

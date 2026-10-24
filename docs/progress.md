@@ -139,7 +139,7 @@ remaining tasks one by one"), same full cycle:
   benchmark kit is published on its own (`benches/compare/package.py` →
   the site); a live install counter on the home page. Package names:
   `agentbuild-sdk` on PyPI ("agentbuild" was taken by an unrelated project
-  on 2026-10-21; `import agentbuild` stays), `@agentbuild/sdk` on npm (the
+  on 2026-10-21; `import agentbuild` stays), `agentbuild-sdk` on npm (the
   user owns the org).
 
 ### 2026-10-17: Linux (task 12)
@@ -194,7 +194,7 @@ remaining tasks one by one"), same full cycle:
   needs the user's go-ahead (paid minutes while the repo is private).
 - RELEASING.md covers the SDKs, the gateway crate and the registry
   setup. Names checked free on 2026-10-16: all crates, PyPI
-  `agentbuild`, npm `@agentbuild/sdk` (unscoped `agentbuild` is taken).
+  `agentbuild`, npm `agentbuild-sdk` (unscoped `agentbuild` is taken).
 
 ### 2026-10-16: benchmarks (design 0014, task 10)
 
@@ -282,7 +282,7 @@ remaining tasks one by one"), same full cycle:
 
 - `sdks/typescript`: crate `agentbuild-node` (napi-rs 3, outside the
   workspace; no `@napi-rs/cli`, cargo builds and a script copies the
-  addon to `native/agentbuild.node`) and `@agentbuild/sdk` in TypeScript.
+  addon to `native/agentbuild.node`) and `agentbuild-sdk` in TypeScript.
 - Bridge: napi async methods on napi's Tokio runtime; tools as weak
   thread-safe functions `(request) => Promise<envelope>` that Rust
   awaits (no event-loop bookkeeping, unlike Python); `AbortSignal`

@@ -1,6 +1,6 @@
 // Design patterns for agentic systems, ready to use (design 0019).
 //
-//   import { patterns } from "@agentbuild/sdk";
+//   import { patterns } from "agentbuild-sdk";
 //   const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
 //   console.log(String(await flow.run("Write about solar panels")));
 //

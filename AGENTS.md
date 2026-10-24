@@ -127,7 +127,7 @@ write our own implementation.
   `ResilientModel`).
 - **Implemented: TypeScript SDK, first slice (0012).** `sdks/typescript`
   (crate `agentbuild-node`, not a workspace member; napi-rs 3, N-API 6,
-  Node 18+; package `@agentbuild/sdk`, TypeScript in `lib/` compiled to
+  Node 18+; package `agentbuild-sdk`, TypeScript in `lib/` compiled to
   `dist/`): the same slice as Python, and workflows (`Workflow`, 0015;
   `test/workflow.test.js`). `Agent`, `tool({...})` with JSON
   Schema input, approvals, typed output, threads (incl. `stream*`),
@@ -195,7 +195,7 @@ write our own implementation.
   decision: `Storage::close` (and `close()` in both SDKs),
   `.github/workflows/sdk-packages.yml` (wheels and npm addons for Linux
   x64/arm64, macOS arm64/x64, Windows x64, tested per platform; manual,
-  never run yet), the TS loader for `@agentbuild/sdk-<platform>-<arch>`.
+  never run yet), the TS loader for `agentbuild-sdk-<platform>-<arch>`.
   Decided (2026-10-22): the code stays private until 10,000 installs
   (then MIT or Apache-2.0); until then the Python and npm packages are
   free to use under the AgentBuild Free Licence (`sdks/*/LICENSE`, a

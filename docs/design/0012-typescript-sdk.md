@@ -29,7 +29,7 @@ sdks/typescript/
 ## 2. The API
 
 ```ts
-import { Agent, tool, ToolError, Storage, Memory, Decision } from "@agentbuild/sdk";
+import { Agent, tool, ToolError, Storage, Memory, Decision } from "agentbuild-sdk";
 
 const getOrder = tool({
   name: "get_order",

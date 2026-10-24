@@ -25,7 +25,7 @@ export const metadata: Metadata = {
 // the code opens.
 const install: Partial<Record<Lang, string>> = {
   python: "pip install agentbuild-sdk",
-  typescript: "npm install @agentbuild/sdk",
+  typescript: "npm install agentbuild-sdk",
 };
 
 // The lifecycle of a run, in the order it happens; each row links to its guide.

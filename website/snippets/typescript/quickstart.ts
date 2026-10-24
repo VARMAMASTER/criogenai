@@ -1,5 +1,5 @@
 // [show]
-import { Agent, ToolError, tool } from "@agentbuild/sdk";
+import { Agent, ToolError, tool } from "agentbuild-sdk";
 
 const getOrder = tool({
   name: "get_order",

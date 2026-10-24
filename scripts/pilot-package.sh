@@ -7,7 +7,7 @@
 # The pilot is `@varmamaster/sdk` (a GitHub Packages scope must be the
 # owner's name), for this machine's platform only: the addon in it is the one
 # just built, so `os` and `cpu` stop it from installing where it cannot run.
-# The public package stays `@agentbuild/sdk` (RELEASING.md). Output:
+# The public package stays `agentbuild-sdk` (RELEASING.md). Output:
 # target/pilot/<name>-<version>.tgz.
 set -euo pipefail
 
@@ -62,8 +62,8 @@ cd "$work"
 npm init -y >/dev/null
 zod="zod@$(cd "$sdk" && node -p 'require("./package.json").devDependencies.zod')"
 npm install --silent --ignore-scripts --no-audit --no-fund "$tarball" "$zod"
-# The consumer and the tests import `@agentbuild/sdk`: point them at the pilot.
-sed "s#@agentbuild/sdk#$NAME#g" "$sdk/examples/consumer.mjs" > consumer.mjs
+# The consumer and the tests import `agentbuild-sdk`: point them at the pilot.
+sed "s#agentbuild-sdk#$NAME#g" "$sdk/examples/consumer.mjs" > consumer.mjs
 node consumer.mjs
 cp -r "$sdk/test" ./test
 AGENTBUILD_ERROR_CATALOG="$root/schemas/error-codes.json" AGENTBUILD_SDK="$NAME" node --test test/*.test.js \

@@ -89,9 +89,9 @@ jobs:
           os="${{ matrix.platform }}"; os="${os%-*}"; cpu="${{ matrix.platform }}"; cpu="${cpu#*-}"
           cat > "$out/package.json" <<EOF
           {
-            "name": "@agentbuild/sdk-${{ matrix.platform }}",
+            "name": "agentbuild-sdk-${{ matrix.platform }}",
             "version": "$version",
-            "description": "The native addon of @agentbuild/sdk for ${{ matrix.platform }}",
+            "description": "The native addon of agentbuild-sdk for ${{ matrix.platform }}",
             "license": "SEE LICENSE IN LICENSE",
             "main": "agentbuild.node",
             "files": ["agentbuild.node", "LICENSE"],
@@ -146,7 +146,7 @@ jobs:
             const pkg = JSON.parse(fs.readFileSync("package.json"));
             pkg.optionalDependencies = Object.fromEntries(
               ["linux-x64", "linux-arm64", "darwin-arm64", "darwin-x64", "win32-x64"]
-                .map((p) => [`@agentbuild/sdk-${p}`, process.argv[1]]));
+                .map((p) => [`agentbuild-sdk-${p}`, process.argv[1]]));
             pkg.files = pkg.files.filter((f) => !f.startsWith("native"));
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           ' "$version"

@@ -39,12 +39,16 @@ The wheel contains the Rust engine, so nothing else is needed. It is typed
 <TabItem label="TypeScript">
 
 ```sh
-npm install @agentbuild/sdk
+npm install agentbuild-sdk
 ```
 
 npm installs the engine for your platform automatically
-(`@agentbuild/sdk-linux-x64`, `-darwin-arm64`, `-win32-x64`, …). Works from
+(`agentbuild-sdk-linux-x64`, `-darwin-arm64`, `-win32-x64`, …). Works from
 TypeScript and JavaScript, as CommonJS or ES modules.
+
+Preview: until `0.1.0` is out for every platform, the package is published as
+`0.1.0-alpha.1` for Windows only, under the `next` tag:
+`npm install agentbuild-sdk@next`.
 
 </TabItem>
 <TabItem label="Rust">

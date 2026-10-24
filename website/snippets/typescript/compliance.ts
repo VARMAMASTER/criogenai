@@ -1,5 +1,5 @@
 // [show]
-import { Storage } from "@agentbuild/sdk";
+import { Storage } from "agentbuild-sdk";
 
 const storage = new Storage({
   url: "postgres://app:secret@db.internal/agents",

@@ -28,7 +28,7 @@ print(result.explain())   # each step, in order
 <TabItem label="TypeScript">
 
 ```ts
-import { patterns } from "@agentbuild/sdk";
+import { patterns } from "agentbuild-sdk";
 
 // A model for the specialists: pass one, or set AGENTBUILD_MODEL="openai:gpt-5-mini".
 const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
@@ -160,7 +160,7 @@ specialists.register(specialists.Specialist(
 <TabItem label="TypeScript">
 
 ```ts
-import { specialists } from "@agentbuild/sdk";
+import { specialists } from "agentbuild-sdk";
 
 const agent = specialists.writer.build("openai:gpt-5-mini");
 
@@ -213,7 +213,7 @@ agent = Agent("openai:gpt-5-mini", tools=[web.search(), web.fetch()])
 <TabItem label="TypeScript">
 
 ```ts
-import { Agent, web } from "@agentbuild/sdk";
+import { Agent, web } from "agentbuild-sdk";
 
 const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
 ```
@@ -269,7 +269,7 @@ flow.workflow.add_node(...)   # the plain Workflow, to add nodes and edges
 <TabItem label="TypeScript">
 
 ```ts
-import { Storage } from "@agentbuild/sdk";
+import { Storage } from "agentbuild-sdk";
 
 const app = patterns.humanReview(myAgent).compile(new Storage({ url: "sqlite:///app.db" }));
 await app.thread("release-1", { actor: "user:ada" }).run({ input: "Release the dataset?" });

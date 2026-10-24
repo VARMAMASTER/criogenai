@@ -1,6 +1,6 @@
 // Installs so far, toward the 10,000 at which AgentBuild's code opens.
 // Read at build time from the public download statistics: npm's
-// downloads API for @agentbuild/sdk (its platform addons are not counted
+// downloads API for agentbuild-sdk (its platform addons are not counted
 // again) and pypistats.org for agentbuild (without mirrors).
 //
 // Limit: pypistats keeps the last 180 days only. Before the first release
@@ -9,7 +9,7 @@
 
 export const GOAL = 10_000;
 const FIRST_DAY = "2026-10-01";
-const NPM = "@agentbuild/sdk";
+const NPM = "agentbuild-sdk";
 // Ours is agentbuild-sdk ("agentbuild" on PyPI is another project's).
 const PYPI: string | null = "agentbuild-sdk";
 

@@ -1,5 +1,5 @@
 // [show]
-import { Storage } from "@agentbuild/sdk";
+import { Storage } from "agentbuild-sdk";
 
 // One process: a SQLite file. Tables are created on first use.
 let storage = new Storage("sqlite:///agent.db");

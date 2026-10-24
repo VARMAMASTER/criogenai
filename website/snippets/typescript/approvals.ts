@@ -1,4 +1,4 @@
-import { tool } from "@agentbuild/sdk";
+import { tool } from "agentbuild-sdk";
 
 const issueRefund = tool({
   name: "issue_refund",
@@ -8,7 +8,7 @@ const issueRefund = tool({
 });
 
 // [show]
-import { Agent, Decision, Storage } from "@agentbuild/sdk";
+import { Agent, Decision, Storage } from "agentbuild-sdk";
 
 const agent = new Agent({
   model: "openai:gpt-5-mini",

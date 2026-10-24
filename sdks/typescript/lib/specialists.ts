@@ -1,7 +1,7 @@
 // Specialist agents: default recipes for common jobs that you configure,
 // extend or replace (design 0019).
 //
-//   import { specialists } from "@agentbuild/sdk";
+//   import { specialists } from "agentbuild-sdk";
 //   const agent = specialists.researcher.build("openai:gpt-5-mini", { tools: [search] });
 //   const careful = specialists.researcher.extend("careful-researcher", { add: "Always give two sources." });
 //   specialists.register(careful);

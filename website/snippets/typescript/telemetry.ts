@@ -1,5 +1,5 @@
 // [show]
-import { Agent, Telemetry } from "@agentbuild/sdk";
+import { Agent, Telemetry } from "agentbuild-sdk";
 
 // LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL
 const langfuse = Telemetry.langfuse();

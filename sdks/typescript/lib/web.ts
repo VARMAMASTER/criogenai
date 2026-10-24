@@ -1,7 +1,7 @@
 // Internet tools for agents: web search (Tavily or Brave) and reading a page
 // (design 0019).
 //
-//   import { Agent, web } from "@agentbuild/sdk";
+//   import { Agent, web } from "agentbuild-sdk";
 //   const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
 //
 // `web.search()` needs no arguments: it uses TAVILY_API_KEY if set, else

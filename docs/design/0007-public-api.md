@@ -16,7 +16,7 @@ access goes through the embeddable gateway (0006, pending).
    decorators and `async`/`await`. TypeScript uses Zod, object options,
    Promises and `AbortSignal`. The names match across languages.
 3. **No Rust visible.** Users never see Rust types, lifetimes or build steps:
-   `pip install agentbuild-sdk` / `npm i @agentbuild/sdk` ship prebuilt binaries.
+   `pip install agentbuild-sdk` / `npm i agentbuild-sdk` ship prebuilt binaries.
 4. **Errors are typed and predictable** (0003). Every failure is a documented
    exception class with a stable `code`.
 5. **Validation before running.** Graphs and agents are checked when built, and
@@ -38,7 +38,7 @@ async for chunk in gw.stream("openai:gpt-…", "Write a haiku"):
 ```
 
 ```ts
-import { Gateway } from "@agentbuild/sdk";
+import { Gateway } from "agentbuild-sdk";
 
 const gw = new Gateway();
 const reply = await gw.chat("anthropic:claude-sonnet-5-5", "Summarize this: …");
@@ -77,7 +77,7 @@ print(result.usage)           # tokens across all calls
 ```
 
 ```ts
-import { Agent, tool, ToolError } from "@agentbuild/sdk";
+import { Agent, tool, ToolError } from "agentbuild-sdk";
 import { z } from "zod";
 
 const getOrder = tool({
@@ -167,7 +167,7 @@ print(result.state.reply, result.steps)
 ```
 
 ```ts
-import { Workflow, messages, END } from "@agentbuild/sdk";
+import { Workflow, messages, END } from "agentbuild-sdk";
 import { z } from "zod";
 
 const Ticket = z.object({

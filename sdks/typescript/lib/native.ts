@@ -63,11 +63,11 @@ interface Addon {
 /**
  * The addon: one built from source (native/agentbuild.node, as
  * scripts/test-typescript.sh makes), else the prebuilt package for this
- * platform (@agentbuild/sdk-<platform>-<arch>, an optional dependency).
+ * platform (agentbuild-sdk-<platform>-<arch>, an optional dependency).
  */
 function load(): Addon {
   const local = path.join(__dirname, "..", "native", "agentbuild.node");
-  const prebuilt = `@agentbuild/sdk-${process.platform}-${process.arch}`;
+  const prebuilt = `agentbuild-sdk-${process.platform}-${process.arch}`;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require(local);
@@ -80,7 +80,7 @@ function load(): Addon {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "MODULE_NOT_FOUND") throw error;
     throw new Error(
-      `@agentbuild/sdk has no native addon for ${process.platform}-${process.arch}: ` +
+      `agentbuild-sdk has no native addon for ${process.platform}-${process.arch}: ` +
         `install ${prebuilt}, or build from source (npm run build:native)`,
     );
   }

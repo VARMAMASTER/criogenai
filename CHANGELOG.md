@@ -11,6 +11,13 @@ All crates in this repository share one version number.
 
 First release, planned as 0.1.0 (Rust crates only).
 
+### npm package name
+
+- The npm package is `agentbuild-sdk` (was planned as `@agentbuild/sdk`), matching the
+  PyPI name; its platform addons are `agentbuild-sdk-<platform>-<arch>`.
+  `0.1.0-alpha.1` (Windows addon only, tag `next`) was submitted on 2026-10-24;
+  `0.1.0` waits for the all-platform build (`sdk-packages.yml`).
+
 ### Patterns, specialists and web tools in Python, TypeScript and Rust (design 0019)
 
 - `agentbuild.patterns`: sequential, parallel, loop, review and critique,
@@ -254,7 +261,7 @@ interrupts (use a dedicated role).
 - A manual workflow builds the Python wheels and the npm native addons
   for Linux (x64, arm64), macOS (arm64, x64) and Windows (x64), tests each
   installed on its own platform, and can publish them. The TypeScript SDK
-  loads a prebuilt `@agentbuild/sdk-<platform>-<arch>` package when no
+  loads a prebuilt `agentbuild-sdk-<platform>-<arch>` package when no
   locally built addon is present.
 
 ### Benchmarks (design 0014)
@@ -299,7 +306,7 @@ interrupts (use a dedicated role).
 
 ### TypeScript SDK, first slice (design 0012)
 
-- `sdks/typescript`: the `@agentbuild/sdk` package on the Rust engine
+- `sdks/typescript`: the `agentbuild-sdk` package on the Rust engine
   (napi-rs addon, Node 18+): the same slice as the Python SDK, with
   `AbortSignal` on every call and error classes whose `cause` is what a
   crashing tool threw. Checked live against OpenAI and Gemini.

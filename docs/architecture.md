@@ -25,7 +25,7 @@ flowchart TB
 
     subgraph SDKs["Language SDKs (idiomatic API)"]
         PYSDK["agentbuild (Python)<br/>decorators, typing, asyncio"]
-        TSSDK["@agentbuild/sdk (TS)<br/>types, Promises, AsyncIterators"]
+        TSSDK["agentbuild-sdk (TS)<br/>types, Promises, AsyncIterators"]
     end
 
     subgraph Bridges["Language bridges (native extensions)"]
@@ -74,7 +74,7 @@ people's projects**, so it is a library first and a server second.
 | Mode | Who it's for | Shape |
 |---|---|---|
 | 1. Library, Rust | Rust services | `agentbuild-providers` crate: `gateway.chat(request).await`, streaming, errors per 0003 |
-| 2. Library, Python / TS | Python and Node apps, with or without agents | `from agentbuild.gateway import Gateway` / `import { Gateway } from "@agentbuild/sdk"`; in-process, no server |
+| 2. Library, Python / TS | Python and Node apps, with or without agents | `from agentbuild.gateway import Gateway` / `import { Gateway } from "agentbuild-sdk"`; in-process, no server |
 | 3. Mounted in the user's server | Apps that want a gateway endpoint inside their own service | Rust `axum::Router`, Python ASGI app, JS fetch handler `(Request) => Response` (works with Hono, Next.js route handlers, Express adapters) |
 | 4. Standalone | Teams replacing a proxy | One static binary and a Docker image; OpenAI-compatible `/v1/chat/completions`, `/v1/models` and Anthropic-compatible `/v1/messages`; official OpenAI/Anthropic SDKs work by changing `base_url` |
 
