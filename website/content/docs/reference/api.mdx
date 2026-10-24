@@ -24,8 +24,10 @@ declarations, Rust from its doc comments.
 | Storage | `Storage`, `Memory` | `Storage`, `Memory` | `agentbuild_storage::Storage`, `Memory` |
 | Models | `OpenAI`, `Anthropic`, `Gemini`, `Ollama`, `OpenAICompatible`, `FakeModel` | `openai()`, `anthropic()`, `gemini()`, `ollama()`, `FakeModel` | `ProviderModel`, `Endpoint`, `FakeModel` |
 | Errors | `AgentBuildError` and subclasses | `AgentBuildError`, `isAgentBuildError` | `AgentError`, `RunError`, `StorageError` |
-| Workflows | in progress | planned | `agentbuild_core::WorkflowBuilder`, `Storage::workflow_thread` |
-| Gateway | – | – | `agentbuild_gateway::Gateway`, `Config` |
+| Workflows | `Workflow`, `CompiledWorkflow`, `WorkflowThread` | `Workflow`, `CompiledWorkflow`, `WorkflowThread` | `agentbuild_core::WorkflowBuilder`, `Storage::workflow_thread` |
+| Patterns and specialists | `agentbuild.patterns`, `agentbuild.specialists` | `patterns`, `specialists` | `agentbuild_agent::patterns`, `agentbuild_agent::specialists` |
+| Web search and page reading | `agentbuild.web` | `web` | `agentbuild_agent::web` (feature `web`) |
+| Gateway | `Gateway` | `Gateway` | `agentbuild_gateway::Gateway`, `Config` |
 
 Once the crates are on crates.io, the Rust reference is also on
 [docs.rs](https://docs.rs).

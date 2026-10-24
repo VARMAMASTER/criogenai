@@ -83,6 +83,28 @@ remaining tasks one by one"), same full cycle:
 
 ## Log
 
+### 2026-10-24: patterns, specialists, web tools; playground and demo
+
+- **Design 0019** and its implementation in Python, TypeScript and Rust:
+  the 12 patterns of Google Cloud's agentic-pattern guide as functions
+  (`quick("a > b")`, every loop capped at 50 with a `stop_reason`), extendable
+  specialist agents with a registry, Tavily/Brave search and a safe page reader
+  (private addresses refused in every spelling; Rust pins the checked address).
+  No engine change. Tests in all three languages; package consumers extended.
+- **Website:** `/playground/` (AgentBuild vs LangChain on one shared mock model,
+  measured from outside, A-B-B-A) and `/demo/` (feature tour run for real with a
+  scripted and a real model, and a chat backed by `demos/feature-tour/chat_server.py`).
+  The playground and chat servers accept calls from the site only.
+- **Found by running against real APIs:** the default Gemini embedding model was
+  dead (now `gemini-embedding-001`); OpenRouter keys with little credit fail with
+  402 because agents send no `max_tokens` (agents cannot set it yet: open).
+- **Security:** tokio 1.54.1 for RUSTSEC-2026-0386; the page reader missed
+  `::ffff:7f00:1` until the TypeScript tests caught it.
+- **Published:** private pilot `@varmamaster/sdk@0.1.0-pilot.2` on GitHub Packages.
+  No public registry yet; no Vercel deploy of these pages yet.
+- **Next:** `max_tokens` on agents; wheels and public publishing (accounts,
+  licence review); a hosted chat needs rate limits and a model budget.
+
 ### 2026-10-22: framework comparison, tool exceptions, site and licence decisions
 
 - **Comparison with LangGraph and CrewAI (design 0016):** `benches/compare/`

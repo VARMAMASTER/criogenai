@@ -9,16 +9,24 @@ and human approval, conversations stored in memory, SQLite or Postgres
 with crash recovery, encryption at rest and an audit trail, and
 OpenTelemetry export.
 
-**Python and TypeScript:** first SDK slices in [`sdks/python`](sdks/python)
-and [`sdks/typescript`](sdks/typescript) (agents, tools, approvals,
-threads, storage, memory; designs 0011 and 0012).
+**Python and TypeScript:** SDKs in [`sdks/python`](sdks/python) and
+[`sdks/typescript`](sdks/typescript): agents, tools, approvals, threads,
+storage, memory, workflows, hooks, tracing and `Gateway` (designs 0011, 0012,
+0015, 0017, 0018).
+
+**Patterns, specialists and web search (Python, TypeScript and Rust):** ready-made
+agent designs (sequential, parallel, loop, review and critique, coordinator,
+hierarchical, swarm, human review, one-line `quick("researcher > writer")`),
+extendable specialist agents, and Tavily/Brave search with a safe page reader
+(design 0019; guide: `website/content/docs/guides/patterns.mdx`).
 
 **LLM gateway:** a first slice in [`crates/agentbuild-gateway`](crates/agentbuild-gateway):
 any OpenAI client in front of any provider AgentBuild speaks, with
 fallback, keys and usage records.
 
-**Planned, not built yet:** workflows in the SDKs, on the same Rust engine
-(sketched in [docs/design/0007-public-api.md](docs/design/0007-public-api.md)).
+**Website:** docs, a benchmark lab, a playground that runs AgentBuild and
+LangChain side by side, and a demo page (`website/`).
+
 Measured costs (per step, per tool call, gateway overhead, SDK bridges,
 and a LangGraph comparison) are in [docs/benchmarks.md](docs/benchmarks.md),
 with the machine and method.
@@ -167,8 +175,8 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 | Phase | Scope                                                         | Status      |
 |-------|---------------------------------------------------------------|-------------|
 | 1     | Rust execution core                                           | Done (0.1)  |
-| 2     | Python SDK (PyO3 + maturin): agents, threads, storage done; workflows planned | In progress |
-| 3     | TypeScript SDK (NAPI-RS)                                      | Planned     |
+| 2     | Python SDK (PyO3 + maturin): agents, threads, storage, workflows, patterns | Done (0.1)  |
+| 3     | TypeScript SDK (NAPI-RS), the same features                   | Done (0.1)  |
 | 4     | Agents, tools, model providers, LLM gateway (first slice)     | Done (0.1)  |
 | 5     | Persistence (threads, SQLite, Postgres, crash recovery, long-term memory with keyword and semantic search, retention, encryption at rest; vector indexes: planned) | Done (0.1)  |
 | 6     | Docs, publishing, benchmarks                                  | In progress |

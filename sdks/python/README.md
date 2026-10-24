@@ -34,6 +34,8 @@ asyncio.run(main())
 storage (SQLite, Postgres, encryption, audit, retention) and memory.
 Workflows too (`Workflow`, design 0015), and from design 0017: agents as
 tools, retries and fallback models, memory by meaning, tracing and hooks,
-and `Gateway` for model calls without an agent (design 0018). Tests use `FakeModel`; no real model is called.
+`Gateway` for model calls without an agent (design 0018), and ready-made
+patterns, extendable specialist agents and web search (`agentbuild.patterns`,
+`specialists`, `web`; design 0019). Tests use `FakeModel`; no real model is called.
 
 Free to use, also commercially (see `LICENSE`).

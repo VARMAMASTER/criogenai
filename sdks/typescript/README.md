@@ -29,7 +29,9 @@ delete, stream, `AbortSignal`), storage (SQLite, Postgres, encryption,
 audit, retention) and memory. Workflows (design 0015), and from design
 0017: agents as tools, retries and fallback models, memory by meaning,
 tracing, hooks, tool input from Zod or any Standard Schema, and
-`Gateway` for model calls without an agent (design 0018). Prebuilt
+`Gateway` for model calls without an agent (design 0018), and ready-made
+patterns, extendable specialist agents and web search (`patterns`,
+`specialists`, `web`; design 0019). Prebuilt
 binaries for every platform come with the first release. Tests use
 `FakeModel`; no real model is called.
 
