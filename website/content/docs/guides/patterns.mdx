@@ -1,0 +1,298 @@
+---
+title: Patterns, specialists and web search
+description: Ready-made agent designs (pipelines, review loops, coordinators, swarms), default specialist agents you can extend, and web search tools, in Python, TypeScript and Rust.
+---
+
+Most multi-agent systems are one of a dozen shapes. AgentBuild ships each shape
+as a function, so you pick one instead of wiring it. They are built from the
+agents and workflows you already know, so you can inspect them, run them with
+durable threads, and extend them. The same shapes, names and limits exist in
+Python, TypeScript and Rust.
+
+## Plug and play
+
+<Tabs syncKey="lang">
+<TabItem label="Python">
+
+```python
+from agentbuild import patterns
+
+# A model for the specialists: pass one, or set AGENTBUILD_MODEL="openai:gpt-5-mini".
+flow = patterns.quick("researcher > writer", model="openai:gpt-5-mini")
+result = await flow.run("Write about solar panels")
+print(result)             # the answer
+print(result.explain())   # each step, in order
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```ts
+import { patterns } from "@agentbuild/sdk";
+
+// A model for the specialists: pass one, or set AGENTBUILD_MODEL="openai:gpt-5-mini".
+const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
+const result = await flow.run("Write about solar panels");
+console.log(String(result));      // the answer
+console.log(result.explain());    // each step, in order
+```
+
+</TabItem>
+<TabItem label="Rust">
+
+```rust
+use agentbuild_agent::patterns;
+
+// Specialists need a model: pass an `Arc<dyn Model>` (Rust has no model strings).
+let flow = patterns::quick("researcher > writer", model.clone())?;
+let result = flow.run("Write about solar panels").await?;
+println!("{result}");              // the answer
+println!("{}", result.explain());  // each step, in order
+```
+
+</TabItem>
+</Tabs>
+
+One line, one connector:
+
+| Line | Pattern |
+|---|---|
+| `a > b > c` | **Sequential**: each output feeds the next |
+| `a \| b \| c` | **Parallel**: at the same time, combined in order |
+| `writer <-> critic` | **Review and critique**: revise until the critic approves |
+| `summarizer` | A single specialist |
+
+## Choosing a pattern
+
+Start with the simplest that works. A task a single model call can do needs no agent at all.
+
+| You need | Use |
+|---|---|
+| Tools and a model, nothing more | `Agent` |
+| A fixed order of steps | `sequential` |
+| Independent work, faster | `parallel` |
+| Better quality before use | `review_and_critique` (`reviewAndCritique` in TypeScript) |
+| Repeat until a condition | `loop`, `iterative_refinement` (`iterativeRefinement`) |
+| Requests of many kinds, routed by a model | `coordinator` |
+| Big ambiguous problems, split level by level | `hierarchical` |
+| Agents that debate and hand work over | `swarm` |
+| Reason, act, observe with a hard cap | `react` |
+| A person approves a draft | `human_review` (`humanReview`) |
+| Branches no pattern fits | `custom(workflow)` |
+
+Patterns that rely on a model to decide (coordinator, hierarchical, swarm) make
+more model calls than the fixed ones (sequential, parallel, loop).
+
+## Every loop ends
+
+Loops, review rounds and swarm hand-offs all have a cap with a default and a hard
+ceiling of 50. A run reports why it stopped (`stop_reason`, `stopReason` in
+TypeScript, `PatternStop` in Rust): `done`, `condition`, `approved`,
+`max_iterations`, `max_rounds`, `final`, `max_handoffs`, `unknown_handoff` (a swarm
+agent named someone who is not in the team), `rejected` or `suspended`.
+
+## Steps
+
+A step can be an agent, a specialist or its registered name, a function
+`text -> text` (sync or async), or a `(name, step)` pair to name it in the trace.
+
+<Tabs syncKey="lang">
+<TabItem label="Python">
+
+```python
+def shout(text):                  # a plain function is a step too
+    return text.upper()
+
+flow = patterns.sequential([("research", my_agent), shout, "writer"], model=m)
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```ts
+const shout = (text: string) => text.toUpperCase();   // a plain function is a step too
+
+const flow = patterns.sequential([["research", myAgent], shout, "writer"], { model: m });
+```
+
+</TabItem>
+<TabItem label="Rust">
+
+```rust
+let shout = Step::function(|text: String| async move { text.to_uppercase() });
+
+let flow = patterns::sequential([
+    Step::from(("research", my_agent)),
+    shout.named("shout"),
+    Step::registered("writer", model.clone())?,
+])?;
+```
+
+</TabItem>
+</Tabs>
+
+## Specialists
+
+A **specialist** is a recipe for an agent: a name, a description, instructions
+and default settings. Built in: `researcher`, `summarizer`, `classifier`,
+`extractor`, `planner`, `writer`, `critic`, `fact_checker`, `code_reviewer`,
+`translator`, `support_agent`. They are prompts and defaults; you add the tools.
+
+<Tabs syncKey="lang">
+<TabItem label="Python">
+
+```python
+from agentbuild import specialists
+
+agent = specialists.writer.build("openai:gpt-5-mini")
+
+# Extend: a new recipe; the original is untouched.
+careful = specialists.researcher.extend("careful-researcher", add="Always give two sources.")
+specialists.register(careful)          # now "careful-researcher" works anywhere a step is expected
+
+# Or write your own.
+specialists.register(specialists.Specialist(
+    "refund-triage", "Decides if a refund request is valid", "You decide whether ...", tools=[get_order],
+))
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```ts
+import { specialists } from "@agentbuild/sdk";
+
+const agent = specialists.writer.build("openai:gpt-5-mini");
+
+// Extend: a new recipe; the original is untouched.
+const careful = specialists.researcher.extend("careful-researcher", { add: "Always give two sources." });
+specialists.register(careful);         // now "careful-researcher" works anywhere a step is expected
+
+// Or write your own.
+specialists.register(new specialists.Specialist(
+  "refund-triage", "Decides if a refund request is valid", "You decide whether ...", { tools: [getOrder] },
+));
+```
+
+</TabItem>
+<TabItem label="Rust">
+
+```rust
+use agentbuild_agent::specialists::{self, Specialist};
+
+let agent = specialists::writer().build(model.clone())?;
+
+// Extend: a new recipe; the original is untouched.
+let careful = specialists::researcher()
+    .extend("careful-researcher")
+    .append_instructions("Always give two sources.");
+specialists::register(careful)?;       // now "careful-researcher" works anywhere a step is expected
+
+// Or write your own.
+specialists::register(
+    Specialist::new("refund-triage", "Decides if a refund request is valid", "You decide whether ...")?
+        .tool(get_order),
+)?;
+```
+
+</TabItem>
+</Tabs>
+
+## Web search
+
+<Tabs syncKey="lang">
+<TabItem label="Python">
+
+```python
+from agentbuild import Agent, web
+
+agent = Agent("openai:gpt-5-mini", tools=[web.search(), web.fetch()])
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```ts
+import { Agent, web } from "@agentbuild/sdk";
+
+const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
+```
+
+</TabItem>
+<TabItem label="Rust">
+
+```rust
+// Cargo feature `web` (off by default): agentbuild-agent = { version = "0.1", features = ["web"] }
+use agentbuild_agent::web;
+
+let agent = Agent::builder(model)
+    .tool(web::search()?)
+    .tool(web::fetch())
+    .build()?;
+```
+
+</TabItem>
+</Tabs>
+
+`search()` needs no arguments: it uses `TAVILY_API_KEY`, else `BRAVE_API_KEY`
+([tavily.com](https://tavily.com), [brave.com/search/api](https://brave.com/search/api)),
+and tells you what to set if neither is. The `researcher` specialist gets
+search and page reading automatically when a key is set.
+
+- Results are bounded: a few results with short snippets, pages cut to a fixed size.
+- The key is sent only as a request header over `https`, and never appears in a
+  tool result, an error or a log.
+- `fetch()` reads public pages only: private-network addresses are refused in
+  every spelling (including IPv4 inside IPv6), a model must not reach your
+  internal services through it, redirects are not followed, and at most 500 KB is read.
+
+## Make it durable, extend it
+
+A pattern is a normal workflow underneath, so it gets threads, approvals, an audit
+trail and storage like any other.
+
+<Tabs syncKey="lang">
+<TabItem label="Python">
+
+```python
+from agentbuild import Storage
+
+app = patterns.human_review(my_agent).compile(Storage("sqlite:///app.db"))
+await app.thread("release-1", actor="user:ada").run({"input": "Release the dataset?"})
+# Days later, from another process:
+await app.thread("release-1", actor="user:boss").resume({"review": "approve"})
+
+flow.workflow.add_node(...)   # the plain Workflow, to add nodes and edges
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```ts
+import { Storage } from "@agentbuild/sdk";
+
+const app = patterns.humanReview(myAgent).compile(new Storage({ url: "sqlite:///app.db" }));
+await app.thread("release-1", { actor: "user:ada" }).run({ input: "Release the dataset?" });
+// Days later, from another process:
+await app.thread("release-1", { actor: "user:boss" }).resume({ review: "approve" });
+
+flow.workflow.addNode(/* ... */);   // the plain Workflow, to add nodes and edges
+```
+
+</TabItem>
+<TabItem label="Rust">
+
+```rust
+let flow = patterns::human_review(Step::from(my_agent))?;
+let thread = flow.thread(&storage, "release-1");
+// ... run it, and later, from another process:
+let done = flow.resume(&paused, ReviewDecision::Approve).await?;
+
+let flow = flow.extend(|workflow| { /* add nodes and edges */ })?;   // rebuilds and revalidates the graph
+```
+
+</TabItem>
+</Tabs>
+
+Every pattern here is exercised on the [demo page](/demo/), with a scripted model
+and with a real one (the demo runs the Python form).

@@ -1,0 +1,1177 @@
+{
+ "ran_at": "2026-10-24T12:05:58+00:00",
+ "sdk": {
+  "name": "agentbuild-sdk",
+  "version": "0.1.0",
+  "language": "Python"
+ },
+ "machine": {
+  "os": "Windows 11",
+  "python": "3.13.14"
+ },
+ "model": null,
+ "features": [
+  {
+   "id": "agents",
+   "group": "Agents",
+   "title": "Agents with tools, limits and typed output",
+   "claim": "Python functions become tools, the model's calls run concurrently, and the answer can be a checked structure.",
+   "code": "async def agents():\n    @tool\n    def add(a: int, b: int) -> int:\n        \"\"\"Adds two numbers.\"\"\"\n        return a + b\n\n    @tool\n    async def double(n: int, ctx: ToolContext) -> dict:\n        \"\"\"Doubles a number.\"\"\"\n        await asyncio.sleep(0.01)\n        return {\"value\": n * 2, \"call_id\": ctx.call_id}\n\n    show(\"schema built from the type hints\", add.schema)\n    agent = Agent(\n        FakeModel([FakeReply.tool_calls([(\"add\", {\"a\": 2, \"b\": 3}), (\"double\", {\"n\": 4})]), \"5 and 8\"]),\n        tools=[add, double],\n    )\n    result = await agent.run(\"go\")\n    show(\"answer\", result.text)\n    show(\"tool results, in call order\", [m[\"content\"][0][\"value\"] for m in tool_results(result)])\n    check(\"both tools ran and the model got both results\", result.tool_calls == 2 and result.text == \"5 and 8\")\n\n    schema = {\n        \"type\": \"object\",\n        \"properties\": {\"category\": {\"type\": \"string\"}, \"refund\": {\"type\": \"boolean\"}},\n        \"required\": [\"category\", \"refund\"],\n        \"additionalProperties\": False,\n    }\n    typed = Agent(FakeModel([FakeReply.tool_call(\"final_output\", {\"category\": \"billing\", \"refund\": True})]), output=schema)\n    result = await typed.run(\"I was charged twice\")\n    show(\"typed output\", result.output)\n    check(\"the output is the checked structure\", result.output == {\"category\": \"billing\", \"refund\": True})\n\n    looping = Agent(FakeModel([FakeReply.tool_call(\"add\", {\"a\": 1, \"b\": 1})] * 5), tools=[add], limits={\"model_calls\": 2})\n    try:\n        await looping.run(\"loop\")\n        check(\"a looping agent is stopped\", False)\n    except LimitExceededError as error:\n        show(\"a run that loops\", f\"{error.code}: {error.message}\")\n        check(\"the limit stopped it with a stable error code\", error.code == \"limit_exceeded\")",
+   "steps": [
+    {
+     "label": "schema built from the type hints",
+     "value": {
+      "type": "object",
+      "properties": {
+       "a": {
+        "type": "integer"
+       },
+       "b": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "a",
+       "b"
+      ],
+      "additionalProperties": false
+     }
+    },
+    {
+     "label": "answer",
+     "value": "5 and 8"
+    },
+    {
+     "label": "tool results, in call order",
+     "value": [
+      5,
+      {
+       "call_id": "call_1_1",
+       "value": 8
+      }
+     ]
+    },
+    {
+     "label": "typed output",
+     "value": {
+      "category": "billing",
+      "refund": true
+     }
+    },
+    {
+     "label": "a run that loops",
+     "value": "limit_exceeded: the agent reached its model_calls limit (2)"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "both tools ran and the model got both results",
+     "ok": true
+    },
+    {
+     "claim": "the output is the checked structure",
+     "ok": true
+    },
+    {
+     "claim": "the limit stopped it with a stable error code",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 27,
+   "attempts": 1
+  },
+  {
+   "id": "validation",
+   "group": "Agents",
+   "title": "Arguments are checked before your code runs",
+   "claim": "A model's malformed call never reaches the tool; the model is told what was wrong and can recover.",
+   "code": "async def validation():\n    calls = []\n\n    @tool\n    def charge(amount: int) -> str:\n        \"\"\"Charges a card.\"\"\"\n        calls.append(amount)\n        return \"ok\"\n\n    agent = Agent(FakeModel([FakeReply.tool_call(\"charge\", {\"amount\": \"lots\"}), \"I could not charge that.\"]), tools=[charge])\n    result = await agent.run(\"charge\")\n    message = str(tool_results(result)[0][\"content\"])\n    show(\"what the model was told\", message)\n    check(\"the tool function never ran\", calls == [])\n    check(\"the model received an 'Invalid arguments' error\", \"Invalid arguments\" in message)",
+   "steps": [
+    {
+     "label": "what the model was told",
+     "value": "[{'text': 'Error: Invalid arguments: amount: expected integer, got \"lots\"', 'type': 'text'}]"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the tool function never ran",
+     "ok": true
+    },
+    {
+     "claim": "the model received an 'Invalid arguments' error",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 1,
+   "attempts": 1
+  },
+  {
+   "id": "tool-errors",
+   "group": "Agents",
+   "title": "Tool failures go back to the model, on your terms",
+   "claim": "A ToolError or an unexpected exception reaches the model by default; you can hide the details or fail the run.",
+   "code": "async def tool_errors():\n    @tool\n    def lookup(order_id: str) -> str:\n        \"\"\"Looks up an order.\"\"\"\n        if order_id == \"missing\":\n            raise ToolError(\"No such order\", retryable=False)\n        raise KeyError(order_id)\n\n    result = await Agent(FakeModel([FakeReply.tool_call(\"lookup\", {\"order_id\": \"missing\"}), \"Sorry, not found.\"]), tools=[lookup]).run(\"where\")\n    show(\"ToolError: the model sees\", str(tool_results(result)[0][\"content\"]))\n    check(\"the model got the message and answered\", result.text == \"Sorry, not found.\")\n\n    script = [FakeReply.tool_call(\"lookup\", {\"order_id\": \"x\"}), \"The order system failed.\"]\n    result = await Agent(FakeModel(script), tools=[lookup]).run(\"go\")\n    crash = tool_results(result)[0]\n    show(\"unexpected exception (default)\", str(crash[\"content\"]))\n    check(\"the crash is reported with a stable code\", crash[\"error\"][\"code\"] == \"tool_failed\")\n\n    quiet = await Agent(FakeModel(script), tools=[lookup], on_tool_exception=\"return_generic\").run(\"go\")\n    hidden = tool_results(quiet)[0]\n    show(\"return_generic: the model sees\", str(hidden[\"content\"]))\n    check(\"the exception text stays out of the model's view\", \"KeyError\" not in str(hidden[\"content\"]))\n\n    try:\n        await Agent(FakeModel(script), tools=[lookup], on_tool_exception=\"fail\").run(\"go\")\n        check(\"fail ends the run\", False)\n    except agentbuild.ToolExecutionError as error:\n        show(\"fail: the run raises\", f\"{type(error).__name__} (cause: {type(error.__cause__).__name__})\")\n        check(\"the original exception is the cause\", isinstance(error.__cause__, KeyError))",
+   "steps": [
+    {
+     "label": "ToolError: the model sees",
+     "value": "[{'text': 'Error: No such order', 'type': 'text'}]"
+    },
+    {
+     "label": "unexpected exception (default)",
+     "value": "[{'text': \"Error: The tool failed with an unexpected error: KeyError: 'x'\", 'type': 'text'}]"
+    },
+    {
+     "label": "return_generic: the model sees",
+     "value": "[{'text': 'Error: The tool failed with an unexpected error.', 'type': 'text'}]"
+    },
+    {
+     "label": "fail: the run raises",
+     "value": "ToolExecutionError (cause: KeyError)"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the model got the message and answered",
+     "ok": true
+    },
+    {
+     "claim": "the crash is reported with a stable code",
+     "ok": true
+    },
+    {
+     "claim": "the exception text stays out of the model's view",
+     "ok": true
+    },
+    {
+     "claim": "the original exception is the cause",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 6,
+   "attempts": 1
+  },
+  {
+   "id": "agents-compose",
+   "group": "Agents",
+   "title": "Agents as tools of other agents",
+   "claim": "An agent becomes a tool of another, so you can build teams without a separate orchestration layer.",
+   "code": "async def agents_compose():\n    researcher = Agent(FakeModel([\"The order shipped on Monday.\"]), instructions=\"Find facts.\")\n    writer = Agent(\n        FakeModel([FakeReply.tool_call(\"research\", {\"input\": \"When did A-1 ship?\"}), \"It shipped on Monday.\"]),\n        tools=[researcher.as_tool(\"research\", \"Looks things up\")],\n    )\n    result = await writer.run(\"When did my order ship?\")\n    show(\"what the researcher told the writer\", str(tool_results(result)[0][\"content\"]))\n    show(\"final answer\", result.text)\n    check(\"the writer used the researcher's answer\", \"Monday\" in result.text)",
+   "steps": [
+    {
+     "label": "what the researcher told the writer",
+     "value": "[{'text': 'The order shipped on Monday.', 'type': 'text'}]"
+    },
+    {
+     "label": "final answer",
+     "value": "It shipped on Monday."
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the writer used the researcher's answer",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 1,
+   "attempts": 1
+  },
+  {
+   "id": "approvals",
+   "group": "Human in the loop",
+   "title": "Approve, reject or edit a call before it runs",
+   "claim": "A risky tool pauses the run in the database; a different process decides later, and the decision is applied exactly.",
+   "code": "async def approvals():\n    storage = Storage()\n    refunds = []\n\n    @tool(destructive=True)\n    def refund(order_id: str, amount: float) -> str:\n        \"\"\"Refunds an order.\"\"\"\n        refunds.append((order_id, amount))\n        return \"refunded\"\n\n    def make(replies):\n        return Agent(FakeModel(replies), tools=[refund], approve=[\"refund\"], storage=storage)\n\n    chat = make([FakeReply.tool_call(\"refund\", {\"order_id\": \"A-1\", \"amount\": 24})]).thread(\"t-1\", actor=\"user:ada\")\n    reply = await chat.send(\"Refund A-1\")\n    show(\"the run stops and asks\", [{\"tool\": r.tool, \"args\": r.args} for r in reply.approvals])\n    check(\"the refund has not run\", reply.needs_approval and refunds == [])\n    try:\n        await chat.send(\"hello?\")\n        check(\"a waiting thread refuses new messages\", False)\n    except ThreadSuspendedError as error:\n        show(\"sending while it waits\", error.code)\n\n    other = make([\"Refunded.\"]).thread(\"t-1\", actor=\"user:boss\")  # another process, in real life\n    reply = await other.approve()\n    show(\"approved by user:boss\", reply.text)\n    check(\"it ran once, after the approval\", refunds == [(\"A-1\", 24)])\n\n    # Reject\n    agent = make([FakeReply.tool_call(\"refund\", {\"order_id\": \"A-2\", \"amount\": 9}), \"I did not refund it.\"])\n    chat = agent.thread(\"t-2\")\n    await chat.send(\"Refund A-2\")\n    reply = await chat.reject(\"Policy says no\")\n    show(\"rejected: the model is told why\", reply.text)\n    check(\"a rejected call never runs\", (\"A-2\", 9) not in refunds)\n\n    # Edit\n    agent = make([FakeReply.tool_call(\"refund\", {\"order_id\": \"A-3\", \"amount\": 500}), \"Refunded the smaller amount.\"])\n    chat = agent.thread(\"t-3\")\n    reply = await chat.send(\"Refund A-3\")\n    call_id = reply.approvals[0].call_id\n    await chat.decide({call_id: Decision.edit({\"order_id\": \"A-3\", \"amount\": 12})})\n    show(\"edited from 500 to 12; what ran\", refunds[-1])\n    check(\"the edited arguments were used\", refunds[-1] == (\"A-3\", 12))",
+   "steps": [
+    {
+     "label": "the run stops and asks",
+     "value": [
+      {
+       "tool": "refund",
+       "args": {
+        "amount": 24,
+        "order_id": "A-1"
+       }
+      }
+     ]
+    },
+    {
+     "label": "sending while it waits",
+     "value": "thread_suspended"
+    },
+    {
+     "label": "approved by user:boss",
+     "value": "Refunded."
+    },
+    {
+     "label": "rejected: the model is told why",
+     "value": "I did not refund it."
+    },
+    {
+     "label": "edited from 500 to 12; what ran",
+     "value": [
+      "A-3",
+      12
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the refund has not run",
+     "ok": true
+    },
+    {
+     "claim": "it ran once, after the approval",
+     "ok": true
+    },
+    {
+     "claim": "a rejected call never runs",
+     "ok": true
+    },
+    {
+     "claim": "the edited arguments were used",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 9,
+   "attempts": 1
+  },
+  {
+   "id": "threads",
+   "group": "Conversations",
+   "title": "Saved conversations: history, rewind, delete",
+   "claim": "Every step is a checkpoint you can list, go back to, and delete; a new agent object continues the same conversation.",
+   "code": "async def threads():\n    path = temp_db(\"threads\")\n    try:\n        first = Agent(FakeModel([\"Hello Ada\"]), storage=Storage(f\"sqlite:///{path}\"))\n        await first.thread(\"t\").send(\"I am Ada\")\n        await first.storage.close()\n\n        storage = Storage(f\"sqlite:///{path}\")\n        second = Agent(FakeModel([\"You are Ada\"]), storage=storage)  # a new agent and connection\n        chat = second.thread(\"t\")\n        reply = await chat.send(\"Who am I?\")\n        show(\"messages the model saw\", [m[\"role\"] for m in reply.messages])\n        check(\"the second agent continued the conversation from disk\", len(reply.messages) == 4)\n\n        history = await chat.history(20)\n        show(\"checkpoints, newest first\", [{\"status\": h[\"status\"]} for h in history])\n        rewound = await chat.rewind(history[-1][\"id\"])\n        show(\"rewind forks from the oldest\", rewound[\"source\"])\n        check(\"rewinding creates a fork\", rewound[\"source\"] == \"fork\")\n        check(\"delete reports it deleted something\", await chat.delete() is True)\n        await storage.close()\n    finally:\n        remove_db(path)",
+   "steps": [
+    {
+     "label": "messages the model saw",
+     "value": [
+      "user",
+      "assistant",
+      "user",
+      "assistant"
+     ]
+    },
+    {
+     "label": "checkpoints, newest first",
+     "value": [
+      {
+       "status": "completed"
+      },
+      {
+       "status": "in_progress"
+      },
+      {
+       "status": "completed"
+      },
+      {
+       "status": "in_progress"
+      }
+     ]
+    },
+    {
+     "label": "rewind forks from the oldest",
+     "value": "fork"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the second agent continued the conversation from disk",
+     "ok": true
+    },
+    {
+     "claim": "rewinding creates a fork",
+     "ok": true
+    },
+    {
+     "claim": "delete reports it deleted something",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 37,
+   "attempts": 1
+  },
+  {
+   "id": "crash-recovery",
+   "group": "Conversations",
+   "title": "Crash recovery without repeating finished tools",
+   "claim": "When a run fails mid-way, retry() continues from the last saved step; tools that finished are not run again.",
+   "code": "async def crash_recovery():\n    counts = {\"fetch\": 0, \"send\": 0}\n    broken = {\"on\": True}\n\n    @tool\n    def fetch(order_id: str) -> str:\n        \"\"\"Fetches an order.\"\"\"\n        counts[\"fetch\"] += 1\n        return \"order A-1: shipped\"\n\n    @tool\n    def send(text: str) -> str:\n        \"\"\"Sends an email.\"\"\"\n        counts[\"send\"] += 1\n        if broken[\"on\"]:\n            raise RuntimeError(\"the mail server is down\")\n        return \"sent\"\n\n    agent = Agent(\n        FakeModel([FakeReply.tool_calls([(\"fetch\", {\"order_id\": \"A-1\"})]), FakeReply.tool_call(\"send\", {\"text\": \"hi\"}), \"Done.\"]),\n        tools=[fetch, send],\n        storage=Storage(),\n        on_tool_exception=\"fail\",\n    )\n    chat = agent.thread(\"job\")\n    try:\n        await chat.send(\"Look it up and email the customer\")\n        check(\"the first attempt fails\", False)\n    except agentbuild.AgentBuildError as error:\n        show(\"first attempt\", f\"{error.code}: {error.message}\")\n    show(\"tool calls so far\", dict(counts))\n    broken[\"on\"] = False\n    reply = await chat.retry()\n    show(\"after retry()\", reply.text)\n    show(\"tool calls in total\", dict(counts))\n    check(\"the run finished after the retry\", reply.text == \"Done.\")\n    check(\"fetch was not run a second time\", counts[\"fetch\"] == 1)",
+   "steps": [
+    {
+     "label": "first attempt",
+     "value": "tool_failed: tool `send` failed: RuntimeError: the mail server is down"
+    },
+    {
+     "label": "tool calls so far",
+     "value": {
+      "fetch": 1,
+      "send": 1
+     }
+    },
+    {
+     "label": "after retry()",
+     "value": "Done."
+    },
+    {
+     "label": "tool calls in total",
+     "value": {
+      "fetch": 1,
+      "send": 2
+     }
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the run finished after the retry",
+     "ok": true
+    },
+    {
+     "claim": "fetch was not run a second time",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 3,
+   "attempts": 1
+  },
+  {
+   "id": "streaming",
+   "group": "Conversations",
+   "title": "Streaming and cancellation",
+   "claim": "Text and tool events arrive as they happen; cancelling stops the model call and the thread is still saved.",
+   "code": "async def streaming():\n    @tool\n    def add(a: int, b: int) -> int:\n        \"\"\"Adds.\"\"\"\n        return a + b\n\n    agent = Agent(FakeModel([\"Hello there\", FakeReply.tool_call(\"add\", {\"a\": 1, \"b\": 2}), \"Three.\"]), tools=[add], approve=[\"add\"])\n    chat = agent.thread(\"s\")\n    stream = chat.stream(\"hi\")\n    events = [e async for e in stream]\n    show(\"events\", [e.type for e in events])\n    text = \"\".join(e.text for e in events if e.type == \"text\")\n    check(\"the streamed text equals the saved reply\", text == \"Hello there\" == (await stream.reply()).text)\n\n    stream = chat.stream(\"add\")\n    types = [e.type async for e in stream]\n    check(\"an approval request is a stream event\", \"approval_needed\" in types)\n    await stream.reply()\n\n    slow = Agent(FakeModel([\"never\"], delay=5.0))\n    stream = slow.thread(\"x\").stream(\"hi\")\n    await asyncio.sleep(0.2)\n    started = time.perf_counter()\n    stream.cancel()\n    try:\n        await stream.reply()\n    except agentbuild.CancelledError:\n        took = time.perf_counter() - started\n        show(\"cancel() on a 5 s model call returned after\", f\"{took * 1000:.0f} ms\")\n        check(\"cancellation is prompt\", took < 1.0)",
+   "steps": [
+    {
+     "label": "events",
+     "value": [
+      "other",
+      "other",
+      "other",
+      "other",
+      "text",
+      "message",
+      "other",
+      "other",
+      "other"
+     ]
+    },
+    {
+     "label": "cancel() on a 5 s model call returned after",
+     "value": "3 ms"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the streamed text equals the saved reply",
+     "ok": true
+    },
+    {
+     "claim": "an approval request is a stream event",
+     "ok": true
+    },
+    {
+     "claim": "cancellation is prompt",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 209,
+   "attempts": 1
+  },
+  {
+   "id": "storage",
+   "group": "Storage and compliance",
+   "title": "SQLite, Postgres and in-memory storage",
+   "claim": "The same agent code saves to a file, to Postgres, or to memory; here SQLite and memory.",
+   "code": "async def storage_backends():\n    path = temp_db(\"storage\")\n    try:\n        storage = Storage(f\"sqlite:///{path}\")\n        agent = Agent(FakeModel([\"saved\"]), storage=storage)\n        await agent.thread(\"t\").send(\"hello\")\n        await storage.close()\n        size = os.path.getsize(path)\n        show(\"SQLite file written\", f\"{size // 1024} KB\")\n        check(\"the conversation is on disk\", size > 0)\n    finally:\n        remove_db(path)\n    memory = Storage()\n    reply = await Agent(FakeModel([\"kept in memory\"]), storage=memory).thread(\"t\").send(\"hi\")\n    show(\"in-memory storage\", reply.text)\n    show(\"Postgres\", \"the same Storage('postgres://\u2026') call; its tests run in CI against a real server (not part of this tour)\")",
+   "steps": [
+    {
+     "label": "SQLite file written",
+     "value": "76 KB"
+    },
+    {
+     "label": "in-memory storage",
+     "value": "kept in memory"
+    },
+    {
+     "label": "Postgres",
+     "value": "the same Storage('postgres://\u2026') call; its tests run in CI against a real server (not part of this tour)"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the conversation is on disk",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 20,
+   "attempts": 1
+  },
+  {
+   "id": "encryption",
+   "group": "Storage and compliance",
+   "title": "Encryption at rest",
+   "claim": "Content in the database is encrypted; without the key the database refuses to open.",
+   "code": "async def encryption():\n    path = temp_db(\"enc\")\n    keys = \"k1:\" + \"ab\" * 32\n    try:\n        agent = Agent(FakeModel([\"secret noted\"]), storage=Storage(f\"sqlite:///{path}\", encryption_keys=keys))\n        await agent.thread(\"t\").send(\"my secret is pelican\")\n        await agent.storage.close()\n        raw = Path(path).read_bytes()\n        show(\"bytes in the database file\", len(raw))\n        check(\"the secret word is not in the file\", b\"pelican\" not in raw)\n        try:\n            Storage(f\"sqlite:///{path}\")\n            check(\"opening without the key fails\", False)\n        except StorageError as error:\n            show(\"opening without the key\", f\"{error.code}\")\n            check(\"it refuses with a stable code\", error.code == \"encryption_key_missing\")\n    finally:\n        remove_db(path)",
+   "steps": [
+    {
+     "label": "bytes in the database file",
+     "value": 77824
+    },
+    {
+     "label": "opening without the key",
+     "value": "encryption_key_missing"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the secret word is not in the file",
+     "ok": true
+    },
+    {
+     "claim": "it refuses with a stable code",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 85,
+   "attempts": 1
+  },
+  {
+   "id": "audit",
+   "group": "Storage and compliance",
+   "title": "A tamper-evident audit trail with no content",
+   "claim": "Runs, model calls, tool calls and decisions are recorded with who did them, in a hash chain, without message text.",
+   "code": "async def audit():\n    storage = Storage(audit=True)\n\n    @tool(destructive=True)\n    def refund(order_id: str) -> str:\n        \"\"\"Refunds.\"\"\"\n        return \"done\"\n\n    agent = Agent(FakeModel([FakeReply.tool_call(\"refund\", {\"order_id\": \"A-1\"}), \"Refunded.\"]), tools=[refund], approve=[\"refund\"], storage=storage)\n    await agent.thread(\"visit-1\", actor=\"user:ada\").send(\"My name is Ada Lovelace, refund A-1\")\n    await agent.thread(\"visit-1\", actor=\"user:dr-rao\").approve()\n    records = await storage.audit_records(thread_id=\"visit-1\")\n    show(\"records (action, actor)\", [(r[\"action\"], r.get(\"actor\")) for r in records])\n    report = await storage.verify_audit()\n    show(\"hash chain verification\", report)\n    check(\"the chain verifies\", report[\"ok\"] is True)\n    check(\"the actors are recorded\", {\"user:ada\", \"user:dr-rao\"} <= {r.get(\"actor\") for r in records})\n    check(\"no message content is in any record\", \"Lovelace\" not in json.dumps(records))",
+   "steps": [
+    {
+     "label": "records (action, actor)",
+     "value": [
+      [
+       "model.called",
+       "user:ada"
+      ],
+      [
+       "run.finished",
+       "user:ada"
+      ],
+      [
+       "approval.requested",
+       "user:ada"
+      ],
+      [
+       "approval.decided",
+       "user:dr-rao"
+      ],
+      [
+       "tool.executed",
+       "user:dr-rao"
+      ],
+      [
+       "model.called",
+       "user:dr-rao"
+      ],
+      [
+       "run.finished",
+       "user:dr-rao"
+      ]
+     ]
+    },
+    {
+     "label": "hash chain verification",
+     "value": {
+      "first_broken": null,
+      "head": [
+       7,
+       "7203afce6f7df4b4a0e673cde294476ff7e7ef200c040389d49209ff073951eb"
+      ],
+      "ok": true,
+      "records": 7
+     }
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the chain verifies",
+     "ok": true
+    },
+    {
+     "claim": "the actors are recorded",
+     "ok": true
+    },
+    {
+     "claim": "no message content is in any record",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 5,
+   "attempts": 1
+  },
+  {
+   "id": "retention",
+   "group": "Storage and compliance",
+   "title": "Retention: old data is deleted on a schedule",
+   "claim": "keep_checkpoints and thread_ttl bound how much is kept; prune() applies them.",
+   "code": "async def retention():\n    path = temp_db(\"ret\")\n    try:\n        storage = Storage(f\"sqlite:///{path}\", retention={\"keep_checkpoints\": 1})\n        agent = Agent(FakeModel([\"one\", \"two\", \"three\"]), storage=storage)\n        chat = agent.thread(\"t\")\n        for text in (\"a\", \"b\", \"c\"):\n            await chat.send(text)\n        before = len(await chat.history(100))\n        report = await storage.prune()\n        after = len(await chat.history(100))\n        show(\"checkpoints before and after prune()\", [before, after])\n        show(\"report\", report)\n        check(\"old checkpoints were deleted\", report[\"checkpoints_deleted\"] > 0 and after < before)\n        await storage.close()\n    finally:\n        remove_db(path)",
+   "steps": [
+    {
+     "label": "checkpoints before and after prune()",
+     "value": [
+      6,
+      1
+     ]
+    },
+    {
+     "label": "report",
+     "value": {
+      "checkpoints_deleted": 5,
+      "memory_items_deleted": 0,
+      "threads_busy": 0,
+      "threads_deleted": 0
+     }
+    }
+   ],
+   "checks": [
+    {
+     "claim": "old checkpoints were deleted",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 29,
+   "attempts": 1
+  },
+  {
+   "id": "memory",
+   "group": "Memory",
+   "title": "Long-term memory per user",
+   "claim": "The model can remember, search and forget facts that outlive a conversation; your code can read them too.",
+   "code": "async def memory():\n    storage = Storage()\n    agent = Agent(\n        FakeModel([FakeReply.tool_call(\"remember\", {\"key\": \"diet\", \"value\": \"vegan\"}), \"Noted.\", \"Eat lentils.\"]),\n        storage=storage,\n        memory=Memory.by_state(\"user_id\", \"users\"),\n    )\n    await agent.run(\"I am vegan\", user_id=\"ada\")\n    found = await storage.search(\"users/ada\")\n    show(\"stored for users/ada\", [(f[\"key\"], f[\"value\"]) for f in found])\n    check(\"the model's remember call saved the fact\", found[0][\"value\"] == \"vegan\")\n    await agent.run(\"What should I eat?\", user_id=\"ada\")\n    check(\"a second user has separate memory\", await storage.search(\"users/bob\") == [])\n    deleted = await storage.forget_all(\"users/ada\")\n    show(\"forget_all (right to erasure)\", f\"{deleted} fact deleted\")\n    check(\"everything about one user can be deleted\", deleted == 1)",
+   "steps": [
+    {
+     "label": "stored for users/ada",
+     "value": [
+      [
+       "diet",
+       "vegan"
+      ]
+     ]
+    },
+    {
+     "label": "forget_all (right to erasure)",
+     "value": "1 fact deleted"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the model's remember call saved the fact",
+     "ok": true
+    },
+    {
+     "claim": "a second user has separate memory",
+     "ok": true
+    },
+    {
+     "claim": "everything about one user can be deleted",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 2,
+   "attempts": 1
+  },
+  {
+   "id": "semantic-memory",
+   "group": "Memory",
+   "title": "Memory by meaning",
+   "claim": "Facts are found by meaning with embeddings, and by keywords when the embedder is down.",
+   "code": "async def semantic_memory():\n    storage = Storage()\n    mem = Memory.shared(\"facts\").semantic(Embedder.fake(synonyms={\"automobile\": \"car\"}))\n    agent = Agent(\n        FakeModel([FakeReply.tool_call(\"remember\", {\"key\": \"vehicle\", \"value\": \"The customer drives a red car\"}), \"Noted.\",\n                   FakeReply.tool_call(\"search_memory\", {\"query\": \"automobile\"}), \"Found it.\"]),\n        storage=storage,\n        memory=mem,\n    )\n    await agent.run(\"Remember my car\")\n    found = await agent.run(\"Which automobile do I have?\")\n    result = str(tool_results(found)[0][\"content\"])\n    show(\"searching 'automobile' (the fact says 'car')\", result)\n    check(\"found with no shared word, by meaning\", \"red car\" in result)\n    broken = Agent(\n        FakeModel([FakeReply.tool_call(\"search_memory\", {\"query\": \"red\"}), \"ok\"]),\n        storage=storage,\n        memory=Memory.shared(\"facts\").semantic(Embedder.fake(failing=True)),\n    )\n    result = str(tool_results(await broken.run(\"search\"))[0][\"content\"])\n    show(\"embedder down: falls back to keywords\", result)\n    check(\"the search still worked\", \"red car\" in result)",
+   "steps": [
+    {
+     "label": "searching 'automobile' (the fact says 'car')",
+     "value": "[{'type': 'json', 'value': [{'key': 'vehicle', 'value': 'The customer drives a red car'}]}]"
+    },
+    {
+     "label": "embedder down: falls back to keywords",
+     "value": "[{'type': 'json', 'value': [{'key': 'vehicle', 'value': 'The customer drives a red car'}]}]"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "found with no shared word, by meaning",
+     "ok": true
+    },
+    {
+     "claim": "the search still worked",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 3,
+   "attempts": 1
+  },
+  {
+   "id": "workflows",
+   "group": "Workflows",
+   "title": "Graphs of steps: routes, parallel branches, joins",
+   "claim": "A graph with a router, two parallel nodes and a join runs on the Rust engine; every graph error is reported at compile time.",
+   "code": "async def workflows():\n    wf = Workflow(reducers={\"log\": \"append\"})\n    wf.add_node(\"classify\", lambda s: {\"log\": [\"classify\"]})\n    wf.add_node(\"fan\", lambda s: None)\n    wf.add_node(\"search_web\", lambda s: {\"log\": [\"web\"], \"web\": 1})\n    wf.add_node(\"search_docs\", lambda s: {\"log\": [\"docs\"], \"docs\": 2})\n    wf.add_node(\"answer\", lambda s: {\"answer\": s[\"web\"] + s[\"docs\"]})\n    wf.add_node(\"refuse\", lambda s: {\"answer\": None})\n    wf.start(\"classify\")\n    wf.route(\"classify\", lambda s: \"ok\" if s[\"question\"] else \"empty\", {\"ok\": \"fan\", \"empty\": \"refuse\"})\n    wf.edge(\"fan\", \"search_web\").edge(\"fan\", \"search_docs\")\n    wf.join([\"search_web\", \"search_docs\"], \"answer\")\n    wf.edge(\"answer\", END).edge(\"refuse\", END)\n    app = wf.compile()\n    result = await app.run({\"question\": \"why?\"})\n    show(\"state at the end\", result.state)\n    show(\"steps\", result.steps)\n    check(\"both parallel branches ran and joined\", result.state[\"answer\"] == 3 and sorted(result.state[\"log\"]) == [\"classify\", \"docs\", \"web\"])\n    empty = await app.run({\"question\": \"\"})\n    check(\"the router sent an empty question elsewhere\", empty.state[\"answer\"] is None)\n\n    broken = Workflow()\n    broken.add_node(\"a\", lambda s: None)\n    broken.start(\"a\").edge(\"a\", \"nowhere\")\n    try:\n        broken.compile()\n        check(\"a broken graph is refused\", False)\n    except agentbuild.AgentBuildError as error:\n        show(\"compile() of a broken graph\", error.message)",
+   "steps": [
+    {
+     "label": "state at the end",
+     "value": {
+      "answer": 3,
+      "docs": 2,
+      "log": [
+       "classify",
+       "web",
+       "docs"
+      ],
+      "question": "why?",
+      "web": 1
+     }
+    },
+    {
+     "label": "steps",
+     "value": 4
+    },
+    {
+     "label": "compile() of a broken graph",
+     "value": "invalid workflow (1 issue(s))\n  - edge `a` -> `nowhere` refers to unknown node `nowhere`"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "both parallel branches ran and joined",
+     "ok": true
+    },
+    {
+     "claim": "the router sent an empty question elsewhere",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 4,
+   "attempts": 1
+  },
+  {
+   "id": "durable-workflows",
+   "group": "Workflows",
+   "title": "Workflows that pause for a person, durably",
+   "claim": "A node suspends the run; the pause lives in the database and any process can resume it.",
+   "code": "async def durable_workflows():\n    storage = Storage(audit=True)\n    paid = []\n\n    def build():\n        wf = Workflow()\n\n        @wf.node\n        def approve(state, ctx):\n            if ctx.resume is None:\n                return suspend({\"refund\": state[\"amount\"]}, {\"status\": \"waiting\"})\n            return {\"approved\": ctx.resume == \"yes\", \"status\": \"decided\"}\n\n        @wf.node\n        def pay(state):\n            if state[\"approved\"]:\n                paid.append(state[\"amount\"])\n            return {\"paid\": state[\"approved\"]}\n\n        wf.start(\"approve\").edge(\"approve\", \"pay\").edge(\"pay\", END)\n        return wf\n\n    thread = build().compile(storage=storage).thread(\"refund-1\", actor=\"user:ada\")\n    turn = await thread.run({\"amount\": 25})\n    show(\"first run\", {\"suspended\": turn.suspended, \"state\": turn.state})\n    show(\"what it waits for\", [i.payload for i in await thread.interrupts()])\n    check(\"it is waiting and nothing was paid\", turn.suspended and paid == [])\n    other = build().compile(storage=storage).thread(\"refund-1\", actor=\"user:boss\")  # another process, in real life\n    turn = await other.resume({\"approve\": \"yes\"})\n    show(\"resumed by user:boss\", turn.state)\n    check(\"it paid once after the resume\", turn.state[\"paid\"] is True and paid == [25])\n    records = await storage.audit_records(thread_id=\"refund-1\")\n    check(\"the audit trail names both people\", {\"user:ada\", \"user:boss\"} <= {r.get(\"actor\") for r in records})",
+   "steps": [
+    {
+     "label": "first run",
+     "value": {
+      "suspended": true,
+      "state": {
+       "amount": 25,
+       "status": "waiting"
+      }
+     }
+    },
+    {
+     "label": "what it waits for",
+     "value": [
+      {
+       "refund": 25
+      }
+     ]
+    },
+    {
+     "label": "resumed by user:boss",
+     "value": {
+      "amount": 25,
+      "approved": true,
+      "paid": true,
+      "status": "decided"
+     }
+    }
+   ],
+   "checks": [
+    {
+     "claim": "it is waiting and nothing was paid",
+     "ok": true
+    },
+    {
+     "claim": "it paid once after the resume",
+     "ok": true
+    },
+    {
+     "claim": "the audit trail names both people",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 3,
+   "attempts": 1
+  },
+  {
+   "id": "agent-nodes",
+   "group": "Workflows",
+   "title": "Agents as workflow steps",
+   "claim": "A node can be a whole agent, so a graph mixes plain functions and agents.",
+   "code": "async def agent_nodes():\n    wf = Workflow(reducers={\"messages\": \"upsert_by_id\"})\n    # An agent node reads and extends the conversation in state[\"messages\"].\n    question = {\"id\": \"m1\", \"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"Refund?\"}]}\n    wf.add_node(\"ask\", lambda s: {\"messages\": [question]})\n    wf.add_node(\"agent\", Agent(FakeModel([\"Refund approved.\"])))\n    wf.start(\"ask\").edge(\"ask\", \"agent\").edge(\"agent\", END)\n    result = await wf.compile().run({})\n    show(\"roles in the conversation\", [m[\"role\"] for m in result.state[\"messages\"]])\n    show(\"the agent's reply\", result.state[\"messages\"][-1][\"content\"][0][\"text\"])\n    check(\"the agent ran as a node and added its reply\", [m[\"role\"] for m in result.state[\"messages\"]] == [\"user\", \"assistant\"])",
+   "steps": [
+    {
+     "label": "roles in the conversation",
+     "value": [
+      "user",
+      "assistant"
+     ]
+    },
+    {
+     "label": "the agent's reply",
+     "value": "Refund approved."
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the agent ran as a node and added its reply",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 1,
+   "attempts": 1
+  },
+  {
+   "id": "resilience",
+   "group": "Models",
+   "title": "Retries and fallback models",
+   "claim": "A transient model error is retried; when a model keeps failing, the next one answers.",
+   "code": "async def resilience():\n    result = await Agent(FakeModel([\"fine now\"], fail_first=1)).run(\"hello\")\n    show(\"one transient failure, retried\", result.text)\n    check(\"the retry succeeded\", result.text == \"fine now\")\n    agent = Agent(\n        FakeModel([\"never\"], fail_first=100),\n        fallbacks=[FakeModel([\"from the fallback\"])],\n        model_retry=Retry(max_attempts=2, initial_backoff=0.01, jitter=False),\n    )\n    result = await agent.run(\"hi\")\n    show(\"primary keeps failing\", result.text)\n    check(\"the fallback model answered\", result.text == \"from the fallback\")",
+   "steps": [
+    {
+     "label": "one transient failure, retried",
+     "value": "fine now"
+    },
+    {
+     "label": "primary keeps failing",
+     "value": "from the fallback"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the retry succeeded",
+     "ok": true
+    },
+    {
+     "claim": "the fallback model answered",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 76,
+   "attempts": 1
+  },
+  {
+   "id": "hooks",
+   "group": "Models",
+   "title": "Hooks around model and tool calls",
+   "claim": "Your code can change arguments, skip a tool, redact a result, replace a reply or end a run, in a fixed order.",
+   "code": "async def hooks():\n    seen = []\n\n    @tool\n    def lookup(order_id: str) -> str:\n        \"\"\"Looks up an order.\"\"\"\n        seen.append(order_id)\n        return f\"order {order_id}: shipped, card 4111-1111\"\n\n    @tool\n    def weather(city: str) -> str:\n        \"\"\"The weather.\"\"\"\n        raise AssertionError(\"skipped by the hook\")\n\n    class Guard:\n        def before_tool(self, call):\n            if call.name == \"weather\":\n                return ToolResult(\"sunny (cached)\")  # skip the tool\n            call.args[\"order_id\"] = call.args[\"order_id\"].upper()\n            return call\n\n        def after_tool(self, call, result):\n            return result.replace(\"4111-1111\", \"[card]\") if isinstance(result, str) else None\n\n        def after_model(self, ctx):\n            if \"secret\" in (ctx.messages[-1][\"content\"][0].get(\"text\", \"\") if ctx.messages[-1][\"content\"] else \"\"):\n                return HookAction(message=dict(ctx.messages[-1], content=[{\"type\": \"text\", \"text\": \"[redacted]\"}]))\n            return None\n\n    agent = Agent(\n        FakeModel([FakeReply.tool_calls([(\"lookup\", {\"order_id\": \"a-1\"}), (\"weather\", {\"city\": \"Paris\"})]), \"The secret answer\"]),\n        tools=[lookup, weather],\n        hooks=[Guard()],\n    )\n    result = await agent.run(\"where is it?\")\n    show(\"argument the tool received\", seen)\n    show(\"what the model saw from the tools\", [str(m[\"content\"]) for m in tool_results(result)])\n    show(\"final answer\", result.text)\n    check(\"before_tool changed the argument\", seen == [\"A-1\"])\n    check(\"after_tool redacted the card number\", \"[card]\" in str(tool_results(result)[0][\"content\"]))\n    check(\"a hook skipped a tool with a cached value\", \"sunny (cached)\" in str(tool_results(result)[1][\"content\"]))\n    check(\"after_model replaced the reply\", result.text == \"[redacted]\")\n\n    class Budget:\n        def before_model(self, ctx):\n            return HookAction(end=True, output=\"Stopped by the budget hook.\") if ctx.model_calls >= 1 else None\n\n    @tool\n    def noop() -> str:\n        \"\"\"Does nothing.\"\"\"\n        return \"ok\"\n\n    result = await Agent(FakeModel([FakeReply.tool_call(\"noop\", {}), \"never\"], by_turn=True), tools=[noop], hooks=[Budget()]).run(\"go\")\n    show(\"a hook ended the run\", result.output)\n    check(\"the budget hook stopped it\", result.output == \"Stopped by the budget hook.\")",
+   "steps": [
+    {
+     "label": "argument the tool received",
+     "value": [
+      "A-1"
+     ]
+    },
+    {
+     "label": "what the model saw from the tools",
+     "value": [
+      "[{'text': 'order A-1: shipped, card [card]', 'type': 'text'}]",
+      "[{'text': 'sunny (cached)', 'type': 'text'}]"
+     ]
+    },
+    {
+     "label": "final answer",
+     "value": "[redacted]"
+    },
+    {
+     "label": "a hook ended the run",
+     "value": "Stopped by the budget hook."
+    }
+   ],
+   "checks": [
+    {
+     "claim": "before_tool changed the argument",
+     "ok": true
+    },
+    {
+     "claim": "after_tool redacted the card number",
+     "ok": true
+    },
+    {
+     "claim": "a hook skipped a tool with a cached value",
+     "ok": true
+    },
+    {
+     "claim": "after_model replaced the reply",
+     "ok": true
+    },
+    {
+     "claim": "the budget hook stopped it",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 29,
+   "attempts": 1
+  },
+  {
+   "id": "gateway-sdk",
+   "group": "Models",
+   "title": "Calling a model directly: chat, stream, JSON output, embed",
+   "claim": "The Gateway class gives retries, fallbacks and schema-checked output without an agent.",
+   "code": "async def gateway_sdk():\n    gw = Gateway(fallbacks=[FakeModel([\"from the backup\"], name=\"backup\")], retry=Retry(initial_backoff=0.01, jitter=False))\n    reply = await gw.chat(FakeModel([], fail_first=10, name=\"primary\"), \"hi\")\n    show(\"primary fails, the backup answers\", {\"text\": reply.text, \"model\": reply.model})\n    check(\"the reply says which model answered\", reply.model == \"fake:backup\")\n\n    chunks = [c async for c in Gateway().stream(FakeModel([\"Hello there.\"]), \"hi\")]\n    show(\"stream chunks\", [c.text for c in chunks])\n    check(\"chunks add up to the reply\", \"\".join(c.text for c in chunks) == \"Hello there.\")\n\n    weather = {\"type\": \"object\", \"properties\": {\"city\": {\"type\": \"string\"}, \"temp\": {\"type\": \"integer\"}}, \"required\": [\"city\", \"temp\"]}\n    reply = await Gateway().chat(FakeModel(['{\"city\": \"Oslo\", \"temp\": 3}']), \"Weather?\", output=weather)\n    show(\"JSON output, checked against the schema\", reply.output)\n    try:\n        await Gateway().chat(FakeModel(['{\"city\": \"Oslo\"}']), \"Weather?\", output=weather)\n        check(\"a wrong structure is refused\", False)\n    except agentbuild.AgentBuildError as error:\n        show(\"a structure that does not match\", error.code)\n        check(\"it fails with a stable code\", error.code == \"output_invalid\")",
+   "steps": [
+    {
+     "label": "primary fails, the backup answers",
+     "value": {
+      "text": "from the backup",
+      "model": "fake:backup"
+     }
+    },
+    {
+     "label": "stream chunks",
+     "value": [
+      "Hello there."
+     ]
+    },
+    {
+     "label": "JSON output, checked against the schema",
+     "value": {
+      "city": "Oslo",
+      "temp": 3
+     }
+    },
+    {
+     "label": "a structure that does not match",
+     "value": "output_invalid"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the reply says which model answered",
+     "ok": true
+    },
+    {
+     "claim": "chunks add up to the reply",
+     "ok": true
+    },
+    {
+     "claim": "it fails with a stable code",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 4,
+   "attempts": 1
+  },
+  {
+   "id": "telemetry",
+   "group": "Observability",
+   "title": "Tracing to OpenTelemetry and Langfuse, without content",
+   "claim": "Every run is exported as a trace to any OTLP collector; prompts and answers stay out unless you ask.",
+   "code": "async def telemetry():\n    received = []\n\n    class Collector(http.server.BaseHTTPRequestHandler):\n        def do_POST(self):\n            received.append(self.rfile.read(int(self.headers[\"Content-Length\"])).decode())\n            self.send_response(200)\n            self.end_headers()\n\n        def log_message(self, *args):\n            pass\n\n    server = http.server.HTTPServer((\"127.0.0.1\", 0), Collector)\n    threading.Thread(target=server.serve_forever, daemon=True).start()\n    try:\n        tel = Telemetry.otlp(f\"http://127.0.0.1:{server.server_port}/v1/traces\", service_name=\"feature-tour\")\n        agent = Agent(FakeModel([\"fine\"]), telemetry=tel)\n        await agent.run(\"a private question\")\n        await tel.flush()\n        body = \"\".join(received)\n        spans = json.loads(received[0])[\"resourceSpans\"][0][\"scopeSpans\"][0][\"spans\"] if received else []\n        show(\"what the collector received\", f\"{len(body)} bytes, {len(spans)} spans: {[s['name'] for s in spans]}\")\n        check(\"a trace reached the collector\", \"resourceSpans\" in body)\n        check(\"the prompt text was left out\", \"a private question\" not in body)\n        await tel.shutdown()\n    finally:\n        server.shutdown()",
+   "steps": [
+    {
+     "label": "what the collector received",
+     "value": "2870 bytes, 3 spans: ['chat fake', 'model', 'agentbuild.run']"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "a trace reached the collector",
+     "ok": true
+    },
+    {
+     "claim": "the prompt text was left out",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 526,
+   "attempts": 1
+  },
+  {
+   "id": "patterns-pipelines",
+   "group": "Patterns and specialists",
+   "title": "Sequential and parallel pipelines in one line",
+   "claim": "Registered specialists chain with '>' or run side by side with '|'; steps are traced and parallel branches overlap.",
+   "code": "async def patterns_pipelines():\n    from agentbuild import patterns\n\n    model = FakeModel([\"a step's answer\"])\n    flow = patterns.quick(\"researcher > writer\", model=model)\n    result = await flow.run(\"solar panels\")\n    show(\"researcher > writer\", result.explain())\n    check(\"both specialists ran, in order\", [t[\"step\"] for t in result.trace] == [\"researcher\", \"writer\"])\n\n    slow = {f\"analyst{i}\": Agent(FakeModel([\"done\"], delay=0.4)) for i in range(4)}\n    started = time.perf_counter()\n    result = await patterns.parallel(slow, synthesizer=(\"summary\", Agent(FakeModel([\"All four agree.\"])))).run(\"review this\")\n    took = time.perf_counter() - started\n    show(\"four 0.4 s analysts at the same time\", f\"{took:.2f} s, then: {result.output}\")\n    check(\"they overlapped (about 0.4 s, not 1.6 s)\", took < 1.2)",
+   "steps": [
+    {
+     "label": "researcher > writer",
+     "value": "ended: done\n1. researcher: a step's answer\n2. writer: a step's answer"
+    },
+    {
+     "label": "four 0.4 s analysts at the same time",
+     "value": "0.42 s, then: All four agree."
+    }
+   ],
+   "checks": [
+    {
+     "claim": "both specialists ran, in order",
+     "ok": true
+    },
+    {
+     "claim": "they overlapped (about 0.4 s, not 1.6 s)",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 424,
+   "attempts": 1
+  },
+  {
+   "id": "patterns-review-loop",
+   "group": "Patterns and specialists",
+   "title": "Review and critique, with a loop that always ends",
+   "claim": "A critic sends a draft back until it approves; a cap stops any loop that never converges.",
+   "code": "async def patterns_review_loop():\n    from agentbuild import patterns\n\n    writer = Agent(FakeModel([\"draft one\", \"draft two\", \"draft three\"]))\n    critic = Agent(FakeModel([\"REVISE: add a number\", \"REVISE: shorter\", \"APPROVED\"]))\n    result = await patterns.review_and_critique(writer, critic, max_rounds=5).run(\"Write a blurb\")\n    show(\"three rounds\", result.explain())\n    check(\"it ended on approval with the third draft\", result.stop_reason == \"approved\" and result.output == \"draft three\")\n\n    stubborn = await patterns.review_and_critique(\n        Agent(FakeModel([\"d1\", \"d2\"])), Agent(FakeModel([\"REVISE: a\", \"REVISE: b\"])), max_rounds=2\n    ).run(\"Write a blurb\")\n    show(\"a critic that never approves, max_rounds=2\", f\"{stubborn.stop_reason}, kept the last draft: {stubborn.output}\")\n    check(\"the cap ended it and the last draft was kept\", stubborn.stop_reason == \"max_rounds\" and stubborn.output == \"d2\")\n    asked = await patterns.loop([lambda t: t + \"!\"], until=lambda t, n: False, max_iterations=10_000).run(\"x\")\n    show(\"max_iterations=10000 is clamped to\", len(asked.trace))\n    check(\"no loop runs more than the ceiling\", len(asked.trace) == patterns.CEILING)",
+   "steps": [
+    {
+     "label": "three rounds",
+     "value": "ended: approved\n1. step1 (draft 1): draft one\n2. step2: REVISE: add a number\n3. step1 (draft 2): draft two\n4. step2: REVISE: shorter\n5. step1 (draft 3): draft three\n6. step2: APPROVED"
+    },
+    {
+     "label": "a critic that never approves, max_rounds=2",
+     "value": "max_rounds, kept the last draft: d2"
+    },
+    {
+     "label": "max_iterations=10000 is clamped to",
+     "value": 50
+    }
+   ],
+   "checks": [
+    {
+     "claim": "it ended on approval with the third draft",
+     "ok": true
+    },
+    {
+     "claim": "the cap ended it and the last draft was kept",
+     "ok": true
+    },
+    {
+     "claim": "no loop runs more than the ceiling",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 65,
+   "attempts": 1
+  },
+  {
+   "id": "patterns-routing",
+   "group": "Patterns and specialists",
+   "title": "Coordinator, hierarchy and swarm",
+   "claim": "A coordinator picks a specialist, specialists can be nested, and a swarm hands work over without a coordinator.",
+   "code": "async def patterns_routing():\n    from agentbuild import patterns\n\n    orders = Agent(FakeModel([\"Order A-1 shipped.\"]))\n    triage = patterns.coordinator(\n        FakeModel([FakeReply.tool_call(\"orders\", {\"input\": \"where is A-1\"}), \"It shipped.\"]),\n        {\"orders\": (orders, \"order status questions\")},\n    )\n    result = await triage.run(\"where is A-1\")\n    show(\"coordinator called the 'orders' specialist\", [m[\"content\"] for m in tool_results(result)])\n    check(\"the coordinator routed and answered\", result.text == \"It shipped.\")\n\n    team = {\n        \"market\": Agent(FakeModel([\"Demand is high.\\nHANDOFF: engineering\"])),\n        \"engineering\": Agent(FakeModel([\"Feasible in 3 months.\\nHANDOFF: finance\"])),\n        \"finance\": Agent(FakeModel([\"Budget fits.\\nFINAL\"])),\n    }\n    result = await patterns.swarm(team, start=\"market\").run(\"Should we build it?\")\n    show(\"swarm hand-offs\", result.explain())\n    check(\"agents handed over until FINAL\", result.stop_reason == \"final\" and len(result.trace) == 3)\n    ping = {\"a\": Agent(FakeModel([\"x\\nHANDOFF: b\"] * 9)), \"b\": Agent(FakeModel([\"y\\nHANDOFF: a\"] * 9))}\n    result = await patterns.swarm(ping, max_handoffs=3).run(\"go\")\n    show(\"two agents that keep passing it back\", result.stop_reason)\n    check(\"the hand-off cap ended it\", result.stop_reason == \"max_handoffs\")",
+   "steps": [
+    {
+     "label": "coordinator called the 'orders' specialist",
+     "value": [
+      [
+       {
+        "text": "Order A-1 shipped.",
+        "type": "text"
+       }
+      ]
+     ]
+    },
+    {
+     "label": "swarm hand-offs",
+     "value": "ended: final\n1. market: Demand is high. HANDOFF: engineering\n2. engineering: Feasible in 3 months. HANDOFF: finance\n3. finance: Budget fits. FINAL"
+    },
+    {
+     "label": "two agents that keep passing it back",
+     "value": "max_handoffs"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the coordinator routed and answered",
+     "ok": true
+    },
+    {
+     "claim": "agents handed over until FINAL",
+     "ok": true
+    },
+    {
+     "claim": "the hand-off cap ended it",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 16,
+   "attempts": 1
+  },
+  {
+   "id": "patterns-human-review",
+   "group": "Patterns and specialists",
+   "title": "Human in the loop as a pattern, durable",
+   "claim": "A step's draft waits for a person; another process approves it later, and the audit trail names both.",
+   "code": "async def patterns_human_review():\n    from agentbuild import patterns\n\n    storage = Storage(audit=True)\n    first = patterns.human_review(Agent(FakeModel([\"Release 120 rows.\"]))).compile(storage).thread(\"release-1\", actor=\"user:ada\")\n    turn = await first.run({\"input\": \"Release the dataset?\"})\n    show(\"it waits with the draft\", (await first.interrupts())[0].payload)\n    check(\"nothing is released yet\", turn.suspended)\n    other = patterns.human_review(Agent(FakeModel([\"unused\"]))).compile(storage).thread(\"release-1\", actor=\"user:boss\")\n    done = await other.resume({\"review\": {\"decision\": \"edit\", \"text\": \"Release 100 rows.\"}})\n    show(\"the reviewer edited it\", done.state[\"output\"])\n    check(\"the edit is the output\", done.state[\"output\"] == \"Release 100 rows.\")\n    records = await storage.audit_records(thread_id=\"release-1\")\n    check(\"the audit trail names both people\", {\"user:ada\", \"user:boss\"} <= {r.get(\"actor\") for r in records})",
+   "steps": [
+    {
+     "label": "it waits with the draft",
+     "value": {
+      "draft": "Release 120 rows.",
+      "question": "Approve, edit or reject this draft."
+     }
+    },
+    {
+     "label": "the reviewer edited it",
+     "value": "Release 100 rows."
+    }
+   ],
+   "checks": [
+    {
+     "claim": "nothing is released yet",
+     "ok": true
+    },
+    {
+     "claim": "the edit is the output",
+     "ok": true
+    },
+    {
+     "claim": "the audit trail names both people",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 9,
+   "attempts": 1
+  },
+  {
+   "id": "specialists",
+   "group": "Patterns and specialists",
+   "title": "Specialist agents you can extend",
+   "claim": "Default recipes for common jobs; extend one, register it, and use it by name anywhere.",
+   "code": "async def specialists_demo():\n    from agentbuild import patterns, specialists\n\n    show(\"built in\", specialists.available())\n    careful = specialists.researcher.extend(\"careful-researcher\", add=\"Always give two sources.\")\n    show(\"extended instructions end with\", careful.instructions.splitlines()[-1])\n    check(\"the original recipe is unchanged\", \"two sources\" not in specialists.researcher.instructions)\n    specialists.register(careful, replace=True)\n    try:\n        flow = patterns.sequential([\"careful-researcher\", \"summarizer\"], model=FakeModel([\"ok\"]))\n        result = await flow.run(\"topic\")\n        show(\"used by name\", [t[\"step\"] for t in result.trace])\n        check(\"a registered recipe works as a step\", [t[\"step\"] for t in result.trace] == [\"careful-researcher\", \"summarizer\"])\n    finally:\n        specialists.unregister(\"careful-researcher\")",
+   "steps": [
+    {
+     "label": "built in",
+     "value": [
+      "classifier",
+      "code_reviewer",
+      "critic",
+      "extractor",
+      "fact_checker",
+      "planner",
+      "researcher",
+      "summarizer",
+      "support_agent",
+      "translator",
+      "writer"
+     ]
+    },
+    {
+     "label": "extended instructions end with",
+     "value": "Always give two sources."
+    },
+    {
+     "label": "used by name",
+     "value": [
+      "careful-researcher",
+      "summarizer"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the original recipe is unchanged",
+     "ok": true
+    },
+    {
+     "claim": "a registered recipe works as a step",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 3,
+   "attempts": 1
+  },
+  {
+   "id": "web-search",
+   "group": "Patterns and specialists",
+   "title": "Web search tools (Tavily, Brave) and page reading",
+   "claim": "web.search() works from an environment key; results are bounded, the key never reaches the model, and private addresses are refused.",
+   "code": "async def web_search_demo():\n    from agentbuild import web\n\n    seen = []\n\n    class Fake(http.server.BaseHTTPRequestHandler):\n        def do_POST(self):\n            payload = json.loads(self.rfile.read(int(self.headers[\"Content-Length\"])))\n            seen.append((self.headers.get(\"authorization\"), payload))\n            body = json.dumps({\"answer\": \"Solar is growing.\", \"results\": [\n                {\"title\": f\"Result {i}\", \"url\": f\"https://example.com/{i}\", \"content\": \"x\" * 2000} for i in range(20)]}).encode()\n            self.send_response(200)\n            self.send_header(\"content-length\", str(len(body)))\n            self.end_headers()\n            self.wfile.write(body)\n\n        def log_message(self, *args):\n            pass\n\n    server = http.server.HTTPServer((\"127.0.0.1\", 0), Fake)\n    threading.Thread(target=server.serve_forever, daemon=True).start()\n    try:\n        search = web.tavily_search(\"tvly-demo-key\", max_results=3, base_url=f\"http://127.0.0.1:{server.server_port}\")\n        agent = Agent(FakeModel([FakeReply.tool_call(\"web_search\", {\"query\": \"solar panels\"}), \"Summary.\"]), tools=[search])\n        result = await agent.run(\"What is new in solar?\")\n        value = tool_results(result)[0][\"content\"][0][\"value\"]\n        show(\"what the model saw\", {\"answer\": value[\"answer\"], \"results\": len(value[\"results\"]), \"first\": value[\"results\"][0][\"title\"]})\n        check(\"20 results were cut to 3, with short snippets\", len(value[\"results\"]) == 3 and all(len(r[\"snippet\"]) <= 600 for r in value[\"results\"]))\n        check(\"the key went in a header and nowhere the model can see\", seen[0][0] == \"Bearer tvly-demo-key\" and \"tvly-demo-key\" not in json.dumps(result.messages))\n    finally:\n        server.shutdown()\n    refused = Agent(FakeModel([FakeReply.tool_call(\"read_page\", {\"url\": \"http://127.0.0.1:1/admin\"}), \"I could not read it.\"]), tools=[web.fetch()])\n    result = await refused.run(\"Read http://127.0.0.1:1/admin\")\n    show(\"reading a private address\", str(tool_results(result)[0][\"content\"]))\n    check(\"private network addresses are refused\", \"private network\" in str(tool_results(result)[0][\"content\"]))\n    show(\"with TAVILY_API_KEY or BRAVE_API_KEY set\", \"web.search() needs no arguments; the researcher specialist picks it up automatically\")",
+   "steps": [
+    {
+     "label": "what the model saw",
+     "value": {
+      "answer": "Solar is growing.",
+      "results": 3,
+      "first": "Result 0"
+     }
+    },
+    {
+     "label": "reading a private address",
+     "value": "[{'text': 'Error: that address is on a private network; only public web pages can be read', 'type': 'text'}]"
+    },
+    {
+     "label": "with TAVILY_API_KEY or BRAVE_API_KEY set",
+     "value": "web.search() needs no arguments; the researcher specialist picks it up automatically"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "20 results were cut to 3, with short snippets",
+     "ok": true
+    },
+    {
+     "claim": "the key went in a header and nowhere the model can see",
+     "ok": true
+    },
+    {
+     "claim": "private network addresses are refused",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 525,
+   "attempts": 1
+  }
+ ]
+}

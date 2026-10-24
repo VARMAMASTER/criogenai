@@ -1,0 +1,320 @@
+/* The playground: glass cards (lab.css), the two frameworks in the fixed
+   categorical colours (tokens.css --fw-1, --fw-2). Colour is never the only
+   signal: every series is also named in text, and the table has the numbers. */
+
+.pg {
+  display: grid;
+  gap: 0;
+}
+.pg-two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 1.5rem;
+}
+.pg-two > .lab-card {
+  min-width: 0;
+}
+.pg-flat {
+  gap: 1rem 1.5rem;
+}
+@media (max-width: 52rem) {
+  .pg-two {
+    grid-template-columns: 1fr;
+  }
+}
+.pg-fw-1 {
+  --pg-color: var(--fw-1);
+}
+.pg-fw-2 {
+  --pg-color: var(--fw-2);
+}
+.pg-small {
+  font-size: 0.86rem;
+}
+.pg-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+.pg-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin: 0 0 0.3rem;
+}
+.pg-swatch {
+  width: 0.8rem;
+  height: 0.8rem;
+  border-radius: 0.25rem;
+  background: var(--pg-color);
+}
+.pg-badge {
+  font-size: 0.8rem;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--glass-border-strong);
+  color: var(--ab-muted);
+}
+.pg-badge.pg-running {
+  color: var(--ab-running-text);
+}
+.pg-badge.pg-done {
+  color: var(--ab-done-text);
+}
+.pg-badge.pg-error {
+  color: var(--ab-failed-text);
+}
+p.pg-error {
+  margin: 0.8rem 0 0;
+  font-weight: 700;
+  color: var(--ab-failed-text);
+}
+.pg-answer {
+  margin: 0.6rem 0;
+  padding: 0.7rem 0.9rem;
+  min-height: 3rem;
+  border-radius: 14px;
+  background: var(--glass-bg-soft);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+.pg-empty {
+  color: var(--ab-muted);
+}
+
+/* Controls */
+.pg-modes,
+.pg-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  align-items: center;
+  margin: 0.8rem 0;
+}
+.pg-modes .lab-button[aria-pressed="true"],
+.pg-primary {
+  border-color: var(--ab-running);
+  background: color-mix(in srgb, var(--ab-running) 18%, transparent);
+}
+.pg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+  color: var(--ab-muted);
+}
+.pg-wide {
+  margin-top: 0.8rem;
+}
+.pg textarea,
+.pg input[type="number"] {
+  font: inherit;
+  color: var(--ab-text);
+  background: var(--glass-bg-soft);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 12px;
+  padding: 0.55rem 0.7rem;
+  width: 100%;
+}
+.pg textarea {
+  min-height: 4.5rem;
+  resize: vertical;
+}
+.pg-advanced summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--ab-muted);
+  margin: 0.4rem 0;
+}
+.pg-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9.5rem, 1fr));
+  gap: 0.8rem;
+  margin: 0.6rem 0;
+}
+.pg button:focus-visible,
+.pg textarea:focus-visible,
+.pg input:focus-visible,
+.pg summary:focus-visible {
+  outline: 2px solid var(--ab-running);
+  outline-offset: 2px;
+}
+
+/* First-run timeline */
+.pg-timeline {
+  margin-top: 0.9rem;
+  font-size: 0.8rem;
+}
+.pg-row {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr;
+  align-items: center;
+  gap: 0.5rem;
+  height: 1.3rem;
+}
+.pg-name {
+  color: var(--ab-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pg-lane {
+  position: relative;
+  height: 0.75rem;
+  border-radius: 0.4rem;
+  background: var(--glass-bg-soft);
+}
+.pg-bar {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  min-width: 3px;
+  border-radius: 0.4rem;
+  background: var(--pg-color);
+}
+.pg-bar.pg-model {
+  opacity: 0.45;
+}
+.pg-axis {
+  display: flex;
+  justify-content: space-between;
+  margin-left: 7rem;
+  color: var(--ab-muted);
+  font-size: 0.75rem;
+}
+
+/* Charts */
+.pg-chart {
+  margin: 0;
+}
+.pg-chart svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.pg-chart figcaption {
+  font-size: 0.82rem;
+  color: var(--ab-muted);
+}
+.pg-grid {
+  stroke: var(--glass-border);
+  stroke-width: 1;
+}
+.pg-tick {
+  fill: var(--ab-muted);
+  font-size: 11px;
+}
+.pg-line {
+  fill: none;
+  stroke: var(--pg-color);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+.pg-dot {
+  fill: var(--pg-color);
+}
+.pg-end {
+  fill: var(--ab-text);
+  font-size: 11px;
+  font-weight: 700;
+}
+.pg-legend {
+  display: flex;
+  gap: 1.4rem;
+  list-style: none;
+  padding: 0;
+  margin: 0.6rem 0 0;
+  font-size: 0.9rem;
+  color: var(--ab-muted);
+}
+.pg-legend i {
+  display: inline-block;
+  width: 0.9rem;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--pg-color);
+  vertical-align: middle;
+}
+
+/* Comparison */
+.pg-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1rem;
+}
+.pg-chips li {
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  background: var(--glass-bg-soft);
+  border: 1px solid var(--glass-border);
+  font-size: 0.9rem;
+}
+.pg-scroll {
+  overflow-x: auto;
+}
+.pg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+.pg-table th,
+.pg-table td {
+  padding: 0.55rem 0.7rem;
+  border-bottom: 1px solid var(--glass-border);
+  text-align: right;
+  white-space: nowrap;
+}
+.pg-table th:first-child,
+.pg-table td:first-child,
+.pg-table td.pg-note {
+  text-align: left;
+}
+.pg-table th[scope="row"] {
+  font-weight: 500;
+  white-space: normal;
+}
+.pg-table thead th {
+  color: var(--ab-muted);
+  font-size: 0.82rem;
+}
+.pg-table td.pg-win {
+  font-weight: 800;
+  color: var(--ab-done-text);
+}
+.pg-note {
+  color: var(--ab-muted);
+  font-size: 0.85rem;
+}
+
+/* Method */
+.pg-method {
+  display: grid;
+  grid-template-columns: 9rem 1fr;
+  gap: 0.7rem 1.5rem;
+  margin: 0.8rem 0 1.4rem;
+}
+.pg-method dt {
+  font-weight: 800;
+}
+.pg-method dd {
+  margin: 0;
+  color: var(--ab-muted);
+}
+.pg-sub {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+}
+@media (max-width: 40rem) {
+  .pg-method {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+  .pg-method dd {
+    margin-bottom: 0.7rem;
+  }
+}

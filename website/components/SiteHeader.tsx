@@ -1,7 +1,7 @@
 // The landing page's and the lab's header: a floating glass pill.
 import ThemeToggle from "./ThemeToggle";
 
-export default function SiteHeader({ current }: { current?: "benchmarks" }) {
+export default function SiteHeader({ current }: { current?: "benchmarks" | "playground" | "demo" }) {
   return (
     <header className="top glass">
       <a className="brand" href="/">
@@ -16,6 +16,12 @@ export default function SiteHeader({ current }: { current?: "benchmarks" }) {
           </a>
           <a href="/benchmarks/" aria-current={current === "benchmarks" ? "page" : undefined}>
             Benchmarks
+          </a>
+          <a href="/playground/" aria-current={current === "playground" ? "page" : undefined}>
+            Playground
+          </a>
+          <a href="/demo/" aria-current={current === "demo" ? "page" : undefined}>
+            Demo
           </a>
         </nav>
         <ThemeToggle compact />

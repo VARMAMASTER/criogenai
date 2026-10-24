@@ -1,0 +1,267 @@
+/* The demo page: one collapsible card per scenario. Pass and fail are never
+   colour alone: each has a ✓ / ✗ mark and a text label. */
+
+.demo-group h3 {
+  margin: 1.6rem 0 0.6rem;
+  font-size: 1.1rem;
+  font-weight: 800;
+}
+.demo-card {
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  background: var(--glass-bg-soft);
+  margin-bottom: 0.6rem;
+  scroll-margin-top: 5rem;
+}
+.demo-card[open] {
+  border-color: var(--glass-border-strong);
+}
+.demo-card summary {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  list-style: none;
+}
+.demo-card summary::-webkit-details-marker {
+  display: none;
+}
+.demo-card summary:focus-visible {
+  outline: 2px solid var(--ab-running);
+  outline-offset: 2px;
+  border-radius: 16px;
+}
+.demo-title {
+  font-weight: 750;
+  flex: 1;
+}
+.demo-meta {
+  color: var(--ab-muted);
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+.demo-mark {
+  font-weight: 900;
+}
+.demo-ok {
+  color: var(--ab-done-text);
+}
+.demo-fail {
+  color: var(--ab-failed-text);
+}
+.demo-body {
+  padding: 0 1rem 1rem;
+}
+.demo-body h4 {
+  margin: 1.1rem 0 0.4rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ab-muted);
+}
+.demo-claim {
+  margin: 0.2rem 0 0;
+}
+.demo-checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.demo-checks li {
+  padding: 0.15rem 0;
+}
+.demo-steps {
+  margin: 0;
+}
+.demo-steps > div {
+  display: grid;
+  grid-template-columns: minmax(8rem, 14rem) 1fr;
+  gap: 0.3rem 1rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--glass-border);
+}
+.demo-steps dt {
+  color: var(--ab-muted);
+  font-size: 0.88rem;
+}
+.demo-steps dd {
+  margin: 0;
+  min-width: 0;
+}
+.demo-steps pre {
+  margin: 0;
+  font-family: var(--ab-mono);
+  font-size: 0.82rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 40rem) {
+  .demo-steps > div {
+    grid-template-columns: 1fr;
+  }
+  .demo-card summary {
+    flex-wrap: wrap;
+  }
+}
+.demo-cov td a {
+  display: inline-block;
+  margin: 0 0.8rem 0.1rem 0;
+  text-decoration: none;
+  font-size: 0.88rem;
+}
+.demo-cov td,
+.demo-cov th {
+  text-align: left;
+  white-space: normal;
+}
+
+/* Chat */
+.chat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 19rem;
+  gap: 1.2rem;
+  margin-top: 0.6rem;
+}
+@media (max-width: 56rem) {
+  .chat {
+    grid-template-columns: 1fr;
+  }
+}
+.chat-bar {
+  display: flex;
+  gap: 0.8rem;
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.chat select,
+.chat-form input {
+  font: inherit;
+  color: var(--ab-text);
+  background: var(--glass-bg-soft);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 12px;
+  padding: 0.55rem 0.7rem;
+}
+.chat-log {
+  margin: 0.8rem 0;
+  height: 26rem;
+  overflow-y: auto;
+  padding: 0.8rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 16px;
+  background: var(--glass-bg-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 0.7rem;
+}
+.chat-msg {
+  max-width: 88%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+.chat-user {
+  align-self: flex-end;
+}
+.chat-user .chat-text {
+  background: color-mix(in srgb, var(--ab-running) 20%, transparent);
+}
+.chat-text {
+  padding: 0.55rem 0.85rem;
+  border-radius: 14px;
+  border: 1px solid var(--glass-border);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.chat-notice .chat-text {
+  border-color: var(--ab-failed);
+  color: var(--ab-failed-text);
+}
+.chat-tool {
+  font-family: var(--ab-mono);
+  font-size: 0.78rem;
+  color: var(--ab-muted);
+  overflow-wrap: anywhere;
+}
+.chat-approval {
+  border: 2px solid var(--ab-waiting);
+  border-radius: 14px;
+  padding: 0.8rem 1rem;
+}
+.chat-call {
+  font-family: var(--ab-mono);
+  font-size: 0.85rem;
+  margin: 0.4rem 0 0.7rem;
+  overflow-wrap: anywhere;
+}
+.chat-actions,
+.chat-edit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.chat-edit input {
+  width: 6rem;
+  font: inherit;
+  color: var(--ab-text);
+  background: var(--glass-bg-soft);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: 12px;
+  padding: 0.45rem 0.6rem;
+}
+.chat-form {
+  display: flex;
+  gap: 0.6rem;
+}
+.chat-form input {
+  flex: 1;
+  min-width: 0;
+}
+.chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.chat-chips .lab-button {
+  white-space: normal;
+  text-align: left;
+  min-height: 2.3rem;
+  padding: 0.35rem 0.9rem;
+}
+.chat-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.chat-side h3 {
+  margin: 0 0 0.4rem;
+  font-size: 1.05rem;
+}
+.chat-side h4 {
+  margin: 1rem 0 0.3rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ab-muted);
+}
+.chat-list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.86rem;
+}
+.chat-audit {
+  max-height: 13rem;
+  overflow-y: auto;
+}
+.demo-cmd {
+  font-family: var(--ab-mono);
+  padding: 0.8rem 1rem;
+  border-radius: 12px;
+  background: var(--glass-bg-soft);
+  border: 1px solid var(--glass-border);
+  overflow-x: auto;
+}

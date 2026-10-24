@@ -1,0 +1,486 @@
+{
+ "ran_at": "2026-10-24T12:06:52+00:00",
+ "sdk": {
+  "name": "agentbuild-sdk",
+  "version": "0.1.0",
+  "language": "Python"
+ },
+ "machine": {
+  "os": "Windows 11",
+  "python": "3.13.14"
+ },
+ "model": {
+  "provider": "Gemini",
+  "name": "gemini-2.5-flash"
+ },
+ "features": [
+  {
+   "id": "live-tools",
+   "group": "With a real model",
+   "title": "A real model chooses and calls a tool",
+   "claim": "Given a question, the model decides to call get_order with the right argument and answers from the result.",
+   "code": "async def live_tools():\n    calls = []\n\n    @tool(read_only=True)\n    def get_order(order_id: str) -> dict:\n        \"\"\"Look up an order by its id.\"\"\"\n        calls.append(order_id)\n        return {\"order_id\": order_id, \"status\": \"shipped\", \"eta\": \"tomorrow\"}\n\n    result = await Agent(real(), instructions=SUPPORT, tools=[get_order]).run(\"Where is order A-1001?\")\n    show(\"the model called get_order with\", calls)\n    show(\"answer\", result.text)\n    show(\"usage\", result.usage)\n    check(\"it looked the order up with the right id\", calls == [\"A-1001\"])\n    check(\"the answer reflects the tool's result\", \"ship\" in (result.text or \"\").lower())",
+   "steps": [
+    {
+     "label": "the model called get_order with",
+     "value": [
+      "A-1001"
+     ]
+    },
+    {
+     "label": "answer",
+     "value": "Your order A-1001 was shipped and should arrive tomorrow."
+    },
+    {
+     "label": "usage",
+     "value": {
+      "cache_read_tokens": 0,
+      "cache_write_tokens": 0,
+      "input_tokens": 214,
+      "output_tokens": 37,
+      "reasoning_tokens": 0
+     }
+    }
+   ],
+   "checks": [
+    {
+     "claim": "it looked the order up with the right id",
+     "ok": true
+    },
+    {
+     "claim": "the answer reflects the tool's result",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 2545,
+   "attempts": 1
+  },
+  {
+   "id": "live-approval",
+   "group": "With a real model",
+   "title": "A real model asks to refund; a person decides",
+   "claim": "The model proposes a destructive call; the run pauses before it, and it runs exactly once after approval.",
+   "code": "async def live_approval():\n    refunds = []\n\n    @tool(destructive=True)\n    def issue_refund(order_id: str, amount: float) -> str:\n        \"\"\"Refund an order. Amount in dollars.\"\"\"\n        refunds.append((order_id, amount))\n        return \"refunded\"\n\n    storage = Storage()\n\n    def make():\n        return Agent(real(), instructions=SUPPORT, tools=[issue_refund], approve=[\"issue_refund\"], storage=storage)\n\n    chat = make().thread(\"t-1\", actor=\"user:ada\")\n    reply = await chat.send(\"Order A-1001 arrived broken. Refund it, 24 dollars.\")\n    show(\"the model asked for\", [{\"tool\": r.tool, \"args\": r.args} for r in reply.approvals])\n    check(\"the run paused before the refund\", reply.needs_approval and refunds == [])\n    reply = await make().thread(\"t-1\", actor=\"user:boss\").approve()  # another process, in real life\n    show(\"after approval the model said\", reply.text)\n    check(\"the refund ran exactly once\", len(refunds) == 1 and refunds[0][0] == \"A-1001\")\n\n    chat = make().thread(\"t-2\")\n    await chat.send(\"Order A-2002 arrived broken. Refund it, 10 dollars.\")\n    reply = await chat.reject(\"Our policy does not allow refunds on this order.\")\n    show(\"after rejection the model said\", reply.text)\n    check(\"a rejected call never ran\", len(refunds) == 1)",
+   "steps": [
+    {
+     "label": "the model asked for",
+     "value": [
+      {
+       "tool": "issue_refund",
+       "args": {
+        "amount": 24,
+        "order_id": "A-1001"
+       }
+      }
+     ]
+    },
+    {
+     "label": "after approval the model said",
+     "value": "OK. I have refunded 24 dollars from order A-1001."
+    },
+    {
+     "label": "after rejection the model said",
+     "value": "I am sorry, but I am unable to refund this order. My apologies."
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the run paused before the refund",
+     "ok": true
+    },
+    {
+     "claim": "the refund ran exactly once",
+     "ok": true
+    },
+    {
+     "claim": "a rejected call never ran",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 5617,
+   "attempts": 1
+  },
+  {
+   "id": "live-structured",
+   "group": "With a real model",
+   "title": "A real model's answer as a checked structure",
+   "claim": "The answer comes back as data that matches your schema, not as text to parse.",
+   "code": "async def live_structured():\n    schema = {\n        \"type\": \"object\",\n        \"properties\": {\"category\": {\"enum\": [\"billing\", \"shipping\", \"other\"]}, \"urgent\": {\"type\": \"boolean\"}},\n        \"required\": [\"category\", \"urgent\"],\n        \"additionalProperties\": False,\n    }\n    result = await Agent(real(), instructions=\"Classify the customer's message.\", output=schema).run(\n        \"I was charged twice for order A-1001 and need it fixed today!\"\n    )\n    show(\"output\", result.output)\n    check(\"it is a valid structure\", set(result.output) == {\"category\", \"urgent\"})\n    check(\"it chose an allowed category\", result.output[\"category\"] in {\"billing\", \"shipping\", \"other\"})",
+   "steps": [
+    {
+     "label": "output",
+     "value": {
+      "category": "billing",
+      "urgent": true
+     }
+    }
+   ],
+   "checks": [
+    {
+     "claim": "it is a valid structure",
+     "ok": true
+    },
+    {
+     "claim": "it chose an allowed category",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 1664,
+   "attempts": 1
+  },
+  {
+   "id": "live-streaming",
+   "group": "With a real model",
+   "title": "Streaming from a real model",
+   "claim": "Text arrives in several events as the model writes, and the saved reply equals what was streamed.",
+   "code": "async def live_streaming():\n    stream = Agent(real(), instructions=\"Answer in about 40 words.\").thread(\"s\").stream(\"Explain what a database index is.\")\n    texts = []\n    async for event in stream:\n        if event.type == \"text\":\n            texts.append(event.text)\n    reply = await stream.reply()\n    show(\"number of text events\", len(texts))\n    show(\"first events\", texts[:3])\n    check(\"the text came in more than one piece\", len(texts) > 1)\n    check(\"the pieces add up to the saved reply\", \"\".join(texts) == reply.text)",
+   "steps": [
+    {
+     "label": "number of text events",
+     "value": 2
+    },
+    {
+     "label": "first events",
+     "value": [
+      "A database index drastically speeds up data retrieval. Like a book's index, it helps the database quickly",
+      " find specific rows without scanning the entire table. It works by creating a sorted reference to column values and their locations, significantly optimizing query performance for searches."
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the text came in more than one piece",
+     "ok": true
+    },
+    {
+     "claim": "the pieces add up to the saved reply",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 5206,
+   "attempts": 1
+  },
+  {
+   "id": "live-memory",
+   "group": "With a real model",
+   "title": "A real model remembers across conversations",
+   "claim": "A fact stated in one conversation is stored, and recalled in a different one for the same user.",
+   "code": "async def live_memory():\n    storage = Storage()\n    agent = Agent(\n        real(),\n        instructions=\"You are a helpful assistant. When the user tells you a lasting fact about themselves, save it with the remember tool.\",\n        storage=storage,\n        memory=Memory.by_state(\"user_id\", \"users\"),\n    )\n    await agent.thread(\"monday\").send(\"Please remember that I am vegetarian.\", user_id=\"ada\")\n    facts = await storage.search(\"users/ada\")\n    show(\"stored for users/ada\", [(f[\"key\"], f[\"value\"]) for f in facts])\n    check(\"the model saved a fact\", len(facts) > 0)\n    reply = await agent.thread(\"friday\").send(\"What do you know about my diet? One short sentence.\", user_id=\"ada\")\n    show(\"in a new conversation the model said\", reply.text)\n    check(\"it took the remembered fact into account\", any(w in (reply.text or \"\").lower() for w in (\"vegetarian\", \"veggie\", \"meat-free\", \"vegan\", \"plant\")))\n    check(\"another user's memory is empty\", await storage.search(\"users/bob\") == [])",
+   "steps": [
+    {
+     "label": "stored for users/ada",
+     "value": [
+      [
+       "diet",
+       "vegetarian"
+      ]
+     ]
+    },
+    {
+     "label": "in a new conversation the model said",
+     "value": "Your diet is vegetarian."
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the model saved a fact",
+     "ok": true
+    },
+    {
+     "claim": "it took the remembered fact into account",
+     "ok": true
+    },
+    {
+     "claim": "another user's memory is empty",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 4568,
+   "attempts": 1
+  },
+  {
+   "id": "live-hooks",
+   "group": "With a real model",
+   "title": "Hooks keep secrets away from a real model",
+   "claim": "An after_tool hook redacts a card number before the model ever sees it.",
+   "code": "async def live_hooks():\n    @tool(read_only=True)\n    def get_payment(order_id: str) -> str:\n        \"\"\"Payment details for an order.\"\"\"\n        return f\"order {order_id}: paid with card 4111-1111-1111-1111\"\n\n    class Redact:\n        def after_tool(self, call, result):\n            return result.replace(\"4111-1111-1111-1111\", \"[card]\") if isinstance(result, str) else None\n\n    result = await Agent(real(), instructions=SUPPORT, tools=[get_payment], hooks=[Redact()]).run(\"How was order A-1001 paid?\")\n    seen = json.dumps(result.messages)\n    show(\"what the model saw from the tool\", [str(m[\"content\"]) for m in tool_results(result)])\n    show(\"answer\", result.text)\n    check(\"the card number never reached the model\", \"4111\" not in seen)\n    check(\"the model still answered\", bool(result.text))",
+   "steps": [
+    {
+     "label": "what the model saw from the tool",
+     "value": [
+      "[{'text': 'order A-1001: paid with card [card]', 'type': 'text'}]"
+     ]
+    },
+    {
+     "label": "answer",
+     "value": "Order A-1001 was paid with card."
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the card number never reached the model",
+     "ok": true
+    },
+    {
+     "claim": "the model still answered",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 2743,
+   "attempts": 1
+  },
+  {
+   "id": "live-audit",
+   "group": "With a real model",
+   "title": "An audit trail of a real run, without its content",
+   "claim": "Model calls, tool calls and the approver are recorded and verifiable; the conversation text is not.",
+   "code": "async def live_audit():\n    storage = Storage(audit=True)\n\n    @tool(destructive=True)\n    def issue_refund(order_id: str, amount: float) -> str:\n        \"\"\"Refund an order.\"\"\"\n        return \"refunded\"\n\n    agent = Agent(real(), instructions=SUPPORT, tools=[issue_refund], approve=[\"issue_refund\"], storage=storage)\n    reply = await agent.thread(\"visit-9\", actor=\"user:ada\").send(\"My name is Ada Lovelace. Refund order A-1001, 5 dollars.\")\n    if reply.needs_approval:\n        await agent.thread(\"visit-9\", actor=\"user:dr-rao\").approve()\n    records = await storage.audit_records(thread_id=\"visit-9\")\n    show(\"records (action, actor)\", [(r[\"action\"], r.get(\"actor\")) for r in records])\n    report = await storage.verify_audit()\n    show(\"hash chain verification\", report)\n    check(\"the chain verifies\", report[\"ok\"] is True)\n    check(\"the model call was recorded\", \"model.called\" in [r[\"action\"] for r in records])\n    check(\"no message content is in the records\", \"Lovelace\" not in json.dumps(records))",
+   "steps": [
+    {
+     "label": "records (action, actor)",
+     "value": [
+      [
+       "model.called",
+       "user:ada"
+      ],
+      [
+       "run.finished",
+       "user:ada"
+      ],
+      [
+       "approval.requested",
+       "user:ada"
+      ],
+      [
+       "approval.decided",
+       "user:dr-rao"
+      ],
+      [
+       "tool.executed",
+       "user:dr-rao"
+      ],
+      [
+       "model.called",
+       "user:dr-rao"
+      ],
+      [
+       "run.finished",
+       "user:dr-rao"
+      ]
+     ]
+    },
+    {
+     "label": "hash chain verification",
+     "value": {
+      "first_broken": null,
+      "head": [
+       7,
+       "44a990dbafe31b4f1612e6fab7deb8b2372b5e75fbe9b15c750544affc558fe4"
+      ],
+      "ok": true,
+      "records": 7
+     }
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the chain verifies",
+     "ok": true
+    },
+    {
+     "claim": "the model call was recorded",
+     "ok": true
+    },
+    {
+     "claim": "no message content is in the records",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 2513,
+   "attempts": 1
+  },
+  {
+   "id": "live-fallback",
+   "group": "With a real model",
+   "title": "A broken model falls back to a working one",
+   "claim": "When the primary model fails, the agent answers from the fallback.",
+   "code": "async def live_fallback():\n    agent = Agent(\n        LIVE[\"broken\"](),\n        fallbacks=[real()],\n        model_retry=Retry(max_attempts=1, initial_backoff=0.01, jitter=False),\n        fallback_on=[\"not_found\"],  # by default only rate limits and outages fall back; a wrong model name is opt-in\n    )\n    result = await agent.run(\"Reply with the single word: ready\")\n    show(\"answer\", result.text)\n    check(\"the fallback model answered\", bool(result.text))",
+   "steps": [
+    {
+     "label": "answer",
+     "value": "ready"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the fallback model answered",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 1865,
+   "attempts": 1
+  },
+  {
+   "id": "live-gateway",
+   "group": "With a real model",
+   "title": "Direct model calls: chat, JSON, stream, embeddings",
+   "claim": "The Gateway class calls a real model without an agent, with schema-checked output and embeddings.",
+   "code": "async def live_gateway():\n    gw = Gateway()\n    reply = await gw.chat(real(), \"What is the capital of France?\", instructions=\"Answer in one word.\")\n    show(\"chat\", {\"text\": reply.text, \"model\": reply.model})\n    check(\"it answered\", \"paris\" in (reply.text or \"\").lower())\n    triage = {\"type\": \"object\", \"properties\": {\"urgent\": {\"type\": \"boolean\"}}, \"required\": [\"urgent\"]}\n    reply = await gw.chat(real(), \"Patient reports crushing chest pain.\", output=triage)\n    show(\"JSON output\", reply.output)\n    check(\"the output matches the schema\", isinstance(reply.output.get(\"urgent\"), bool))\n    chunks = [c.text async for c in gw.stream(real(), \"Write about 120 words on why rain matters to farmers.\")]\n    show(\"stream pieces\", len(chunks))\n    check(\"it streamed in pieces\", len(chunks) > 1)\n    if LIVE[\"embedder\"] is None:\n        show(\"embeddings\", \"skipped: this provider has no embedding model\")\n        return\n    vectors = await gw.embed(LIVE[\"embedder\"](), [\"first note\", \"second note\"])\n    show(\"embeddings\", f\"{len(vectors)} vectors of {len(vectors[0])} numbers\")\n    check(\"one vector per text\", len(vectors) == 2 and len(vectors[0]) > 10)",
+   "steps": [
+    {
+     "label": "chat",
+     "value": {
+      "text": "Paris",
+      "model": "gemini:gemini-2.5-flash"
+     }
+    },
+    {
+     "label": "JSON output",
+     "value": {
+      "urgent": true
+     }
+    },
+    {
+     "label": "stream pieces",
+     "value": 4
+    },
+    {
+     "label": "embeddings",
+     "value": "2 vectors of 3072 numbers"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "it answered",
+     "ok": true
+    },
+    {
+     "claim": "the output matches the schema",
+     "ok": true
+    },
+    {
+     "claim": "it streamed in pieces",
+     "ok": true
+    },
+    {
+     "claim": "one vector per text",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 11211,
+   "attempts": 1
+  },
+  {
+   "id": "live-workflow",
+   "group": "With a real model",
+   "title": "A real model as a workflow step",
+   "claim": "A graph mixes a plain function and a real agent; the agent's reply lands in the shared state.",
+   "code": "async def live_workflow():\n    wf = Workflow(reducers={\"messages\": \"upsert_by_id\"})\n    question = {\"id\": \"m1\", \"role\": \"user\", \"content\": [{\"type\": \"text\", \"text\": \"In one sentence: what is a refund?\"}]}\n    wf.add_node(\"ask\", lambda s: {\"messages\": [question]})\n    wf.add_node(\"agent\", Agent(real(), instructions=\"Be brief.\"))\n    wf.start(\"ask\").edge(\"ask\", \"agent\").edge(\"agent\", END)\n    result = await wf.compile().run({})\n    roles = [m[\"role\"] for m in result.state[\"messages\"]]\n    show(\"roles\", roles)\n    show(\"the agent's reply\", result.state[\"messages\"][-1][\"content\"][0][\"text\"])\n    check(\"the agent added its reply to the state\", roles == [\"user\", \"assistant\"])",
+   "steps": [
+    {
+     "label": "roles",
+     "value": [
+      "user",
+      "assistant"
+     ]
+    },
+    {
+     "label": "the agent's reply",
+     "value": "A refund is money returned to a customer for a purchase they made, often because the item was returned or the service was unsatisfactory."
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the agent added its reply to the state",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 1539,
+   "attempts": 1
+  },
+  {
+   "id": "live-patterns",
+   "group": "With a real model",
+   "title": "Specialists and patterns with a real model",
+   "claim": "One-line pipelines of built-in specialists work with a real model: a writer and critic loop, and a planner into a summarizer.",
+   "code": "async def live_patterns():\n    from agentbuild import patterns\n\n    review = await patterns.quick(\"writer <-> critic\", model=real()).run(\n        \"Write a two-sentence product blurb for a standing desk. It must mention the price $249 and free delivery.\"\n    )\n    show(\"writer <-> critic\", review.explain())\n    check(\"it ended (approved, or the round cap) with an output\", review.stop_reason in (\"approved\", \"max_rounds\") and bool(review.output))\n    check(\"the blurb has the required facts\", \"$249\" in review.output and \"deliver\" in review.output.lower())\n    plan = await patterns.quick(\"planner > summarizer\", model=real()).run(\"Goal: hold a small bake sale on Saturday\")\n    show(\"planner > summarizer\", plan.explain())\n    check(\"both steps ran\", [t[\"step\"] for t in plan.trace] == [\"planner\", \"summarizer\"])",
+   "steps": [
+    {
+     "label": "writer <-> critic",
+     "value": "ended: approved\n1. writer (draft 1): Elevate your workspace and well-being with our innovative standing desk, designed for optimal comfort and productivity throughout your day. \u2026\n2. critic: APPROVED"
+    },
+    {
+     "label": "planner > summarizer",
+     "value": "ended: done\n1. planner: 1. Decide on 2-3 baked goods to make. 2. Create a shopping list for all ingredients needed. 3. Buy all ingredients from the grocery store. 4\u2026\n2. summarizer: Decide on 2-3 baked goods, create a shopping list, and buy all ingredients. Bake goods on Friday. Set up your sale table and display Saturda\u2026"
+    }
+   ],
+   "checks": [
+    {
+     "claim": "it ended (approved, or the round cap) with an output",
+     "ok": true
+    },
+    {
+     "claim": "the blurb has the required facts",
+     "ok": true
+    },
+    {
+     "claim": "both steps ran",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 9094,
+   "attempts": 1
+  },
+  {
+   "id": "live-coordinator",
+   "group": "With a real model",
+   "title": "A real coordinator picks the right specialist",
+   "claim": "Given two specialists, the coordinator model chooses the one that fits and answers from it.",
+   "code": "async def live_coordinator():\n    from agentbuild import patterns\n\n    asked = []\n\n    @tool(read_only=True)\n    def get_order(order_id: str) -> dict:\n        \"\"\"Look up an order by id.\"\"\"\n        asked.append(order_id)\n        return {\"order_id\": order_id, \"status\": \"shipped\"}\n\n    orders = Agent(real(), instructions=\"You answer order status questions. Use get_order. Be brief.\", tools=[get_order])\n    jokes = Agent(real(), instructions=\"You tell one short, clean joke.\")\n    triage = patterns.coordinator(real(), {\"orders\": (orders, \"Order status and delivery questions\"), \"jokes\": (jokes, \"Tells a joke\")})\n    result = await triage.run(\"Where is order A-1001?\")\n    show(\"answer\", result.text)\n    show(\"specialists the coordinator called\", [m.get(\"name\") or m.get(\"tool\") for m in tool_results(result)])\n    check(\"the order specialist's tool ran with the right id\", asked == [\"A-1001\"])",
+   "steps": [
+    {
+     "label": "answer",
+     "value": "Order A-1001 has been shipped."
+    },
+    {
+     "label": "specialists the coordinator called",
+     "value": [
+      "orders"
+     ]
+    }
+   ],
+   "checks": [
+    {
+     "claim": "the order specialist's tool ran with the right id",
+     "ok": true
+    }
+   ],
+   "ok": true,
+   "error": null,
+   "ms": 4531,
+   "attempts": 1
+  }
+ ]
+}
