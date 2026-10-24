@@ -83,11 +83,15 @@ mod hooks;
 mod memory;
 mod nested;
 mod output;
+pub mod patterns;
 mod resilience;
 mod schema;
+pub mod specialists;
 mod stream;
 mod thread;
 mod tool;
+#[cfg(feature = "web")]
+pub mod web;
 
 pub use agent::{
     AGENT, Agent, AgentBuildError, AgentBuilder, AgentError, AgentInput, AgentResult, HOOKS,
@@ -104,8 +108,10 @@ pub use memory::{
 };
 pub use nested::{AGENT_APPROVAL_INTERRUPT, AgentNode, AgentTool};
 pub use output::FINAL_OUTPUT_TOOL;
+pub use patterns::{Pattern, PatternError, PatternResult, PatternStop, ReviewDecision, Step};
 pub use resilience::ResilientModel;
 pub use schema::validate as validate_arguments;
+pub use specialists::{Specialist, SpecialistError};
 pub use stream::{AgentEvent, AgentStream, ThreadStream};
 pub use thread::{Reply, Thread};
 pub use tool::{Tool, ToolContext, ToolError, ToolOutput, tool_fn};

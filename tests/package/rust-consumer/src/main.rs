@@ -42,6 +42,7 @@ async fn main() {
     thread_stream().await;
     llm_gateway().await;
     workflow_threads().await;
+    patterns_and_specialists().await;
     println!("package smoke test: ok");
 }
 
@@ -939,4 +940,57 @@ async fn workflow_threads() {
         .expect("resume");
     assert_eq!(turn.state().get("answer"), Some(&json!("yes")));
     println!("  workflow threads (pause, resume from another handle): ok");
+}
+
+/// Patterns and specialists (design 0019): ready-made graphs and recipes,
+/// through the public API only.
+async fn patterns_and_specialists() {
+    use agentbuild_agent::patterns::{self, Step};
+    use agentbuild_agent::{Agent, PatternStop, ReviewDecision, Specialist, specialists};
+
+    let instant = |replies: &[&str]| {
+        let mut model = FakeModel::with_delay(Duration::ZERO, Duration::ZERO);
+        for reply in replies {
+            model = model.then(FakeReply::text(*reply));
+        }
+        model
+    };
+
+    // A review loop: the critic asks for one revision, then approves.
+    let writer = Agent::builder(instant(&["draft one", "draft two"])).build().unwrap();
+    let critic = Agent::builder(instant(&["REVISE: shorter", "APPROVED"])).build().unwrap();
+    let result = patterns::review_and_critique(writer, critic, 3)
+        .unwrap()
+        .run("write")
+        .await
+        .unwrap();
+    assert_eq!(result.output.as_deref(), Some("draft two"));
+    assert_eq!(result.stop_reason, PatternStop::Approved);
+    assert_eq!(result.trace.len(), 4);
+
+    // A function step, a registered specialist, and a recipe of my own.
+    let mine = Specialist::new("pkg-test-triage", "Triage for the package test", "Be quick.")
+        .unwrap()
+        .append_instructions("Answer in one line.");
+    specialists::register(mine).unwrap();
+    assert!(specialists::available().iter().any(|n| n == "researcher"));
+    let model: Arc<dyn Model> = Arc::new(instant(&["triaged"]));
+    let flow = patterns::sequential([
+        Step::registered("pkg-test-triage", model).unwrap(),
+        Step::function(|text| async move { text.to_uppercase() }).named("shout"),
+    ])
+    .unwrap();
+    assert_eq!(flow.run("hi").await.unwrap().output.as_deref(), Some("TRIAGED"));
+    assert!(specialists::unregister("pkg-test-triage"));
+
+    // Human in the loop: pause, then resume with a decision.
+    let review = patterns::human_review(Agent::builder(instant(&["send it?"])).build().unwrap()).unwrap();
+    let paused = review.run("go").await.unwrap();
+    assert!(paused.suspended);
+    let done = review.resume(&paused, ReviewDecision::Edit("send it!".into())).await.unwrap();
+    assert_eq!(done.output.as_deref(), Some("send it!"));
+
+    // The one-liner.
+    let model: Arc<dyn Model> = Arc::new(instant(&[]));
+    assert!(patterns::quick("researcher > writer", model).is_ok());
 }

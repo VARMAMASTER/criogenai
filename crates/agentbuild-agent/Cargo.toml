@@ -25,6 +25,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 # `rt`: tool calls run as tasks; `sync`: the parallel-call semaphore; `time`: tool timeouts.
 tokio = { workspace = true, features = ["rt", "sync", "time"] }
+reqwest = { version = "0.13", optional = true, default-features = false, features = ["rustls", "system-proxy"] }
 
 [features]
 default = ["http"]
@@ -36,6 +37,10 @@ sqlite = ["agentbuild-storage/sqlite"]
 postgres = ["agentbuild-storage/postgres"]
 # Encryption at rest (agentbuild-storage's `encryption`).
 encryption = ["agentbuild-storage/encryption"]
+# Web search and page reading tools (`agentbuild_agent::web`, design 0019). Off by
+# default: it adds `reqwest` (the HTTP client agentbuild-providers already
+# uses, same version and features, so no new crate) and tokio `net` for DNS.
+web = ["dep:reqwest", "tokio/net"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "test-util", "net", "io-util"] }
