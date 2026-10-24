@@ -36,6 +36,7 @@ from .models import (
     OpenAICompatible,
     OpenRouter,
 )
+from . import patterns, specialists, web
 from .gateway import ChatReply, ChatStream, Chunk, Gateway
 from .hooks import HookAction, HookContext, ToolCall, ToolResult
 from .storage import Memory, Storage
@@ -61,5 +62,5 @@ __all__ = [
     "OpenAICompatible", "OpenRouter", "Reply", "Retry", "RunResult", "StorageError", "Storage", "Stream",
     "Telemetry", "Thread", "ThreadBusyError", "ThreadSuspendedError", "Tool", "ToolCall", "ToolContext", "ToolError",
     "ToolExecutionError", "ToolResult", "ValidationError", "Workflow", "WorkflowResult", "WorkflowThread",
-    "__version__", "goto", "suspend", "tool",
+    "__version__", "goto", "patterns", "specialists", "suspend", "tool", "web",
 ]

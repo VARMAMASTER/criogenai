@@ -48,6 +48,16 @@ async def main():
     paused = await app.run({"amount": 40})
     assert paused.suspended and paused.interrupts[0].payload == {"refund": 40}
     assert (await app.resume(paused.snapshot, {"ask": True})).state["ok"] is True
+    # Patterns and specialists (design 0019): a one-line pipeline and a review loop.
+    from agentbuild import patterns, specialists
+
+    flow = patterns.quick("researcher > writer", model=FakeModel(["notes", "article"]))
+    piped = await flow.run("topic")
+    assert [t["step"] for t in piped.trace] == ["researcher", "writer"] and piped.stop_reason == "done"
+    reviewed = await patterns.review_and_critique(
+        Agent(FakeModel(["draft"])), Agent(FakeModel(["APPROVED"]))
+    ).run("write")
+    assert reviewed.stop_reason == "approved" and "researcher" in specialists.available()
     print("python package test: ok", agentbuild.__version__)
     for suffix in ("", "-wal", "-shm"):
         try:
