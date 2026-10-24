@@ -6,7 +6,7 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { END, Agent, FakeModel, FakeReply, Storage, ToolError, ValidationError, Workflow, suspend, tool } from "@agentbuild/sdk";
+import { END, Agent, FakeModel, FakeReply, Storage, ToolError, ValidationError, Workflow, patterns, specialists, suspend, tool } from "@agentbuild/sdk";
 
 const require = createRequire(import.meta.url);
 const resolved = require.resolve("@agentbuild/sdk");
@@ -60,4 +60,11 @@ const app = new Workflow()
 const paused = await app.run({ amount: 40 });
 if (!paused.suspended || paused.interrupts[0].payload.refund !== 40) throw new Error("expected a pause");
 if ((await app.resume(paused.snapshot, { ask: true })).state.ok !== true) throw new Error("resume failed");
+// Patterns and specialists (design 0019): a one-line pipeline and a review loop.
+const piped = await patterns.quick("researcher > writer", { model: new FakeModel(["notes", "article"]) }).run("topic");
+if (piped.trace.map((t) => t.step).join() !== "researcher,writer" || piped.stopReason !== "done") throw new Error("pipeline failed");
+const reviewed = await patterns
+  .reviewAndCritique(new Agent({ model: new FakeModel(["draft"]) }), new Agent({ model: new FakeModel(["APPROVED"]) }))
+  .run("write");
+if (reviewed.stopReason !== "approved" || !specialists.available().includes("researcher")) throw new Error("review failed");
 console.log("typescript package test: ok");

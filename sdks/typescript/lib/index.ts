@@ -40,3 +40,8 @@ export { Tool, ToolError, tool } from "./tools";
 export type { JsonSchema, StandardIssue, StandardResult, StandardSchema, ToolContext, ToolDefinition } from "./tools";
 export { CompiledWorkflow, END, Workflow, WorkflowThread, goto, suspend } from "./workflow";
 export type { Goto, Interrupt, NodeContext, NodeFunction, Router, Suspend, WorkflowResult, WorkflowRunOptions } from "./workflow";
+
+// Patterns, specialists and web tools (design 0019).
+export * as patterns from "./patterns";
+export * as specialists from "./specialists";
+export * as web from "./web";
