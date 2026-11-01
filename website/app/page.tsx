@@ -7,6 +7,7 @@ import BenchBars from "@/components/landing/BenchBars";
 import Reveal from "@/components/motion/Reveal";
 import InstallCommand from "@/components/landing/InstallCommand";
 import InstallCounter from "@/components/landing/InstallCounter";
+import ModelMarquee from "@/components/landing/ModelMarquee";
 import Providers from "@/components/landing/Providers";
 import RunTrace from "@/components/landing/RunTrace";
 import Scene from "@/components/landing/Scene";
@@ -157,6 +158,8 @@ export default async function Home() {
           </div>
           <RunTrace />
         </section>
+
+        <ModelMarquee />
 
         <section className="watch" aria-labelledby="watch-title">
           <h2 id="watch-title">See a run, step by step</h2>
