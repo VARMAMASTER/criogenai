@@ -227,6 +227,11 @@ write our own implementation.
   hourly proxy token from a Kaggle API token and renews it; `kaggle:` model strings in both SDKs
   and `provider = "kaggle"` in the gateway. Tests: `crates/criogen-providers/tests/kaggle.rs`,
   `sdks/python/tests/test_kaggle.py`, `sdks/typescript/test/kaggle.test.js` (local servers only).
+- **Released (2026-11-01): npm `criogen@0.1.0`** (`latest`) with platform packages
+  `criogen-linux-x64`, `-linux-arm64`, `-darwin-arm64`, `-darwin-x64` and `criogen-windows-x64`
+  (npm's spam filter refused `criogen-win32-x64`; the loader maps `win32-x64` to it). Built and
+  tested per platform by `sdk-packages.yml` (dry run), published from this machine. PyPI waits for
+  a token or trusted publisher; the wheels are built. Site: https://criogen.vercel.app.
 - **Not started:** vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 
