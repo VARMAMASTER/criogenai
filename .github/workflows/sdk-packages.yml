@@ -89,7 +89,7 @@ jobs:
           os="${{ matrix.platform }}"; os="${os%-*}"; cpu="${{ matrix.platform }}"; cpu="${cpu#*-}"
           cat > "$out/package.json" <<EOF
           {
-            "name": "criogen-${{ matrix.platform }}",
+            "name": "${{ matrix.platform == 'win32-x64' && 'criogen-windows-x64' || format('criogen-{0}', matrix.platform) }}",
             "version": "$version",
             "description": "The native addon of criogen for ${{ matrix.platform }}",
             "license": "SEE LICENSE IN LICENSE",
@@ -145,7 +145,8 @@ jobs:
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json"));
             pkg.optionalDependencies = Object.fromEntries(
-              ["linux-x64", "linux-arm64", "darwin-arm64", "darwin-x64", "win32-x64"]
+              // Windows is criogen-windows-x64: npm's spam filter refused criogen-win32-x64.
+              ["linux-x64", "linux-arm64", "darwin-arm64", "darwin-x64", "windows-x64"]
                 .map((p) => [`criogen-${p}`, process.argv[1]]));
             pkg.files = pkg.files.filter((f) => !f.startsWith("native"));
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));

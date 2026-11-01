@@ -5,7 +5,8 @@ description: Criogen for Python, TypeScript and Rust, on Linux, macOS and Window
 
 
 <Aside type="note" title="Version 0.1.0">
-The Python and TypeScript packages are published (PyPI and npm). The Rust crates are
+The TypeScript package is on npm for Linux, macOS and Windows. The Python package
+follows on PyPI shortly; the command below is the one it will use. The Rust crates are
 published when Criogen's code opens, at 10,000 installs.
 </Aside>
 
@@ -24,6 +25,10 @@ Other platforms (Windows on ARM, Alpine/musl, 32-bit) are not supported yet.
 
 <Tabs syncKey="lang">
 <TabItem label="Python">
+
+<Aside type="caution" title="Coming to PyPI">
+The Python package is built and tested for every platform but not yet published.
+</Aside>
 
 ```sh
 pip install criogen
@@ -47,7 +52,7 @@ bun add criogen
 ```
 
 npm installs the engine for your platform automatically
-(`criogen-linux-x64`, `-darwin-arm64`, `-win32-x64`, …). Works from
+(`criogen-linux-x64`, `-darwin-arm64`, `-windows-x64`, …). Works from
 TypeScript and JavaScript, as CommonJS or ES modules.
 
 </TabItem>

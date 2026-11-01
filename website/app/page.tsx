@@ -27,7 +27,6 @@ export const metadata: Metadata = {
 // Python and TypeScript are published first; the Rust crates come when
 // the code opens.
 const install: Partial<Record<Lang, string>> = {
-  python: "pip install criogen",
   typescript: "npm install criogen",
 };
 

@@ -65,9 +65,14 @@ interface Addon {
  * scripts/test-typescript.sh makes), else the prebuilt package for this
  * platform (criogen-<platform>-<arch>, an optional dependency).
  */
+/** Platform packages whose name differs from criogen-<platform>-<arch>: npm's spam
+ * filter refused `criogen-win32-x64`, so Windows uses `criogen-windows-x64`. */
+export const PLATFORM_PACKAGES: Record<string, string> = { "win32-x64": "criogen-windows-x64" };
+
 function load(): Addon {
   const local = path.join(__dirname, "..", "native", "criogen.node");
-  const prebuilt = `criogen-${process.platform}-${process.arch}`;
+  const target = `${process.platform}-${process.arch}`;
+  const prebuilt = PLATFORM_PACKAGES[target] ?? `criogen-${target}`;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require(local);
