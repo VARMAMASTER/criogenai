@@ -12,27 +12,27 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
-use agentbuild_agent::{
+use criogen_agent::{
     Agent, AgentError, AgentEvent, AgentInput, AgentResult, Approval, Decision, Hook, HookAction,
     HookContext, HookError, Limits, Memory, OnToolException, Outcome, Reply, ResilientModel,
     Thread, ThreadStream, ToolCallRequest, ToolContext, ToolError, ToolNext, ToolOutput, tool_fn,
     validate_arguments,
 };
-use agentbuild_core::{
+use criogen_core::{
     CancelToken, NodeContext, NodeError, NodeOutput, Reducer, RetryPolicy, RunError, RunErrorKind,
     RunOptions, RunOutput, Snapshot, State, Update, Workflow, WorkflowBuilder, node_with_context,
     router_fn,
 };
-use agentbuild_providers::{
+use criogen_providers::{
     BlockDelta, BoxFuture, Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, Message,
     MessageDelta, Model, ModelError, ModelErrorKind, ModelRequest, ModelResponse, OutputSpec,
     ProviderEmbedder, ProviderModel, Settings, ToolAnnotations, ToolSpec,
 };
-use agentbuild_storage::{
+use criogen_storage::{
     AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
     WorkflowThread,
 };
-use agentbuild_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
+use criogen_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
 use napi::Status;
 use napi::bindgen_prelude::{Promise, block_on, within_runtime_if_available};
 use napi::threadsafe_function::ThreadsafeFunction;
@@ -100,7 +100,7 @@ pub fn release_cancel_id(id: u32) {
 
 /// A failure on its way to JavaScript: the error's reason is
 /// `{"code", "message", "details"}`, which the TypeScript side turns into
-/// an `AgentBuildError`.
+/// an `CriogenError`.
 fn failure(code: &str, message: impl Into<String>, details: Option<Value>) -> napi::Error {
     let reason = json!({"code": code, "message": message.into(), "details": details});
     napi::Error::new(Status::GenericFailure, reason.to_string())
@@ -110,7 +110,7 @@ fn agent_error(error: AgentError) -> napi::Error {
     failure(&error.code, error.message, error.details)
 }
 
-fn storage_error(error: agentbuild_storage::StorageError) -> napi::Error {
+fn storage_error(error: criogen_storage::StorageError) -> napi::Error {
     failure(error.code(), error.message, None)
 }
 
@@ -808,7 +808,7 @@ impl NativeTelemetry {
                 (Some(public), Some(secret)) => Langfuse::config(
                     public,
                     secret,
-                    text(&spec, "baseUrl").unwrap_or(agentbuild_telemetry::DEFAULT_BASE_URL),
+                    text(&spec, "baseUrl").unwrap_or(criogen_telemetry::DEFAULT_BASE_URL),
                 ),
                 _ => Langfuse::from_env().map_err(|err| bad(err.to_string()))?,
             },
@@ -1447,7 +1447,7 @@ async fn call_js(function: Arc<JsTool>, request: String) -> Result<Value, String
 
 /// A JavaScript function as a node. Envelopes: `{"update"}`,
 /// `{"suspend", "update"}`, `{"goto", "update"}` or `{"crash"}`.
-fn js_node(name: String, function: Arc<JsTool>) -> impl agentbuild_core::Node {
+fn js_node(name: String, function: Arc<JsTool>) -> impl criogen_core::Node {
     node_with_context(move |ctx: NodeContext, state: Arc<State>| {
         let (name, function) = (name.clone(), function.clone());
         async move {
@@ -1491,7 +1491,7 @@ fn js_node(name: String, function: Arc<JsTool>) -> impl agentbuild_core::Node {
 }
 
 /// A JavaScript function as a router: `{"label"}` or `{"crash"}`.
-fn js_router(from: String, function: Arc<JsTool>) -> impl agentbuild_core::Router {
+fn js_router(from: String, function: Arc<JsTool>) -> impl criogen_core::Router {
     router_fn(move |state: Arc<State>| {
         let (from, function) = (from.clone(), function.clone());
         async move {

@@ -1,13 +1,13 @@
 [workspace]
 resolver = "3"
-members = ["crates/agentbuild-core", "crates/agentbuild-providers", "crates/agentbuild-agent", "crates/agentbuild-telemetry", "crates/agentbuild-storage", "crates/agentbuild-gateway", "crates/agentbuild-bench"]
+members = ["crates/criogen-core", "crates/criogen-providers", "crates/criogen-agent", "crates/criogen-telemetry", "crates/criogen-storage", "crates/criogen-gateway", "crates/criogen-bench"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/VARMAMASTER/agentbuild"
+repository = "https://github.com/VARMAMASTER/criogen"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -1,4 +1,4 @@
-# Contributing to AgentBuild
+# Contributing to Criogen
 
 Thanks for helping. This page covers how to build, test and propose changes.
 [AGENTS.md](AGENTS.md) has the project's rules in full; the essentials are
@@ -14,11 +14,11 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo test --workspace --all-features
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps --all-features
 bash scripts/test-package.sh      # uses the packaged crates from a separate project
-bash scripts/get-postgres.sh      # once: portable PostgreSQL in ~/.agentbuild/postgres
+bash scripts/get-postgres.sh      # once: portable PostgreSQL in ~/.criogen/postgres
 bash scripts/with-postgres.sh cargo test --workspace --all-features   # + the Postgres tests
 ```
 
-The Postgres tests skip unless `AGENTBUILD_TEST_POSTGRES_URL` names a
+The Postgres tests skip unless `CRIOGEN_TEST_POSTGRES_URL` names a
 server. `scripts/with-postgres.sh` starts a throwaway one (no install,
 service or Docker) and sets the variable.
 
@@ -38,7 +38,7 @@ checks every feature against real models (see `tests/live/README.md`).
    design document in `docs/design/` in the same change.
 2. **Tests with every behaviour change.** Tests never call real models: use
    `FakeModel` (agents, providers) or the simulated LLM in
-   `crates/agentbuild-core/tests/support/` (workflows), on Tokio's paused
+   `crates/criogen-core/tests/support/` (workflows), on Tokio's paused
    clock where possible. Concurrency claims need a test that would hang or
    fail if the claim were false.
 3. **Explicit failures.** Every error has a stable snake_case code.

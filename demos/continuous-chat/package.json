@@ -2,7 +2,7 @@
   "name": "continuous-chat",
   "version": "0.1.0",
   "private": true,
-  "description": "A chat that keeps its conversation across restarts, on @varmamaster/sdk (the private AgentBuild pilot package)",
+  "description": "A chat that keeps its conversation across restarts, on @varmamaster/sdk (the private Criogen pilot package)",
   "type": "module",
   "scripts": {
     "cli": "node --env-file-if-exists=./.env cli.mjs",

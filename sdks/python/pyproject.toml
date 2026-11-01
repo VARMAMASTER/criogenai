@@ -3,18 +3,18 @@ requires = ["maturin>=1.9,<2"]
 build-backend = "maturin"
 
 [project]
-name = "agentbuild-sdk"
-version = "0.1.0"
+name = "criogen"
+version = "0.1.0a1"
 description = "Agents and workflows on a Rust engine: tools, approvals, durable threads, memory"
 readme = "README.md"
 requires-python = ">=3.9"
-license = "LicenseRef-AgentBuild-Free"
+license = "LicenseRef-Criogen-Free"
 license-files = ["LICENSE"]
 keywords = ["agents", "llm", "workflows", "ai", "tools"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "Operating System :: OS Independent",
+    "Operating System :: Microsoft :: Windows",
     "Programming Language :: Python :: 3",
     "Programming Language :: Rust",
     "Framework :: AsyncIO",
@@ -23,8 +23,8 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://agentbuild.vercel.app"
-Documentation = "https://agentbuild.vercel.app/docs/"
+Homepage = "https://criogen.vercel.app"
+Documentation = "https://criogen.vercel.app/docs/"
 
 [project.optional-dependencies]
 pydantic = ["pydantic>=2"]
@@ -32,7 +32,7 @@ test = ["pytest>=8"]
 
 [tool.maturin]
 python-source = "python"
-module-name = "agentbuild._native"
+module-name = "criogen._native"
 features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]

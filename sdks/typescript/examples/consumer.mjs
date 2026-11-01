@@ -6,10 +6,10 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { END, Agent, FakeModel, FakeReply, Storage, ToolError, ValidationError, Workflow, patterns, specialists, suspend, tool } from "agentbuild-sdk";
+import { END, Agent, FakeModel, FakeReply, Storage, ToolError, ValidationError, Workflow, patterns, specialists, suspend, tool } from "criogen";
 
 const require = createRequire(import.meta.url);
-const resolved = require.resolve("agentbuild-sdk");
+const resolved = require.resolve("criogen");
 if (!resolved.includes("node_modules")) throw new Error(`not the installed package: ${resolved}`);
 
 const lookup = tool({
@@ -22,7 +22,7 @@ const lookup = tool({
   },
 });
 
-const file = path.join(os.tmpdir(), `agentbuild-consumer-${process.pid}.db`);
+const file = path.join(os.tmpdir(), `criogen-consumer-${process.pid}.db`);
 const storage = new Storage({ url: `sqlite:///${file}`, audit: true });
 const agent = new Agent({
   model: new FakeModel([FakeReply.toolCall("lookup", { orderId: "A-1" }), "It shipped."]),

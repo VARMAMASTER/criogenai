@@ -888,9 +888,9 @@ types. **Recommendation: learn, don't link.**
 
 ---
 
-## 10. Blueprint for `agentbuild-providers`
+## 10. Blueprint for `criogen-providers`
 
-This is a proposal for one crate, `agentbuild-providers`, that implements the 0002 §7 provider
+This is a proposal for one crate, `criogen-providers`, that implements the 0002 §7 provider
 contract and the 0003 §4 error kinds. It assumes the recommendation in `architecture.md` §8.1:
 Rust adapters for the main providers, plus a user-implementable `Model` escape hatch in the SDKs.
 Legend: **[L]** learned from LiteLLM, **[D]** our decision.
@@ -921,7 +921,7 @@ Legend: **[L]** learned from LiteLLM, **[D]** our decision.
 ### 10.2 Module layout
 
 ```
-agentbuild-providers/
+criogen-providers/
   src/
     lib.rs            pub use: Model, ProviderModel, Endpoint, ModelError, catalog
     model.rs          Model trait (invoke / stream) + ProviderModel (protocol + endpoint + http)

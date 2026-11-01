@@ -239,7 +239,7 @@ resume.
 
 ```jsonc
 {
-  "format": "agentbuild.snapshot/1",
+  "format": "criogen.snapshot/1",
   "workflow_fingerprint": "fnv1a64:…",      // graph structure + reducers (not policies)
   "run_id": "…", "step": 7,
   "state": { … },                           // committed state before `step`
@@ -399,7 +399,7 @@ Validation failures before anything runs (`resume_invalid`,
 ## 7. Routers: what they see
 
 LangGraph evaluates a conditional edge inside the source node's task, so it sees
-only that node's own writes. AgentBuild routers keep 0001's rule: they see the
+only that node's own writes. Criogen routers keep 0001's rule: they see the
 **merged state of the whole step**. This is deliberate. Routing is defined on
 the committed view and does not depend on which sibling finished first.
 

@@ -66,15 +66,15 @@ step_rust() {
   run cargo clippy --all-targets -- -D warnings
   run cargo test --all-targets --all-features
   run cargo test --doc --workspace --all-features
-  run cargo test -p agentbuild-providers --no-default-features
-  run cargo test -p agentbuild-agent --no-default-features
+  run cargo test -p criogen-providers --no-default-features
+  run cargo test -p criogen-agent --no-default-features
 }
 
 # A server for the Postgres tests: given, or startable by with-postgres.sh.
 have_postgres() {
-  [[ -n ${AGENTBUILD_TEST_POSTGRES_URL:-} || -n ${PG_BIN:-} ]] ||
+  [[ -n ${CRIOGEN_TEST_POSTGRES_URL:-} || -n ${PG_BIN:-} ]] ||
     command -v pg_ctl >/dev/null 2>&1 ||
-    [[ -d ${PG_HOME:-$HOME/.agentbuild/postgres}/bin ]]
+    [[ -d ${PG_HOME:-$HOME/.criogen/postgres}/bin ]]
 }
 
 step_postgres() {
@@ -83,8 +83,8 @@ step_postgres() {
     return
   fi
   # REQUIRE: the tests fail instead of skipping if the server is missing.
-  AGENTBUILD_REQUIRE_POSTGRES=1 run bash scripts/with-postgres.sh \
-    cargo test -p agentbuild-storage -p agentbuild-agent --all-features \
+  CRIOGEN_REQUIRE_POSTGRES=1 run bash scripts/with-postgres.sh \
+    cargo test -p criogen-storage -p criogen-agent --all-features \
     --test postgres --test memory_store --test durable --test encryption --test retention --test audit
 }
 
@@ -124,15 +124,15 @@ step_package() {
     run bash scripts/test-package.sh
   fi
   # The benchmarks keep working (debug build; numbers not recorded).
-  run cargo run -p agentbuild-bench -- quick
-  run cargo run -p agentbuild-core --example basic_workflow -- "Hello world"
-  run cargo run -p agentbuild-core --example approval_workflow -- yes
-  run cargo run -p agentbuild-core --example llm_workflow -- "remote work"
-  run cargo run -p agentbuild-core --example retry_workflow
-  run cargo run -p agentbuild-core --example recover_workflow
-  run cargo run -p agentbuild-agent --example approval_agent -- edit
-  run cargo run -p agentbuild-agent --example thread_agent
-  run cargo run -p agentbuild-agent --features sqlite --example durable_agent
+  run cargo run -p criogen-bench -- quick
+  run cargo run -p criogen-core --example basic_workflow -- "Hello world"
+  run cargo run -p criogen-core --example approval_workflow -- yes
+  run cargo run -p criogen-core --example llm_workflow -- "remote work"
+  run cargo run -p criogen-core --example retry_workflow
+  run cargo run -p criogen-core --example recover_workflow
+  run cargo run -p criogen-agent --example approval_agent -- edit
+  run cargo run -p criogen-agent --example thread_agent
+  run cargo run -p criogen-agent --features sqlite --example durable_agent
 }
 
 step_python() {

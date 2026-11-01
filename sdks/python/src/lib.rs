@@ -1,4 +1,4 @@
-//! The Python SDK's native module `agentbuild._native` (design 0011): a
+//! The Python SDK's native module `criogen._native` (design 0011): a
 //! bridge from asyncio to the Rust engine. Python builds the configuration
 //! (as JSON) and holds the user's tools; the agent loop, validation,
 //! storage and approvals run here.
@@ -13,27 +13,27 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
-use agentbuild_agent::{
+use criogen_agent::{
     Agent, AgentError, AgentEvent, AgentInput, AgentResult, Approval, Decision, Hook, HookAction,
     HookContext, HookError, Limits, Memory, OnToolException, Reply, ResilientModel, Thread,
     ThreadStream, ToolCallRequest, ToolContext, ToolError, ToolNext, ToolOutput, tool_fn,
     validate_arguments,
 };
-use agentbuild_core::{
+use criogen_core::{
     CancelToken, Node, NodeContext, NodeError, NodeOutput, Reducer, RetryPolicy, Router, RunError,
     RunErrorKind, RunOptions, RunOutput, Snapshot, State, Update, Workflow, WorkflowBuilder,
     node_with_context, router_fn,
 };
-use agentbuild_providers::{
+use criogen_providers::{
     BlockDelta, BoxFuture, Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, Message,
     MessageDelta, Model, ModelError, ModelErrorKind, ModelRequest, ModelResponse, OutputSpec,
     ProviderEmbedder, ProviderModel, Settings, ToolAnnotations, ToolSpec,
 };
-use agentbuild_storage::{
+use criogen_storage::{
     AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
     WorkflowThread,
 };
-use agentbuild_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
+use criogen_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyCFunction, PyDict, PyTuple};
@@ -43,16 +43,16 @@ use serde_json::{Map, Value, json};
 
 /// The run metadata key that names the caller's event loop (an id into
 /// [`loops`]), so async tools run on it.
-const LOOP_KEY: &str = "agentbuild_python_loop";
+const LOOP_KEY: &str = "criogen_python_loop";
 
 fn runtime() -> &'static tokio::runtime::Runtime {
     static RUNTIME: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
     RUNTIME.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
-            .thread_name("agentbuild")
+            .thread_name("criogen")
             .build()
-            .expect("the agentbuild Tokio runtime starts")
+            .expect("the criogen Tokio runtime starts")
     })
 }
 
@@ -126,8 +126,8 @@ impl From<AgentError> for Failure {
     }
 }
 
-impl From<agentbuild_storage::StorageError> for Failure {
-    fn from(error: agentbuild_storage::StorageError) -> Self {
+impl From<criogen_storage::StorageError> for Failure {
+    fn from(error: criogen_storage::StorageError) -> Self {
         Self::new(error.code(), error.message)
     }
 }
@@ -179,7 +179,7 @@ fn deliver(
     future: &Py<PyAny>,
     outcome: Outcome,
 ) -> PyResult<()> {
-    let bridge = py.import("agentbuild._bridge")?;
+    let bridge = py.import("criogen._bridge")?;
     match outcome {
         Ok(value) => {
             event_loop.call_method1(
@@ -840,15 +840,15 @@ impl Hook for PyHook {
     fn on_end<'a>(
         &'a self,
         ctx: &'a HookContext,
-        outcome: agentbuild_agent::Outcome,
+        outcome: criogen_agent::Outcome,
     ) -> BoxFuture<'a, ()> {
         Box::pin(async move {
             if !self.has("on_end") {
                 return;
             }
             let outcome = match outcome {
-                agentbuild_agent::Outcome::Completed => "completed",
-                agentbuild_agent::Outcome::Suspended => "suspended",
+                criogen_agent::Outcome::Completed => "completed",
+                criogen_agent::Outcome::Suspended => "suspended",
                 _ => "failed",
             };
             let mut payload: Value = serde_json::from_str(&hook_ctx_json(ctx)).unwrap_or_default();
@@ -1195,7 +1195,7 @@ impl NativeTelemetry {
                 (Some(public), Some(secret)) => Langfuse::config(
                     public,
                     secret,
-                    text(&spec, "base_url").unwrap_or(agentbuild_telemetry::DEFAULT_BASE_URL),
+                    text(&spec, "base_url").unwrap_or(criogen_telemetry::DEFAULT_BASE_URL),
                 ),
                 _ => Langfuse::from_env().map_err(|err| py_failure(bad(err.to_string())))?,
             },
@@ -1468,7 +1468,7 @@ async fn storage_operation(storage: Storage, op: String, payload: Value) -> Outc
     }
 }
 
-fn prune_json(report: agentbuild_storage::PruneReport) -> Value {
+fn prune_json(report: criogen_storage::PruneReport) -> Value {
     json!({
         "threads_deleted": report.threads_deleted,
         "threads_busy": report.threads_busy,
@@ -1481,7 +1481,7 @@ fn py_failure(failure: Failure) -> PyErr {
     let details = failure.details.map(|d| d.to_string());
     Python::attach(|py| {
         match py
-            .import("agentbuild._bridge")
+            .import("criogen._bridge")
             .and_then(|b| b.getattr("make_error"))
             .and_then(|f| f.call1((failure.code.clone(), failure.message.clone(), details)))
         {

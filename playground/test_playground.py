@@ -1,7 +1,7 @@
 """The playground's controller, with the real workers (skipped when the
 framework environments are not set up: `python benches/compare/setup.py`).
 
-    target/compare/venvs/agentbuild/Scripts/python.exe -m unittest discover playground
+    target/compare/venvs/criogen/Scripts/python.exe -m unittest discover playground
 """
 
 import json
@@ -24,7 +24,7 @@ class Limits(unittest.TestCase):
         job = server.read_job({"message": "hi", "tools": 99, "runs": 10_000, "concurrency": 0, "model_delay_ms": -5, "order": "x"})
         self.assertEqual((job["tools"], job["runs"], job["concurrency"], job["model_delay_ms"]), (5, 200, 1, 0))
         self.assertEqual(job["order"], "parallel")
-        self.assertEqual(job["frameworks"], ["agentbuild", "langchain"])
+        self.assertEqual(job["frameworks"], ["criogen", "langchain"])
         self.assertEqual(len(server.read_job({"message": "x" * 5000})["message"]), 2000)
         self.assertEqual(server.read_job({"message": "hi", "frameworks": ["langchain", "nope"]})["frameworks"], ["langchain"])
 
@@ -52,7 +52,7 @@ class Runs(unittest.TestCase):
         self.assertEqual(events[0]["e"], "job")
         self.assertEqual(events[-1]["e"], "end")
         answers = set()
-        for fw in ("agentbuild", "langchain"):
+        for fw in ("criogen", "langchain"):
             self.assertEqual(by[(fw, "exit")]["code"], 0, fw)
             self.assertGreater(by[(fw, "exit")]["peak_rss_mb"], 5, "the real interpreter was measured, not the launcher")
             self.assertGreater(by[(fw, "exit")]["cpu_time_s"], 0)
@@ -67,7 +67,7 @@ class Runs(unittest.TestCase):
         events = []
         server.run_job(job, events.append)
         exits = [e for e in events if e["e"] == "exit"]
-        self.assertEqual([(e["fw"], e["pass"]) for e in exits], [("agentbuild", 0), ("langchain", 0), ("langchain", 1), ("agentbuild", 1)])
+        self.assertEqual([(e["fw"], e["pass"]) for e in exits], [("criogen", 0), ("langchain", 0), ("langchain", 1), ("criogen", 1)])
         starts = [e for e in events if e["e"] == "start"]
         for before, after in zip(exits, starts[1:]):
             self.assertGreaterEqual(after["t"], before["t"], "the next one started after the previous finished")
@@ -76,7 +76,7 @@ class Runs(unittest.TestCase):
         job = server.read_job({"message": "hi", "tools": 0, "model_delay_ms": 0, "tool_delay_ms": 0, "runs": 2, "order": "sequential", "balanced": False})
         events = []
         server.run_job(job, events.append)
-        self.assertEqual([e["fw"] for e in events if e["e"] == "exit"], ["agentbuild", "langchain"])
+        self.assertEqual([e["fw"] for e in events if e["e"] == "exit"], ["criogen", "langchain"])
 
     def test_the_fake_model_server_is_stopped_afterwards(self):
         import psutil
@@ -111,7 +111,7 @@ class Http(unittest.TestCase):
         self.assertIn(b"Playground", urllib.request.urlopen(self.base + "/").read())
         info = json.load(urllib.request.urlopen(self.base + "/api/info"))
         self.assertIn("machine", info)
-        self.assertEqual(set(info["frameworks"]), {"agentbuild", "langchain"})
+        self.assertEqual(set(info["frameworks"]), {"criogen", "langchain"})
 
     def test_a_bad_request_is_a_400_and_a_busy_server_a_409(self):
         with self.assertRaises(urllib.error.HTTPError) as caught:

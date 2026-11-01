@@ -1,6 +1,6 @@
 # 0001 — Execution model
 
-Status: **Implemented** in `crates/agentbuild-core`. Pre-1.0; may change.
+Status: **Implemented** in `crates/criogen-core`. Pre-1.0; may change.
 Extended by [0005](0005-core-runtime-extensions.md) §1–§3 (node context,
 node outcomes, reducers, suspend/resume), §4 (policies), §5 (saved task
 writes, the task memo, snapshots on failure) and §6 (events), which are
@@ -60,7 +60,7 @@ including the suspending node's own. Then:
   count toward joins. It has not completed.
 - The run returns `RunOutput { status: Suspended { interrupts, snapshot } }`.
   This is a normal return, not an error.
-- The **snapshot** is plain JSON: format `agentbuild.snapshot/1`, workflow
+- The **snapshot** is plain JSON: format `criogen.snapshot/1`, workflow
   fingerprint, `run_id`, next step index, state, frontier (the scheduled nodes
   *plus* the suspended ones), join progress and interrupts.
 - `Workflow::resume(snapshot, {node: value})` validates the input first

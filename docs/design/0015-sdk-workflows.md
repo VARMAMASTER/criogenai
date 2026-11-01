@@ -9,7 +9,7 @@ and its threads ([0008](0008-persistence-and-memory.md) §18).
 ## 1. The API
 
 ```python
-from agentbuild import Workflow, END, suspend, goto
+from criogen import Workflow, END, suspend, goto
 
 wf = Workflow(reducers={"log": "append"})
 

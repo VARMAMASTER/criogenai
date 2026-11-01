@@ -10,9 +10,9 @@ research/wheels/
 research/rea-evidence/
 research/repos/
 # Python SDK build outputs (maturin develop puts the module next to the sources).
-sdks/python/python/agentbuild/_native.pyd
-sdks/python/python/agentbuild/_native.pdb
-sdks/python/python/agentbuild/_native*.so
+sdks/python/python/criogen/_native.pyd
+sdks/python/python/criogen/_native.pdb
+sdks/python/python/criogen/_native*.so
 .pytest_cache/
 
 # TypeScript SDK build outputs.

@@ -25,7 +25,7 @@ jobs:
       - name: version
         id: version
         run: |
-          version="$(cargo pkgid -p agentbuild-core | sed 's/.*[@#]//')"
+          version="$(cargo pkgid -p criogen-core | sed 's/.*[@#]//')"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "Releasing $version"
           grep -q "^## \[$version\]" CHANGELOG.md || {
@@ -40,7 +40,7 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: |
           # Dependency order: each crate needs the ones before it.
-          for crate in agentbuild-core agentbuild-providers agentbuild-gateway agentbuild-storage agentbuild-agent agentbuild-telemetry; do
+          for crate in criogen-core criogen-providers criogen-gateway criogen-storage criogen-agent criogen-telemetry; do
             cargo publish -p "$crate"
           done
       - name: tag and GitHub release
@@ -51,4 +51,4 @@ jobs:
         run: |
           git tag "v$VERSION"
           git push origin "v$VERSION"
-          gh release create "v$VERSION" --title "AgentBuild $VERSION" --notes "See CHANGELOG.md for what is in this release."
+          gh release create "v$VERSION" --title "Criogen $VERSION" --notes "See CHANGELOG.md for what is in this release."

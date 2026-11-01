@@ -11,13 +11,13 @@ from typing import List, Literal, Optional
 
 import pytest
 
-from agentbuild import (
+from criogen import (
     Agent,
     HookAction,
     ToolResult,
     Embedder,
     Telemetry,
-    AgentBuildError,
+    CriogenError,
     CancelledError,
     Decision,
     FakeModel,
@@ -302,7 +302,7 @@ def test_reject_decide_and_rewind():
 
 
 def test_sqlite_threads_survive_a_new_agent_and_storage_has_memory_retention_and_audit():
-    path = os.path.join(tempfile.gettempdir(), f"agentbuild-py-{uuid.uuid4().hex}.db")
+    path = os.path.join(tempfile.gettempdir(), f"criogen-py-{uuid.uuid4().hex}.db")
     url = f"sqlite:///{path}"
     try:
         first = Agent(FakeModel(["Hello Ada"]), storage=Storage(url, audit=True))
@@ -353,7 +353,7 @@ def test_sqlite_threads_survive_a_new_agent_and_storage_has_memory_retention_and
 
 
 def test_encrypted_storage_refuses_to_open_without_its_keys():
-    path = os.path.join(tempfile.gettempdir(), f"agentbuild-py-enc-{uuid.uuid4().hex}.db")
+    path = os.path.join(tempfile.gettempdir(), f"criogen-py-enc-{uuid.uuid4().hex}.db")
     url = f"sqlite:///{path}"
     keys = "k1:" + "ab" * 32
     try:
@@ -443,7 +443,7 @@ def test_memory_by_state_recalls_per_user():
     assert found[0]["value"] == "vegan"
     result = agent.run_sync("What should I eat?", user_id="ada")
     assert result.text == "Eat lentils."
-    with pytest.raises(AgentBuildError) as caught:
+    with pytest.raises(CriogenError) as caught:
         agent.run_sync("no user")
     assert caught.value.code == "invalid_state"
 
@@ -587,7 +587,7 @@ def test_a_hook_can_end_the_run_and_its_exceptions_fail_it_with_the_cause():
         def before_model(self, ctx):
             raise KeyError("missing setting")
 
-    with pytest.raises(AgentBuildError) as caught:
+    with pytest.raises(CriogenError) as caught:
         Agent(FakeModel(["x"]), hooks=[Broken()]).run_sync("go")
     assert caught.value.code == "hook_failed"
     assert isinstance(caught.value.__cause__, KeyError)
@@ -634,8 +634,8 @@ def test_limits_errors_and_the_sync_wrappers():
 
 
 def test_models_by_name_read_keys_from_the_environment_and_never_show_them():
-    from agentbuild import OpenAI
-    from agentbuild.models import model_spec
+    from criogen import OpenAI
+    from criogen.models import model_spec
 
     os.environ["OPENAI_API_KEY"] = "sk-test-not-real"
     try:
@@ -673,23 +673,23 @@ def test_every_catalog_code_raises_its_family_class():
     import json
     import pathlib
 
-    import agentbuild
-    from agentbuild.errors import error_for
+    import criogen
+    from criogen.errors import error_for
 
-    path = os.environ.get("AGENTBUILD_ERROR_CATALOG") or str(
+    path = os.environ.get("CRIOGEN_ERROR_CATALOG") or str(
         pathlib.Path(__file__).resolve().parents[3] / "schemas" / "error-codes.json"
     )
     catalog = json.load(open(path, encoding="utf-8"))
     classes = {
-        "model": agentbuild.ModelError,
-        "tool": agentbuild.ToolExecutionError,
-        "limit": agentbuild.LimitExceededError,
-        "busy": agentbuild.ThreadBusyError,
-        "suspended": agentbuild.ThreadSuspendedError,
-        "storage": agentbuild.StorageError,
-        "validation": agentbuild.ValidationError,
-        "cancelled": agentbuild.CancelledError,
-        "other": agentbuild.AgentBuildError,
+        "model": criogen.ModelError,
+        "tool": criogen.ToolExecutionError,
+        "limit": criogen.LimitExceededError,
+        "busy": criogen.ThreadBusyError,
+        "suspended": criogen.ThreadSuspendedError,
+        "storage": criogen.StorageError,
+        "validation": criogen.ValidationError,
+        "cancelled": criogen.CancelledError,
+        "other": criogen.CriogenError,
     }
     checked = 0
     for entry in catalog["codes"]:
@@ -725,9 +725,9 @@ def test_concurrent_runs_get_their_own_hook_exception():
 
 
 def test_credentials_are_not_sent_over_plain_http_to_another_machine():
-    from agentbuild import OpenAICompatible
+    from criogen import OpenAICompatible
 
-    with pytest.raises(AgentBuildError) as refused:
+    with pytest.raises(CriogenError) as refused:
         Agent(OpenAICompatible("m", base_url="http://gpu-box:8000/v1", api_key="a-secret-key-1234"))
     assert "plain http" in str(refused.value) and "a-secret-key-1234" not in str(refused.value)
     # Explicitly allowed for a trusted network; this machine and https need nothing.

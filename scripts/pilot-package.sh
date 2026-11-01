@@ -7,7 +7,7 @@
 # The pilot is `@varmamaster/sdk` (a GitHub Packages scope must be the
 # owner's name), for this machine's platform only: the addon in it is the one
 # just built, so `os` and `cpu` stop it from installing where it cannot run.
-# The public package stays `agentbuild-sdk` (RELEASING.md). Output:
+# The public package stays `criogen` (RELEASING.md). Output:
 # target/pilot/<name>-<version>.tgz.
 set -euo pipefail
 
@@ -27,7 +27,7 @@ echo "== stage $NAME@$VERSION"
 rm -rf "$out"
 mkdir -p "$out/package/native"
 cp -r "$sdk/dist" "$out/package/dist"
-cp "$sdk/native/agentbuild.node" "$out/package/native/agentbuild.node"
+cp "$sdk/native/criogen.node" "$out/package/native/criogen.node"
 cp "$sdk/README.md" "$sdk/LICENSE" "$out/package/"
 NAME="$NAME" VERSION="$VERSION" SDK="$sdk" OUT="$out/package/package.json" node -e '
   const fs = require("fs");
@@ -45,8 +45,8 @@ NAME="$NAME" VERSION="$VERSION" SDK="$sdk" OUT="$out/package/package.json" node 
     engines: pkg.engines,
     os: [platform],
     cpu: [cpu],
-    files: ["dist", "native/agentbuild.node", "README.md", "LICENSE"],
-    repository: { type: "git", url: "git+https://github.com/VARMAMASTER/agentbuild.git" },
+    files: ["dist", "native/criogen.node", "README.md", "LICENSE"],
+    repository: { type: "git", url: "git+https://github.com/VARMAMASTER/criogen.git" },
     publishConfig: { registry: "https://npm.pkg.github.com", access: "restricted" },
   };
   fs.writeFileSync(process.env.OUT, JSON.stringify(out, null, 2) + "\n");
@@ -62,10 +62,10 @@ cd "$work"
 npm init -y >/dev/null
 zod="zod@$(cd "$sdk" && node -p 'require("./package.json").devDependencies.zod')"
 npm install --silent --ignore-scripts --no-audit --no-fund "$tarball" "$zod"
-# The consumer and the tests import `agentbuild-sdk`: point them at the pilot.
-sed "s#agentbuild-sdk#$NAME#g" "$sdk/examples/consumer.mjs" > consumer.mjs
+# The consumer and the tests import `criogen`: point them at the pilot.
+sed "s#criogen#$NAME#g" "$sdk/examples/consumer.mjs" > consumer.mjs
 node consumer.mjs
 cp -r "$sdk/test" ./test
-AGENTBUILD_ERROR_CATALOG="$root/schemas/error-codes.json" AGENTBUILD_SDK="$NAME" node --test test/*.test.js \
+CRIOGEN_ERROR_CATALOG="$root/schemas/error-codes.json" CRIOGEN_SDK="$NAME" node --test test/*.test.js \
   | grep -E "^# (pass|fail)"
 echo "pilot package ok: $tarball"

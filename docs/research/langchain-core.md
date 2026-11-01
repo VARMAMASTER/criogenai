@@ -33,7 +33,7 @@ env vars unset. Numbers are order-of-magnitude only.
    a CDDL file. It defines message-lifecycle events (`message-start → content-block-start/delta/finish →
    message-finish`), tool events, lifecycle, checkpoint and HITL commands. Core now drives chat-model
    streaming "v3" through it, with a compat bridge that turns old chunks into events. This is the
-   part most worth studying for AgentBuild.
+   part most worth studying for Criogen.
 5. **Chat-model provider contract.** The minimum is `_generate` plus `_llm_type`. Optional:
    `_stream`, `_agenerate`, `_astream`, and the new `_stream_chat_model_events`. The base class
    adds caching, rate limiting, callbacks, ID assignment, the output-format version, and the
@@ -51,7 +51,7 @@ env vars unset. Numbers are order-of-magnitude only.
    aggregation, dict-shape sniffing). Overhead is about 130 µs per trivial `RunnableLambda.invoke`.
    Versioned streaming APIs are layered on each other (`astream_log`, events v1/v2/v3,
    `output_version` v0/v1).
-9. **For AgentBuild:** adopt the content-block schema and the message-event lifecycle as
+9. **For Criogen:** adopt the content-block schema and the message-event lifecycle as
    **JSON-schema contracts in the Rust core**. Adopt the run-tree/event model, but as plain data
    events, not a callback-handler class hierarchy. Avoid a universal Runnable algebra, the implicit
    `+` aggregation, pydantic-as-schema-source, and tracer-vendor coupling.
@@ -715,12 +715,12 @@ move toward a schema-first, cross-language contract.
 
 ---
 
-## 10. Implications for AgentBuild
+## 10. Implications for Criogen
 
 ### 10.1 Placement principle
 
 LangChain's own trajectory (§8) is toward **schema-first, generated, language-neutral types**,
-with SDK classes as views over them. AgentBuild should start there. Data contracts live in the
+with SDK classes as views over them. Criogen should start there. Data contracts live in the
 Rust core as `serde` types, published as JSON Schema, with Python (TypedDict/pydantic) and
 TypeScript (types/zod) generated from them. Behaviour that calls user code or provider SDKs lives
 in the SDKs.

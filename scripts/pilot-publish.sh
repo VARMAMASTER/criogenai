@@ -5,7 +5,7 @@
 #   bash scripts/pilot-publish.sh --dry-run     # what would be sent, nothing sent
 #   bash scripts/pilot-publish.sh               # publishes
 #
-# The token is `GITHUB_PACKAGES_TOKEN` (environment, or ~/.agentbuild-keys.env),
+# The token is `GITHUB_PACKAGES_TOKEN` (environment, or ~/.criogen-keys.env),
 # else the GitHub CLI's login (`gh auth login`, with the write:packages scope:
 # `gh auth refresh -s write:packages`). It reaches npm through an environment
 # variable that an .npmrc line expands, so it is never written to a file or
@@ -16,7 +16,7 @@ root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 tarball="$(ls "$root"/target/pilot/*.tgz 2>/dev/null | head -1 || true)"
 [[ -n $tarball ]] || { echo "no tarball: run scripts/pilot-package.sh first" >&2; exit 1; }
 
-keys="${AGENTBUILD_KEYS_FILE:-$HOME/.agentbuild-keys.env}"
+keys="${CRIOGEN_KEYS_FILE:-$HOME/.criogen-keys.env}"
 if [[ -z ${GITHUB_PACKAGES_TOKEN:-} && -f $keys ]]; then
   set -a
   # shellcheck disable=SC1090

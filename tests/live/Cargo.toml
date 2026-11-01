@@ -1,20 +1,20 @@
-# Live check: every AgentBuild feature against real model APIs. Manual
+# Live check: every Criogen feature against real model APIs. Manual
 # only (needs API keys, costs a few cents); never run in CI. Not a workspace
 # member. See README.md.
 [package]
-name = "agentbuild-live-check"
+name = "criogen-live-check"
 version = "0.0.0"
 edition = "2024"
 publish = false
 
 [dependencies]
-agentbuild-core = { path = "../../crates/agentbuild-core" }
-agentbuild-providers = { path = "../../crates/agentbuild-providers" }
-agentbuild-storage = { path = "../../crates/agentbuild-storage", features = ["sqlite"] }
-agentbuild-agent = { path = "../../crates/agentbuild-agent", features = ["sqlite"] }
-agentbuild-telemetry = { path = "../../crates/agentbuild-telemetry" }
+criogen-core = { path = "../../crates/criogen-core" }
+criogen-providers = { path = "../../crates/criogen-providers" }
+criogen-storage = { path = "../../crates/criogen-storage", features = ["sqlite"] }
+criogen-agent = { path = "../../crates/criogen-agent", features = ["sqlite"] }
+criogen-telemetry = { path = "../../crates/criogen-telemetry" }
 serde_json = "1"
 tokio = { version = "1.45", features = ["macros", "rt-multi-thread", "net", "io-util", "time", "sync"] }
 
-# Stand-alone: never part of the AgentBuild workspace.
+# Stand-alone: never part of the Criogen workspace.
 [workspace]

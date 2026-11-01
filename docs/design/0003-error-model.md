@@ -15,7 +15,7 @@ opposite of what we want:
 - Interrupts are exceptions that every `except Exception` must remember to
   re-raise.
 
-AgentBuild's rule:
+Criogen's rule:
 
 > **Every failure has exactly one category, one stable code, one documented
 > default action, and leaves behind a valid transcript and an exact account of
@@ -51,7 +51,7 @@ A run (or a resumed segment of one) ends in exactly one outcome:
 |---|---|---|---|
 | `completed` | Finished normally | returns `RunResult` | resolves `RunResult` |
 | `suspended` | Waiting for external input (0004 §7) | returns `RunResult` with `.status == "suspended"`, `.interrupt`, `.snapshot` | same |
-| `failed` | An error ended the run | raises `AgentBuildError` subclass | rejects with `AgentBuildError` |
+| `failed` | An error ended the run | raises `CriogenError` subclass | rejects with `CriogenError` |
 | `cancelled` | The caller cancelled, or the parent run was cancelled | raises `asyncio.CancelledError` | rejects with `AbortError` (`signal.reason`) |
 
 Suspension is **returned**, not raised, because it is an expected outcome.
@@ -71,7 +71,7 @@ code keeps working.
 | **policy** | Configuration | model-call limit, tool-call limit, step limit, deadline, nesting limit | Fail with a `limit_exceeded`-family code, or end gracefully if configured (0004 §5) |
 | **human** | A reviewer | rejected tool call | Send it to the model as `status: rejected`; continue |
 | **cancellation** | The caller | `cancel()`, abort signal, parent cancelled | Stop; outcome `cancelled` |
-| **internal** | AgentBuild maintainers | Rust panic in the runtime, broken invariant | Fail with code `internal`; bug report requested |
+| **internal** | Criogen maintainers | Rust panic in the runtime, broken invariant | Fail with code `internal`; bug report requested |
 
 ---
 
@@ -80,7 +80,7 @@ code keeps working.
 Adapters must map every provider failure to a `ModelError.kind`. Retry logic is
 then generic and identical for all providers.
 
-Status: **implemented** in `agentbuild-providers` (`ModelErrorKind`,
+Status: **implemented** in `criogen-providers` (`ModelErrorKind`,
 `ModelError`, `classify_http` for HTTP failures in the shapes of OpenAI,
 Anthropic, Ollama, vLLM, llama.cpp and Google (Gemini), `Retry-After` in all three forms,
 message sanitization). Transport failures (`network`, `timeout`,
@@ -150,7 +150,7 @@ behave identically.
   and in `metadata.attempts`.
 
 Status (2026-10-12): **implemented** for agent model calls in
-`agentbuild-agent` (`resilience.rs`): retries of transient kinds with the
+`criogen-agent` (`resilience.rs`): retries of transient kinds with the
 node's `RetryPolicy` backoff, `Retry-After` honored up to
 `max_retry_after` (default 60 s, longer waits fail or fall back at once),
 `not_sent` retried immediately, fallback models (at once on
@@ -217,7 +217,7 @@ model node is reported to the user as `ModelError`, not as a generic
 ### 6.2 Python
 
 ```
-AgentBuildError                      .code .category .retryable .details .run_id .step .node
+CriogenError                      .code .category .retryable .details .run_id .step .node
 ├── WorkflowBuildError               .issues            (ValidationIssue list)
 ├── RunFailedError                   node/router failures; __cause__ = the original exception
 │   ├── UpdateConflictError, RoutingError, StepLimitError
@@ -236,15 +236,15 @@ AgentBuildError                      .code .category .retryable .details .run_id
 ToolError(Exception)                 raised BY tool authors to send an error to the model
 ```
 
-`ToolError` deliberately does not inherit from `AgentBuildError`. It is a message
+`ToolError` deliberately does not inherit from `CriogenError`. It is a message
 from a tool author to the model, not a framework failure. Catching
-`AgentBuildError` must never swallow it.
+`CriogenError` must never swallow it.
 
 ### 6.3 TypeScript
 
-`class AgentBuildError extends Error` with a readonly `code` discriminant, the
+`class CriogenError extends Error` with a readonly `code` discriminant, the
 same fields as the JSON, and standard `cause` (ES2022). Subclasses mirror the
-Python tree. Type guards: `isAgentBuildError(e)` and `isAgentBuildError(e, "model_failed")`.
+Python tree. Type guards: `isCriogenError(e)` and `isCriogenError(e, "model_failed")`.
 `ToolError` is a separate class. Cancellation surfaces as the `AbortSignal`'s
 reason (an `AbortError` by default).
 

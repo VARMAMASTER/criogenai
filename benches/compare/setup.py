@@ -2,10 +2,10 @@
 (design 0016 §1): their dependencies conflict, and each venv's size is the
 install footprint.
 
-    python benches/compare/setup.py [--agentbuild-wheel PATH]
+    python benches/compare/setup.py [--criogen-wheel PATH]
 
 Venvs go to target/compare/venvs/<framework> (in the benchmark kit:
-venvs/<framework> next to this file). AgentBuild comes from a local wheel
+venvs/<framework> next to this file). Criogen comes from a local wheel
 when there is one (the newest in target/wheels, or the one given), else
 from PyPI.
 """
@@ -21,9 +21,9 @@ HERE = Path(__file__).resolve().parent
 # In the repository the venvs go to target/; in the downloaded kit, next to it.
 ROOT = HERE.parents[1] if (HERE.parents[1] / "Cargo.toml").exists() else HERE
 VENVS = ROOT / "target" / "compare" / "venvs" if ROOT != HERE else HERE / "venvs"
-# AgentBuild's Python package on PyPI ("agentbuild" there is another
-# project's; ours is agentbuild-sdk, imported as `agentbuild`).
-AGENTBUILD = "agentbuild-sdk==0.1.0"
+# Criogen's Python package on PyPI ("criogen" there is another
+# project's; ours is criogen, imported as `criogen`).
+CRIOGEN = "criogen==0.1.0"
 
 # Pinned: the latest stable releases when the comparison was set up.
 PSUTIL = "psutil==7.2.2"
@@ -54,22 +54,22 @@ def create(name: str, packages: list, isolated: bool = False) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--agentbuild-wheel", help="the AgentBuild wheel to install")
-    parser.add_argument("--only", choices=["agentbuild", *PACKAGES], help="set up one framework")
+    parser.add_argument("--criogen-wheel", help="the Criogen wheel to install")
+    parser.add_argument("--only", choices=["criogen", *PACKAGES], help="set up one framework")
     parser.add_argument("--pip-isolated", action="store_true", help="read no pip configuration file (e.g. one with a broken extra index)")
     args = parser.parse_args()
 
-    wheel = args.agentbuild_wheel
+    wheel = args.criogen_wheel
     if wheel is None:
-        wheels = sorted(glob.glob(str(ROOT / "target" / "wheels" / "agentbuild_sdk-*.whl")), key=os.path.getmtime)
+        wheels = sorted(glob.glob(str(ROOT / "target" / "wheels" / "criogen-*.whl")), key=os.path.getmtime)
         wheel = wheels[-1] if wheels else None
-    source = wheel or AGENTBUILD
-    plan = {"agentbuild": [source, PSUTIL] if source else None, **PACKAGES}
+    source = wheel or CRIOGEN
+    plan = {"criogen": [source, PSUTIL] if source else None, **PACKAGES}
     for name, packages in plan.items():
         if args.only and name != args.only:
             continue
         if packages is None:
-            print("[agentbuild] skipped: no AgentBuild wheel found; pass --agentbuild-wheel PATH", flush=True)
+            print("[criogen] skipped: no Criogen wheel found; pass --criogen-wheel PATH", flush=True)
             continue
         create(name, packages, args.pip_isolated)
     print("ready:", ", ".join(str(python_of(VENVS / n)) for n in plan if not args.only or n == args.only))

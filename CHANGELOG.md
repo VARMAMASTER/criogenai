@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to AgentBuild. The format follows
+All notable changes to Criogen. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
 [Semantic Versioning](https://semver.org/). Before 1.0, a minor version
 (0.x → 0.y) may contain breaking changes; patch versions do not.
@@ -11,26 +11,37 @@ All crates in this repository share one version number.
 
 First release, planned as 0.1.0 (Rust crates only).
 
-### npm package name
+### Renamed: AgentBuild is now Criogen
 
-- The npm package is `agentbuild-sdk` (was planned as `@agentbuild/sdk`), matching the
-  PyPI name; its platform addons are `agentbuild-sdk-<platform>-<arch>`.
-  `0.1.0-alpha.1` (Windows addon only, tag `next`) was submitted on 2026-10-24;
-  `0.1.0` waits for the all-platform build (`sdk-packages.yml`).
+- The project, its packages and every identifier were renamed from AgentBuild to Criogen:
+  the packages are `criogen` (npm and PyPI; import `criogen`), the Rust crates `criogen-*`,
+  the platform addons `criogen-<platform>-<arch>`, environment variables `CRIOGEN_*`, the error
+  base class `CriogenError`, and the database tables `criogen_*`. Nothing had been released,
+  so there is no migration; a database created before the rename must be recreated.
+- `agentbuild-sdk@0.1.0-alpha.1` (npm, Windows only) was published once under the old name
+  and is deprecated; `criogen` starts at `0.1.0` once the all-platform build has run.
+
+### Keys from the environment and a `.env` file (Python, TypeScript)
+
+- `load_env()` / `loadEnv()` reads a `.env` file into the environment (names returned, never values;
+  an existing variable wins unless `override`; a missing file is fine unless `required`; 1 MB cap).
+  `env.status()` / `envStatus()` says which providers have a key, `key_name()` / `keyName()` names the variable.
+- A model with no key now fails at once, naming the variable to set, instead of an `auth` error later.
+  A custom `base_url` (a gateway or local server) still needs no key.
 
 ### Patterns, specialists and web tools in Python, TypeScript and Rust (design 0019)
 
-- `agentbuild.patterns`: sequential, parallel, loop, review and critique,
+- `criogen.patterns`: sequential, parallel, loop, review and critique,
   iterative refinement, coordinator, hierarchical, swarm, human review, react,
   custom, and `quick("researcher > writer")`. Built from agents and workflows
   (no engine change); every loop has a cap (ceiling 50) and a `stop_reason`.
-- `agentbuild.specialists`: default agent recipes (researcher, summarizer,
+- `criogen.specialists`: default agent recipes (researcher, summarizer,
   classifier, extractor, planner, writer, critic, fact checker, code reviewer,
   translator, support agent) with `build`, `extend`, `register`, `get`.
-- `agentbuild.web`: `search()` (Tavily or Brave, from the environment), `fetch()`
+- `criogen.web`: `search()` (Tavily or Brave, from the environment), `fetch()`
   (public pages only, no redirects, bounded); the researcher uses them when a key is set.
 - TypeScript: `patterns`, `specialists`, `web` (same shapes, camelCase). Rust:
-  `agentbuild_agent::{patterns, specialists}` and `web` behind the cargo feature `web`.
+  `criogen_agent::{patterns, specialists}` and `web` behind the cargo feature `web`.
 - Private-network addresses are refused by the page reader in every spelling
   (IPv4 inside IPv6, NAT64, 6to4), in all three languages.
 - Fixed: the default Gemini embedding model (`text-embedding-004`) no longer
@@ -39,7 +50,7 @@ First release, planned as 0.1.0 (Rust crates only).
   model, and a chat); `demos/feature-tour/`.
 
 
-### agentbuild-core: the workflow engine
+### criogen-core: the workflow engine
 
 - Workflows as graphs of async nodes over a JSON state, run in supersteps:
   static edges, fan-out and fan-in, async routers, joins, cycles bounded by
@@ -57,7 +68,7 @@ First release, planned as 0.1.0 (Rust crates only).
   and every finished task as it happens (`Persister`); `TaskMemo::save`.
 - Graph validation that reports every issue at once; stable error codes.
 
-### agentbuild-providers: models
+### criogen-providers: models
 
 - Language-neutral messages with ordered content blocks, tool definitions,
   model requests and responses, usage, transcript checks and repair.
@@ -98,7 +109,7 @@ checked against the code) and what changed. **Behaviour changes:**
 - **The gateway reserves tokens at admission**, caps `max_tokens`, limits
   requests in flight (new code `concurrency_limited`), cuts off clients
   that stop reading, shows clients only the kind of upstream failures and
-  no longer sends `x-agentbuild-model` unless `expose_model_header` is set.
+  no longer sends `x-criogen-model` unless `expose_model_header` is set.
 - A thread keeps the value that scopes its memory (`Memory::by_state`): a
   later turn that changes it is `invalid_input`.
 - A `$ref` a tool schema does not define is a validation problem (it used
@@ -246,9 +257,9 @@ interrupts (use a dedicated role).
 ### Comparison with LangGraph and CrewAI (design 0016)
 
 - `benches/compare/`: the same agents, workflows, loads and injected
-  faults run on AgentBuild, LangGraph and CrewAI in Python, one venv per
+  faults run on Criogen, LangGraph and CrewAI in Python, one venv per
   framework and one process per measurement, with one simulated model;
-  results as a JSON file (`agentbuild-compare/1`) that the website's
+  results as a JSON file (`criogen-compare/1`) that the website's
   benchmark lab shows as comparison graphs.
 
 ### Release preparation
@@ -261,12 +272,12 @@ interrupts (use a dedicated role).
 - A manual workflow builds the Python wheels and the npm native addons
   for Linux (x64, arm64), macOS (arm64, x64) and Windows (x64), tests each
   installed on its own platform, and can publish them. The TypeScript SDK
-  loads a prebuilt `agentbuild-sdk-<platform>-<arch>` package when no
+  loads a prebuilt `criogen-<platform>-<arch>` package when no
   locally built addon is present.
 
 ### Benchmarks (design 0014)
 
-- `agentbuild-bench` and `benches/`: the framework's own costs (engine
+- `criogen-bench` and `benches/`: the framework's own costs (engine
   steps, parallel nodes, agent loop, tool calls, thread saving, gateway,
   SDK bridges) with instant simulated models, and the same workflow
   shapes in LangGraph. Results in `docs/benchmarks.md`.
@@ -287,18 +298,18 @@ interrupts (use a dedicated role).
   category, retryability, SDK error class and gateway HTTP status;
   `docs/errors.md` is generated from it. Tests keep the Rust sources, the
   page and both SDKs in line with it.
-- `schemas/agentbuild.schema.json`: JSON Schemas of the data every
+- `schemas/criogen.schema.json`: JSON Schemas of the data every
   language exchanges, checked against values the engine writes.
 - Tool-argument validation now enforces `anyOf`, `oneOf`, `allOf` and
   local `$ref` (e.g. Pydantic `Optional` fields and nested models).
 - SDKs: `step_limit_exceeded` and `deadline_exceeded` raise
   `LimitExceededError`, `workflow_mismatch` raises `ValidationError`.
 
-### agentbuild-gateway: LLM gateway, first slice (design 0006 §12)
+### criogen-gateway: LLM gateway, first slice (design 0006 §12)
 
 - An OpenAI-compatible HTTP gateway: `POST /v1/chat/completions`
   (streaming and not), `GET /v1/models`, `GET /health`, in front of any
-  upstream AgentBuild speaks (OpenAI, Anthropic, Gemini, OpenRouter,
+  upstream Criogen speaks (OpenAI, Anthropic, Gemini, OpenRouter,
   Ollama, vLLM). Routes with fallback models, virtual keys per route,
   usage records without content, the upstream call stopped when the
   client leaves. A library (`Gateway::builder().router()`) and a binary
@@ -306,14 +317,14 @@ interrupts (use a dedicated role).
 
 ### TypeScript SDK, first slice (design 0012)
 
-- `sdks/typescript`: the `agentbuild-sdk` package on the Rust engine
+- `sdks/typescript`: the `criogen` package on the Rust engine
   (napi-rs addon, Node 18+): the same slice as the Python SDK, with
   `AbortSignal` on every call and error classes whose `cause` is what a
   crashing tool threw. Checked live against OpenAI and Gemini.
 
 ### Python SDK, first slice (design 0011)
 
-- `sdks/python`: the `agentbuild` package on the Rust engine (PyO3 abi3
+- `sdks/python`: the `criogen` package on the Rust engine (PyO3 abi3
   wheel for Python 3.9+): `Agent`, `@tool`, approvals, typed output,
   threads with streaming, `Storage` (SQLite, Postgres, encryption, audit,
   retention), `Memory`, errors with the Rust codes, sync wrappers,
@@ -332,7 +343,7 @@ interrupts (use a dedicated role).
   (memory keys as hashes). Fail closed: `audit_failed`.
 - Core: `NodeContext::metadata` exposes `RunOptions::metadata` to nodes.
 
-### agentbuild-agent: agents
+### criogen-agent: agents
 
 - `Thread::stream` (and `stream_approve`, `stream_reject`,
   `stream_decide`, `stream_retry`): a thread operation's events as they
@@ -356,7 +367,7 @@ interrupts (use a dedicated role).
   `forget` and `search_memory` tools; a run without its user fails
   instead of sharing memory. `AgentInput::with` sets run state values.
 
-### agentbuild-storage: where threads live
+### criogen-storage: where threads live
 
 - Checkpoints as plain JSON, compare-and-set commits, per-thread leases
   (`OnBusy`: wait, reject, interrupt), durability `step` (default) or
@@ -387,10 +398,10 @@ interrupts (use a dedicated role).
   same way on every backend (brute force; vectors are encrypted with the
   rest). Schema version 4.
 - SQLite overwrites deleted rows in the file (`secure_delete`).
-- Schema version 3 (`agentbuild_settings`, an index for idle threads);
+- Schema version 3 (`criogen_settings`, an index for idle threads);
   applied automatically.
 
-### agentbuild-telemetry: tracing
+### criogen-telemetry: tracing
 
 - OpenTelemetry export over OTLP/HTTP (runs, steps, model generations, tool
   calls) with a Langfuse preset, content capture switch and masking, and a

@@ -1,0 +1,42 @@
+[package]
+name = "criogen-providers"
+description = "Model provider layer for Criogen: messages, tools, model errors, protocols"
+readme = "README.md"
+keywords = ["llm", "agents", "openai", "anthropic", "gateway"]
+categories = ["api-bindings", "asynchronous"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# Not published until the package name is confirmed.
+publish = false
+
+# docs.rs documents every feature (e.g. SQLite storage).
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# `time`: timeouts and FakeModel's simulated latency.
+tokio = { workspace = true, features = ["time"] }
+uuid.workspace = true
+# HTTP transport (feature `http`). rustls with the OS trust store (platform
+# verifier), HTTP/2, and HTTP(S)_PROXY support for corporate networks.
+reqwest = { version = "0.13", optional = true, default-features = false, features = ["rustls", "http2", "system-proxy"] }
+
+[features]
+default = ["http"]
+http = ["dep:reqwest"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "test-util", "net", "io-util"] }
+
+[lints]
+workspace = true
+
+[[example]]
+name = "chat"
+required-features = ["http"]

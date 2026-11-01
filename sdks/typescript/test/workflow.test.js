@@ -1,13 +1,13 @@
 // Workflows in TypeScript (design 0015), run by the Rust engine. Simulated
 // models only. Runs against the source build, or the installed package when
-// AGENTBUILD_SDK names it (scripts/test-typescript.sh).
+// CRIOGEN_SDK names it (scripts/test-typescript.sh).
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
-const sdk = require(process.env.AGENTBUILD_SDK || path.join(__dirname, ".."));
-const { END, Agent, AgentBuildError, FakeModel, Storage, ValidationError, Workflow, goto, suspend } = sdk;
+const sdk = require(process.env.CRIOGEN_SDK || path.join(__dirname, ".."));
+const { END, Agent, CriogenError, FakeModel, Storage, ValidationError, Workflow, goto, suspend } = sdk;
 
 test("a linear workflow with sync and async nodes", async () => {
   const wf = new Workflow()
@@ -92,7 +92,7 @@ test("a node pauses for a person and resumes", async () => {
   const resumed = await app.resume(result.snapshot, { approve: "yes" });
   assert.equal(resumed.state.paid, true);
   assert.deepEqual(paid, [40]);
-  await assert.rejects(app.resume(result.snapshot, { pay: "yes" }), (e) => e instanceof AgentBuildError && e.code === "resume_invalid");
+  await assert.rejects(app.resume(result.snapshot, { pay: "yes" }), (e) => e instanceof CriogenError && e.code === "resume_invalid");
 });
 
 test("threads keep paused runs and another handle resumes", async () => {

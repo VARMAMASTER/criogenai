@@ -1,4 +1,4 @@
-// The native addon (design 0012 §4): loaded once from native/agentbuild.node.
+// The native addon (design 0012 §4): loaded once from native/criogen.node.
 
 import * as path from "path";
 
@@ -61,18 +61,29 @@ interface Addon {
 }
 
 /**
- * The addon: one built from source (native/agentbuild.node, as
+ * The addon: one built from source (native/criogen.node, as
  * scripts/test-typescript.sh makes), else the prebuilt package for this
- * platform (agentbuild-sdk-<platform>-<arch>, an optional dependency).
+ * platform (criogen-<platform>-<arch>, an optional dependency).
  */
 function load(): Addon {
-  const local = path.join(__dirname, "..", "native", "agentbuild.node");
-  const prebuilt = `agentbuild-sdk-${process.platform}-${process.arch}`;
+  const local = path.join(__dirname, "..", "native", "criogen.node");
+  const prebuilt = `criogen-${process.platform}-${process.arch}`;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require(local);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "MODULE_NOT_FOUND") throw error;
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ERR_DLOPEN_FAILED") {
+      // The file is there but built for another system (the preview packages
+      // carry the Windows x64 engine only).
+      throw new Error(
+        `criogen's bundled engine could not be loaded on ${process.platform}-${process.arch}. ` +
+          `This preview build includes the engine for Windows x64 only; Linux and macOS builds are coming. ` +
+          `To build it yourself: npm run build:native`,
+        { cause: error },
+      );
+    }
+    if (code !== "MODULE_NOT_FOUND") throw error;
   }
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -80,7 +91,7 @@ function load(): Addon {
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code !== "MODULE_NOT_FOUND") throw error;
     throw new Error(
-      `agentbuild-sdk has no native addon for ${process.platform}-${process.arch}: ` +
+      `criogen has no native addon for ${process.platform}-${process.arch}: ` +
         `install ${prebuilt}, or build from source (npm run build:native)`,
     );
   }

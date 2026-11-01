@@ -8,14 +8,14 @@ Generated from [`schemas/error-codes.json`](../schemas/error-codes.json) (design
 
 | Code | Category | Retryable | SDK class | HTTP | Meaning |
 |---|---|---|---|---|---|
-| `node_failed` | developer | no | `AgentBuildError` | - | A workflow node returned an error. |
-| `node_panicked` | developer | no | `AgentBuildError` | - | A Rust node panicked; the run failed instead of the process. |
-| `node_timeout` | developer | yes | `AgentBuildError` | - | A node attempt took longer than its policy timeout. |
-| `router_failed` | developer | no | `AgentBuildError` | - | A router function returned an error. |
-| `unknown_route` | developer | no | `AgentBuildError` | - | A router returned a label with no edge. |
-| `missing_goto` | developer | no | `AgentBuildError` | - | A node that must choose the next node did not. |
-| `memo_type_mismatch` | developer | no | `AgentBuildError` | - | A saved task memo entry does not have the shape the node asks for (or a value to save is not JSON); seen as the kind of a node_failed error. |
-| `update_conflict` | developer | no | `AgentBuildError` | - | Two nodes wrote the same state key in one step without a reducer. |
+| `node_failed` | developer | no | `CriogenError` | - | A workflow node returned an error. |
+| `node_panicked` | developer | no | `CriogenError` | - | A Rust node panicked; the run failed instead of the process. |
+| `node_timeout` | developer | yes | `CriogenError` | - | A node attempt took longer than its policy timeout. |
+| `router_failed` | developer | no | `CriogenError` | - | A router function returned an error. |
+| `unknown_route` | developer | no | `CriogenError` | - | A router returned a label with no edge. |
+| `missing_goto` | developer | no | `CriogenError` | - | A node that must choose the next node did not. |
+| `memo_type_mismatch` | developer | no | `CriogenError` | - | A saved task memo entry does not have the shape the node asks for (or a value to save is not JSON); seen as the kind of a node_failed error. |
+| `update_conflict` | developer | no | `CriogenError` | - | Two nodes wrote the same state key in one step without a reducer. |
 | `step_limit_exceeded` | policy | no | `LimitExceededError` | - | The run reached its step limit. |
 | `deadline_exceeded` | policy | no | `LimitExceededError` | - | The run reached its deadline, or the next retry would pass it. |
 | `cancelled` | cancellation | yes | `CancelledError` | - | The run was cancelled (a cancel token, an AbortSignal, a dropped stream, an interrupt from another process). In a tool message: a call that never got a result. |
@@ -26,8 +26,8 @@ Generated from [`schemas/error-codes.json`](../schemas/error-codes.json) (design
 | `model_failed` | provider | depends | `ModelError` | - | A model call failed after retries and fallbacks; details.model_error has the kind, and retryable follows it. |
 | `tool_failed` | developer | no | `ToolExecutionError` | - | A tool failed with an error it did not handle (an exception, a panic). By default the model sees it as the call's result and the run goes on; with on_tool_exception="fail" (or ToolError::fatal) it fails the run. |
 | `limit_exceeded` | policy | no | `LimitExceededError` | - | A model-call, tool-call, token or nesting limit was reached; details.limit names it. |
-| `output_invalid` | policy | no | `AgentBuildError` | - | The structured output was still invalid after the allowed retries. |
-| `hook_failed` | developer | no | `AgentBuildError` | - | A hook returned an error. |
+| `output_invalid` | policy | no | `CriogenError` | - | The structured output was still invalid after the allowed retries. |
+| `hook_failed` | developer | no | `CriogenError` | - | A hook returned an error. |
 | `invalid_state` | developer | no | `ValidationError` | - | The run state is not an agent's, or memory cannot find the run's namespace. |
 | `invalid_input` | developer | no | `ValidationError` | - | The input names one of the agent's own state keys, or tries to change the value that scopes the thread's memory. |
 | `audit_failed` | transient | yes | `StorageError` | - | An audit record could not be written, so the action it describes failed. |
@@ -38,7 +38,7 @@ Generated from [`schemas/error-codes.json`](../schemas/error-codes.json) (design
 |---|---|---|---|---|---|
 | `thread_busy` | transient | yes | `ThreadBusyError` | - | Another run holds the thread (OnBusy reject, or the wait timed out). |
 | `thread_suspended` | developer | no | `ThreadSuspendedError` | - | The thread waits for approval: answer it before sending more. |
-| `thread_interrupted` | developer | no | `AgentBuildError` | - | The thread's last run did not finish: continue it with retry. |
+| `thread_interrupted` | developer | no | `CriogenError` | - | The thread's last run did not finish: continue it with retry. |
 
 ## Storage errors
 

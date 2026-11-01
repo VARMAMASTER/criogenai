@@ -7,7 +7,7 @@ export interface ModelOptions {
   baseUrl?: string;
 }
 
-const KEYS: Record<string, string> = {
+export const KEYS: Record<string, string> = {
   openai: "OPENAI_API_KEY",
   gemini: "GEMINI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
@@ -29,6 +29,11 @@ export class ProviderModel {
     this.model = model;
     this.baseUrl = options.baseUrl;
     this.#apiKey = options.apiKey ?? (KEYS[kind] ? process.env[KEYS[kind]] : undefined);
+    if (KEYS[kind] && !this.#apiKey && !options.baseUrl) {
+      throw new Error(
+        `no API key for ${kind}: set ${KEYS[kind]} in the environment or a .env file (loadEnv()), or pass apiKey`,
+      );
+    }
     this.#name = options.name;
     this.#allowInsecureHttp = options.allowInsecureHttp;
   }

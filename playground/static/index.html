@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Playground: AgentBuild and LangChain</title>
+<title>Playground: Criogen and LangChain</title>
 <style>
   :root {
     --bg:#f5f6f8; --card:#fff; --ink:#14171c; --muted:#5f6876; --line:#e3e6eb; --soft:#eef0f4;
@@ -73,7 +73,7 @@
 </head>
 <body>
 <main>
-  <h1>Playground: AgentBuild and LangChain</h1>
+  <h1>Playground: Criogen and LangChain</h1>
   <p class="sub">One message, both frameworks, the same fake model server and tools, measured live. <span id="machine"></span></p>
 
   <section class="card" aria-labelledby="ask">
@@ -106,14 +106,14 @@
       <div><canvas id="cpu" aria-label="CPU use over time"></canvas><div class="hint">CPU, % of one core (over 100% means several cores)</div></div>
       <div><canvas id="mem" aria-label="Memory over time"></canvas><div class="hint">Memory, MB (the whole process)</div></div>
     </div>
-    <div class="legend"><span><i style="background:var(--ab)"></i>AgentBuild</span><span><i style="background:var(--lc)"></i>LangChain</span></div>
+    <div class="legend"><span><i style="background:var(--ab)"></i>Criogen</span><span><i style="background:var(--lc)"></i>LangChain</span></div>
   </section>
 
   <section class="card" style="margin-top:16px" aria-labelledby="cmp">
     <h2 id="cmp">Comparison</h2>
     <div class="chips" id="chips"></div>
     <table>
-      <thead><tr><th>What was measured</th><th>AgentBuild</th><th>LangChain</th><th style="text-align:left">Lower is better</th></tr></thead>
+      <thead><tr><th>What was measured</th><th>Criogen</th><th>LangChain</th><th style="text-align:left">Lower is better</th></tr></thead>
       <tbody id="table"></tbody>
     </table>
     <p class="foot" id="foot">Run something to see numbers.</p>
@@ -121,7 +121,7 @@
 </main>
 
 <script>
-const FW = { agentbuild: { label: "AgentBuild", cls: "ab", color: "--ab" }, langchain: { label: "LangChain", cls: "lc", color: "--lc" } };
+const FW = { criogen: { label: "Criogen", cls: "ab", color: "--ab" }, langchain: { label: "LangChain", cls: "lc", color: "--lc" } };
 const $ = (id) => document.getElementById(id);
 const fmt = (n, d = 0) => n == null ? "–" : Number(n).toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
 let state, controller;
@@ -174,7 +174,7 @@ function table() {
     ["Peak memory", "peak_rss_mb", " MB", 1],
     ["CPU time used", "cpu_time_s", " s", 2],
   ];
-  const a = state.agentbuild.metrics, l = state.langchain.metrics;
+  const a = state.criogen.metrics, l = state.langchain.metrics;
   $("table").replaceChildren();
   const chips = [];
   let any = false;
@@ -186,7 +186,7 @@ function table() {
     if (x != null && y != null && x > 0 && y > 0) {
       const better = higher ? x > y : x < y;
       const ratio = better ? (higher ? x / y : y / x) : (higher ? y / x : x / y);
-      if (ratio >= 1.1) { win = better ? "ab" : "lc"; note = `${FW[better ? "agentbuild" : "langchain"].label} ${fmt(ratio, ratio < 10 ? 1 : 0)}× ${higher ? "more" : "less"}`; }
+      if (ratio >= 1.1) { win = better ? "ab" : "lc"; note = `${FW[better ? "criogen" : "langchain"].label} ${fmt(ratio, ratio < 10 ? 1 : 0)}× ${higher ? "more" : "less"}`; }
       else note = "about the same";
       if (win && ["ready_ms", "median", "peak_rss_mb", "cpu_time_s"].includes(key)) chips.push(`<div class="chip">${label}: <b>${note}</b></div>`);
     }

@@ -1,5 +1,5 @@
 {
- "schema": "agentbuild-compare/1",
+ "schema": "criogen-compare/1",
  "recorded": "2026-10-21T18:47:32Z",
  "command": "python benches/compare/run.py",
  "quick": false,
@@ -11,8 +11,8 @@
  },
  "python": "3.13.14",
  "frameworks": {
-  "agentbuild": {
-   "label": "AgentBuild",
+  "criogen": {
+   "label": "Criogen",
    "version": "0.1.0",
    "also": null,
    "model_us": null,
@@ -106,7 +106,7 @@
  ],
  "results": [
   {
-   "framework": "agentbuild",
+   "framework": "criogen",
    "status": "ok",
    "runs": 300,
    "median_ms": 0.2903,
@@ -754,7 +754,7 @@
    "scenario": "agent_call"
   },
   {
-   "framework": "agentbuild",
+   "framework": "criogen",
    "status": "ok",
    "runs": 200,
    "median_ms": 1.1023,
@@ -1402,7 +1402,7 @@
    "scenario": "agent_tools"
   },
   {
-   "framework": "agentbuild",
+   "framework": "criogen",
    "status": "ok",
    "runs": 5,
    "median_ms": 705.6405,
@@ -1465,7 +1465,7 @@
    "scenario": "agent_latency"
   },
   {
-   "framework": "agentbuild",
+   "framework": "criogen",
    "status": "ok",
    "runs": 300,
    "median_ms": 0.8216,
@@ -2113,7 +2113,7 @@
    "scenario": "workflow_chain"
   },
   {
-   "framework": "agentbuild",
+   "framework": "criogen",
    "status": "ok",
    "runs": 5,
    "median_ms": 102.2787,
@@ -2176,7 +2176,7 @@
    "scenario": "workflow_fanout"
   },
   {
-   "framework": "agentbuild",
+   "framework": "criogen",
    "status": "ok",
    "runs": 1,
    "median_ms": 254.4154,
@@ -2245,7 +2245,7 @@
    "scenario": "concurrent_1"
   },
   {
-   "framework": "agentbuild",
+   "framework": "criogen",
    "status": "ok",
    "runs": 100,
    "median_ms": 270.8788,
@@ -2611,7 +2611,7 @@
    "scenario": "concurrent_100"
   },
   {
-   "framework": "agentbuild",
+   "framework": "criogen",
    "status": "ok",
    "runs": 1000,
    "median_ms": 333.0686,
@@ -3280,7 +3280,7 @@
  "reliability": [
   {
    "test": "model_transient",
-   "framework": "agentbuild",
+   "framework": "criogen",
    "outcome": "pass",
    "reason": "the agent retried the rate-limited call by itself and answered",
    "note": null,
@@ -3304,7 +3304,7 @@
   },
   {
    "test": "tool_exception",
-   "framework": "agentbuild",
+   "framework": "criogen",
    "outcome": "pass",
    "reason": "the model saw the error and answered",
    "note": null,
@@ -3328,7 +3328,7 @@
   },
   {
    "test": "bad_arguments",
-   "framework": "agentbuild",
+   "framework": "criogen",
    "outcome": "pass",
    "reason": "the arguments were rejected against the schema before the tool ran; the model got the error and answered",
    "note": null,
@@ -3352,11 +3352,11 @@
   },
   {
    "test": "crash_resume",
-   "framework": "agentbuild",
+   "framework": "criogen",
    "outcome": "pass",
    "reason": "resumed with thread.retry() in a new process, same SQLite file; the finished tool did not run again",
    "note": null,
-   "log": "phase 1 (killed): ['get_invoice started', 'get_order done']\nphase 2: ['get_invoice started', 'get_invoice done']\nphase 2 said: {\"framework\": \"agentbuild\", \"task\": \"crash\", \"import_ms\": 16.81, \"answer\": \"Your refund of 40.00 is on its way.\", \"how\": \"thread.retry() in a new process, same SQLite file\"}"
+   "log": "phase 1 (killed): ['get_invoice started', 'get_order done']\nphase 2: ['get_invoice started', 'get_invoice done']\nphase 2 said: {\"framework\": \"criogen\", \"task\": \"crash\", \"import_ms\": 16.81, \"answer\": \"Your refund of 40.00 is on its way.\", \"how\": \"thread.retry() in a new process, same SQLite file\"}"
   },
   {
    "test": "crash_resume",
@@ -3376,7 +3376,7 @@
   },
   {
    "test": "runaway_loop",
-   "framework": "agentbuild",
+   "framework": "criogen",
    "outcome": "pass",
    "reason": "stopped after 25 tool calls in 24 ms: LimitExceededError",
    "note": null,
@@ -3401,7 +3401,7 @@
  ],
  "footprint": [
   {
-   "framework": "agentbuild",
+   "framework": "criogen",
    "import_ms": 147.8,
    "packages": 1,
    "install_mb": 17.9

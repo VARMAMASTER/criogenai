@@ -1,5 +1,5 @@
 {
-  "$comment": "Every stable AgentBuild error code (design 0013 §2). Codes may be added, never renamed or removed before 1.0. Checked against the Rust sources, docs/errors.md and both SDKs by tests.",
+  "$comment": "Every stable Criogen error code (design 0013 §2). Codes may be added, never renamed or removed before 1.0. Checked against the Rust sources, docs/errors.md and both SDKs by tests.",
   "version": 1,
   "codes": [
     {"code": "node_failed", "layers": ["run"], "category": "developer", "retryable": false, "family": "other", "description": "A workflow node returned an error."},

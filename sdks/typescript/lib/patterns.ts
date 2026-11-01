@@ -1,12 +1,12 @@
 // Design patterns for agentic systems, ready to use (design 0019).
 //
-//   import { patterns } from "agentbuild-sdk";
+//   import { patterns } from "criogen";
 //   const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
 //   console.log(String(await flow.run("Write about solar panels")));
 //
 // Steps can be an Agent, a Specialist or its registered name (a string), a
 // plain function `text => text` (sync or async), or `[name, step]`. The model
-// for specialists comes from `model` or the AGENTBUILD_MODEL environment
+// for specialists comes from `model` or the CRIOGEN_MODEL environment
 // variable. Every loop has a cap, so nothing runs forever.
 //
 // Workflow patterns return a Pattern: `run` for the answer, `compile(storage)`
@@ -23,7 +23,7 @@ import * as specialists from "./specialists";
 
 /** No loop runs more often than this, whatever the caller asks for. */
 export const CEILING = 50;
-export const DEFAULT_MODEL_ENV = "AGENTBUILD_MODEL";
+export const DEFAULT_MODEL_ENV = "CRIOGEN_MODEL";
 
 type State = Record<string, unknown>;
 type Run = (text: string) => Promise<string>;

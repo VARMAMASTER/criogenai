@@ -2,18 +2,18 @@
 # a temporary directory, fills in the paths of the unpacked packages
 # and runs it. Not a workspace member.
 [package]
-name = "agentbuild-package-test"
+name = "criogen-package-test"
 version = "0.0.0"
 edition = "2024"
 publish = false
 
 [dependencies]
-agentbuild-core = { path = "@AGENTBUILD_CORE_DIR@" }
-agentbuild-providers = { path = "@AGENTBUILD_PROVIDERS_DIR@" }
-agentbuild-storage = { path = "@AGENTBUILD_STORAGE_DIR@", features = ["sqlite", "postgres", "encryption"] }
-agentbuild-agent = { path = "@AGENTBUILD_AGENT_DIR@" }
-agentbuild-telemetry = { path = "@AGENTBUILD_TELEMETRY_DIR@" }
-agentbuild-gateway = { path = "@AGENTBUILD_GATEWAY_DIR@" }
+criogen-core = { path = "@CRIOGEN_CORE_DIR@" }
+criogen-providers = { path = "@CRIOGEN_PROVIDERS_DIR@" }
+criogen-storage = { path = "@CRIOGEN_STORAGE_DIR@", features = ["sqlite", "postgres", "encryption"] }
+criogen-agent = { path = "@CRIOGEN_AGENT_DIR@" }
+criogen-telemetry = { path = "@CRIOGEN_TELEMETRY_DIR@" }
+criogen-gateway = { path = "@CRIOGEN_GATEWAY_DIR@" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 serde_json = "1"
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "time", "net"] }
@@ -21,9 +21,9 @@ tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "time", "ne
 # The packaged crates depend on each other through crates.io versions, which
 # are not published: use the unpacked packages instead.
 [patch.crates-io]
-agentbuild-core = { path = "@AGENTBUILD_CORE_DIR@" }
-agentbuild-providers = { path = "@AGENTBUILD_PROVIDERS_DIR@" }
-agentbuild-storage = { path = "@AGENTBUILD_STORAGE_DIR@" }
+criogen-core = { path = "@CRIOGEN_CORE_DIR@" }
+criogen-providers = { path = "@CRIOGEN_PROVIDERS_DIR@" }
+criogen-storage = { path = "@CRIOGEN_STORAGE_DIR@" }
 
-# Stand-alone: never part of the AgentBuild workspace.
+# Stand-alone: never part of the Criogen workspace.
 [workspace]

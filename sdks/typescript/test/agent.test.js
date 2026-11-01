@@ -1,7 +1,7 @@
 // The TypeScript SDK (design 0012) with simulated models only: runs, tools,
 // typed output, threads, approvals, storage, streaming, cancellation, memory,
 // errors. Runs against the source build, or the installed package when
-// AGENTBUILD_SDK names it (scripts/test-typescript.sh).
+// CRIOGEN_SDK names it (scripts/test-typescript.sh).
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
@@ -10,12 +10,12 @@ const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
-const sdk = require(process.env.AGENTBUILD_SDK || path.join(__dirname, ".."));
+const sdk = require(process.env.CRIOGEN_SDK || path.join(__dirname, ".."));
 const {
   Agent,
   Embedder,
   Telemetry,
-  AgentBuildError,
+  CriogenError,
   CancelledError,
   Decision,
   FakeModel,
@@ -29,7 +29,7 @@ const {
   ToolExecutionError,
   ToolResult,
   ValidationError,
-  isAgentBuildError,
+  isCriogenError,
   tool,
 } = sdk;
 
@@ -58,7 +58,7 @@ const double = tool({
 const toolResults = (result) => result.messages.filter((m) => m.role === "tool");
 
 function tempDb(name) {
-  const file = path.join(os.tmpdir(), `agentbuild-ts-${name}-${crypto.randomUUID()}.db`);
+  const file = path.join(os.tmpdir(), `criogen-ts-${name}-${crypto.randomUUID()}.db`);
   return {
     url: `sqlite:///${file}`,
     file,
@@ -291,7 +291,7 @@ test("a hook can end the run, and what it throws fails the run as the cause", as
     },
   };
   await assert.rejects(new Agent({ model: new FakeModel(["x"]), hooks: [broken] }).run("go"), (e) => {
-    assert.ok(e instanceof AgentBuildError);
+    assert.ok(e instanceof CriogenError);
     assert.equal(e.code, "hook_failed");
     assert.ok(e.cause instanceof MissingSetting);
     return true;
@@ -565,7 +565,7 @@ test("memory by state recalls per user", async () => {
   assert.equal((await agent.run("I am vegan", { state: { user_id: "ada" } })).text, "Noted.");
   assert.equal((await storage.search("users/ada"))[0].value, "vegan");
   assert.equal((await agent.run("What should I eat?", { state: { user_id: "ada" } })).text, "Eat lentils.");
-  await assert.rejects(agent.run("no user"), (e) => isAgentBuildError(e, "invalid_state"));
+  await assert.rejects(agent.run("no user"), (e) => isCriogenError(e, "invalid_state"));
 });
 
 test("limits, construction errors and model names", async () => {
@@ -579,9 +579,9 @@ test("limits, construction errors and model names", async () => {
   assert.throws(() => new Agent({ model: "nope" }), TypeError);
   assert.throws(() => tool({ name: "bad name", description: "", input: {}, run: () => 1 }), TypeError);
   // Two tools with one name: the engine refuses the agent.
-  assert.throws(() => new Agent({ model: new FakeModel(), tools: [add, add] }), (e) => e instanceof AgentBuildError);
+  assert.throws(() => new Agent({ model: new FakeModel(), tools: [add, add] }), (e) => e instanceof CriogenError);
 
-  const { modelSpec } = require(process.env.AGENTBUILD_SDK ? `${process.env.AGENTBUILD_SDK}/dist/models` : "../dist/models");
+  const { modelSpec } = require(process.env.CRIOGEN_SDK ? `${process.env.CRIOGEN_SDK}/dist/models` : "../dist/models");
   process.env.OPENAI_API_KEY = "sk-test-not-real";
   try {
     assert.deepEqual(modelSpec("openai:gpt-5-mini"), {
@@ -600,9 +600,9 @@ test("limits, construction errors and model names", async () => {
 
 test("every catalog code raises its family class", () => {
   // schemas/error-codes.json (design 0013): the scripts pass its path.
-  const file = process.env.AGENTBUILD_ERROR_CATALOG || path.join(__dirname, "..", "..", "..", "schemas", "error-codes.json");
+  const file = process.env.CRIOGEN_ERROR_CATALOG || path.join(__dirname, "..", "..", "..", "schemas", "error-codes.json");
   const catalog = JSON.parse(fs.readFileSync(file, "utf8"));
-  const { errorFor } = require(process.env.AGENTBUILD_SDK ? `${process.env.AGENTBUILD_SDK}/dist/errors` : "../dist/errors");
+  const { errorFor } = require(process.env.CRIOGEN_SDK ? `${process.env.CRIOGEN_SDK}/dist/errors` : "../dist/errors");
   const classes = {
     model: sdk.ModelError,
     tool: sdk.ToolExecutionError,
@@ -612,7 +612,7 @@ test("every catalog code raises its family class", () => {
     storage: sdk.StorageError,
     validation: sdk.ValidationError,
     cancelled: sdk.CancelledError,
-    other: sdk.AgentBuildError,
+    other: sdk.CriogenError,
   };
   let checked = 0;
   for (const entry of catalog.codes) {
@@ -649,7 +649,7 @@ test("credentials are not sent over plain http to another machine", () => {
   assert.throws(
     () => new Agent({ model: openaiCompatible("m", { baseUrl: "http://gpu-box:8000/v1", apiKey: "a-secret-key-1234" }) }),
     (error) => {
-      assert.ok(error instanceof AgentBuildError);
+      assert.ok(error instanceof CriogenError);
       assert.match(error.message, /plain http/);
       assert.doesNotMatch(error.message, /a-secret-key-1234/);
       return true;

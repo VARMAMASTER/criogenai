@@ -1,7 +1,7 @@
 """What the Python SDK's bridge costs (design 0014 §2): agent runs with an
 instant simulated model, with and without one Python tool call.
 
-    python benches/python_bridge.py [quick]   (with the agentbuild wheel installed)
+    python benches/python_bridge.py [quick]   (with the criogen wheel installed)
 """
 
 import asyncio
@@ -9,7 +9,7 @@ import statistics
 import sys
 import time
 
-from agentbuild import Agent, FakeModel, FakeReply, tool
+from criogen import Agent, FakeModel, FakeReply, tool
 
 
 @tool

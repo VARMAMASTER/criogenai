@@ -1,11 +1,11 @@
-# AgentBuild, LangGraph and CrewAI: the comparison kit
+# Criogen, LangGraph and CrewAI: the comparison kit
 
 This is the exact benchmark behind the numbers on
-https://agentbuild.vercel.app/benchmarks/ . Run it on your own machine and
+https://criogen.vercel.app/benchmarks/ . Run it on your own machine and
 compare your results with ours.
 
 What it does: the same agents, workflows, loads and injected faults run on
-AgentBuild, LangGraph and CrewAI, all in Python, with one simulated model
+Criogen, LangGraph and CrewAI, all in Python, with one simulated model
 (no network, no API keys). Each framework gets its own virtual environment,
 and every measurement runs in a fresh process. `METHOD.md` describes every
 scenario and test; the code for each framework is in `frameworks/`.
@@ -21,7 +21,7 @@ python run.py        # everything, about 25 minutes; writes bench/results/<date>
 python run.py quick  # a short smoke test (not for comparing)
 ```
 
-Then open https://agentbuild.vercel.app/benchmarks/ and drop the results
+Then open https://criogen.vercel.app/benchmarks/ and drop the results
 file into "Check it on your machine": your numbers appear next to ours.
 Nothing is uploaded; the page reads the file in your browser.
 

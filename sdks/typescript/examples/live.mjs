@@ -1,6 +1,6 @@
 // Live check of the TypeScript SDK against real models (design 0012 §5).
 // Manual only: needs API keys (OPENAI_API_KEY / GEMINI_API_KEY, or KEY=value
-// lines in ~/.agentbuild-keys.env) and costs a few cents. Never run in CI.
+// lines in ~/.criogen-keys.env) and costs a few cents. Never run in CI.
 //
 //   node sdks/typescript/examples/live.mjs [openai] [gemini]
 
@@ -12,7 +12,7 @@ import { createRequire } from "node:module";
 const require = createRequire(import.meta.url);
 const { Agent, Storage, gemini, openai, tool } = require("..");
 
-const keysFile = process.env.AGENTBUILD_KEYS_FILE || path.join(os.homedir(), ".agentbuild-keys.env");
+const keysFile = process.env.CRIOGEN_KEYS_FILE || path.join(os.homedir(), ".criogen-keys.env");
 if (fs.existsSync(keysFile)) {
   for (const line of fs.readFileSync(keysFile, "utf8").split(/\r?\n/)) {
     const at = line.indexOf("=");

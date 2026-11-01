@@ -96,7 +96,7 @@ and continues from the stored snapshot.
 ### 2.3 Long-term memory
 
 ```python
-from agentbuild import Memory
+from criogen import Memory
 
 agent = Agent(
     model=…, tools=[…], storage="postgres://…",
@@ -283,7 +283,7 @@ threads and memory items are removed by a background sweep, or by calling
 - **Run context is never stored.** `context=` holds runtime dependencies (DB
   clients, credentials) and is not part of state.
 - Optional encryption at rest:
-  `Storage(…, encrypt=Key.from_env("AGENTBUILD_KEY"))` encrypts `body`,
+  `Storage(…, encrypt=Key.from_env("CRIOGEN_KEY"))` encrypts `body`,
   `value` and pending writes (AES-GCM, key id stored per row for rotation).
   As built: §15.2 (also snapshots and memory keys).
 
@@ -303,7 +303,7 @@ threads and memory items are removed by a background sweep, or by calling
 
 Built-in backends version their tables (`schema_migrations`). The default is to
 migrate automatically on first use. `storage.migrate(dry_run=True)` and the CLI
-`agentbuild storage migrate` exist for teams that run migrations in CI.
+`criogen storage migrate` exist for teams that run migrations in CI.
 
 ---
 
@@ -331,7 +331,7 @@ about 12 methods with sync and async twins
 ([research](../research/langgraph.md) §5.2). Backends receive whole
 checkpoints. A custom backend may store them as they are; the built-in SQL
 backends encode deltas and keyframes internally with the public
-`agentbuild_storage::delta` helpers (as built: §12). Encryption is
+`criogen_storage::delta` helpers (as built: §12). Encryption is
 inside the SQL backends, after encoding (deltas need the plain state);
 retention adds two methods (§15.1). Python and TS can implement the
 same interfaces (async methods); the bridge adapts them.
@@ -387,8 +387,8 @@ even if the database was down.
 
 ## 11. Step 1 as built
 
-Crate `agentbuild-storage` (depends on `agentbuild-core` only) holds the
-storage contract and the in-memory backend; `agentbuild-agent` adds the
+Crate `criogen-storage` (depends on `criogen-core` only) holds the
+storage contract and the in-memory backend; `criogen-agent` adds the
 `Thread` API on top. SQL backends will be features of the storage crate.
 
 **Checkpoints.** A `Checkpoint` is plain JSON: `id` (UUIDv7), `thread_id`,
@@ -456,7 +456,7 @@ Durability `step` (§5.1), crash recovery (§5.5) and the SQLite backend
 (§4). Not yet: durability `async`, history across branches, `fork`,
 `update`, `on_mismatch`, retention, encryption (later steps).
 
-**Core: `Persister`.** `agentbuild-core` gained one trait so the engine can
+**Core: `Persister`.** `criogen-core` gained one trait so the engine can
 save a run while it executes without knowing about storage.
 `RunOptions::persist(Arc<dyn Persister>)` turns it on:
 
@@ -485,7 +485,7 @@ method (§7). It merges a task write into that checkpoint's
 checkpoints with a snapshot accept writes (`checkpoint_not_found`
 otherwise).
 
-**`ThreadWriter`** (in `agentbuild-storage`) is the `Persister` for one
+**`ThreadWriter`** (in `criogen-storage`) is the `Persister` for one
 thread. It holds the head it last wrote: the first checkpoint of a call is
 source `input`, later ones `step`, each with `expected` = the previous
 version (compare-and-set). Task writes go to its latest checkpoint.
@@ -503,20 +503,20 @@ head; `retry` continues a `failed` or `in_progress` head. Finished tool
 calls are not repeated, including calls finished just before a crash. A
 call interrupted mid-flight runs again (§5.5's honest limit).
 
-**Deltas** (`agentbuild_storage::delta`, public so custom backends can
+**Deltas** (`criogen_storage::delta`, public so custom backends can
 reuse it). `diff(old, new)` gives `set`, `append` (a list that only grew:
 just the new elements) and `remove` operations, in key order; `apply`
 replays them (`storage_corrupt` if an append hits a non-list). It works on
 plain state, so it needs no reducers and stays correct for any reducer.
 
-**SQLite** (feature `sqlite` of `agentbuild-storage`, forwarded by
-`agentbuild-agent`; `sqlx` 0.8 without macros, SQLite bundled).
+**SQLite** (feature `sqlite` of `criogen-storage`, forwarded by
+`criogen-agent`; `sqlx` 0.8 without macros, SQLite bundled).
 `SqliteCheckpointer::connect(url)` / `open(path)`, or
 `Storage::connect("sqlite://file.db")` (`"memory:"` and `sqlite::memory:`
 also work). WAL journal, 5 s busy timeout, up to 8 connections (one for
 in-memory).
 
-- Tables, prefixed `agentbuild_` so they can live in an app's database:
+- Tables, prefixed `criogen_` so they can live in an app's database:
   `threads(thread_id, head_id, head_version, created_at_ms, updated_at_ms)`,
   `checkpoints(id, thread_id, parent_id, version, source, status, run_id,
   step, kind, depth, body, snapshot, created_at_ms)`,
@@ -551,8 +551,8 @@ assertion, not a benchmark.
 
 ## 13. Step 3 as built
 
-Long-term memory (§2.3): a memory store in `agentbuild-storage`, and
-`Memory` for agents in `agentbuild-agent`. Not yet: vector search, a
+Long-term memory (§2.3): a memory store in `criogen-storage`, and
+`Memory` for agents in `criogen-agent`. Not yet: vector search, a
 background sweep of expired items, encryption (step 5).
 
 **Namespaces.** `Namespace` is a list of segments (`["users", "42"]`,
@@ -594,7 +594,7 @@ need: per-user memory is usually small.
 
 **SQLite** (`SqliteMemoryStore`, from `SqliteCheckpointer::memory_store`
 or `SqliteMemoryStore::connect`). Migration 2 adds
-`agentbuild_memory(namespace, key, value, search_text, created_at_ms,
+`criogen_memory(namespace, key, value, search_text, created_at_ms,
 updated_at_ms, expires_at_ms, PRIMARY KEY (namespace, key))` and an index
 on `expires_at_ms`. `search_text` stores the words as ` w1 w2 … `; a
 search selects the live rows in the prefix that contain ` <word>` for any
@@ -647,8 +647,8 @@ is part of the model node.
 
 ## 14. Step 4 as built
 
-Postgres: feature `postgres` of `agentbuild-storage` (forwarded by
-`agentbuild-agent`), with `PostgresCheckpointer`, `PostgresMemoryStore`
+Postgres: feature `postgres` of `criogen-storage` (forwarded by
+`criogen-agent`), with `PostgresCheckpointer`, `PostgresMemoryStore`
 and `PostgresThreadLocks`. `Storage::connect("postgres://…")` (or
 `postgresql://`) sets up all three on one database. Tested on
 PostgreSQL 13 and 18.
@@ -677,7 +677,7 @@ first, which migrates; the rest find nothing to do (tested with four at
 once).
 
 **Thread locks across processes (§5.2).** A new trait in
-`agentbuild-storage`:
+`criogen-storage`:
 
 ```rust
 trait ThreadLocks {
@@ -698,16 +698,16 @@ releases the lock first, then the local lease.
 | `Interrupt` | Tries once. If the lock is held, sends an interrupt, then waits as `Wait`. The holder's process cancels its run (the token from `ThreadLease::set_cancel`) |
 
 Postgres uses **session advisory locks**. The key is
-`hashtextextended('agentbuild/thread/' || thread_id, 0)`, computed by the
+`hashtextextended('criogen/thread/' || thread_id, 0)`, computed by the
 server so every client agrees on it. One task owns each lock's
 connection from start to end:
 
 1. It takes the lock: `pg_try_advisory_lock`, or `pg_advisory_lock` with
    `lock_timeout` set to the time left. The server ends the wait, so the
    connection is never dropped mid-query.
-2. It runs `LISTEN agentbuild_interrupt` (before taking the lock, so an
+2. It runs `LISTEN criogen_interrupt` (before taking the lock, so an
    interrupt sent the moment it is taken is not missed). An interrupt is
-   `pg_notify('agentbuild_interrupt', '<key>:<pid>')`, where `pid` is the
+   `pg_notify('criogen_interrupt', '<key>:<pid>')`, where `pid` is the
    server process holding the lock (from `pg_locks`): a process still
    waiting for the lock hears it too, and ignores it. An interrupt that
    arrives before the run registered its cancel token is kept for that
@@ -758,14 +758,14 @@ client does not trust is refused.
 **Testing without installing Postgres.**
 
 - `scripts/get-postgres.sh` downloads portable binaries (checksummed) to
-  `~/.agentbuild/postgres`.
+  `~/.criogen/postgres`.
 - `scripts/with-postgres.sh` runs a command against a throwaway server: a
   new cluster in a temporary directory, on 127.0.0.1, with trust auth and
   a TLS certificate from a throwaway CA. The cluster is deleted
   afterwards.
-- Tests read `AGENTBUILD_TEST_POSTGRES_URL`, create a database each, and
+- Tests read `CRIOGEN_TEST_POSTGRES_URL`, create a database each, and
   skip without it. The `postgres` step of `scripts/ci-local.sh` sets
-  `AGENTBUILD_REQUIRE_POSTGRES=1`, so they fail instead of skipping.
+  `CRIOGEN_REQUIRE_POSTGRES=1`, so they fail instead of skipping.
 - The GitHub workflow has a Postgres 13/18 job (manual, like the rest).
 
 No performance claims: there is no benchmark yet.
@@ -831,13 +831,13 @@ idempotent.
 ### 15.2 Encryption at rest
 
 ```rust
-// AGENTBUILD_ENCRYPTION_KEYS="k2:<64 hex digits>,k1:<64 hex digits>"
-let keys = Keyring::from_env("AGENTBUILD_ENCRYPTION_KEYS")?; // the first is active
+// CRIOGEN_ENCRYPTION_KEYS="k2:<64 hex digits>,k1:<64 hex digits>"
+let keys = Keyring::from_env("CRIOGEN_ENCRYPTION_KEYS")?; // the first is active
 let storage = Storage::connect_encrypted(url, keys).await?;
 ```
 
-Feature `encryption` of `agentbuild-storage` (forwarded by
-`agentbuild-agent`). For the SQL backends; the in-memory ones keep
+Feature `encryption` of `criogen-storage` (forwarded by
+`criogen-agent`). For the SQL backends; the in-memory ones keep
 nothing at rest, so `connect_encrypted("memory:", …)` is allowed and
 encrypts nothing.
 
@@ -883,7 +883,7 @@ encrypts; the key a row names decrypts it. Key bytes are never printed
 (`Debug` shows ids).
 
 **The database remembers it is encrypted.** Migration 3 adds
-`agentbuild_settings(name, value)`. Opening with keys records
+`criogen_settings(name, value)`. Opening with keys records
 `encryption = on` and, per key id, a check value encrypted with that
 key. Then:
 
@@ -949,7 +949,7 @@ Keyword search (§13) finds "penicillin" only when the item says
 avoid?": items and queries are turned into vectors by an embedding model,
 and items are ranked by how close their vector is to the query's.
 
-### 16.1 Embedding models (`agentbuild-providers`)
+### 16.1 Embedding models (`criogen-providers`)
 
 ```rust
 trait Embedder: Send + Sync {
@@ -972,7 +972,7 @@ trait Embedder: Send + Sync {
   a model; `failing()` fails every call. It records the texts it was
   given.
 
-### 16.2 Vectors in the memory store (`agentbuild-storage`)
+### 16.2 Vectors in the memory store (`criogen-storage`)
 
 ```rust
 store.put_embedded(&ns, "allergy", json!("Severe penicillin allergy"), None,
@@ -994,12 +994,12 @@ store.search(&prefix, &SearchQuery::new().similar_to(query_embedding).limit(5)).
   does). SQL backends read the prefix's items that have a vector:
   brute force, no vector index. Fine for one user's or patient's memory;
   `sqlite-vec` / `pgvector` indexes wait for a benchmark showing the need.
-- Storage: migration 4 adds `agentbuild_memory.embedding` (text:
+- Storage: migration 4 adds `criogen_memory.embedding` (text:
   `{"model", "dims", "vector": base64 of little-endian f32}`). With
   encryption (§15.2) it is encrypted like the value (embeddings can be
   inverted into text), and `reencrypt` rewrites it.
 
-### 16.3 Agents (`agentbuild-agent`)
+### 16.3 Agents (`criogen-agent`)
 
 `Memory::by_state("patient", patients).semantic(embedder)`:
 
@@ -1013,7 +1013,7 @@ store.search(&prefix, &SearchQuery::new().similar_to(query_embedding).limit(5)).
 - **`search_memory`** searches by meaning, falling back to keywords if
   the embedder fails.
 - Facts an app saves itself are found by meaning only if saved with a
-  vector: `agentbuild_agent::put_embedded(store, embedder, ns, key, value,
+  vector: `criogen_agent::put_embedded(store, embedder, ns, key, value,
   ttl)` embeds `memory_text(key, value)`, the same text `remember`
   embeds.
 
@@ -1120,7 +1120,7 @@ Errors are a `ThreadError`: `Run` (the core's `RunError`, with its
 snapshot), `Storage`, or `State` (`thread_suspended`,
 `thread_interrupted`, `resume_invalid`); `code()` gives the catalog code.
 
-The module lives in `agentbuild-storage` (which already depends on the
+The module lives in `criogen-storage` (which already depends on the
 core), not in the agent crate: workflows without agents need no agent
 dependency. Agent threads keep their own type, since a `Reply` carries
 agent results (text, approvals); both use the same leases, writer and

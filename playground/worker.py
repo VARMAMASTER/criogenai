@@ -16,11 +16,11 @@ The comparison is fair by construction:
 - **The same tools**: plain synchronous functions that wait a fixed time (a
   database call), with the same name, argument and description.
 - **The same agent**: each framework's standard way to build a tool-calling
-  agent, with its defaults (LangChain's `create_agent`, AgentBuild's `Agent`).
+  agent, with its defaults (LangChain's `create_agent`, Criogen's `Agent`).
 - **The same work, the same order of events**, measured from outside the
   process by the same code.
 
-Job fields: framework ("agentbuild" | "langchain"), message, tools (0-5),
+Job fields: framework ("criogen" | "langchain"), message, tools (0-5),
 model_delay_ms, tool_delay_ms, runs, concurrency, mock_url.
 """
 
@@ -62,11 +62,11 @@ def description(name: str) -> str:
     return f"{name.replace('_', ' ').capitalize()} for an order."
 
 
-# ---------------------------------------------------------------- AgentBuild
+# ---------------------------------------------------------------- Criogen
 
 
-def build_agentbuild(job):
-    from agentbuild import Agent, OpenAICompatible, __version__, tool
+def build_criogen(job):
+    from criogen import Agent, OpenAICompatible, __version__, tool
 
     delay = job["tool_delay_ms"] / 1000
 
@@ -123,7 +123,7 @@ def build_langchain(job):
 
 async def work(job):
     global tracing, run_started
-    builders = {"agentbuild": build_agentbuild, "langchain": build_langchain}
+    builders = {"criogen": build_criogen, "langchain": build_langchain}
     run, version = builders[job["framework"]](job)
     # "Ready": the framework imported and the agent built (imports are most of it).
     emit(e="start", version=version, ready_ms=round((time.perf_counter() - T0) * 1000, 2))

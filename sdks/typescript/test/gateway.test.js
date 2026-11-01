@@ -1,13 +1,13 @@
 // Gateway (design 0018): model calls without an agent, simulated models only.
 // Runs against the source build, or the installed package when
-// AGENTBUILD_SDK names it (scripts/test-typescript.sh).
+// CRIOGEN_SDK names it (scripts/test-typescript.sh).
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
-const sdk = require(process.env.AGENTBUILD_SDK || path.join(__dirname, ".."));
-const { AgentBuildError, CancelledError, Embedder, FakeModel, Gateway, ModelError, ValidationError } = sdk;
+const sdk = require(process.env.CRIOGEN_SDK || path.join(__dirname, ".."));
+const { CriogenError, CancelledError, Embedder, FakeModel, Gateway, ModelError, ValidationError } = sdk;
 
 const fast = { initialBackoffSecs: 0.01, jitter: false };
 
@@ -56,11 +56,11 @@ test("JSON output is parsed and checked", async () => {
   const reply = await gw.chat(new FakeModel(['{"city": "Oslo", "temp": 3}']), "Weather?", { output: weather });
   assert.deepEqual(reply.output, { city: "Oslo", temp: 3 });
   await assert.rejects(gw.chat(new FakeModel(['{"city": "Oslo"}']), "Weather?", { output: weather }), (e) => {
-    assert.ok(e instanceof AgentBuildError);
+    assert.ok(e instanceof CriogenError);
     assert.equal(e.code, "output_invalid");
     return true;
   });
-  await assert.rejects(gw.chat(new FakeModel(["not json"]), "Weather?", { output: { type: "object" } }), AgentBuildError);
+  await assert.rejects(gw.chat(new FakeModel(["not json"]), "Weather?", { output: { type: "object" } }), CriogenError);
 });
 
 test("a stream's chunks add up to the reply", async () => {

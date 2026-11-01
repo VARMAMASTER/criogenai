@@ -3,7 +3,7 @@
 # run without installing a server, a service or Docker. Nothing outside the
 # target directory changes.
 #
-#   bash scripts/get-postgres.sh        # into ~/.agentbuild/postgres
+#   bash scripts/get-postgres.sh        # into ~/.criogen/postgres
 #   PG_HOME=/some/dir bash scripts/get-postgres.sh
 #
 # Then scripts/with-postgres.sh and scripts/ci-local.sh find them there.
@@ -11,11 +11,11 @@
 # Source: the zonky "embedded-postgres-binaries" builds of PostgreSQL on
 # Maven Central, checked against Maven Central's SHA-256. PostgreSQL is
 # under the PostgreSQL License; nothing downloaded here is committed or
-# shipped with AgentBuild.
+# shipped with Criogen.
 set -euo pipefail
 
 version="${PG_VERSION:-18.6.0}"
-home="${PG_HOME:-$HOME/.agentbuild/postgres}"
+home="${PG_HOME:-$HOME/.criogen/postgres}"
 
 case "$(uname -s)-$(uname -m)" in
   MINGW* | MSYS* | CYGWIN*) platform=windows-amd64 ;;

@@ -16,7 +16,7 @@ access goes through the embeddable gateway (0006, pending).
    decorators and `async`/`await`. TypeScript uses Zod, object options,
    Promises and `AbortSignal`. The names match across languages.
 3. **No Rust visible.** Users never see Rust types, lifetimes or build steps:
-   `pip install agentbuild-sdk` / `npm i agentbuild-sdk` ship prebuilt binaries.
+   `pip install criogen` / `npm i criogen` ship prebuilt binaries.
 4. **Errors are typed and predictable** (0003). Every failure is a documented
    exception class with a stable `code`.
 5. **Validation before running.** Graphs and agents are checked when built, and
@@ -27,7 +27,7 @@ access goes through the embeddable gateway (0006, pending).
 ## Level 0: call a model
 
 ```python
-from agentbuild import Gateway
+from criogen import Gateway
 
 gw = Gateway()                                     # keys from env (ANTHROPIC_API_KEY, …)
 reply = await gw.chat("anthropic:claude-sonnet-5-5", "Summarize this: …")
@@ -38,7 +38,7 @@ async for chunk in gw.stream("openai:gpt-…", "Write a haiku"):
 ```
 
 ```ts
-import { Gateway } from "agentbuild-sdk";
+import { Gateway } from "criogen";
 
 const gw = new Gateway();
 const reply = await gw.chat("anthropic:claude-sonnet-5-5", "Summarize this: …");
@@ -55,7 +55,7 @@ then `"local:llama-…"`.
 ## Level 1: an agent with tools
 
 ```python
-from agentbuild import Agent, tool, ToolError
+from criogen import Agent, tool, ToolError
 
 @tool
 async def get_order(order_id: str) -> dict:
@@ -77,7 +77,7 @@ print(result.usage)           # tokens across all calls
 ```
 
 ```ts
-import { Agent, tool, ToolError } from "agentbuild-sdk";
+import { Agent, tool, ToolError } from "criogen";
 import { z } from "zod";
 
 const getOrder = tool({
@@ -99,7 +99,7 @@ const result = await agent.run("Where is order A-1001?");
 
 ```python
 from pydantic import BaseModel
-from agentbuild import Agent, Limits, Approve, ToolContext
+from criogen import Agent, Limits, Approve, ToolContext
 
 class Resolution(BaseModel):
     category: str
@@ -123,7 +123,7 @@ result = await agent.run("Refund A-1001, it arrived broken", context=AppDeps(pay
 Custom hooks are plain classes or functions:
 
 ```python
-from agentbuild import Hook
+from criogen import Hook
 
 class RedactEmails(Hook):
     async def before_model(self, state, ctx):
@@ -136,7 +136,7 @@ A workflow is an explicit graph of nodes. Nodes can be plain functions,
 agents, or other workflows.
 
 ```python
-from agentbuild import Workflow, State, Messages, END
+from criogen import Workflow, State, Messages, END
 
 class Ticket(State):                 # Pydantic-based; fields become state keys
     text: str
@@ -167,7 +167,7 @@ print(result.state.reply, result.steps)
 ```
 
 ```ts
-import { Workflow, messages, END } from "agentbuild-sdk";
+import { Workflow, messages, END } from "criogen";
 import { z } from "zod";
 
 const Ticket = z.object({
@@ -261,7 +261,7 @@ await agent.storage.memory.put(("users", "42"), "diet", {"value": "vegetarian"})
 ## Errors as users see them
 
 ```python
-from agentbuild.errors import ModelError, RateLimitError, LimitExceededError, ToolExecutionError
+from criogen.errors import ModelError, RateLimitError, LimitExceededError, ToolExecutionError
 
 try:
     result = await agent.run(question)
@@ -277,7 +277,7 @@ except ToolExecutionError as e:      # a bug in a tool; e.__cause__ is the origi
 ```ts
 try { await agent.run(q); }
 catch (e) {
-  if (isAgentBuildError(e, "limit_exceeded")) { /* e.details.limit */ }
+  if (isCriogenError(e, "limit_exceeded")) { /* e.details.limit */ }
   else throw e;
 }
 ```
@@ -290,7 +290,7 @@ catch (e) {
 | Agent loop, routing, limits, retries, timeouts | Rust | 0004, 0005 |
 | Graph validation, scheduling, state merging | Rust | 0001, 0005 |
 | Tool-argument and output validation | Rust (JSON Schema) + Pydantic/Zod | 0002 §5.1 |
-| Model calls, streaming, error classification | Rust | `agentbuild-providers` (0006) |
+| Model calls, streaming, error classification | Rust | `criogen-providers` (0006) |
 | Checkpoints, threads, memory store (SQLite/Postgres) | Rust | 0008 |
 
 ## Resolved API decisions (2026-10-11)

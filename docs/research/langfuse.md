@@ -3,7 +3,7 @@
 Studied 2026-10-11 from the Langfuse source (MIT outside its `ee/`
 directories; commit `cb2cebae`, checked out sparsely in the git-ignored
 `research/repos/langfuse`) and its documentation. Read-only study: no
-Langfuse code is used in AgentBuild. Input to
+Langfuse code is used in Criogen. Input to
 [design 0009](../design/0009-observability.md).
 
 ## Transport
@@ -24,7 +24,7 @@ Langfuse code is used in AgentBuild. Input to
 
 - A span without a parent (or marked `langfuse.internal.as_root`) creates
   the trace; several roots in one trace id simply update the same trace,
-  which fits AgentBuild's suspend/resume segments.
+  which fits Criogen's suspend/resume segments.
 - With ingestion version 4, trace fields (name, user, session, tags) are
   stored per observation from each span's own attributes, so they must be on
   every span.
@@ -47,12 +47,12 @@ Langfuse code is used in AgentBuild. Input to
 - `completion_start_time` must be an ISO 8601 date; observations that fail
   validation in the worker are dropped silently.
 - **OTLP span events are not stored** (they are read only to reconstruct
-  GenAI input/output). AgentBuild therefore exports warnings, retries and
+  GenAI input/output). Criogen therefore exports warnings, retries and
   custom events as short `event` observations.
 - Unknown attributes go to the observation's `metadata.attributes`, except
   for scopes named `langfuse-sdk*`.
 
-## What AgentBuild does with this
+## What Criogen does with this
 
 See [0009](../design/0009-observability.md) §3 and the "as built" notes
 there.

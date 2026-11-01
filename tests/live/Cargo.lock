@@ -3,81 +3,6 @@
 version = 4
 
 [[package]]
-name = "agentbuild-agent"
-version = "0.1.0"
-dependencies = [
- "agentbuild-core",
- "agentbuild-providers",
- "agentbuild-storage",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
-]
-
-[[package]]
-name = "agentbuild-core"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "agentbuild-live-check"
-version = "0.0.0"
-dependencies = [
- "agentbuild-agent",
- "agentbuild-core",
- "agentbuild-providers",
- "agentbuild-storage",
- "agentbuild-telemetry",
- "serde_json",
- "tokio",
-]
-
-[[package]]
-name = "agentbuild-providers"
-version = "0.1.0"
-dependencies = [
- "reqwest",
- "serde",
- "serde_json",
- "thiserror",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "agentbuild-storage"
-version = "0.1.0"
-dependencies = [
- "agentbuild-core",
- "base64 0.22.1",
- "serde",
- "serde_json",
- "sha2",
- "sqlx",
- "thiserror",
- "tokio",
- "uuid",
-]
-
-[[package]]
-name = "agentbuild-telemetry"
-version = "0.1.0"
-dependencies = [
- "agentbuild-core",
- "reqwest",
- "serde_json",
- "thiserror",
- "tokio",
-]
-
-[[package]]
 name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -278,6 +203,81 @@ name = "crc-catalog"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "217698eaf96b4a3f0bc4f3662aaa55bdf913cd54d7204591faa790070c6d0853"
+
+[[package]]
+name = "criogen-agent"
+version = "0.1.0"
+dependencies = [
+ "criogen-core",
+ "criogen-providers",
+ "criogen-storage",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
+
+[[package]]
+name = "criogen-core"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "criogen-live-check"
+version = "0.0.0"
+dependencies = [
+ "criogen-agent",
+ "criogen-core",
+ "criogen-providers",
+ "criogen-storage",
+ "criogen-telemetry",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "criogen-providers"
+version = "0.1.0"
+dependencies = [
+ "reqwest",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "criogen-storage"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "criogen-core",
+ "serde",
+ "serde_json",
+ "sha2",
+ "sqlx",
+ "thiserror",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "criogen-telemetry"
+version = "0.1.0"
+dependencies = [
+ "criogen-core",
+ "reqwest",
+ "serde_json",
+ "thiserror",
+ "tokio",
+]
 
 [[package]]
 name = "crossbeam-queue"

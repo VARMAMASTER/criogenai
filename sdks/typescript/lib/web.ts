@@ -1,7 +1,7 @@
 // Internet tools for agents: web search (Tavily or Brave) and reading a page
 // (design 0019).
 //
-//   import { Agent, web } from "agentbuild-sdk";
+//   import { Agent, web } from "criogen";
 //   const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
 //
 // `web.search()` needs no arguments: it uses TAVILY_API_KEY if set, else
@@ -252,7 +252,7 @@ export function fetchPage(options: { allowPrivate?: boolean; maxChars?: number }
       }
       if (parts.protocol !== "http:" && parts.protocol !== "https:") throw new ToolError("give a full http or https URL", { retryable: false });
       await checkPublic(parts.hostname, options.allowPrivate ?? false);
-      const body = await request(url, { headers: { "user-agent": "agentbuild-web/0.1", accept: "text/html,text/plain" } }, MAX_PAGE_BYTES);
+      const body = await request(url, { headers: { "user-agent": "criogen-web/0.1", accept: "text/html,text/plain" } }, MAX_PAGE_BYTES);
       const text = htmlToText(body.toString("utf8"));
       return { url, text: text.slice(0, cap), truncated: text.length > cap };
     },

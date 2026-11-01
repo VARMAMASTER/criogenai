@@ -1,16 +1,20 @@
-# agentbuild-sdk (Python)
+# criogen (Python)
 
 ```sh
-pip install agentbuild-sdk
+pip install criogen
 ```
 
+> **Preview (`0.1.0a1`).** This build is for **Windows x64 only** (Python 3.9+).
+> On Linux and macOS `pip` finds no matching package; builds for every platform
+> follow. Install the preview with `pip install --pre criogen`.
+
 Agents and workflows with tools, human approval, durable threads, long-term memory, an
-audit trail and encryption at rest, on [AgentBuild](https://agentbuild.vercel.app)'s
+audit trail and encryption at rest, on [Criogen](https://criogen.vercel.app)'s
 Rust engine (design 0011).
 
 ```python
 import asyncio
-from agentbuild import Agent, tool, ToolError
+from criogen import Agent, tool, ToolError
 
 @tool
 async def get_order(order_id: str) -> dict:
@@ -29,13 +33,24 @@ async def main():
 asyncio.run(main())
 ```
 
+## Keep your keys in a `.env` file
+
+```python
+from criogen import load_env
+
+load_env()   # reads ./.env: OPENAI_API_KEY, ANTHROPIC_API_KEY, GEMINI_API_KEY, OPENROUTER_API_KEY
+```
+
+It returns the names it set (never the values) and never replaces a variable that
+is already set. A model with no key fails at once and says which variable to set.
+
 **Status:** first slice: agents, tools, approvals, typed output, threads
 (send, approve, reject, decide, retry, history, rewind, delete, stream),
 storage (SQLite, Postgres, encryption, audit, retention) and memory.
 Workflows too (`Workflow`, design 0015), and from design 0017: agents as
 tools, retries and fallback models, memory by meaning, tracing and hooks,
 `Gateway` for model calls without an agent (design 0018), and ready-made
-patterns, extendable specialist agents and web search (`agentbuild.patterns`,
+patterns, extendable specialist agents and web search (`criogen.patterns`,
 `specialists`, `web`; design 0019). Tests use `FakeModel`; no real model is called.
 
 Free to use, also commercially (see `LICENSE`).

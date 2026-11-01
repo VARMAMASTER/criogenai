@@ -391,7 +391,7 @@ every node (`state.py:1158-1162`). Path labels are only checked when a
 `path_map` exists. `Pregel.validate` (`pregel/_validate.py:13-107`) checks
 channel and node wiring. Our builder is far stricter (doc 0001, "Validation").
 
-### 3.3 Conditional edge semantics: a key difference from AgentBuild
+### 3.3 Conditional edge semantics: a key difference from Criogen
 
 The branch reader uses `ChannelRead.do_read(..., fresh=True)`
 (`state.py:1613-1619`). `local_read` with `fresh=True` **copies every channel
@@ -774,7 +774,7 @@ anywhere in this version.
 
 ## 10. Pain points and design debt
 
-These are ordered roughly by how much they should influence AgentBuild.
+These are ordered roughly by how much they should influence Criogen.
 
 1. **The plumbing is an untyped dict.** Tasks talk to the engine through
    `config["configurable"]` keys such as `__pregel_send`, `__pregel_read`,
@@ -903,7 +903,7 @@ These are ordered roughly by how much they should influence AgentBuild.
 
 ---
 
-## 11. Implications for AgentBuild
+## 11. Implications for Criogen
 
 Verdicts: **Adopt** means take the idea mostly as is. **Adapt** means take the
 idea with a different mechanism. **Avoid** means do not copy it.

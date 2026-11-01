@@ -1,6 +1,6 @@
-# Playground: AgentBuild and LangChain, side by side
+# Playground: Criogen and LangChain, side by side
 
-Type one message; the same job runs in AgentBuild and in LangChain (with
+Type one message; the same job runs in Criogen and in LangChain (with
 LangGraph), each in its own process. The page shows each framework's answer, a
 timeline of the first run, live CPU and memory charts, and a comparison table.
 
@@ -10,13 +10,13 @@ timeline of the first run, live CPU and memory charts, and a comparison table.
   (`mock_model.py`, OpenAI wire format) with **their own real clients**: each
   builds the request, sends it over HTTP, parses the reply and extracts the
   tool calls itself, as with a hosted model. (An earlier version used each
-  framework's in-process simulated model; AgentBuild's ran in Rust and
+  framework's in-process simulated model; Criogen's ran in Rust and
   LangChain's in Python, which was not like for like.) Only the model's
   *answers* are scripted, identically; no real model and no internet.
 - **The same tools**: plain synchronous functions with the same name,
   argument and description, each waiting a fixed time (a database call).
 - **Each framework's standard agent, with its defaults**: LangChain's
-  `create_agent`, AgentBuild's `Agent`.
+  `create_agent`, Criogen's `Agent`.
 - **The same measurement, from outside**: `psutil` samples each worker's CPU
   and memory every 100 ms, the same code for both; the fake model server runs
   in its own process, so it is charged to neither.
@@ -29,11 +29,11 @@ timeline of the first run, live CPU and memory charts, and a comparison table.
 ## What is still not identical (so read numbers with this in mind)
 
 - Each framework uses its **default** way of calling the model. Checked by
-  recording the requests the mock server received: AgentBuild sends
+  recording the requests the mock server received: Criogen sends
   `stream: true` (with `stream_options`), so the reply comes as many small
   chunks to parse; LangChain's `ainvoke` sends `stream: false` and gets the
-  whole reply at once. If anything this costs AgentBuild.
-- Defaults also differ in what each does for you (for example AgentBuild
+  whole reply at once. If anything this costs Criogen.
+- Defaults also differ in what each does for you (for example Criogen
   validates tool arguments and retries transient model errors). We compare
   defaults, not feature sets, and have not measured how much any one default
   contributes.
@@ -47,14 +47,14 @@ timeline of the first run, live CPU and memory charts, and a comparison table.
 ## Run it
 
 ```sh
-# once: the two environments (AgentBuild from the newest wheel in target/wheels,
+# once: the two environments (Criogen from the newest wheel in target/wheels,
 # LangChain 1.4.6 / LangGraph 1.2.16 pinned, plus its OpenAI client)
-python benches/compare/setup.py --only agentbuild
+python benches/compare/setup.py --only criogen
 python benches/compare/setup.py --only langgraph
 
 # every time
-target/compare/venvs/agentbuild/Scripts/python.exe playground/server.py   # Windows
-target/compare/venvs/agentbuild/bin/python playground/server.py           # Linux, macOS
+target/compare/venvs/criogen/Scripts/python.exe playground/server.py   # Windows
+target/compare/venvs/criogen/bin/python playground/server.py           # Linux, macOS
 # then open http://127.0.0.1:4600
 ```
 
@@ -99,5 +99,5 @@ peak memory include importing the framework.
 ## Tests
 
 ```sh
-target/compare/venvs/agentbuild/Scripts/python.exe -m unittest discover -s playground
+target/compare/venvs/criogen/Scripts/python.exe -m unittest discover -s playground
 ```

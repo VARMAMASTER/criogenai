@@ -4,7 +4,7 @@ Status: **Accepted** (roadmap task 16; the user asked to build every
 feature planned for Python and TypeScript). It makes
 [0007](0007-public-api.md) "Level 0" concrete. The name `Gateway` comes
 from 0007; it runs in your process and has nothing to do with the
-`agentbuild-gateway` server (0006 §12), which you reach like any
+`criogen-gateway` server (0006 §12), which you reach like any
 OpenAI-compatible endpoint.
 
 ## 1. What it is for
@@ -17,7 +17,7 @@ classes.
 ## 2. API
 
 ```python
-from agentbuild import Gateway, Retry
+from criogen import Gateway, Retry
 
 gw = Gateway(fallbacks=["gemini:gemini-2.5-flash"], retry=Retry(max_attempts=4))
 reply = await gw.chat("openai:gpt-5-mini", "Summarize: …", instructions="Be brief.")
@@ -70,7 +70,7 @@ const vectors = await gw.embed(Embedder.openai(), ["first text", "second text"])
 ## 3. Rust
 
 The retry and fallback chain the agent uses becomes public as
-`agentbuild_agent::ResilientModel`, a `Model` itself:
+`criogen_agent::ResilientModel`, a `Model` itself:
 
 ```rust
 let model = ResilientModel::new(primary)

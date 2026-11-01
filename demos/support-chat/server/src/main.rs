@@ -1,14 +1,14 @@
-//! Support chat demo server: an AgentBuild agent for "Mugshot", a small
+//! Support chat demo server: an Criogen agent for "Mugshot", a small
 //! coffee gear shop, behind a JSON API for the Next.js UI in `../web`.
 //!
-//! - conversations are AgentBuild threads in a SQLite file (`support.db`)
+//! - conversations are Criogen threads in a SQLite file (`support.db`)
 //! - refunds wait for a human (approve / reject in the UI)
 //! - a run that is killed (stop the server mid-answer) continues with retry
 //! - each request may pick the model: OpenAI or Gemini, same thread
 //!
 //! Keys come from the environment (`OPENAI_API_KEY`, `GEMINI_API_KEY`), or
-//! from the file in `AGENTBUILD_KEYS_FILE` (default
-//! `~/.agentbuild-keys.env`, `KEY=value` lines). They are never logged or
+//! from the file in `CRIOGEN_KEYS_FILE` (default
+//! `~/.criogen-keys.env`, `KEY=value` lines). They are never logged or
 //! sent anywhere but the matching provider.
 
 use std::collections::BTreeMap;
@@ -16,16 +16,16 @@ use std::net::SocketAddr;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
-use agentbuild_agent::{
-    Agent, AgentError, Approval, ApprovalRule, Decision, Reply, Thread, ToolError, tool_fn,
-};
-use agentbuild_providers::{Endpoint, ProviderModel, Role, ToolSpec};
-use agentbuild_storage::Storage;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
+use criogen_agent::{
+    Agent, AgentError, Approval, ApprovalRule, Decision, Reply, Thread, ToolError, tool_fn,
+};
+use criogen_providers::{Endpoint, ProviderModel, Role, ToolSpec};
+use criogen_storage::Storage;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -472,11 +472,11 @@ impl IntoResponse for ApiError {
 /// Reads `KEY=value` lines into the environment, for keys not already set.
 /// Values are never printed.
 fn load_keys_file() {
-    let path = std::env::var("AGENTBUILD_KEYS_FILE").ok().or_else(|| {
+    let path = std::env::var("CRIOGEN_KEYS_FILE").ok().or_else(|| {
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
             .ok()?;
-        Some(format!("{home}/.agentbuild-keys.env"))
+        Some(format!("{home}/.criogen-keys.env"))
     });
     let Some(text) = path.and_then(|p| std::fs::read_to_string(p).ok()) else {
         return;

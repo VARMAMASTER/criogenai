@@ -5,10 +5,10 @@ import asyncio
 
 import pytest
 
-from agentbuild import (
+from criogen import (
     END,
     Agent,
-    AgentBuildError,
+    CriogenError,
     CancelledError,
     FakeModel,
     Storage,
@@ -111,7 +111,7 @@ def test_a_node_pauses_for_a_person_and_resumes():
         resumed = await app.resume(result.snapshot, {"approve": "yes"})
         assert resumed.state["paid"] is True
         assert paid == [40]
-        with pytest.raises(AgentBuildError) as caught:
+        with pytest.raises(CriogenError) as caught:
             await app.resume(result.snapshot, {"pay": "yes"})
         assert caught.value.code == "resume_invalid"
 
@@ -127,7 +127,7 @@ def test_threads_keep_paused_runs_and_another_handle_resumes():
         turn = await thread.run({"amount": 25})
         assert turn.suspended and turn.version > 0
         assert (await thread.interrupts())[0].payload == {"refund": 25}
-        with pytest.raises(AgentBuildError) as caught:
+        with pytest.raises(CriogenError) as caught:
             await thread.run({"amount": 1})
         assert caught.value.code == "thread_suspended"
         # Another compiled copy (another process, in real life).
@@ -166,7 +166,7 @@ def test_a_failing_node_keeps_its_exception_and_a_thread_retries_it():
 
     async def scenario():
         thread = app.thread("mail-1")
-        with pytest.raises(AgentBuildError) as caught:
+        with pytest.raises(CriogenError) as caught:
             await thread.run({})
         assert caught.value.code == "node_failed"
         assert caught.value.details["node"] == "send"
@@ -217,7 +217,7 @@ def test_compile_reports_every_problem_and_routers_must_be_plain_functions():
 def test_a_node_returning_the_wrong_thing_fails_clearly_and_cancel_stops_a_run():
     wf = Workflow()
     wf.add_node("bad", lambda s: 42).start("bad").edge("bad", END)
-    with pytest.raises(AgentBuildError) as caught:
+    with pytest.raises(CriogenError) as caught:
         wf.compile().run_sync({})
     assert caught.value.code == "node_failed"
     assert isinstance(caught.value.__cause__, TypeError)
@@ -236,7 +236,7 @@ def test_a_node_returning_the_wrong_thing_fails_clearly_and_cancel_stops_a_run()
             await asyncio.wait_for(app.run({}), timeout=0.3)
 
     run(scenario())
-    with pytest.raises(AgentBuildError) as caught:
+    with pytest.raises(CriogenError) as caught:
         slow.compile().run_sync({}, deadline=0.2)
     assert caught.value.code == "deadline_exceeded"
     assert CancelledError  # exported

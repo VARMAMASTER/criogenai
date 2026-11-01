@@ -1,0 +1,53 @@
+[package]
+name = "criogen-agent"
+description = "Agents for Criogen: the model and tools loop on the workflow engine"
+readme = "README.md"
+keywords = ["agents", "llm", "tools", "workflow", "ai"]
+categories = ["asynchronous"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# Not published until the package name is confirmed.
+publish = false
+
+# docs.rs documents every feature (e.g. SQLite storage).
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+criogen-core = { path = "../criogen-core", version = "0.1.0" }
+criogen-providers = { path = "../criogen-providers", version = "0.1.0", default-features = false }
+criogen-storage = { path = "../criogen-storage", version = "0.1.0" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# `rt`: tool calls run as tasks; `sync`: the parallel-call semaphore; `time`: tool timeouts.
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
+reqwest = { version = "0.13", optional = true, default-features = false, features = ["rustls", "system-proxy"] }
+
+[features]
+default = ["http"]
+# Real model providers over HTTP (criogen-providers' `http`).
+http = ["criogen-providers/http"]
+# SQLite thread storage (criogen-storage's `sqlite`).
+sqlite = ["criogen-storage/sqlite"]
+# Postgres thread storage (criogen-storage's `postgres`).
+postgres = ["criogen-storage/postgres"]
+# Encryption at rest (criogen-storage's `encryption`).
+encryption = ["criogen-storage/encryption"]
+# Web search and page reading tools (`criogen_agent::web`, design 0019). Off by
+# default: it adds `reqwest` (the HTTP client criogen-providers already
+# uses, same version and features, so no new crate) and tokio `net` for DNS.
+web = ["dep:reqwest", "tokio/net"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "test-util", "net", "io-util"] }
+
+[lints]
+workspace = true
+
+[[example]]
+name = "durable_agent"
+required-features = ["sqlite"]

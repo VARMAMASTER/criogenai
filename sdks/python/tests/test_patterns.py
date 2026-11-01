@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from agentbuild import Agent, FakeModel, FakeReply, Storage, patterns, specialists, tool
+from criogen import Agent, FakeModel, FakeReply, Storage, patterns, specialists, tool
 
 
 def run(coroutine):
@@ -40,8 +40,8 @@ def test_steps_can_be_registered_specialist_names_with_a_model_argument():
 
 
 def test_a_specialist_without_a_model_explains_what_to_do(monkeypatch):
-    monkeypatch.delenv("AGENTBUILD_MODEL", raising=False)
-    with pytest.raises(ValueError, match="AGENTBUILD_MODEL"):
+    monkeypatch.delenv("CRIOGEN_MODEL", raising=False)
+    with pytest.raises(ValueError, match="CRIOGEN_MODEL"):
         patterns.sequential(["researcher"])
     with pytest.raises(KeyError, match="registered"):
         patterns.sequential(["no-such-specialist"], model=FakeModel(["x"]))
@@ -188,7 +188,7 @@ def test_a_pattern_can_be_extended_with_more_nodes():
 
 
 def test_custom_wraps_any_workflow():
-    from agentbuild import END, Workflow
+    from criogen import END, Workflow
 
     wf = Workflow()
     wf.add_node("only", lambda s: {"output": s["input"].upper()})
@@ -203,7 +203,7 @@ def test_react_caps_model_calls():
         return "again"
 
     looping = patterns.react(FakeModel([FakeReply.tool_call("poke", {})] * 20), [poke], max_steps=3)
-    from agentbuild import LimitExceededError
+    from criogen import LimitExceededError
 
     with pytest.raises(LimitExceededError):
         looping.run_sync("go")

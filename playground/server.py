@@ -9,7 +9,7 @@ psutil. Binds to this computer only, one run at a time, with limits on
 everything the page can ask for.
 
 Environments: target/compare/venvs/<name> (made by benches/compare/setup.py);
-`PLAYGROUND_PYTHON_AGENTBUILD` / `PLAYGROUND_PYTHON_LANGCHAIN` override.
+`PLAYGROUND_PYTHON_CRIOGEN` / `PLAYGROUND_PYTHON_LANGCHAIN` override.
 """
 
 import json
@@ -32,7 +32,7 @@ WORKER = HERE / "worker.py"
 STATIC = HERE / "static"
 
 #: framework id -> (label, venv name)
-FRAMEWORKS = {"agentbuild": ("AgentBuild", "agentbuild"), "langchain": ("LangChain", "langgraph")}
+FRAMEWORKS = {"criogen": ("Criogen", "criogen"), "langchain": ("LangChain", "langgraph")}
 
 SAMPLE_EVERY = 0.1  # seconds
 MAX_SECONDS = 180  # a run that takes longer is stopped
@@ -267,13 +267,13 @@ def machine() -> dict:
 # (same origin, no header), the website in development and the deployed site.
 # Anything else (another site's script) gets 403 before a run can start.
 ALLOWED_ORIGINS = {
-    "http://localhost:4400", "http://127.0.0.1:4400", "https://agentbuild.vercel.app",
+    "http://localhost:4400", "http://127.0.0.1:4400", "https://criogen.vercel.app",
     *filter(None, os.environ.get("PLAYGROUND_ORIGINS", "").split(",")),
 }
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AgentBuildPlayground"
+    server_version = "CriogenPlayground"
 
     def _origin_ok(self) -> bool:
         origin = self.headers.get("origin")

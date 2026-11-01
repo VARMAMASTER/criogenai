@@ -1,11 +1,11 @@
-# Mugshot Support: an AgentBuild demo
+# Mugshot Support: an Criogen demo
 
-A small but real app on AgentBuild: a customer support agent for a pretend
+A small but real app on Criogen: a customer support agent for a pretend
 coffee gear shop, with a Next.js chat UI.
 
 What it shows:
 
-- **Threads in SQLite.** Every conversation is an AgentBuild thread in
+- **Threads in SQLite.** Every conversation is an Criogen thread in
   `server/support.db`. Restart the server and conversations are still there.
 - **Human approval.** The agent may call `issue_refund`, but the call waits
   until you press *Approve* or *Reject* in the UI. The pending approval is
@@ -31,7 +31,7 @@ provider.
 
 Needs Rust and Node.js 20.9 or newer.
 
-1. Put your keys in `~/.agentbuild-keys.env` (outside the repository):
+1. Put your keys in `~/.criogen-keys.env` (outside the repository):
 
    ```
    OPENAI_API_KEY=sk-...
@@ -39,7 +39,7 @@ Needs Rust and Node.js 20.9 or newer.
    ```
 
    Either one is enough. Environment variables of the same name take
-   precedence; `AGENTBUILD_KEYS_FILE` points to another file.
+   precedence; `CRIOGEN_KEYS_FILE` points to another file.
    Optional: `OPENAI_MODEL` (default `gpt-5-mini`), `GEMINI_MODEL` (default
    `gemini-2.5-flash`), `SUPPORT_DB` (default `sqlite://support.db`), `PORT`
    (default 8787).

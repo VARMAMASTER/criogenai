@@ -1,12 +1,12 @@
 """A small chat backend for the website's demo page: a support agent built on
-the real AgentBuild SDK, so visitors can try the features themselves.
+the real Criogen SDK, so visitors can try the features themselves.
 
-    <python with agentbuild-sdk> demos/feature-tour/chat_server.py     # http://127.0.0.1:4700
+    <python with criogen> demos/feature-tour/chat_server.py     # http://127.0.0.1:4700
 
 The agent has tools (look up an order, refund it), pauses before a refund for a
 person to decide, remembers facts per visitor, writes an audit trail, saves
 every conversation to a SQLite file and guards large refunds with a hook.
-Models come from the keys in ~/.agentbuild-keys.env (read here, never sent to
+Models come from the keys in ~/.criogen-keys.env (read here, never sent to
 the browser). The server listens on 127.0.0.1 only and accepts calls from the
 website's pages only.
 """
@@ -22,11 +22,11 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from agentbuild import Agent, Decision, Gemini, Memory, OpenAI, OpenRouter, Retry, Storage, ToolError, tool
+from criogen import Agent, Decision, Gemini, Memory, OpenAI, OpenRouter, Retry, Storage, ToolError, tool
 
 PORT = int(os.environ.get("PORT", "4700"))
 ALLOWED_ORIGINS = {
-    "http://localhost:4400", "http://127.0.0.1:4400", "https://agentbuild.vercel.app",
+    "http://localhost:4400", "http://127.0.0.1:4400", "https://criogen.vercel.app",
     *filter(None, os.environ.get("PLAYGROUND_ORIGINS", "").split(",")),
 }
 
@@ -38,7 +38,7 @@ ORDERS = {
 
 
 def load_keys() -> None:
-    path = Path.home() / ".agentbuild-keys.env"
+    path = Path.home() / ".criogen-keys.env"
     if not path.exists():
         return
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -87,7 +87,7 @@ INSTRUCTIONS = (
 # One dedicated event loop runs every SDK call; request threads submit to it.
 LOOP = asyncio.new_event_loop()
 threading.Thread(target=LOOP.run_forever, daemon=True).start()
-DB = os.path.join(tempfile.gettempdir(), f"agentbuild-demo-chat-{uuid.uuid4().hex}.db")
+DB = os.path.join(tempfile.gettempdir(), f"criogen-demo-chat-{uuid.uuid4().hex}.db")
 STORAGE: Storage = None  # type: ignore[assignment]
 AGENTS: dict = {}
 
@@ -182,7 +182,7 @@ async def snapshot(thread_id: str, visitor: str) -> dict:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "AgentBuildDemoChat"
+    server_version = "CriogenDemoChat"
 
     def log_message(self, *args):
         pass
@@ -281,7 +281,7 @@ def main() -> None:
     load_keys()
     submit(init_storage()).result(timeout=20)
     server = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
-    print(f"demo chat on http://127.0.0.1:{PORT} with models: {[k for k, _ in available()] or 'none (add keys to ~/.agentbuild-keys.env)'}", flush=True)
+    print(f"demo chat on http://127.0.0.1:{PORT} with models: {[k for k, _ in available()] or 'none (add keys to ~/.criogen-keys.env)'}", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

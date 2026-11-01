@@ -7,7 +7,7 @@ comparison, alongside the LiteLLM notes.
 >
 > `theopenco/llmgateway` is licensed under the **GNU AGPLv3**. The exception is
 > everything under `ee/`, which is under a separate **commercial license**
-> (`LICENSE:1-9`). AgentBuild is meant to be permissively licensed, so it
+> (`LICENSE:1-9`). Criogen is meant to be permissively licensed, so it
 > **cannot copy, port, translate, or closely paraphrase** any llmgateway code.
 > A Rust rewrite of AGPL TypeScript can still be a derivative work. AGPL's
 > network clause also means that running a modified copy as a service obliges
@@ -20,10 +20,10 @@ comparison, alongside the LiteLLM notes.
 > of how llmgateway implements them. Nothing under `ee/` was read; only the
 > directory names (`admin`, `audit`, `guardrails`) were listed.
 >
-> **How AgentBuild may use it:** only as an *external service*, meaning a
+> **How Criogen may use it:** only as an *external service*, meaning a
 > separately deployed, unmodified llmgateway (or the hosted
-> `api.llmgateway.io`) that AgentBuild calls over its OpenAI- or
-> Anthropic-compatible HTTP API, like any other provider endpoint. AgentBuild
+> `api.llmgateway.io`) that Criogen calls over its OpenAI- or
+> Anthropic-compatible HTTP API, like any other provider endpoint. Criogen
 > must never vendor it, link it, or embed it.
 
 **Source studied:** commit `ae99ddf` ("feat: add hourly prompt cache
@@ -66,7 +66,7 @@ file and symbol names. Source files were opened only to confirm structure.
    list. A separate worker batch-inserts them into Postgres, does billing,
    and builds the hourly aggregates that feed back into routing. Config
    reads go through a cache with a last-known-good copy kept in Redis.
-6. **What AgentBuild should take from it is ideas only:** the
+6. **What Criogen should take from it is ideas only:** the
    model→mapping→provider catalog shape, a per-mapping "wire dialect" switch,
    error classes that drive fallback, session-sticky routing for prompt
    caching, and keeping usage and cost off the critical path. Sections 6 and
@@ -361,7 +361,7 @@ as Perplexity's agent API.
   `chat.ts` handles plan, compliance and billing rules that are mixed into
   the request path.
 
-## 6. Design ideas for AgentBuild's Rust provider layer
+## 6. Design ideas for Criogen's Rust provider layer
 
 These are written as general techniques we could build independently. None
 of them describes llmgateway's code.
@@ -376,11 +376,11 @@ of them describes llmgateway's code.
 2. **Make the wire dialect a property of the deployment.** The dialect is
    one of a few families, such as `openai_chat`, `openai_responses`,
    `anthropic_messages` and `gemini`. A new OpenAI-compatible host is then
-   catalog data, not new code. This lets AgentBuild keep a small number of
+   catalog data, not new code. This lets Criogen keep a small number of
    codec implementations behind one trait.
 3. **Use one internal request representation and thin codecs.** Convert
    inbound shapes to one internal shape, and convert back at the edges, so
-   routing, logging and costing run once. AgentBuild should design its own
+   routing, logging and costing run once. Criogen should design its own
    neutral internal representation. llmgateway uses the OpenAI chat
    completions shape for this, which is lossy for Anthropic thinking and
    cache blocks and for the Responses API.
@@ -401,7 +401,7 @@ of them describes llmgateway's code.
    a session to the deployment chosen first, and switch only when health
    requires it. Prompt-cache savings usually exceed small price differences.
    Pass a session-derived cache key upstream where the API supports one.
-   This matters directly for AgentBuild, whose workloads are multi-turn agent
+   This matters directly for Criogen, whose workloads are multi-turn agent
    loops.
 8. **Score with cache awareness when choosing.** Estimate the effective
    input price from the expected cache-hit rate and output ratio, not from
@@ -424,9 +424,9 @@ of them describes llmgateway's code.
 **Things to avoid:**
 
 - **A 15k-line request handler** that mixes billing, plans, compliance and
-  routing. AgentBuild should keep these as composable layers or middleware
+  routing. Criogen should keep these as composable layers or middleware
   with narrow traits.
-- **Tenancy, billing and plan logic in the provider layer.** AgentBuild is
+- **Tenancy, billing and plan logic in the provider layer.** Criogen is
   a runtime, not a SaaS. Quotas and keys belong to whoever hosts it.
 - **Requiring Postgres, Redis and a worker** just to make a provider call.
   The provider layer should run in-process with no external services, and
@@ -451,7 +451,7 @@ of them describes llmgateway's code.
 | Routing | Weighted metrics scoring, sticky sessions, exploration, auto/smart model routing, dynamic route graphs | Router with strategies and fallbacks |
 | Required infrastructure | Postgres + 2× Redis + gateway + worker (+ API and UI) | None for the SDK; the proxy is optional, with Postgres/Redis optional |
 | Gateway size | About 81k LOC in `apps/gateway`, plus 17k in `actions` and 29k in `models` | — |
-| Usable by AgentBuild | **Only as an external HTTP service, unmodified** | Its license allows study, and porting with attribution |
+| Usable by Criogen | **Only as an external HTTP service, unmodified** | Its license allows study, and porting with attribution |
 
 ## Appendix: REA static analysis of `apps/gateway`
 

@@ -1,0 +1,31 @@
+[package]
+name = "criogen-core"
+description = "Execution engine for Criogen workflows"
+readme = "README.md"
+keywords = ["agents", "workflow", "llm", "orchestration", "async"]
+categories = ["asynchronous", "concurrency"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# Not published until the package name is confirmed.
+publish = false
+
+# docs.rs documents every feature (e.g. SQLite storage).
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# `sync`: event channel and cancel tokens. `time`: timeouts, deadlines, backoff.
+tokio = { workspace = true, features = ["rt", "sync", "time"] }
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "test-util"] }
+
+[lints]
+workspace = true

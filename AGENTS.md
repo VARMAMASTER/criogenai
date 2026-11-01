@@ -1,4 +1,4 @@
-# AgentBuild: notes for assistants and contributors
+# Criogen: notes for assistants and contributors
 
 Read this first when picking up work on this repository. Then read
 [docs/progress.md](docs/progress.md) for current status and next steps, and
@@ -18,7 +18,7 @@ write our own implementation.
 
 ## Current state (keep this section accurate)
 
-- **Implemented:** `crates/agentbuild-core`. Superstep engine with static
+- **Implemented:** `crates/criogen-core`. Superstep engine with static
   edges, async routers, joins, cycles, concurrent nodes, atomic steps, stable
   error codes. CI was last green on GitHub on Linux, Windows, macOS and
   MSRV 1.88 at `3ca76cc` (2026-10-13).
@@ -26,14 +26,14 @@ write our own implementation.
   `docs/design/0002`–`0008` cover messages and tools, errors, the agent loop,
   core extensions, the provider layer and gateway, the public API, and
   persistence and memory. Research is in `docs/research/`.
-- **Implemented in `agentbuild-core`:** the 0001 engine plus all of 0005:
+- **Implemented in `criogen-core`:** the 0001 engine plus all of 0005:
   NodeContext, `Update`/`Command`/`Suspend` outcomes, suspend/resume with
   JSON snapshots, reducers, the workflow fingerprint, live events
   (`Workflow::stream`, `event_channel`, `ctx.events()`), policies
   (`NodePolicy` timeout/retry, run deadline, `CancelToken` with grace), and
   saved task writes with `ctx.memo()` plus snapshots on failure
   (`RunError::snapshot`, `Workflow::retry`).
-- **Implemented in `agentbuild-providers` (foundation):** the 0002 types
+- **Implemented in `criogen-providers` (foundation):** the 0002 types
   (`Message`, `ContentBlock`, `ToolSpec`, `ModelRequest`/`ModelResponse`,
   `Capabilities`), `ModelError` with `classify_http` (0003 §4), transcript
   check/repair (0002 §6), the `Model` trait, `FakeModel`, the SSE parser,
@@ -41,7 +41,7 @@ write our own implementation.
   default), the `openai_chat` and `anthropic_messages` protocols,
   `Endpoint` presets and `ProviderModel` (OpenAI, OpenRouter, Ollama,
   LM Studio, vLLM, Anthropic, any OpenAI- or Anthropic-compatible server).
-- **Implemented in `agentbuild-agent` (slice 1):** the agent loop (0004):
+- **Implemented in `criogen-agent` (slice 1):** the agent loop (0004):
   `model` ⇄ `tools` workflow, Rust tools (`tool_fn`), argument validation,
   concurrent calls in call order, timeouts, limits, model retries, events,
   memo-backed `Agent::retry`; slice 2: human approval (`Approval`,
@@ -59,7 +59,7 @@ write our own implementation.
   `rewind`, `delete`; `stream` / `stream_approve` / `stream_reject` /
   `stream_decide` / `stream_retry` (`ThreadStream`, 0008 §17: a dropped
   stream cancels and still saves; model calls stop at once on cancel).
-- **Implemented in `agentbuild-storage` (0008 steps 1–5):** `Checkpoint`,
+- **Implemented in `criogen-storage` (0008 steps 1–5):** `Checkpoint`,
   the `Checkpointer` trait (compare-and-set commit, `put_pending`),
   `InMemoryCheckpointer`, `SqliteCheckpointer` (feature `sqlite`, sqlx
   0.8: delta + keyframe checkpoints, migrations), `ThreadWriter`,
@@ -84,7 +84,7 @@ write our own implementation.
   `spawn_pruner`; `Checkpointer::threads` / `prune_thread`. Encryption
   at rest (feature `encryption`): `Keyring`, `Storage::connect_encrypted`,
   `reencrypt`; AES-256-GCM per-row keys (HKDF), memory keys as HMAC tags,
-  `agentbuild_settings` refuses opening an encrypted database without
+  `criogen_settings` refuses opening an encrypted database without
   its keys. SQLite runs with `secure_delete`. Step 6 (§16): semantic
   memory search. Workflow threads (§18): `Storage::workflow_thread(&wf,
   id)` → `WorkflowThread` (`run`, `resume(values)`, `retry`, `cancel`,
@@ -97,16 +97,16 @@ write our own implementation.
   storage; `Memory::semantic(embedder)`, `put_embedded`, `memory_text`
   in agents (keyword fallback when the embedder fails).
 - **Implemented: audit trail (0010).** `AuditLog` (`InMemoryAuditLog`,
-  `SqliteAuditLog`, `PostgresAuditLog`; table `agentbuild_audit`,
+  `SqliteAuditLog`, `PostgresAuditLog`; table `criogen_audit`,
   migration 5), SHA-256 hash chain with `verify` and `head`,
   `Storage::with_audit` / `record`, fail closed (`audit_failed`). Agents
   record model and tool calls (before the result is saved), runs,
   approvals (decisions before the calls run), rewinds, deletions and
   memory writes (key hashed), with `Thread::actor`. No content in
   records. Core: `NodeContext::metadata` (agents put the audit context
-  under `agentbuild_audit`).
+  under `criogen_audit`).
 - **Implemented: Python SDK, first slice (0011).** `sdks/python`
-  (crate `agentbuild-python`, not a workspace member; PyO3 0.29 abi3,
+  (crate `criogen-python`, not a workspace member; PyO3 0.29 abi3,
   maturin): `Agent`, `@tool` (schemas from type hints; sync tools on a
   worker thread, async tools on the caller's loop), approvals, typed
   output, threads (send/approve/reject/decide/retry/history/rewind/
@@ -119,15 +119,15 @@ write our own implementation.
   for it: `Thread::with_options`, `ToolContext::metadata`. Workflows
   (0015): `Workflow`, nodes (functions or agents), routes, joins, goto,
   reducers, suspend/resume, threads (`sdks/python/tests/test_workflow.py`).
-  Published as **`agentbuild-sdk`** on PyPI (import `agentbuild`; the
-  name "agentbuild" there belongs to another project). Since then (0017):
+  Package name **`criogen`** on PyPI (import `criogen`; not published yet).
+  Since then (0017):
   sub-agents, retries and fallbacks, semantic memory, telemetry and
   hooks in both SDKs; Zod / Standard Schema tool input in TypeScript;
   `Gateway` (0018: chat, stream, embed without an agent, over Rust's
   `ResilientModel`).
 - **Implemented: TypeScript SDK, first slice (0012).** `sdks/typescript`
-  (crate `agentbuild-node`, not a workspace member; napi-rs 3, N-API 6,
-  Node 18+; package `agentbuild-sdk`, TypeScript in `lib/` compiled to
+  (crate `criogen-node`, not a workspace member; napi-rs 3, N-API 6,
+  Node 18+; package `criogen`, TypeScript in `lib/` compiled to
   `dist/`): the same slice as Python, and workflows (`Workflow`, 0015;
   `test/workflow.test.js`). `Agent`, `tool({...})` with JSON
   Schema input, approvals, typed output, threads (incl. `stream*`),
@@ -137,11 +137,11 @@ write our own implementation.
   (`sdks/typescript/test`); `scripts/test-typescript.sh` installs the
   npm tarball into a new project; `ci-local.sh` step `typescript`.
 - **Implemented: LLM gateway, first slice (0006 §12).**
-  `crates/agentbuild-gateway` (axum 0.8, toml): `Gateway::builder()`
+  `crates/criogen-gateway` (axum 0.8, toml): `Gateway::builder()`
   (routes with fallbacks, virtual keys kept as SHA-256 digests, usage
   records on a `try_send` channel) → axum `Router`; `Config` (TOML;
   secrets only through `*_env` variable names); binary
-  `agentbuild-gateway --config … [--listen] [--allow-open] [--log-usage]`
+  `criogen-gateway --config … [--listen] [--allow-open] [--log-usage]`
   (refuses an open gateway off loopback). `POST /v1/chat/completions`
   (stream and not; OpenAI wire format in and out, any upstream protocol),
   `GET /v1/models`, `GET /health`; the upstream call is aborted when the
@@ -154,30 +154,30 @@ write our own implementation.
 - **Implemented: error catalog and JSON Schemas (0013).**
   `schemas/error-codes.json` (every stable code: layers, category,
   retryable, SDK family, gateway HTTP status) and
-  `schemas/agentbuild.schema.json` (Message, ContentBlock, ToolSpec,
+  `schemas/criogen.schema.json` (Message, ContentBlock, ToolSpec,
   ModelRequest/Response, MessageDelta, ModelError, ApprovalRequest,
   Decision, AuditRecord, UsageRecord, ErrorObject). Tests:
-  `agentbuild-agent/tests/catalog.rs` (scans the sources for raised
-  codes; `docs/errors.md` is generated: `AGENTBUILD_UPDATE_DOCS=1 cargo
-  test -p agentbuild-agent --test catalog`), `tests/schemas.rs` (real
+  `criogen-agent/tests/catalog.rs` (scans the sources for raised
+  codes; `docs/errors.md` is generated: `CRIOGEN_UPDATE_DOCS=1 cargo
+  test -p criogen-agent --test catalog`), `tests/schemas.rs` (real
   values validate), SDK tests check their error classes against the
   catalog. The validator now enforces `anyOf`/`oneOf`/`allOf`/local
   `$ref` (tool arguments too).
-- **Benchmarks (0014):** `crates/agentbuild-bench` (`cargo run -p
-  agentbuild-bench --release`), `benches/` (LangGraph comparison, Python
+- **Benchmarks (0014):** `crates/criogen-bench` (`cargo run -p
+  criogen-bench --release`), `benches/` (LangGraph comparison, Python
   and TypeScript bridges); results in `docs/benchmarks.md` (one machine,
   2026-10-16). Quote numbers only from that page, with what was measured.
 - **Framework comparison (0016):** `benches/compare/` (setup.py: one venv
   per framework in `target/compare/venvs`; `run.py`: scenarios, load,
   reliability, footprint → `bench/results/<date>T<time>-<machine>.json`;
-  `package.py`: the public kit zip for the website). AgentBuild,
+  `package.py`: the public kit zip for the website). Criogen,
   LangGraph and CrewAI in Python with one simulated model. The website's
   benchmark lab (`website/app/benchmarks`) shows the file in
   `website/public/bench/results.json`.
 - **Tool exceptions:** `Limits::on_tool_exception` (`OnToolException`:
   `ReturnToModel` default, `ReturnGeneric`, `Fail`); `ToolError::crashed`;
   Rust tool panics are caught and follow it (0003 §5.1).
-- **Implemented in `agentbuild-telemetry` (0009):** OTLP/HTTP JSON export
+- **Implemented in `criogen-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
@@ -187,24 +187,24 @@ write our own implementation.
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
   (manual; dry run unless "publish"). Crates still have `publish = false`
   until the user confirms the names.
-- **Demo app:** `demos/support-chat` (Rust server on AgentBuild + Next.js
+- **Demo app:** `demos/support-chat` (Rust server on Criogen + Next.js
   UI; real OpenAI/Gemini models, manual only, not in CI or the workspace).
-  Keys live in `~/.agentbuild-keys.env`, never in the repo.
+  Keys live in `~/.criogen-keys.env`, never in the repo.
 - **Next:** the 10-task roadmap in `docs/progress.md` ("Roadmap
   tasks") is done, and so are the release blockers that need no
   decision: `Storage::close` (and `close()` in both SDKs),
   `.github/workflows/sdk-packages.yml` (wheels and npm addons for Linux
   x64/arm64, macOS arm64/x64, Windows x64, tested per platform; manual,
-  never run yet), the TS loader for `agentbuild-sdk-<platform>-<arch>`.
+  never run yet), the TS loader for `criogen-<platform>-<arch>`.
   Decided (2026-10-22): the code stays private until 10,000 installs
   (then MIT or Apache-2.0); until then the Python and npm packages are
-  free to use under the AgentBuild Free Licence (`sdks/*/LICENSE`, a
+  free to use under the Criogen Free Licence (`sdks/*/LICENSE`, a
   draft to review); Python and TypeScript first, Rust crates when the
   code opens; no GitHub links on the website; a live install counter on
   the home page. Waiting for the user: running the GitHub workflows (paid
   minutes while private), registry accounts (see RELEASING.md), a legal
   review of the licence. The user will build their
-  hospital product (Axon Health OS) on AgentBuild: keep the framework
+  hospital product (Axon Health OS) on Criogen: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
 - **Website:** `website/` (Next.js 16, React, static export for Vercel):
@@ -215,12 +215,12 @@ write our own implementation.
   fixed (CHANGELOG "Security audit"); `scripts/check-supply-chain.sh`
   guards the build and release. New rules below (10–12).
 - **Implemented (Python, TypeScript, Rust): patterns, specialists, web tools (0019).**
-  `agentbuild.patterns` (12 designs from Google Cloud's agentic-pattern guide
-  as functions, plus `quick("a > b")`), `agentbuild.specialists` (extendable
-  default agent recipes and a registry), `agentbuild.web` (Tavily/Brave search,
+  `criogen.patterns` (12 designs from Google Cloud's agentic-pattern guide
+  as functions, plus `quick("a > b")`), `criogen.specialists` (extendable
+  default agent recipes and a registry), `criogen.web` (Tavily/Brave search,
   safe page fetch). Tests: `sdks/python/tests/test_patterns.py`, `test_web.py`;
   `sdks/typescript/test/patterns.test.js`, `web.test.js`;
-  `crates/agentbuild-agent/tests/patterns.rs`, `web.rs` (feature `web`). Website: `/playground/`,
+  `crates/criogen-agent/tests/patterns.rs`, `web.rs` (feature `web`). Website: `/playground/`,
   `/demo/` (`demos/feature-tour/`: `tour.py` records scripted and `--live`
   tours into `website/public/demo/`; `chat_server.py` is the chat backend).
 - **Not started:** vector indexes
@@ -234,32 +234,32 @@ cargo test                       # unit + integration + doctests
 cargo test --workspace --all-features   # also the SQLite backend
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
-cargo test -p agentbuild-providers   # one crate
-cargo run -p agentbuild-core --example basic_workflow -- "some text"
-cargo run -p agentbuild-core --example approval_workflow -- yes
-cargo run -p agentbuild-core --example llm_workflow -- "remote work"
-cargo run -p agentbuild-core --example retry_workflow
-cargo run -p agentbuild-core --example recover_workflow
-cargo run -p agentbuild-agent --example approval_agent -- edit   # or approve, reject
-cargo run -p agentbuild-agent --example thread_agent
-cargo run -p agentbuild-agent --features sqlite --example durable_agent
+cargo test -p criogen-providers   # one crate
+cargo run -p criogen-core --example basic_workflow -- "some text"
+cargo run -p criogen-core --example approval_workflow -- yes
+cargo run -p criogen-core --example llm_workflow -- "remote work"
+cargo run -p criogen-core --example retry_workflow
+cargo run -p criogen-core --example recover_workflow
+cargo run -p criogen-agent --example approval_agent -- edit   # or approve, reject
+cargo run -p criogen-agent --example thread_agent
+cargo run -p criogen-agent --features sqlite --example durable_agent
 # Langfuse, manual only (needs LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY):
-cargo run -p agentbuild-telemetry --example langfuse
+cargo run -p criogen-telemetry --example langfuse
 # Real model, manual only (needs a server; default: Ollama on localhost):
-AGENTBUILD_MODEL=llama3.2 cargo run -p agentbuild-providers --example chat -- "hi"
+CRIOGEN_MODEL=llama3.2 cargo run -p criogen-providers --example chat -- "hi"
 # Claude (needs ANTHROPIC_API_KEY):
-AGENTBUILD_PROTOCOL=anthropic AGENTBUILD_MODEL=claude-haiku-5-5 cargo run -p agentbuild-providers --example chat -- "hi"
+CRIOGEN_PROTOCOL=anthropic CRIOGEN_MODEL=claude-haiku-5-5 cargo run -p criogen-providers --example chat -- "hi"
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 bash scripts/test-package.sh     # package the crate, use it from a separate project
 cargo deny --all-features check  # advisories, licenses, sources (deny.toml)
 bash scripts/ci-local.sh         # the whole CI pipeline, locally (--quick: rust step only)
 bash scripts/test-python.sh      # Python SDK: wheel into a new venv, consumer + pytest
 bash scripts/test-typescript.sh  # TypeScript SDK: npm tarball into a new project, consumer + node --test
-cargo run -p agentbuild-bench --release   # benchmarks (docs/benchmarks.md)
-cargo run -p agentbuild-gateway -- --config crates/agentbuild-gateway/examples/gateway.toml   # the LLM gateway
-bash scripts/get-postgres.sh     # portable PostgreSQL into ~/.agentbuild/postgres (once)
+cargo run -p criogen-bench --release   # benchmarks (docs/benchmarks.md)
+cargo run -p criogen-gateway -- --config crates/criogen-gateway/examples/gateway.toml   # the LLM gateway
+bash scripts/get-postgres.sh     # portable PostgreSQL into ~/.criogen/postgres (once)
 bash scripts/with-postgres.sh cargo test --workspace --all-features   # with a throwaway server
-# Every feature against real models, manual only (keys in ~/.agentbuild-keys.env):
+# Every feature against real models, manual only (keys in ~/.criogen-keys.env):
 cd tests/live && cargo run       # or: cargo run -- gemini; LIVE_ONLY=approval cargo run
 ```
 
@@ -291,7 +291,7 @@ git-ignored. REA is not registered as an MCP server in any agent config.
 2. **Keep the core small.** Add a dependency only with a stated reason. Current
    deps: tokio (features `rt`, `sync`, `time`; no `macros`), serde, serde_json,
    thiserror, uuid (v7 run ids). Dev only: tokio `test-util` for the paused
-   clock. `agentbuild-providers` follows the budget in research
+   clock. `criogen-providers` follows the budget in research
    `litellm-providers.md` §10.11 (today: serde, serde_json, thiserror, uuid,
    tokio `time`, reqwest behind the `http` feature).
    Transport tests use a scripted local TCP server
@@ -305,17 +305,17 @@ git-ignored. REA is not registered as an MCP server in any agent config.
 6. **Honest docs.** README status tables distinguish implemented from planned.
    No performance claims without benchmarks in the repo.
 7. **Tests with every behaviour change.** Integration tests live in
-   `crates/agentbuild-core/tests/`. Concurrency claims need tests that would
+   `crates/criogen-core/tests/`. Concurrency claims need tests that would
    deadlock or time out if the claim were false (see
    `fan_out_runs_nodes_concurrently`).
    **Simulate LLM calls; never call a real model in tests.** Use `FakeLlm`
-   (`crates/agentbuild-core/tests/support/fake_llm.rs`): it replies after
+   (`crates/criogen-core/tests/support/fake_llm.rs`): it replies after
    2–3 s (fixed per prompt) and can fail on a marker. Tests run it on Tokio's
    paused clock (`#[tokio::test(start_paused = true)]`) so timing is exact and
    the suite stays fast; examples run it in real time. See
    `tests/llm_simulation.rs`. Code that speaks the model contract
-   (`agentbuild-providers`, later the agent loop) uses
-   `agentbuild_providers::FakeModel` instead: the same 2–3 s timing, plus
+   (`criogen-providers`, later the agent loop) uses
+   `criogen_providers::FakeModel` instead: the same 2–3 s timing, plus
    scripted tool calls (`FakeReply`) and classified `ModelError`s.
 8. **Public API hygiene.** Public enums and structs that may grow are
    `#[non_exhaustive]`. Public items have docs and implement `Debug`
@@ -353,7 +353,7 @@ git-ignored. REA is not registered as an MCP server in any agent config.
   skips and says so if they are missing). Local runs cover Windows only;
   start the CI workflow by hand before a release for Linux and macOS.
 
-- Remote: `https://github.com/VARMAMASTER/agentbuild` (private). The `main` branch is protected by
+- Remote: `https://github.com/VARMAMASTER/criogen` (private). The `main` branch is protected by
   convention: commit only when the user asks.
 - Use Conventional Commits (`feat(core): …`, `docs: …`, `fix: …`); mark breaking
   changes with `!`.
@@ -383,9 +383,9 @@ git-ignored. REA is not registered as an MCP server in any agent config.
 |---|---|
 | What does a term mean? Naming rules? | `docs/glossary.md` |
 | What does an error code mean? | `docs/errors.md` (from `schemas/error-codes.json`) |
-| How does a run execute? | `docs/architecture.md` §4, `crates/agentbuild-core/src/runtime.rs` |
+| How does a run execute? | `docs/architecture.md` §4, `crates/criogen-core/src/runtime.rs` |
 | What are the exact semantics? | `docs/design/0001-execution-model.md` |
 | What's done, what's next, what's undecided? | `docs/progress.md` |
 | How does LangGraph/LangChain do X? | `docs/research/*.md` |
 | How do agents, tools and errors work (design)? | `docs/design/0002`–`0005`, `docs/architecture.md` §7 |
-| Validation rules | `crates/agentbuild-core/src/graph.rs` (`build`), `src/error.rs` (`ValidationIssue`) |
+| Validation rules | `crates/criogen-core/src/graph.rs` (`build`), `src/error.rs` (`ValidationIssue`) |

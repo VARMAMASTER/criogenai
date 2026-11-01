@@ -439,9 +439,9 @@ Other O(history) work done on every step:
 
 ---
 
-## 8. Implications for AgentBuild
+## 8. Implications for Criogen
 
-AgentBuild's core today (0001) provides:
+Criogen's core today (0001) provides:
 
 - supersteps, static edges, async routers that return declared labels, joins, cycles
 - atomic steps and fail-fast errors
@@ -519,5 +519,5 @@ This gives LangChain's expressiveness (the same six hook points) without its cos
 2. Add a minimal **reducer** to the core: `append` for lists. It is the smallest change that fixes O(history) FFI traffic, and it keeps `update_conflict` for every other key.
 3. Define **`Suspend` as a third node outcome** (besides update and error), alongside the persistence work. Do not emulate it with exceptions.
 4. Keep middleware an SDK concept with **six hooks** (`on_start`, `before_model`, `wrap_model`, `after_model`, `wrap_tool`, `on_end`). Specify ordering explicitly: forward for `before_*`, reverse for `after_*`, first is outermost for `wrap_*`. Provide async only in TS, and both sync and async in Python with automatic adaptation, never a runtime `NotImplementedError`.
-5. Make every agent-level failure an **AgentBuild error code** (`model_failed`, `tool_failed`, `output_invalid`, `model_call_limit`), consistent with the 0001 `RunError` table. Make conversion of a tool error into a message an explicit, uniform policy.
+5. Make every agent-level failure an **Criogen error code** (`model_failed`, `tool_failed`, `output_invalid`, `model_call_limit`), consistent with the 0001 `RunError` table. Make conversion of a tool error into a message an explicit, uniform policy.
 6. Budget the per-step overhead: LangChain adds about 2.4–8.5 ms per iteration in-process. Benchmark against the same fake-model loop (§7.4) before optimising.

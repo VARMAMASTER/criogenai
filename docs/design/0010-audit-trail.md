@@ -104,7 +104,7 @@ trait AuditLog: Send + Sync {
   `since_ms` / `until_ms`, `limit` (default 100).
 - `AuditVerification { records, ok, first_broken: Option<u64>, head }`.
 - Backends: `InMemoryAuditLog`; `SqliteCheckpointer::audit_log()` and
-  `PostgresCheckpointer::audit_log()` (table `agentbuild_audit`,
+  `PostgresCheckpointer::audit_log()` (table `criogen_audit`,
   migration 5). `Storage::connect` keeps the database's log ready;
   `with_audit()` turns it on (in-memory storage: an `InMemoryAuditLog`).
 
@@ -132,7 +132,7 @@ cut off the tail, or edit records and recompute every later hash, and
 
 - **The table refuses edits.** Migration 6 adds triggers (SQLite) and a
   trigger function (Postgres) that make `UPDATE`, `DELETE` and, on
-  Postgres, `TRUNCATE` fail with "agentbuild_audit is append-only". They
+  Postgres, `TRUNCATE` fail with "criogen_audit is append-only". They
   stop SQL injection elsewhere in an app and careless tooling; dropping a
   trigger takes schema rights.
 - **Anchors.** `AuditLog::anchor(key)` signs the head (`seq`, `hash`) with
@@ -162,7 +162,7 @@ run_id, subject, outcome, details, prev_hash])`, hex-encoded. Canonical:
 
 ## 6. Storage format
 
-`agentbuild_audit(seq INTEGER PRIMARY KEY, at_ms, action, actor,
+`criogen_audit(seq INTEGER PRIMARY KEY, at_ms, action, actor,
 thread_id, run_id, subject, outcome, details TEXT (JSON), prev_hash,
 hash)`, indexes on `thread_id` and `at_ms`. Not encrypted: it holds no
 content, and auditors need to read it. Never pruned.

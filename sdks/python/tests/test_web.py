@@ -6,7 +6,7 @@ import threading
 
 import pytest
 
-from agentbuild import Agent, FakeModel, FakeReply, specialists, web
+from criogen import Agent, FakeModel, FakeReply, specialists, web
 
 SECRET = "tvly-secret-key-123"
 

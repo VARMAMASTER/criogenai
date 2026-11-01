@@ -20,7 +20,7 @@ limits stay in Rust. A pattern is a function that returns a graph.
 
 ## The 12 patterns
 
-| Guide pattern | AgentBuild | Built how |
+| Guide pattern | Criogen | Built how |
 |---|---|---|
 | Single agent | `Agent` | exists |
 | ReAct | `patterns.react(model, tools, max_steps)` | an `Agent` with the loop's limits set and a reasoning prompt |
@@ -72,11 +72,11 @@ tools come from the user, and nothing is claimed about quality.
 
 ## Per language
 
-Python (`agentbuild.patterns`, `specialists`, `web`), TypeScript
+Python (`criogen.patterns`, `specialists`, `web`), TypeScript
 (`patterns`, `specialists`, `web` namespaces; camelCase) and Rust
-(`agentbuild_agent::patterns`, `specialists`, and `web` behind the cargo
+(`criogen_agent::patterns`, `specialists`, and `web` behind the cargo
 feature `web`). Differences are only what the language forces: Rust has no model
-strings or `AGENTBUILD_MODEL` fallback (specialist steps take an `Arc<dyn Model>`),
+strings or `CRIOGEN_MODEL` fallback (specialist steps take an `Arc<dyn Model>`),
 returns `Result<_, PatternError>` and a `PatternStop` enum, and extends a pattern
 with `Pattern::extend(closure)` because a compiled workflow cannot be edited.
 The Rust page reader also pins the connection to the address it checked, so DNS

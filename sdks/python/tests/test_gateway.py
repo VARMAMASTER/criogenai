@@ -5,8 +5,8 @@ import time
 
 import pytest
 
-from agentbuild import (
-    AgentBuildError,
+from criogen import (
+    CriogenError,
     Embedder,
     FakeModel,
     Gateway,
@@ -62,10 +62,10 @@ def test_json_output_is_parsed_and_checked():
     gw = Gateway()
     reply = gw.chat_sync(FakeModel(['{"city": "Oslo", "temp": 3}']), "Weather?", output=weather)
     assert reply.output == {"city": "Oslo", "temp": 3}
-    with pytest.raises(AgentBuildError) as wrong:
+    with pytest.raises(CriogenError) as wrong:
         gw.chat_sync(FakeModel(['{"city": "Oslo"}']), "Weather?", output=weather)
     assert wrong.value.code == "output_invalid"
-    with pytest.raises(AgentBuildError):
+    with pytest.raises(CriogenError):
         gw.chat_sync(FakeModel(["not json"]), "Weather?", output={"type": "object"})
 
 

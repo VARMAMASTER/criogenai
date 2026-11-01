@@ -1,6 +1,6 @@
 # 0002: Messages, tools, tool calls and tool results
 
-Status: **Partly implemented** in `crates/agentbuild-providers`: the data
+Status: **Partly implemented** in `crates/criogen-providers`: the data
 types of §1, §2, §3 (`ToolSpec` and registration-time validation), §4 (tool
 message fields and statuses) and §7 (request, response, capabilities), and
 the transcript check and repair of §6. Not yet: the tool context (§3.1),

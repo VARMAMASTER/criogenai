@@ -1,6 +1,6 @@
 """Live check of the Python SDK against real models (design 0011 §5).
 Manual only: needs API keys (OPENAI_API_KEY / GEMINI_API_KEY, or KEY=value
-lines in ~/.agentbuild-keys.env) and costs a few cents. Never run in CI.
+lines in ~/.criogen-keys.env) and costs a few cents. Never run in CI.
 
     python sdks/python/examples/live.py [openai] [gemini]
 """
@@ -10,11 +10,11 @@ import os
 import sys
 import time
 
-from agentbuild import Agent, Gemini, OpenAI, Storage, tool
+from criogen import Agent, Gemini, OpenAI, Storage, tool
 
 
 def load_keys():
-    path = os.environ.get("AGENTBUILD_KEYS_FILE", os.path.expanduser("~/.agentbuild-keys.env"))
+    path = os.environ.get("CRIOGEN_KEYS_FILE", os.path.expanduser("~/.criogen-keys.env"))
     if os.path.exists(path):
         for line in open(path, encoding="utf-8"):
             key, sep, value = line.strip().partition("=")

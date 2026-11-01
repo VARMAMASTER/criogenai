@@ -92,20 +92,20 @@ REA's next step would be a native decompiler (Ghidra, IDA or Hopper), none of
 which are installed. It isn't needed: these are open-source Rust crates, and
 their speed is not where LangChain's overhead comes from.
 
-## 4. What this means for AgentBuild
+## 4. What this means for Criogen
 
 1. **The hot paths of LangChain/LangGraph are already partly Rust**: validation,
    serialization and IDs. Orchestration (the Pregel loop, channels, callbacks,
    the agent factory) is pure Python. That's where the measured overhead lives
    (2.4–8.5 ms per agent step, [langchain-agents](langchain-agents.md) §7.4).
-   AgentBuild's differentiation must therefore be **Rust orchestration**, not
+   Criogen's differentiation must therefore be **Rust orchestration**, not
    just Rust serialization. "Rust-powered" alone is not a moat; pydantic-core
    already is.
 2. **maturin + PyO3 is proven at scale** (pydantic-core, orjson) for exactly
    our Phase 2 packaging. We should copy their *distribution* practices:
    per-platform wheels, and `abi3` where possible so one wheel covers many
    Python versions. Benchmark first.
-3. **Ship one package, not five in lock-step.** One `agentbuild` wheel (Rust
+3. **Ship one package, not five in lock-step.** One `criogen` wheel (Rust
    core plus the Python SDK) per platform, with providers as optional extras.
    This avoids the coordinated version pinning seen above.
 4. **No hard dependency on a vendor tracer.** Tracing goes through our event

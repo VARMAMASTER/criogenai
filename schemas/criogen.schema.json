@@ -1,0 +1,260 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://criogen.vercel.app/schemas/criogen.schema.json",
+  "title": "Criogen data contracts",
+  "description": "The JSON every Criogen language and service exchanges (design 0013 §3). Each type is under $defs; refer to one as criogen.schema.json#/$defs/<Type>. Checked against values serialized by the Rust engine.",
+  "$defs": {
+    "Extras": {
+      "description": "Provider-specific fields, by provider name.",
+      "type": "object"
+    },
+    "Role": {"enum": ["system", "user", "assistant", "tool"]},
+    "MediaSource": {
+      "oneOf": [
+        {"type": "object", "properties": {"kind": {"const": "url"}, "url": {"type": "string"}}, "required": ["kind", "url"]},
+        {"type": "object", "properties": {"kind": {"const": "base64"}, "data": {"type": "string"}}, "required": ["kind", "data"]},
+        {"type": "object", "properties": {"kind": {"const": "file_id"}, "file_id": {"type": "string"}}, "required": ["kind", "file_id"]}
+      ]
+    },
+    "ContentBlock": {
+      "description": "One part of a message, by `type`.",
+      "oneOf": [
+        {"type": "object", "properties": {"type": {"const": "text"}, "text": {"type": "string"}, "extras": {"$ref": "#/$defs/Extras"}}, "required": ["type", "text"]},
+        {"type": "object", "properties": {"type": {"const": "reasoning"}, "text": {"type": "string"}, "signature": {"type": "string"}, "redacted": {"type": "string"}, "extras": {"$ref": "#/$defs/Extras"}}, "required": ["type"]},
+        {"type": "object", "properties": {"type": {"const": "image"}, "source": {"$ref": "#/$defs/MediaSource"}, "mime_type": {"type": "string"}, "extras": {"$ref": "#/$defs/Extras"}}, "required": ["type", "source"]},
+        {"type": "object", "properties": {"type": {"const": "audio"}, "source": {"$ref": "#/$defs/MediaSource"}, "mime_type": {"type": "string"}, "extras": {"$ref": "#/$defs/Extras"}}, "required": ["type", "source"]},
+        {"type": "object", "properties": {"type": {"const": "file"}, "source": {"$ref": "#/$defs/MediaSource"}, "mime_type": {"type": "string"}, "extras": {"$ref": "#/$defs/Extras"}}, "required": ["type", "source"]},
+        {"type": "object", "properties": {"type": {"const": "json"}, "value": {}, "extras": {"$ref": "#/$defs/Extras"}}, "required": ["type", "value"]},
+        {"type": "object", "properties": {"type": {"const": "tool_call"}, "id": {"type": "string"}, "name": {"type": "string"}, "args": {"type": "object"}, "extras": {"$ref": "#/$defs/Extras"}}, "required": ["type", "id", "name", "args"]},
+        {"type": "object", "properties": {"type": {"const": "invalid_tool_call"}, "id": {"type": "string"}, "name": {"type": "string"}, "raw_args": {"type": "string"}, "error": {"type": "string"}, "extras": {"$ref": "#/$defs/Extras"}}, "required": ["type", "id", "raw_args", "error"]},
+        {"type": "object", "properties": {"type": {"const": "provider"}, "provider": {"type": "string"}, "data": {}}, "required": ["type", "provider", "data"]}
+      ]
+    },
+    "ToolStatus": {"enum": ["success", "error", "rejected", "skipped", "cancelled"]},
+    "ToolResultError": {
+      "type": "object",
+      "properties": {"code": {"type": "string"}, "message": {"type": "string"}, "retryable": {"type": "boolean"}},
+      "required": ["code", "message"]
+    },
+    "FinishReason": {"enum": ["stop", "tool_calls", "length", "content_filter", "error", "other"]},
+    "Usage": {
+      "type": "object",
+      "properties": {
+        "input_tokens": {"type": "integer", "minimum": 0},
+        "output_tokens": {"type": "integer", "minimum": 0},
+        "cache_read_tokens": {"type": "integer", "minimum": 0},
+        "cache_write_tokens": {"type": "integer", "minimum": 0},
+        "reasoning_tokens": {"type": "integer", "minimum": 0}
+      }
+    },
+    "MessageMetadata": {
+      "type": "object",
+      "properties": {
+        "model": {"type": "string"},
+        "provider": {"type": "string"},
+        "usage": {"$ref": "#/$defs/Usage"},
+        "finish_reason": {"$ref": "#/$defs/FinishReason"},
+        "raw_finish_reason": {"type": "string"},
+        "created_at": {"type": "string"},
+        "duration_ms": {"type": "integer", "minimum": 0},
+        "attempts": {"type": "integer", "minimum": 0},
+        "truncated": {"type": "boolean"}
+      }
+    },
+    "Message": {
+      "description": "One message of a conversation (design 0002 §1).",
+      "type": "object",
+      "properties": {
+        "id": {"type": "string"},
+        "role": {"$ref": "#/$defs/Role"},
+        "content": {"type": "array", "items": {"$ref": "#/$defs/ContentBlock"}},
+        "name": {"type": "string"},
+        "call_id": {"type": "string"},
+        "tool": {"type": "string"},
+        "status": {"$ref": "#/$defs/ToolStatus"},
+        "error": {"$ref": "#/$defs/ToolResultError"},
+        "artifact": {},
+        "metadata": {"$ref": "#/$defs/MessageMetadata"}
+      },
+      "required": ["role"]
+    },
+    "ToolAnnotations": {
+      "type": "object",
+      "properties": {"read_only": {"type": "boolean"}, "idempotent": {"type": "boolean"}, "destructive": {"type": "boolean"}}
+    },
+    "ToolSpec": {
+      "description": "A tool the model may call (design 0002 §3).",
+      "type": "object",
+      "properties": {
+        "name": {"type": "string", "minLength": 1, "maxLength": 64},
+        "description": {"type": "string"},
+        "input_schema": {"type": "object"},
+        "kind": {"enum": ["function", "mcp", "hosted"]},
+        "annotations": {"$ref": "#/$defs/ToolAnnotations"},
+        "timeout_ms": {"type": "integer", "minimum": 0},
+        "max_concurrency": {"type": "integer", "minimum": 1},
+        "return_direct": {"type": "boolean"},
+        "max_result_chars": {"type": "integer", "minimum": 0}
+      },
+      "required": ["name", "input_schema"]
+    },
+    "ToolChoice": {
+      "oneOf": [
+        {"enum": ["auto", "none", "required"]},
+        {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"], "additionalProperties": false}
+      ]
+    },
+    "OutputSpec": {
+      "type": "object",
+      "properties": {"schema": {"type": "object"}, "strategy": {"enum": ["native", "tool"]}},
+      "required": ["schema"]
+    },
+    "Reasoning": {
+      "oneOf": [
+        {"type": "object", "properties": {"effort": {"enum": ["low", "medium", "high"]}}, "required": ["effort"], "additionalProperties": false},
+        {"type": "object", "properties": {"budget_tokens": {"type": "integer", "minimum": 0}}, "required": ["budget_tokens"], "additionalProperties": false}
+      ]
+    },
+    "Settings": {
+      "type": "object",
+      "properties": {
+        "max_tokens": {"type": "integer", "minimum": 0},
+        "temperature": {"type": "number"},
+        "stop": {"type": "array", "items": {"type": "string"}},
+        "parallel_tool_calls": {"type": "boolean"},
+        "reasoning": {"$ref": "#/$defs/Reasoning"}
+      }
+    },
+    "ModelRequest": {
+      "description": "What a model is asked (design 0002 §4).",
+      "type": "object",
+      "properties": {
+        "messages": {"type": "array", "items": {"$ref": "#/$defs/Message"}},
+        "tools": {"type": "array", "items": {"$ref": "#/$defs/ToolSpec"}},
+        "tool_choice": {"$ref": "#/$defs/ToolChoice"},
+        "output": {"$ref": "#/$defs/OutputSpec"},
+        "settings": {"$ref": "#/$defs/Settings"},
+        "extras": {"$ref": "#/$defs/Extras"}
+      },
+      "required": ["messages"]
+    },
+    "Warning": {
+      "type": "object",
+      "properties": {"code": {"type": "string"}, "message": {"type": "string"}},
+      "required": ["code", "message"]
+    },
+    "ModelResponse": {
+      "type": "object",
+      "properties": {
+        "message": {"$ref": "#/$defs/Message"},
+        "usage": {"$ref": "#/$defs/Usage"},
+        "finish_reason": {"$ref": "#/$defs/FinishReason"},
+        "warnings": {"type": "array", "items": {"$ref": "#/$defs/Warning"}}
+      },
+      "required": ["message", "finish_reason"]
+    },
+    "BlockDelta": {
+      "oneOf": [
+        {"type": "object", "properties": {"type": {"const": "text"}, "text": {"type": "string"}}, "required": ["type", "text"]},
+        {"type": "object", "properties": {"type": {"const": "reasoning"}, "text": {"type": "string"}, "signature": {"type": "string"}}, "required": ["type"]},
+        {"type": "object", "properties": {"type": {"const": "tool_call"}, "id": {"type": "string"}, "name": {"type": "string"}, "args_fragment": {"type": "string"}}, "required": ["type"]},
+        {"type": "object", "properties": {"type": {"const": "block"}, "block": {"$ref": "#/$defs/ContentBlock"}}, "required": ["type", "block"]}
+      ]
+    },
+    "MessageDelta": {
+      "description": "A piece of a message as it streams (design 0005 §6).",
+      "type": "object",
+      "properties": {
+        "message_id": {"type": "string"},
+        "index": {"type": "integer", "minimum": 0},
+        "delta": {"$ref": "#/$defs/BlockDelta"}
+      },
+      "required": ["message_id", "index", "delta"]
+    },
+    "ModelError": {
+      "description": "A classified provider failure (design 0003 §4). `kind` is a code of layer `model` in error-codes.json.",
+      "type": "object",
+      "properties": {
+        "kind": {"enum": ["rate_limited", "overloaded", "server", "timeout", "network", "auth", "permission", "not_found", "invalid_request", "context_overflow", "content_filter", "quota_exhausted", "invalid_response", "unknown"]},
+        "message": {"type": "string"},
+        "provider": {"type": "string"},
+        "model": {"type": "string"},
+        "status": {"type": "integer"},
+        "provider_code": {"type": "string"},
+        "retry_after_ms": {"type": "integer", "minimum": 0},
+        "request_id": {"type": "string"},
+        "dispatch": {"enum": ["not_sent", "sent", "streaming"]},
+        "emitted_deltas": {"type": "boolean"}
+      },
+      "required": ["kind", "message"]
+    },
+    "DecisionKind": {"enum": ["approve", "edit", "reject", "respond"]},
+    "ApprovalRequest": {
+      "description": "A tool call waiting for a human decision (design 0004 §7).",
+      "type": "object",
+      "properties": {
+        "call_id": {"type": "string"},
+        "tool": {"type": "string"},
+        "args": {"type": "object"},
+        "description": {"type": "string"},
+        "allowed": {"type": "array", "items": {"$ref": "#/$defs/DecisionKind"}}
+      },
+      "required": ["call_id", "tool", "args", "allowed"]
+    },
+    "Decision": {
+      "description": "A reviewer's answer to one call.",
+      "oneOf": [
+        {"type": "object", "properties": {"type": {"const": "approve"}}, "required": ["type"]},
+        {"type": "object", "properties": {"type": {"const": "edit"}, "name": {"type": "string"}, "args": {"type": "object"}}, "required": ["type", "args"]},
+        {"type": "object", "properties": {"type": {"const": "reject"}, "message": {"type": "string"}}, "required": ["type"]},
+        {"type": "object", "properties": {"type": {"const": "respond"}, "message": {"type": "string"}}, "required": ["type", "message"]}
+      ]
+    },
+    "AuditRecord": {
+      "description": "One audit trail record (design 0010 §1). No content.",
+      "type": "object",
+      "properties": {
+        "seq": {"type": "integer", "minimum": 1},
+        "at_ms": {"type": "integer", "minimum": 0},
+        "action": {"type": "string", "minLength": 1},
+        "actor": {"type": "string"},
+        "thread_id": {"type": "string"},
+        "run_id": {"type": "string"},
+        "subject": {"type": "string"},
+        "outcome": {"type": "string"},
+        "details": {"type": "object"},
+        "prev_hash": {"type": "string", "minLength": 64, "maxLength": 64},
+        "hash": {"type": "string", "minLength": 64, "maxLength": 64}
+      },
+      "required": ["seq", "at_ms", "action", "prev_hash", "hash"]
+    },
+    "UsageRecord": {
+      "description": "The gateway's record of one request (design 0006 §12.5). No content.",
+      "type": "object",
+      "properties": {
+        "key": {"type": ["string", "null"]},
+        "route": {"type": "string"},
+        "model": {"type": "string"},
+        "input_tokens": {"type": "integer", "minimum": 0},
+        "output_tokens": {"type": "integer", "minimum": 0},
+        "latency_ms": {"type": "integer", "minimum": 0},
+        "outcome": {"type": "string"},
+        "fallbacks": {"type": "integer", "minimum": 0},
+        "stream": {"type": "boolean"}
+      },
+      "required": ["key", "route", "model", "input_tokens", "output_tokens", "latency_ms", "outcome", "fallbacks", "stream"]
+    },
+    "ErrorObject": {
+      "description": "An error as the SDKs and bridges report it (design 0003 §6.1). `code` is in error-codes.json.",
+      "type": "object",
+      "properties": {
+        "code": {"type": "string", "minLength": 1},
+        "message": {"type": "string"},
+        "category": {"type": "string"},
+        "retryable": {"type": "boolean"},
+        "details": {"type": ["object", "null"]}
+      },
+      "required": ["code", "message"]
+    }
+  }
+}

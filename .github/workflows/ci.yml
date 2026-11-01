@@ -32,8 +32,8 @@ jobs:
       - run: cargo test --doc --workspace --all-features
       - name: without the http feature
         run: |
-          cargo test -p agentbuild-providers --no-default-features
-          cargo test -p agentbuild-agent --no-default-features
+          cargo test -p criogen-providers --no-default-features
+          cargo test -p criogen-agent --no-default-features
 
   # The Postgres backend against real servers: the oldest supported
   # version and the newest.
@@ -52,13 +52,13 @@ jobs:
           --health-cmd pg_isready --health-interval 2s --health-timeout 5s
           --health-retries 20
     env:
-      AGENTBUILD_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
-      AGENTBUILD_REQUIRE_POSTGRES: "1"
+      CRIOGEN_TEST_POSTGRES_URL: postgres://postgres:postgres@localhost:5432/postgres
+      CRIOGEN_REQUIRE_POSTGRES: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
       - run: >-
-          cargo test -p agentbuild-storage -p agentbuild-agent --all-features
+          cargo test -p criogen-storage -p criogen-agent --all-features
           --test postgres --test memory_store --test durable --test encryption --test retention --test audit
 
   msrv:
@@ -124,11 +124,11 @@ jobs:
       - name: examples
         shell: bash
         run: |
-          cargo run -p agentbuild-core --example basic_workflow -- "Hello world"
-          cargo run -p agentbuild-core --example approval_workflow -- yes
-          cargo run -p agentbuild-core --example llm_workflow -- "remote work"
-          cargo run -p agentbuild-core --example retry_workflow
-          cargo run -p agentbuild-core --example recover_workflow
-          cargo run -p agentbuild-agent --example approval_agent -- edit
-          cargo run -p agentbuild-agent --example thread_agent
-          cargo run -p agentbuild-agent --features sqlite --example durable_agent
+          cargo run -p criogen-core --example basic_workflow -- "Hello world"
+          cargo run -p criogen-core --example approval_workflow -- yes
+          cargo run -p criogen-core --example llm_workflow -- "remote work"
+          cargo run -p criogen-core --example retry_workflow
+          cargo run -p criogen-core --example recover_workflow
+          cargo run -p criogen-agent --example approval_agent -- edit
+          cargo run -p criogen-agent --example thread_agent
+          cargo run -p criogen-agent --features sqlite --example durable_agent

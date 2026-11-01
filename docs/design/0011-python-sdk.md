@@ -11,10 +11,10 @@ slices (§8).
 
 ```
 sdks/python/
-  Cargo.toml          crate `agentbuild-python` (cdylib, not a workspace member)
-  pyproject.toml      maturin; wheel `agentbuild`, module `agentbuild._native`
+  Cargo.toml          crate `criogen-python` (cdylib, not a workspace member)
+  pyproject.toml      maturin; wheel `criogen`, module `criogen._native`
   src/lib.rs          the bridge: PyO3, one Tokio runtime per process
-  python/agentbuild/  the Python API (pure Python over `_native`)
+  python/criogen/  the Python API (pure Python over `_native`)
   tests/              pytest, simulated models only
 ```
 
@@ -30,7 +30,7 @@ sdks/python/
 ## 2. The API
 
 ```python
-from agentbuild import Agent, tool, ToolError, Storage, Memory
+from criogen import Agent, tool, ToolError, Storage, Memory
 
 @tool
 async def get_order(order_id: str) -> dict:
@@ -91,7 +91,7 @@ instance when `output=` is a model), `result.usage` (dict),
 
 ## 3. Errors
 
-`AgentBuildError(code, message, details)` for everything, with subclasses
+`CriogenError(code, message, details)` for everything, with subclasses
 by code: `ModelError` (`model_failed`), `ToolExecutionError`
 (`tool_failed`), `LimitExceededError`, `ThreadBusyError`,
 `ThreadSuspendedError`, `StorageError` (`storage_*`, `encryption_*`,

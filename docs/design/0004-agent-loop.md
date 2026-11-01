@@ -1,6 +1,6 @@
 # 0004: Agent loop, hooks, structured output and human-in-the-loop
 
-Status: **Partly implemented** in `crates/agentbuild-agent`: slice 1 (the
+Status: **Partly implemented** in `crates/criogen-agent`: slice 1 (the
 graph of §2, the model node and routing of §4.1–§4.2
 (without hooks and structured output), the tools node of §4.3, the limits
 `model_calls`, `tool_calls`, `tool_calls_per_turn`, `parallel_tool_calls`
@@ -218,7 +218,7 @@ Builds on [0002](0002-messages-and-tools.md)
 ## 1. Public API (sketch)
 
 ```python
-from agentbuild import Agent, tool, ToolError, Limits, Approve
+from criogen import Agent, tool, ToolError, Limits, Approve
 
 @tool
 async def search_docs(query: str, limit: int = 5) -> list[dict]:

@@ -1,6 +1,6 @@
 """The feature tour: every feature on the website's status page, run for real.
 
-    <python with the agentbuild SDK> demos/feature-tour/tour.py [out.json]
+    <python with the criogen SDK> demos/feature-tour/tour.py [out.json]
 
 Each scenario below is ordinary SDK code. The tour runs it (simulated models
 only: no network, no keys), records what it printed with `show(...)` and
@@ -28,8 +28,8 @@ import uuid
 from pathlib import Path
 from typing import Callable, Optional
 
-import agentbuild
-from agentbuild import (
+import criogen
+from criogen import (
     END,
     Agent,
     Decision,
@@ -81,8 +81,8 @@ def real():
 
 
 def load_keys() -> None:
-    """Read provider keys from ~/.agentbuild-keys.env into this process only (never printed)."""
-    path = Path.home() / ".agentbuild-keys.env"
+    """Read provider keys from ~/.criogen-keys.env into this process only (never printed)."""
+    path = Path.home() / ".criogen-keys.env"
     if not path.exists():
         return
     for line in path.read_text(encoding="utf-8").splitlines():
@@ -117,7 +117,7 @@ def tool_results(result):
 
 
 def temp_db(prefix: str) -> str:
-    return os.path.join(tempfile.gettempdir(), f"agentbuild-tour-{prefix}-{uuid.uuid4().hex}.db")
+    return os.path.join(tempfile.gettempdir(), f"criogen-tour-{prefix}-{uuid.uuid4().hex}.db")
 
 
 def remove_db(path: str) -> None:
@@ -225,7 +225,7 @@ async def tool_errors():
     try:
         await Agent(FakeModel(script), tools=[lookup], on_tool_exception="fail").run("go")
         check("fail ends the run", False)
-    except agentbuild.ToolExecutionError as error:
+    except criogen.ToolExecutionError as error:
         show("fail: the run raises", f"{type(error).__name__} (cause: {type(error.__cause__).__name__})")
         check("the original exception is the cause", isinstance(error.__cause__, KeyError))
 
@@ -355,7 +355,7 @@ async def crash_recovery():
     try:
         await chat.send("Look it up and email the customer")
         check("the first attempt fails", False)
-    except agentbuild.AgentBuildError as error:
+    except criogen.CriogenError as error:
         show("first attempt", f"{error.code}: {error.message}")
     show("tool calls so far", dict(counts))
     broken["on"] = False
@@ -394,7 +394,7 @@ async def streaming():
     stream.cancel()
     try:
         await stream.reply()
-    except agentbuild.CancelledError:
+    except criogen.CancelledError:
         took = time.perf_counter() - started
         show("cancel() on a 5 s model call returned after", f"{took * 1000:.0f} ms")
         check("cancellation is prompt", took < 1.0)
@@ -569,7 +569,7 @@ async def workflows():
     try:
         broken.compile()
         check("a broken graph is refused", False)
-    except agentbuild.AgentBuildError as error:
+    except criogen.CriogenError as error:
         show("compile() of a broken graph", error.message)
 
 
@@ -721,7 +721,7 @@ async def gateway_sdk():
     try:
         await Gateway().chat(FakeModel(['{"city": "Oslo"}']), "Weather?", output=weather)
         check("a wrong structure is refused", False)
-    except agentbuild.AgentBuildError as error:
+    except criogen.CriogenError as error:
         show("a structure that does not match", error.code)
         check("it fails with a stable code", error.code == "output_invalid")
 
@@ -763,7 +763,7 @@ async def telemetry():
 @feature("patterns-pipelines", "Patterns and specialists", "Sequential and parallel pipelines in one line",
          "Registered specialists chain with '>' or run side by side with '|'; steps are traced and parallel branches overlap.")
 async def patterns_pipelines():
-    from agentbuild import patterns
+    from criogen import patterns
 
     model = FakeModel(["a step's answer"])
     flow = patterns.quick("researcher > writer", model=model)
@@ -782,7 +782,7 @@ async def patterns_pipelines():
 @feature("patterns-review-loop", "Patterns and specialists", "Review and critique, with a loop that always ends",
          "A critic sends a draft back until it approves; a cap stops any loop that never converges.")
 async def patterns_review_loop():
-    from agentbuild import patterns
+    from criogen import patterns
 
     writer = Agent(FakeModel(["draft one", "draft two", "draft three"]))
     critic = Agent(FakeModel(["REVISE: add a number", "REVISE: shorter", "APPROVED"]))
@@ -803,7 +803,7 @@ async def patterns_review_loop():
 @feature("patterns-routing", "Patterns and specialists", "Coordinator, hierarchy and swarm",
          "A coordinator picks a specialist, specialists can be nested, and a swarm hands work over without a coordinator.")
 async def patterns_routing():
-    from agentbuild import patterns
+    from criogen import patterns
 
     orders = Agent(FakeModel(["Order A-1 shipped."]))
     triage = patterns.coordinator(
@@ -831,7 +831,7 @@ async def patterns_routing():
 @feature("patterns-human-review", "Patterns and specialists", "Human in the loop as a pattern, durable",
          "A step's draft waits for a person; another process approves it later, and the audit trail names both.")
 async def patterns_human_review():
-    from agentbuild import patterns
+    from criogen import patterns
 
     storage = Storage(audit=True)
     first = patterns.human_review(Agent(FakeModel(["Release 120 rows."]))).compile(storage).thread("release-1", actor="user:ada")
@@ -849,7 +849,7 @@ async def patterns_human_review():
 @feature("specialists", "Patterns and specialists", "Specialist agents you can extend",
          "Default recipes for common jobs; extend one, register it, and use it by name anywhere.")
 async def specialists_demo():
-    from agentbuild import patterns, specialists
+    from criogen import patterns, specialists
 
     show("built in", specialists.available())
     careful = specialists.researcher.extend("careful-researcher", add="Always give two sources.")
@@ -868,7 +868,7 @@ async def specialists_demo():
 @feature("web-search", "Patterns and specialists", "Web search tools (Tavily, Brave) and page reading",
          "web.search() works from an environment key; results are bounded, the key never reaches the model, and private addresses are refused.")
 async def web_search_demo():
-    from agentbuild import web
+    from criogen import web
 
     seen = []
 
@@ -1112,7 +1112,7 @@ async def live_workflow():
 @feature("live-patterns", "With a real model", "Specialists and patterns with a real model",
          "One-line pipelines of built-in specialists work with a real model: a writer and critic loop, and a planner into a summarizer.", live=True)
 async def live_patterns():
-    from agentbuild import patterns
+    from criogen import patterns
 
     review = await patterns.quick("writer <-> critic", model=real()).run(
         "Write a two-sentence product blurb for a standing desk. It must mention the price $249 and free delivery."
@@ -1128,7 +1128,7 @@ async def live_patterns():
 @feature("live-coordinator", "With a real model", "A real coordinator picks the right specialist",
          "Given two specialists, the coordinator model chooses the one that fits and answers from it.", live=True)
 async def live_coordinator():
-    from agentbuild import patterns
+    from criogen import patterns
 
     asked = []
 
@@ -1251,7 +1251,7 @@ async def main() -> int:
         results.append(result)
     data = {
         "ran_at": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
-        "sdk": {"name": "agentbuild-sdk", "version": agentbuild.__version__, "language": "Python"},
+        "sdk": {"name": "criogen", "version": criogen.__version__, "language": "Python"},
         "machine": {"os": f"{platform.system()} {platform.release()}", "python": platform.python_version()},
         "model": {"provider": PROVIDERS[provider]["label"], "name": PROVIDERS[provider]["name"]} if provider else None,
         "features": results,

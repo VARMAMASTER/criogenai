@@ -1,9 +1,9 @@
 # Glossary and naming conventions
 
-The words AgentBuild uses, what each one means, and the naming rules for
+The words Criogen uses, what each one means, and the naming rules for
 code, JSON and docs. Terms marked *(planned)* are designed but not built.
 
-## 1. Workflow engine (`agentbuild-core`)
+## 1. Workflow engine (`criogen-core`)
 
 | Term | Meaning | In code |
 |---|---|---|
@@ -28,7 +28,7 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Node context** | What a node receives besides the state: ids, attempt, resume value, events, cancel token, deadline, memo. | `NodeContext` (`ctx`) |
 | **Suspend / interrupt** | A node pausing the run to ask for outside input (e.g. a human approval). The run returns the **interrupt** payloads and a snapshot. | `NodeOutput::Suspend`, `Interrupt` |
 | **Resume** | Continuing a suspended run with a value for each suspended node. | `workflow.resume(snapshot, values)` |
-| **Snapshot** | Everything needed to continue a run later, as plain JSON (`agentbuild.snapshot/1`). Returned on suspend and attached to every failure. | `Snapshot` |
+| **Snapshot** | Everything needed to continue a run later, as plain JSON (`criogen.snapshot/1`). Returned on suspend and attached to every failure. | `Snapshot` |
 | **Pending writes** | Work already done in the snapshot's step: saved outputs, memo entries, resume values. | `Snapshot::pending_writes` |
 | **Task memo** | Results a node saves while running so they are not repeated on retry or resume (e.g. "email already sent"). | `ctx.memo()`, `TaskMemo::once` |
 | **Retry (a failed run)** | Continuing from a failure snapshot after fixing the cause; finished nodes are not run again. | `workflow.retry(snapshot)` |
@@ -47,7 +47,7 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 3. **Model retry** *(planned, agent layer)*: re-sending a model request after
    a transient `ModelError`, per 0003 §5.
 
-## 2. Messages, tools and models (`agentbuild-providers`)
+## 2. Messages, tools and models (`criogen-providers`)
 
 | Term | Meaning | In code |
 |---|---|---|
@@ -80,7 +80,7 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Warning** | Something dropped or repaired, never silently. | `Warning` |
 | **Fake model / fake LLM** | Simulated models for tests: 2–3 s replies, scripted tool calls, failures. | `FakeModel`, `FakeLlm` (core tests) |
 
-## 3. Agents (`agentbuild-agent`; design 0004)
+## 3. Agents (`criogen-agent`; design 0004)
 
 | Term | Meaning | In code |
 |---|---|---|
@@ -115,7 +115,7 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Actor** | Who acts through a thread handle, as the app names them (`user:dr-rao`); recorded in the audit trail. | `Thread::actor` |
 | **Storage** | A checkpointer plus the busy-thread rules (`wait`, `reject`, `interrupt`) and the durability. | `Storage`, `OnBusy`, `Durability`, `ThreadLease`, error `thread_busy` |
 | **Durability** | When a run is written: `step` (before every step and after every task; a crash loses at most unfinished tasks) or `exit` (once per call). | `Durability`, `Persister`, `RunOptions::persist`, `ThreadWriter` |
-| **Keyframe / delta** | How SQL backends store checkpoints: a delta holds only the changes since the parent (`set`, `append`, `remove`); a keyframe the full state, every 25 checkpoints. | `agentbuild_storage::delta` |
+| **Keyframe / delta** | How SQL backends store checkpoints: a delta holds only the changes since the parent (`set`, `append`, `remove`); a keyframe the full state, every 25 checkpoints. | `criogen_storage::delta` |
 | **Interrupted run** | A thread whose head is `in_progress` while no process runs it (e.g. after a crash). `retry` continues it; `send` refuses with `thread_interrupted`. | `Thread::retry` |
 | **Long-term memory** | Facts that outlive a thread (a user's preferences, a patient's allergies), kept in a memory store under a namespace. Recalled before model calls; written by apps or the model's `remember` tool (design 0008 §13). | `MemoryStore`, `MemoryItem`, `Memory` |
 | **Retention** | How long stored data is kept: idle threads expire (`thread_ttl`), long threads keep their last N checkpoints, abandoned branches go. Applied by a prune pass, once or in the background (design 0008 §15.1). | `Retention`, `Storage::prune`, `Storage::spawn_pruner`, `Pruner`, `PruneReport` |
@@ -127,7 +127,7 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Rewind** | Making an older checkpoint the thread's head again (a new `fork` checkpoint); later steps run again. | `Thread::rewind` |
 | **Gateway** | The HTTP server that exposes the provider layer to other apps (design 0006 §7). |
 
-## 4. Observability (`agentbuild-telemetry`; design 0009)
+## 4. Observability (`criogen-telemetry`; design 0009)
 
 | Term | Meaning | In code |
 |---|---|---|
@@ -142,8 +142,8 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 
 ### Code (Rust)
 
-- Crates: `agentbuild-<area>` (`agentbuild-core`, `agentbuild-providers`;
-  later `agentbuild-gateway`, `agentbuild-py`, `agentbuild-node`).
+- Crates: `criogen-<area>` (`criogen-core`, `criogen-providers`;
+  later `criogen-gateway`, `criogen-py`, `criogen-node`).
 - Types are nouns in `UpperCamelCase` (`RunOptions`, `ToolSpec`); functions
   and methods are verbs in `snake_case` (`run`, `resume`, `classify_http`).
 - Constructors: `new(...)` for the plain case, named constructors for
@@ -177,7 +177,7 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
   `"{run_id}:{step}:{node}"`.
 - Reserved names: node names starting with `__` (`__end__`); the tool name
   `final_output`.
-- Formats are versioned strings: `agentbuild.snapshot/1`.
+- Formats are versioned strings: `criogen.snapshot/1`.
 
 ### Repository and process
 

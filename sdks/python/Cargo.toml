@@ -1,7 +1,7 @@
 # The Python SDK's native module (design 0011). Not a workspace member:
 # building it needs Python. Built with maturin (see pyproject.toml).
 [package]
-name = "agentbuild-python"
+name = "criogen-python"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
@@ -13,18 +13,18 @@ name = "_native"
 crate-type = ["cdylib"]
 
 [dependencies]
-agentbuild-core = { path = "../../crates/agentbuild-core" }
-agentbuild-providers = { path = "../../crates/agentbuild-providers" }
-agentbuild-storage = { path = "../../crates/agentbuild-storage", features = ["sqlite", "postgres", "encryption"] }
-agentbuild-agent = { path = "../../crates/agentbuild-agent", features = ["sqlite", "postgres", "encryption"] }
-agentbuild-telemetry = { path = "../../crates/agentbuild-telemetry" }
+criogen-core = { path = "../../crates/criogen-core" }
+criogen-providers = { path = "../../crates/criogen-providers" }
+criogen-storage = { path = "../../crates/criogen-storage", features = ["sqlite", "postgres", "encryption"] }
+criogen-agent = { path = "../../crates/criogen-agent", features = ["sqlite", "postgres", "encryption"] }
+criogen-telemetry = { path = "../../crates/criogen-telemetry" }
 # The stable ABI: one wheel for every Python from 3.9.
 pyo3 = { version = "0.29", features = ["extension-module", "abi3-py39"] }
 serde = "1"
 serde_json = "1"
 tokio = { version = "1.45", features = ["rt-multi-thread", "sync", "time"] }
 
-# Stand-alone: never part of the AgentBuild workspace.
+# Stand-alone: never part of the Criogen workspace.
 [workspace]
 
 # Published binaries carry no symbol table. (Fat LTO made the addon 21%

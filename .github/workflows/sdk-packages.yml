@@ -50,7 +50,7 @@ jobs:
           cp -r sdks/python/tests "$RUNNER_TEMP/tests"
           cd "$RUNNER_TEMP"
           "$bin/python" "$GITHUB_WORKSPACE/sdks/python/examples/consumer.py"
-          AGENTBUILD_ERROR_CATALOG="$GITHUB_WORKSPACE/schemas/error-codes.json" \
+          CRIOGEN_ERROR_CATALOG="$GITHUB_WORKSPACE/schemas/error-codes.json" \
             "$bin/python" -m pytest -q -p no:cacheprovider tests
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
@@ -84,17 +84,17 @@ jobs:
           version="$(node -p "require('./sdks/typescript/package.json').version")"
           out="platform/${{ matrix.platform }}"
           mkdir -p "$out"
-          cp sdks/typescript/native/agentbuild.node "$out/agentbuild.node"
+          cp sdks/typescript/native/criogen.node "$out/criogen.node"
           cp sdks/typescript/LICENSE "$out/"
           os="${{ matrix.platform }}"; os="${os%-*}"; cpu="${{ matrix.platform }}"; cpu="${cpu#*-}"
           cat > "$out/package.json" <<EOF
           {
-            "name": "agentbuild-sdk-${{ matrix.platform }}",
+            "name": "criogen-${{ matrix.platform }}",
             "version": "$version",
-            "description": "The native addon of agentbuild-sdk for ${{ matrix.platform }}",
+            "description": "The native addon of criogen for ${{ matrix.platform }}",
             "license": "SEE LICENSE IN LICENSE",
-            "main": "agentbuild.node",
-            "files": ["agentbuild.node", "LICENSE"],
+            "main": "criogen.node",
+            "files": ["criogen.node", "LICENSE"],
             "os": ["$os"],
             "cpu": ["$cpu"]
           }
@@ -146,7 +146,7 @@ jobs:
             const pkg = JSON.parse(fs.readFileSync("package.json"));
             pkg.optionalDependencies = Object.fromEntries(
               ["linux-x64", "linux-arm64", "darwin-arm64", "darwin-x64", "win32-x64"]
-                .map((p) => [`agentbuild-sdk-${p}`, process.argv[1]]));
+                .map((p) => [`criogen-${p}`, process.argv[1]]));
             pkg.files = pkg.files.filter((f) => !f.startsWith("native"));
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           ' "$version"

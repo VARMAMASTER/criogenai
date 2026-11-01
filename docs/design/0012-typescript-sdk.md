@@ -10,15 +10,15 @@ offer the same things under each language's idioms.
 
 ```
 sdks/typescript/
-  Cargo.toml        crate `agentbuild-node` (cdylib, not a workspace member)
+  Cargo.toml        crate `criogen-node` (cdylib, not a workspace member)
   src/lib.rs        the bridge: napi-rs 3, napi's Tokio runtime
   lib/*.ts          the TypeScript API, compiled to dist/ (CommonJS + .d.ts)
-  native/           the built addon, agentbuild.node (not in git)
+  native/           the built addon, criogen.node (not in git)
   test/*.test.js    node:test, simulated models only
 ```
 
 - **napi-rs 3** (N-API 6: Node 18+). No `@napi-rs/cli`: cargo builds the
-  addon and `scripts/copy-native.js` copies it to `native/agentbuild.node`.
+  addon and `scripts/copy-native.js` copies it to `native/criogen.node`.
   Prebuilt per-platform packages come with the release workflow later.
 - **Rule 3 holds**: the agent loop, validation, retries, storage and
   approvals run in Rust. TypeScript builds the configuration and holds
@@ -29,7 +29,7 @@ sdks/typescript/
 ## 2. The API
 
 ```ts
-import { Agent, tool, ToolError, Storage, Memory, Decision } from "agentbuild-sdk";
+import { Agent, tool, ToolError, Storage, Memory, Decision } from "criogen";
 
 const getOrder = tool({
   name: "get_order",
@@ -72,11 +72,11 @@ reading the stream (the stream's token is held apart from the stream:
 
 ## 3. Errors
 
-`AgentBuildError` with `code` (the engine's stable code, 0003), `message`
+`CriogenError` with `code` (the engine's stable code, 0003), `message`
 and `details`; subclasses `ModelError`, `ToolExecutionError` (its `cause`
 is what the tool threw), `LimitExceededError`, `ThreadBusyError`,
 `ThreadSuspendedError`, `StorageError`, `ValidationError`,
-`CancelledError`. `isAgentBuildError(e, code?)` checks without
+`CancelledError`. `isCriogenError(e, code?)` checks without
 `instanceof` across copies of the package.
 
 ## 4. The bridge

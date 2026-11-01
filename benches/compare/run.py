@@ -1,4 +1,4 @@
-"""Compares AgentBuild, LangGraph and CrewAI (design 0016) and writes the
+"""Compares Criogen, LangGraph and CrewAI (design 0016) and writes the
 results file the website shows.
 
     python benches/compare/setup.py           # once: one venv per framework
@@ -29,7 +29,7 @@ sys.path.insert(0, str(HERE))
 # The repository root, or the kit's own folder when run from the download.
 from setup import ROOT, VENVS, python_of  # noqa: E402
 
-FRAMEWORKS = ["agentbuild", "langgraph", "crewai"]
+FRAMEWORKS = ["criogen", "langgraph", "crewai"]
 
 SCENARIOS = [
     {"id": "agent_call", "kind": "speed", "title": "Agent, one model call",
@@ -75,7 +75,7 @@ def load_batches(fw, n, repeats):
 
 
 IMPORTS = {
-    "agentbuild": "import agentbuild",
+    "criogen": "import criogen",
     "langgraph": "from langchain.agents import create_agent; from langgraph.graph import StateGraph",
     "crewai": "from crewai import Agent, Crew, Task; from crewai.flow.flow import Flow",
 }
@@ -260,7 +260,7 @@ def main():
             sys.exit(f"no venv for {fw}: run `python benches/compare/setup.py` first")
 
     report = {
-        "schema": "agentbuild-compare/1",
+        "schema": "criogen-compare/1",
         "recorded": datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
         "command": "python benches/compare/run.py" + (" quick" if quick else ""),
         "quick": quick,

@@ -1,9 +1,9 @@
-//! Live check: exercises every AgentBuild feature against real model APIs
+//! Live check: exercises every Criogen feature against real model APIs
 //! and prints a PASS/FAIL table per provider.
 //!
 //! Usage: `cargo run -- [openai] [gemini] [ollama]` (default: every provider
 //! with a key; `ollama` only when named or `OLLAMA_MODEL` is set). Keys come from `OPENAI_API_KEY` / `GEMINI_API_KEY`, or from the
-//! file in `AGENTBUILD_KEYS_FILE` (default `~/.agentbuild-keys.env`).
+//! file in `CRIOGEN_KEYS_FILE` (default `~/.criogen-keys.env`).
 //! Models: `OPENAI_MODEL` (default `gpt-5-mini`), `GEMINI_MODEL` (default
 //! `gemini-2.5-flash`), `OLLAMA_MODEL` (default: the first model Ollama
 //! lists; `OLLAMA_URL` default `http://localhost:11434`). Checks that need
@@ -21,22 +21,22 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use agentbuild_agent::{
+use criogen_agent::{
     Agent, AgentEvent, AgentInput, AgentResult, Approval, Decision, Hook, HookAction, HookContext,
     HookError, Limits, Memory, OnLimit, StopReason, ToolCallRequest, ToolError, ToolNext,
     ToolOutput, put_embedded, tool_fn,
 };
-use agentbuild_core::{
+use criogen_core::{
     BoxFuture, END, NodeError, RunOptions, State, Update, WorkflowBuilder, node_fn, router_fn,
 };
-use agentbuild_providers::{
+use criogen_providers::{
     BlockDelta, Embedder, Endpoint, Message, MessageDelta, Model, ModelErrorKind, ModelRequest,
     OutputStrategy, ProviderEmbedder, ProviderModel, ToolSpec,
 };
-use agentbuild_storage::{
+use criogen_storage::{
     CheckpointStatus, Embedding, Namespace, SearchQuery, SqliteCheckpointer, Storage,
 };
-use agentbuild_telemetry::{OtlpConfig, OtlpExporter};
+use criogen_telemetry::{OtlpConfig, OtlpExporter};
 use serde_json::{Map, Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -62,7 +62,7 @@ impl Provider {
     /// The same provider with a bad key (for error and fallback checks).
     fn broken(&self) -> ProviderModel {
         let mut endpoint = self.endpoint.clone();
-        endpoint.api_key = Some("invalid-key-for-agentbuild-live-check".into());
+        endpoint.api_key = Some("invalid-key-for-criogen-live-check".into());
         ProviderModel::new(endpoint, &self.model).expect("HTTP client")
     }
 }
@@ -281,7 +281,7 @@ fn err<E: std::fmt::Display>(e: E) -> String {
 }
 
 /// A tool that records its calls.
-fn weather(calls: &Arc<Mutex<Vec<Map<String, Value>>>>) -> impl agentbuild_agent::Tool {
+fn weather(calls: &Arc<Mutex<Vec<Map<String, Value>>>>) -> impl criogen_agent::Tool {
     let calls = calls.clone();
     tool_fn(
         ToolSpec::new(
@@ -744,7 +744,7 @@ async fn semantic_memory(p: &Provider) -> Outcome {
 }
 
 fn temp_db(name: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("agentbuild-live-{name}-{}.db", std::process::id()))
+    std::env::temp_dir().join(format!("criogen-live-{name}-{}.db", std::process::id()))
 }
 
 fn remove_db(path: &std::path::Path) {
@@ -1044,7 +1044,7 @@ async fn bad_key(p: &Provider) -> Outcome {
         format!("kind {kind}: {}", error.message),
     )?;
     ensure(
-        !error.message.contains("invalid-key-for-agentbuild"),
+        !error.message.contains("invalid-key-for-criogen"),
         "the key leaked into the error message",
     )?;
     Ok(format!("model_failed / {kind}, key redacted"))
@@ -1232,11 +1232,11 @@ async fn deadline(p: &Provider) -> Outcome {
 
 /// Reads `KEY=value` lines into the environment, for keys not already set.
 fn load_keys_file() {
-    let path = std::env::var("AGENTBUILD_KEYS_FILE").ok().or_else(|| {
+    let path = std::env::var("CRIOGEN_KEYS_FILE").ok().or_else(|| {
         let home = std::env::var("HOME")
             .or_else(|_| std::env::var("USERPROFILE"))
             .ok()?;
-        Some(format!("{home}/.agentbuild-keys.env"))
+        Some(format!("{home}/.criogen-keys.env"))
     });
     let Some(text) = path.and_then(|p| std::fs::read_to_string(p).ok()) else {
         return;

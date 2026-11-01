@@ -5,7 +5,7 @@ const assert = require("node:assert/strict");
 const http = require("node:http");
 const path = require("node:path");
 
-const sdk = require(process.env.AGENTBUILD_SDK || path.join(__dirname, ".."));
+const sdk = require(process.env.CRIOGEN_SDK || path.join(__dirname, ".."));
 const { Agent, FakeModel, FakeReply, specialists, web } = sdk;
 
 const SECRET = "tvly-secret-key-123";

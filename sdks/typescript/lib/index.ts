@@ -1,10 +1,10 @@
-// AgentBuild for TypeScript: agents with tools, approvals, durable threads and
+// Criogen for TypeScript: agents with tools, approvals, durable threads and
 // memory, on a Rust engine (design 0012).
 
 export { Agent, AgentTool, Decision, Stream, Thread } from "./agent";
 export type { AgentOptions, ApprovalRequest, CallOptions, Reply, Retry, RunOptions, RunResult, StreamEvent } from "./agent";
 export {
-  AgentBuildError,
+  CriogenError,
   CancelledError,
   LimitExceededError,
   ModelError,
@@ -13,7 +13,7 @@ export {
   ThreadSuspendedError,
   ToolExecutionError,
   ValidationError,
-  isAgentBuildError,
+  isCriogenError,
 } from "./errors";
 export {
   Embedder,
@@ -45,3 +45,5 @@ export type { Goto, Interrupt, NodeContext, NodeFunction, Router, Suspend, Workf
 export * as patterns from "./patterns";
 export * as specialists from "./specialists";
 export * as web from "./web";
+export { loadEnv, parseEnv, envStatus, keyName } from "./env";
+export type { LoadEnvOptions } from "./env";

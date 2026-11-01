@@ -1,6 +1,6 @@
 # Benchmarks
 
-What AgentBuild itself costs, measured as described in
+What Criogen itself costs, measured as described in
 [design 0014](design/0014-benchmarks.md): every model answers at once, so
 these are the framework's own costs, added on top of a real model's time
 (typically 0.3–5 s per call). One machine, one run; compare numbers only
@@ -13,7 +13,7 @@ runs after a warm-up.
 
 ## The Rust engine, agents, storage and gateway
 
-`cargo run -p agentbuild-bench --release`
+`cargo run -p criogen-bench --release`
 
 | Scenario | Runs | Median per run | p95 per run | Median per unit |
 |---|---|---|---|---|
@@ -64,11 +64,11 @@ include the extra model call the tool result causes.
 | workflow: 100 parallel nodes + join (invoke) | 500 | 40.28 ms | 51.18 ms | 394.9 µs per node |
 | workflow: 100 parallel nodes + join (ainvoke) | 500 | 34.06 ms | 44.43 ms | 333.9 µs per node |
 
-With trivial nodes on this machine, AgentBuild's Rust core spends
+With trivial nodes on this machine, Criogen's Rust core spends
 21.4 µs per step against LangGraph's 244 µs (`invoke`), and 3.9 µs per
 parallel node against 334 µs (`ainvoke`, LangGraph's faster mode here).
 
-What this does **not** show: workflows written in Python on AgentBuild
+What this does **not** show: workflows written in Python on Criogen
 (SDK workflows are not built yet; each node would add roughly the Python
 bridge cost above), real model latency (which dominates any agent run),
 or memory use. Once a model takes a second to answer, the difference
@@ -78,7 +78,7 @@ workflows with many steps, wide fan-outs, or many concurrent runs.
 ## Reproducing
 
 ```sh
-cargo run -p agentbuild-bench --release
+cargo run -p criogen-bench --release
 research/.venv/Scripts/python benches/compare_langgraph.py   # needs langgraph
 cd sdks/python && maturin develop --release && cd ../.. && python benches/python_bridge.py
 bash scripts/test-typescript.sh && node benches/typescript_bridge.mjs   # builds the release addon

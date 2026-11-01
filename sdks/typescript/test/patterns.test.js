@@ -1,12 +1,12 @@
 // Patterns and specialists in TypeScript (design 0019). Simulated models only.
-// Runs against the source build, or the installed package when AGENTBUILD_SDK
+// Runs against the source build, or the installed package when CRIOGEN_SDK
 // names it (scripts/test-typescript.sh).
 
 const test = require("node:test");
 const assert = require("node:assert/strict");
 const path = require("node:path");
 
-const sdk = require(process.env.AGENTBUILD_SDK || path.join(__dirname, ".."));
+const sdk = require(process.env.CRIOGEN_SDK || path.join(__dirname, ".."));
 const { Agent, END, FakeModel, FakeReply, LimitExceededError, Storage, Workflow, patterns, specialists, tool } = sdk;
 
 const agent = (replies, options) => new Agent({ model: new FakeModel(replies, options) });
@@ -35,14 +35,14 @@ test("steps can be registered specialist names with a model argument", async () 
 });
 
 test("a specialist without a model explains what to do", () => {
-  const saved = process.env.AGENTBUILD_MODEL;
-  delete process.env.AGENTBUILD_MODEL;
+  const saved = process.env.CRIOGEN_MODEL;
+  delete process.env.CRIOGEN_MODEL;
   try {
-    assert.throws(() => patterns.sequential(["researcher"]), /AGENTBUILD_MODEL/);
+    assert.throws(() => patterns.sequential(["researcher"]), /CRIOGEN_MODEL/);
     assert.throws(() => patterns.sequential(["no-such-specialist"], { model: new FakeModel(["x"]) }), /registered/);
     assert.throws(() => patterns.sequential([42]), TypeError);
   } finally {
-    if (saved !== undefined) process.env.AGENTBUILD_MODEL = saved;
+    if (saved !== undefined) process.env.CRIOGEN_MODEL = saved;
   }
 });
 
