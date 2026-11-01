@@ -25,9 +25,9 @@ use criogen_core::{
     node_with_context, router_fn,
 };
 use criogen_providers::{
-    BlockDelta, BoxFuture, Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, Message,
-    MessageDelta, Model, ModelError, ModelErrorKind, ModelRequest, ModelResponse, OutputSpec,
-    ProviderEmbedder, ProviderModel, Settings, ToolAnnotations, ToolSpec,
+    BlockDelta, BoxFuture, Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, KaggleModel,
+    Message, MessageDelta, Model, ModelError, ModelErrorKind, ModelRequest, ModelResponse,
+    OutputSpec, ProviderEmbedder, ProviderModel, Settings, ToolAnnotations, ToolSpec,
 };
 use criogen_storage::{
     AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
@@ -299,9 +299,32 @@ fn model(spec: &Value) -> Result<Arc<dyn Model>, Failure> {
         return Ok(Arc::new(fake));
     }
     let name = text(spec, "model").ok_or_else(|| bad("a model needs a `model` name"))?;
+    if kind == "kaggle" {
+        return kaggle_model(spec, name);
+    }
     ProviderModel::new(endpoint(spec)?, name)
         .map(|m| Arc::new(m) as Arc<dyn Model>)
         .map_err(|err| Failure::new("model_failed", err.to_string()))
+}
+
+/// Kaggle's Model Proxy (design 0020): `api_key` (a Kaggle API token), or
+/// `proxy_url` and `proxy_token` (a pre-minted proxy token), else the
+/// environment; `api_base` points the token minting elsewhere (tests).
+fn kaggle_model(spec: &Value, name: &str) -> Result<Arc<dyn Model>, Failure> {
+    let built = match (
+        text(spec, "proxy_url"),
+        text(spec, "proxy_token"),
+        text(spec, "api_key"),
+    ) {
+        (Some(url), Some(token), _) => KaggleModel::from_proxy(url, token, name),
+        (_, _, Some(key)) => Ok(KaggleModel::new(key, name)),
+        _ => KaggleModel::from_env(name),
+    };
+    let mut model = built.map_err(|err| Failure::new("model_failed", err.to_string()))?;
+    if let Some(base) = text(spec, "api_base") {
+        model = model.with_api_base(base);
+    }
+    Ok(Arc::new(model))
 }
 
 /// The provider endpoint of a model or embedder spec (`kind`, `api_key`,

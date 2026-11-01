@@ -75,7 +75,7 @@ fn is_secret_header(name: &str) -> bool {
 }
 
 /// `true` for `localhost`, `127.x.x.x` and `::1`.
-fn is_loopback_host(host: &str) -> bool {
+pub(crate) fn is_loopback_host(host: &str) -> bool {
     let host = host.trim_start_matches('[').trim_end_matches(']');
     host == "localhost"
         || host.ends_with(".localhost")
@@ -86,7 +86,7 @@ fn is_loopback_host(host: &str) -> bool {
 }
 
 /// The scheme and host of a URL.
-fn url_host(url: &str) -> Option<(&str, &str)> {
+pub(crate) fn url_host(url: &str) -> Option<(&str, &str)> {
     let (scheme, rest) = url.split_once("://")?;
     let authority = rest.split(['/', '?', '#']).next()?;
     let authority = authority.rsplit('@').next()?;

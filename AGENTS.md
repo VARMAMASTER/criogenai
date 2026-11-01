@@ -223,6 +223,10 @@ write our own implementation.
   `crates/criogen-agent/tests/patterns.rs`, `web.rs` (feature `web`). Website: `/playground/`,
   `/demo/` (`demos/feature-tour/`: `tour.py` records scripted and `--live`
   tours into `website/public/demo/`; `chat_server.py` is the chat backend).
+- **Implemented: Kaggle's Model Proxy (0020).** `criogen_providers::KaggleModel` mints the
+  hourly proxy token from a Kaggle API token and renews it; `kaggle:` model strings in both SDKs
+  and `provider = "kaggle"` in the gateway. Tests: `crates/criogen-providers/tests/kaggle.rs`,
+  `sdks/python/tests/test_kaggle.py`, `sdks/typescript/test/kaggle.test.js` (local servers only).
 - **Not started:** vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 

@@ -38,6 +38,8 @@ mod anthropic_messages;
 mod embed;
 mod error;
 mod fake;
+#[cfg(feature = "http")]
+mod kaggle;
 mod message;
 mod model;
 #[cfg(feature = "http")]
@@ -62,6 +64,8 @@ pub use error::{
     invalid_response, sanitize_message,
 };
 pub use fake::{FakeModel, FakeReply};
+#[cfg(feature = "http")]
+pub use kaggle::{KAGGLE_API_BASE, KaggleModel};
 pub use message::{
     ContentBlock, Extras, FinishReason, MediaSource, Message, MessageIssue, MessageMetadata, Role,
     ToolCall, ToolResultError, ToolStatus, Usage, new_call_id, new_message_id,

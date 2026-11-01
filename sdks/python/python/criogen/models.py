@@ -71,6 +71,51 @@ class OpenRouter(_Model):
     kind = "openrouter"
 
 
+class Kaggle:
+    """Kaggle's Model Proxy (design 0020): the hosted models your Kaggle
+    account's AI-model allowance pays for, e.g.
+    ``Kaggle("google/gemini-3.6-flash")`` or ``"kaggle:google/gemini-3.6-flash"``.
+
+    Credentials, in order: ``api_token`` (a Kaggle API token); ``proxy_url``
+    and ``proxy_token`` (a proxy token minted elsewhere, as in a Kaggle
+    notebook); else the environment: ``MODEL_PROXY_URL`` and
+    ``MODEL_PROXY_API_KEY``, ``KAGGLE_API_TOKEN``, or the ``access_token`` file
+    in ``KAGGLE_CONFIG_DIR`` or ``~/.kaggle``. The engine mints the short-lived
+    proxy token and renews it before it expires. For prototypes and tests,
+    not production traffic (see the models guide)."""
+
+    kind = "kaggle"
+
+    def __init__(
+        self,
+        model: str,
+        api_token: Optional[str] = None,
+        proxy_url: Optional[str] = None,
+        proxy_token: Optional[str] = None,
+        api_base: Optional[str] = None,
+    ):
+        self.model = model
+        self.api_token = api_token
+        self.proxy_url = proxy_url
+        self.proxy_token = proxy_token
+        self.api_base = api_base
+
+    def spec(self) -> Dict[str, Any]:
+        spec: Dict[str, Any] = {"kind": self.kind, "model": self.model}
+        for key, value in (
+            ("api_key", self.api_token),
+            ("proxy_url", self.proxy_url),
+            ("proxy_token", self.proxy_token),
+            ("api_base", self.api_base),
+        ):
+            if value:
+                spec[key] = value
+        return spec
+
+    def __repr__(self) -> str:  # never shows a token
+        return f"Kaggle({self.model!r})"
+
+
 class Ollama(_Model):
     """Ollama on this machine (or ``base_url``), no key."""
 
@@ -174,6 +219,7 @@ def model_spec(model: Any) -> Dict[str, Any]:
             "anthropic": Anthropic,
             "openrouter": OpenRouter,
             "ollama": Ollama,
+            "kaggle": Kaggle,
         }
         if not sep or provider not in classes:
             raise ValueError(

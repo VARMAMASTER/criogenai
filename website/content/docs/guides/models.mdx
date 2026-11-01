@@ -12,6 +12,7 @@ description: OpenAI, Anthropic, Gemini, OpenRouter and self-hosted models, with 
 | Anthropic (Claude) | Messages API, natively (reasoning, caching) | `ANTHROPIC_API_KEY` |
 | Google Gemini | Its OpenAI-compatible endpoint | `GEMINI_API_KEY` |
 | OpenRouter | OpenAI-compatible | `OPENROUTER_API_KEY` |
+| Kaggle Model Proxy (prototypes) | OpenAI-compatible; Criogen mints and renews the hourly proxy token | `KAGGLE_API_TOKEN` or `~/.kaggle/access_token` |
 | Ollama, LM Studio | Local, OpenAI-compatible | none |
 | vLLM and any OpenAI-compatible server | Your URL (a key is never sent over plain `http://` to another machine unless you pass `allow_insecure_http` / `allowInsecureHttp`) | optional |
 | Any Anthropic-compatible server | Your URL (Rust) | optional |
@@ -68,6 +69,55 @@ const careful = new Agent({ model: "anthropic:claude-sonnet-5-5" });
 - Quotes, `export NAME=value`, and `#` comments work. There is no variable
   expansion.
 - In Rust, pass the key you read with `std::env::var` to the provider.
+
+## Kaggle's model allowance (prototypes and tests)
+
+A Kaggle account comes with an AI-model allowance (at the time of writing $10 a
+day, $100 a month) for hosted models such as `anthropic/claude-sonnet-5@default`,
+`google/gemini-3.6-flash`, `google/gemini-3.5-flash-lite`, `openai/gpt-oss-120b`
+and `openai/gpt-5.4-nano-2026-03-17`. Which models an account may use is decided by
+Kaggle; a model you may not use fails with `not_found` and costs nothing.
+
+<Tabs syncKey="lang">
+<TabItem label="Python">
+
+```python
+from criogen import Agent, Kaggle
+
+agent = Agent("kaggle:google/gemini-3.6-flash")      # or Kaggle("...", api_token=...)
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```ts
+import { Agent, kaggle } from "criogen";
+
+const agent = new Agent({ model: "kaggle:google/gemini-3.6-flash" }); // or kaggle("...", { apiToken })
+```
+
+</TabItem>
+<TabItem label="Rust">
+
+```rust
+use criogen_providers::KaggleModel;
+
+let model = KaggleModel::from_env("google/gemini-3.6-flash")?;
+```
+
+</TabItem>
+</Tabs>
+
+- **Credentials**, in order: a token you pass; `MODEL_PROXY_URL` and
+  `MODEL_PROXY_API_KEY` (set in Kaggle notebooks); `KAGGLE_API_TOKEN`; the
+  `access_token` file in `KAGGLE_CONFIG_DIR` or `~/.kaggle` (what the Kaggle CLI
+  writes). Create the token at kaggle.com/settings, under API.
+- Criogen mints the short-lived proxy token itself, renews it before it expires,
+  and renews and retries once if the proxy refuses it. Tools and streaming work.
+- In the gateway: `{ provider = "kaggle", model = "google/gemini-3.6-flash" }`.
+- **Use it for prototypes, tests and MVPs, not production traffic**: the
+  allowance is small and meant for evaluation, there is no service guarantee, and
+  prompts pass through Kaggle. Never send patient or customer data through it.
 
 ## What every model gets
 

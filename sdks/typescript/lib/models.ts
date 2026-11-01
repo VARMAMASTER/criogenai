@@ -123,17 +123,65 @@ export class FakeModel {
   }
 }
 
-export type Model = string | ProviderModel | FakeModel;
+/**
+ * Kaggle's Model Proxy (design 0020): the hosted models your Kaggle account's
+ * AI-model allowance pays for. Credentials, in order: `apiToken`; `proxyUrl`
+ * and `proxyToken`; else MODEL_PROXY_URL and MODEL_PROXY_API_KEY,
+ * KAGGLE_API_TOKEN, or the `access_token` file in KAGGLE_CONFIG_DIR or
+ * ~/.kaggle. The engine mints the short-lived proxy token and renews it.
+ * For prototypes and tests, not production traffic.
+ */
+export interface KaggleOptions {
+  apiToken?: string;
+  proxyUrl?: string;
+  proxyToken?: string;
+  /** Where proxy tokens are minted (tests). */
+  apiBase?: string;
+}
+
+export class KaggleModel {
+  readonly kind = "kaggle";
+  readonly model: string;
+  readonly #options: KaggleOptions;
+
+  constructor(model: string, options: KaggleOptions = {}) {
+    this.model = model;
+    this.#options = options;
+  }
+
+  /** The JSON spec (with any token; never logged). */
+  spec(): Record<string, unknown> {
+    const o = this.#options;
+    return {
+      kind: this.kind,
+      model: this.model,
+      apiKey: o.apiToken,
+      proxyUrl: o.proxyUrl,
+      proxyToken: o.proxyToken,
+      apiBase: o.apiBase,
+    };
+  }
+
+  toJSON(): Record<string, unknown> {
+    return { kind: this.kind, model: this.model };
+  }
+}
+
+/** A model on Kaggle's Model Proxy, e.g. kaggle("google/gemini-3.6-flash"). */
+export const kaggle = (model: string, options?: KaggleOptions) => new KaggleModel(model, options);
+
+export type Model = string | ProviderModel | KaggleModel | FakeModel;
 
 /** The JSON spec of a model object or "provider:model" string. */
 export function modelSpec(model: Model): Record<string, unknown> {
   if (typeof model === "string") {
     const at = model.indexOf(":");
     const provider = at > 0 ? model.slice(0, at) : "";
-    const known = ["openai", "gemini", "anthropic", "openrouter", "ollama"];
+    const known = ["openai", "gemini", "anthropic", "openrouter", "ollama", "kaggle"];
     if (!known.includes(provider)) {
       throw new TypeError(`model "${model}": use "provider:model" with provider one of ${known.join(", ")}`);
     }
+    if (provider === "kaggle") return new KaggleModel(model.slice(at + 1)).spec();
     return new ProviderModel(provider, model.slice(at + 1)).spec();
   }
   if (model && typeof (model as { spec?: unknown }).spec === "function") return model.spec();

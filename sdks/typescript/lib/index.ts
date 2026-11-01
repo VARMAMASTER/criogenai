@@ -19,15 +19,17 @@ export {
   Embedder,
   FakeModel,
   FakeReply,
+  KaggleModel,
   ProviderModel,
   anthropic,
   gemini,
+  kaggle,
   ollama,
   openai,
   openaiCompatible,
   openrouter,
 } from "./models";
-export type { Model, ModelOptions } from "./models";
+export type { KaggleOptions, Model, ModelOptions } from "./models";
 export { ChatStream, Gateway } from "./gateway";
 export type { ChatInput, ChatOptions, ChatReply, Chunk, GatewayOptions } from "./gateway";
 export { ToolResult } from "./hooks";

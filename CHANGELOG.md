@@ -9,6 +9,14 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+### Kaggle's Model Proxy as a provider (design 0020)
+
+- `KaggleModel` (Rust), `Kaggle` / `"kaggle:<model>"` (Python), `kaggle()` / `"kaggle:<model>"`
+  (TypeScript) and `provider = "kaggle"` (gateway): the hosted models a Kaggle account's
+  AI-model allowance pays for. Criogen mints the hourly proxy token from the Kaggle API token,
+  renews it before it expires and retries once when the proxy refuses it; credentials come
+  from the environment or `~/.kaggle/access_token`. For prototypes and tests.
+
 ## [0.1.0] - 2026-11-01
 
 First release: the Python (`criogen`, PyPI) and TypeScript (`criogen`, npm) packages for

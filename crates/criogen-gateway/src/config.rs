@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use criogen_providers::{Endpoint, Model, ProviderModel};
+use criogen_providers::{Endpoint, KaggleModel, Model, ProviderModel};
 use serde::Deserialize;
 
 use crate::{BudgetPeriod, Gateway, GatewayBuilder, GatewayError, KeyLimits};
@@ -164,6 +164,20 @@ impl Config {
                         ))
                     })
                 };
+                if m.provider == "kaggle" {
+                    // Design 0020: a Kaggle API token (`api_key_env`, else
+                    // KAGGLE_API_TOKEN); the proxy token is minted and renewed.
+                    let token = match key.clone() {
+                        Some(token) => token,
+                        None => var("KAGGLE_API_TOKEN")?,
+                    };
+                    let mut model = KaggleModel::new(token, &m.model);
+                    if let Some(base) = &m.base_url {
+                        model = model.with_api_base(base);
+                    }
+                    models.push(Arc::new(model));
+                    continue;
+                }
                 let mut endpoint = match m.provider.as_str() {
                     "openai" => Endpoint::openai(need_key()?),
                     "gemini" => Endpoint::gemini(need_key()?),
@@ -257,6 +271,10 @@ mod tests {
         name = "local"
         models = [{ provider = "openai_compatible", model = "m", base_url = "http://127.0.0.1:9/v1" }]
 
+        [[routes]]
+        name = "prototype"
+        models = [{ provider = "kaggle", model = "google/gemini-3.6-flash" }]
+
         [[keys]]
         name = "team-a"
         key_env = "TEST_KEY_A"
@@ -270,6 +288,7 @@ mod tests {
         match name {
             "TEST_OPENAI_KEY" => Some("sk-test-not-real".into()),
             "TEST_KEY_A" => Some("a-long-enough-test-key".into()),
+            "KAGGLE_API_TOKEN" => Some("KGAT_not_real".into()),
             _ => None,
         }
     }
@@ -282,6 +301,7 @@ mod tests {
             .unwrap();
         assert!(gateway.has_keys());
         assert_eq!(gateway.inner.routes["support"].len(), 2);
+        assert_eq!(gateway.inner.routes["prototype"][0].provider(), "kaggle");
         assert_eq!(gateway.spent("team-a"), Some(0));
         // The Debug output names routes, never keys.
         let shown = format!("{gateway:?}");

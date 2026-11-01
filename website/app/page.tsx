@@ -7,6 +7,7 @@ import BenchBars from "@/components/landing/BenchBars";
 import Reveal from "@/components/motion/Reveal";
 import InstallCommand from "@/components/landing/InstallCommand";
 import InstallCounter from "@/components/landing/InstallCounter";
+import Providers from "@/components/landing/Providers";
 import RunTrace from "@/components/landing/RunTrace";
 import Scene from "@/components/landing/Scene";
 import { crash, gateway, workflow } from "@/components/landing/scenes";
@@ -186,6 +187,8 @@ export default async function Home() {
             ))}
           />
         </section>
+
+        <Providers />
 
         <section className="lifecycle" aria-labelledby="life-title">
           <h2 id="life-title">What the runtime handles for you</h2>
