@@ -25,7 +25,8 @@ export const metadata: Metadata = {
 // Python and TypeScript are published first; the Rust crates come when
 // the code opens.
 const install: Partial<Record<Lang, string>> = {
-  typescript: "npm install criogen@next",
+  python: "pip install criogen",
+  typescript: "npm install criogen",
 };
 
 // The lifecycle of a run, in the order it happens; each row links to its guide.
@@ -150,7 +151,7 @@ export default async function Home() {
                 Read the docs
               </a>
             </div>
-            <p className="fine">Free to use, also commercially. Version 0.1, early: the TypeScript alpha is on npm, the Python package follows.</p>
+            <p className="fine">Free to use, also commercially. Version 0.1, early.</p>
             <InstallCounter installs={await installs()} />
           </div>
           <RunTrace />

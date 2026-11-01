@@ -74,11 +74,11 @@ function load(): Addon {
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ERR_DLOPEN_FAILED") {
-      // The file is there but built for another system (the preview packages
-      // carry the Windows x64 engine only).
+      // The file is there but cannot be loaded here (built for another system, or a
+      // C library it does not match, such as Alpine/musl).
       throw new Error(
-        `criogen's bundled engine could not be loaded on ${process.platform}-${process.arch}. ` +
-          `This preview build includes the engine for Windows x64 only; Linux and macOS builds are coming. ` +
+        `criogen's engine could not be loaded on ${process.platform}-${process.arch}. ` +
+          `Supported: Linux (glibc) x64 and ARM64, macOS Apple Silicon and Intel, Windows x64. ` +
           `To build it yourself: npm run build:native`,
         { cause: error },
       );

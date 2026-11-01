@@ -4,9 +4,8 @@
 pip install criogen
 ```
 
-> **Preview (`0.1.0a1`).** This build is for **Windows x64 only** (Python 3.9+).
-> On Linux and macOS `pip` finds no matching package; builds for every platform
-> follow. Install the preview with `pip install --pre criogen`.
+> Wheels for Linux (x64, ARM64), macOS (Apple Silicon, Intel) and Windows (x64);
+> Python 3.9 or newer.
 
 Agents and workflows with tools, human approval, durable threads, long-term memory, an
 audit trail and encryption at rest, on [Criogen](https://criogen.vercel.app)'s

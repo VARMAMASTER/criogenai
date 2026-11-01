@@ -158,7 +158,9 @@ jobs:
         run: |
           # Only `npm publish` runs here. Once the packages exist, switch to
           # npm trusted publishing (RELEASING.md) and delete NPM_TOKEN.
+          # `--provenance` is added once the repository is public: npm refuses
+          # a provenance statement for a private repository.
           for dir in artifacts/npm-*; do
-            (cd "$dir" && npm publish --access public --provenance)
+            (cd "$dir" && npm publish --access public)
           done
-          (cd sdks/typescript && npm publish --access public --provenance)
+          (cd sdks/typescript && npm publish --access public)

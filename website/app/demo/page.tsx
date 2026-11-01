@@ -17,7 +17,7 @@ export const metadata: Metadata = {
 };
 
 const RUN_COMMANDS = [
-  "# needs the criogen Python package (not on PyPI yet)",
+  "pip install criogen",
   "python demos/feature-tour/tour.py                 # simulated model: no network, no keys",
   "python demos/feature-tour/tour.py --live gemini   # a real model (GEMINI_API_KEY); or: --live openai",
 ].join("\n");

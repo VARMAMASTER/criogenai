@@ -4,10 +4,9 @@ Agents with tools, human approval, durable threads, long-term memory, an
 audit trail and encryption at rest, on [Criogen](https://criogen.vercel.app)'s
 Rust engine (design 0012).
 
-> **Preview (`0.1.0-alpha.1`).** This build includes the engine for **Windows x64
-> only**; on Linux and macOS it stops with a clear error. Builds for every
-> platform follow. Install it with `npm install criogen@next` (or
-> `pnpm add criogen@next`, `yarn add criogen@next`, `bun add criogen@next`).
+> `npm install criogen` (or `pnpm add criogen`, `yarn add criogen`, `bun add criogen`).
+> The engine for your platform installs with it: Linux (x64, ARM64), macOS (Apple
+> Silicon, Intel) and Windows (x64); Node 18 or newer.
 
 ```ts
 import { Agent, tool, ToolError } from "criogen";

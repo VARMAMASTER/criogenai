@@ -4,9 +4,9 @@ description: Criogen for Python, TypeScript and Rust, on Linux, macOS and Window
 ---
 
 
-<Aside type="caution" title="Before the first release">
-Criogen 0.1.0 is not on PyPI, npm or crates.io yet. The commands below
-are the ones that will work once it is published.
+<Aside type="note" title="Version 0.1.0">
+The Python and TypeScript packages are published (PyPI and npm). The Rust crates are
+published when Criogen's code opens, at 10,000 installs.
 </Aside>
 
 ## Supported platforms
@@ -15,8 +15,8 @@ are the ones that will work once it is published.
 |---|---|---|---|---|---|
 | Python 3.9+ (one wheel per platform) | yes | yes | yes | yes | yes |
 | Node.js 18+ (a prebuilt addon per platform) | yes | yes | yes | yes | yes |
-| Rust 1.88+ (compiled on your machine) | yes | yes | yes | yes | yes |
-| Tested so far | yes | not yet | not yet | not yet | yes |
+| Rust 1.88+ (crates published when the code opens) | later | later | later | later | later |
+| Built and tested in CI on its own platform | yes | yes | yes | yes | yes |
 
 Other platforms (Windows on ARM, Alpine/musl, 32-bit) are not supported yet.
 
@@ -24,11 +24,6 @@ Other platforms (Windows on ARM, Alpine/musl, 32-bit) are not supported yet.
 
 <Tabs syncKey="lang">
 <TabItem label="Python">
-
-<Aside type="caution" title="Not on PyPI yet">
-The Python package is not published yet; the command below is what it will be.
-The TypeScript package is available now as a preview (see the TypeScript tab).
-</Aside>
 
 ```sh
 pip install criogen
@@ -43,21 +38,15 @@ The wheel contains the Rust engine, so nothing else is needed. It is typed
 </TabItem>
 <TabItem label="TypeScript">
 
-<Aside type="caution" title="Preview: Windows only, for now">
-The first release, `0.1.0-alpha.1`, includes the engine for Windows x64 only; on Linux and
-macOS it stops with a clear error. Builds for every platform follow, then `0.1.0`.
-Until then, install the preview with the `next` tag.
-</Aside>
-
 ```sh
-npm install criogen@next
+npm install criogen
 # or, with another package manager (they all use the npm registry):
-pnpm add criogen@next
-yarn add criogen@next
-bun add criogen@next
+pnpm add criogen
+yarn add criogen
+bun add criogen
 ```
 
-The finished release installs the engine for your platform automatically
+npm installs the engine for your platform automatically
 (`criogen-linux-x64`, `-darwin-arm64`, `-win32-x64`, …). Works from
 TypeScript and JavaScript, as CommonJS or ES modules.
 

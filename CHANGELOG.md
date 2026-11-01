@@ -9,7 +9,10 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
-First release, planned as 0.1.0 (Rust crates only).
+## [0.1.0] - 2026-11-01
+
+First release: the Python (`criogen`, PyPI) and TypeScript (`criogen`, npm) packages for
+Linux x64 and ARM64, macOS Apple Silicon and Intel, and Windows x64. The Rust crates follow when the code opens.
 
 ### Renamed: AgentBuild is now Criogen
 
