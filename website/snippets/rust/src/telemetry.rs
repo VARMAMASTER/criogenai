@@ -1,9 +1,9 @@
 type Error = Box<dyn std::error::Error>;
-use agentbuild_agent::Agent;
+use criogen_agent::Agent;
 
 pub async fn telemetry(agent: Agent) -> Result<(), Error> {
     // [show]
-    use agentbuild_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
+    use criogen_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
     use serde_json::json;
 
     // LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL

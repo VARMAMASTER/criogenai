@@ -3,11 +3,11 @@ import os
 
 async def main() -> None:
     # [show]
-    from agentbuild import Storage
+    from criogen import Storage
 
     storage = Storage(
         "postgres://app:secret@db.internal/agents",
-        encryption_keys=os.environ["AGENTBUILD_ENCRYPTION_KEYS"],  # "k1:<64 hex digits>"
+        encryption_keys=os.environ["CRIOGEN_ENCRYPTION_KEYS"],  # "k1:<64 hex digits>"
         audit=True,
         retention={"thread_ttl_secs": 30 * 86_400},
     )

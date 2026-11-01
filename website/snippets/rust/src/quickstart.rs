@@ -2,8 +2,8 @@ type Error = Box<dyn std::error::Error>;
 
 pub async fn quickstart() -> Result<(), Error> {
     // [show]
-    use agentbuild_agent::{Agent, ToolError, tool_fn};
-    use agentbuild_providers::{Endpoint, ProviderModel, ToolSpec};
+    use criogen_agent::{Agent, ToolError, tool_fn};
+    use criogen_providers::{Endpoint, ProviderModel, ToolSpec};
     use serde_json::json;
 
     let model = ProviderModel::new(

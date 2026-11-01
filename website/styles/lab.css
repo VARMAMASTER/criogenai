@@ -1,13 +1,13 @@
-/* The benchmark lab: glass cards over the aurora, frameworks in fixed
+/* The benchmark lab: flat cards, frameworks in fixed
    categorical colours (tokens.css --fw-*), outcomes in the run-state
    colours (pass = done, partial = waiting, fail = failed). */
 
 .lab {
-  --lab-surface: #13223a;
-  --radius: 16px;
+  --lab-surface: #12151a;
+  --radius: 10px;
 }
 :root[data-theme="light"] .lab {
-  --lab-surface: #f4f7fb;
+  --lab-surface: #f2f3f1;
 }
 .lab-main {
   max-width: 76rem;
@@ -36,7 +36,7 @@
 .lab-eyebrow {
   margin: 0 0 0.5rem;
   color: var(--ab-running-text);
-  font-weight: 800;
+  font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-size: 0.82rem;
@@ -46,7 +46,7 @@
   font-size: clamp(2rem, 4vw, 3rem);
   line-height: 1.08;
   letter-spacing: -0.02em;
-  font-weight: 850;
+  font-weight: 650;
 }
 .lab-lede {
   font-size: 1.1rem;
@@ -58,7 +58,7 @@
 .lab-card {
   margin-top: 1.5rem;
   padding: 1.5rem 1.75rem;
-  border-radius: 24px;
+  border-radius: 12px;
   background:
     linear-gradient(135deg, rgba(255, 255, 255, 0.07) 0%, rgba(255, 255, 255, 0.01) 45%, rgba(255, 255, 255, 0.03) 100%),
     var(--glass-bg);
@@ -72,7 +72,7 @@
 .record-head h2 {
   margin: 0 0 0.6rem;
   font-size: 1.5rem;
-  font-weight: 850;
+  font-weight: 650;
   letter-spacing: -0.01em;
 }
 .lab-card > p {
@@ -219,8 +219,8 @@
 .kind-switch button[aria-pressed="true"],
 .scenario-chips button[aria-pressed="true"] {
   color: var(--ab-text);
-  background: rgba(127, 214, 232, 0.14);
-  border-color: rgba(127, 214, 232, 0.35);
+  background: rgba(62, 207, 142, 0.14);
+  border-color: rgba(62, 207, 142, 0.35);
 }
 .scenario-chips {
   display: flex;
@@ -241,7 +241,7 @@
 .scenario-head h3 {
   margin: 0;
   font-size: 1.3rem;
-  font-weight: 800;
+  font-weight: 650;
 }
 .scenario-head h3 code {
   font-size: 0.7em;
@@ -257,7 +257,7 @@
 .conc h4 {
   margin: 1.75rem 0 0.75rem;
   font-size: 1rem;
-  font-weight: 800;
+  font-weight: 650;
   color: var(--ab-text);
 }
 
@@ -630,7 +630,7 @@
 }
 .outcome-pass {
   color: var(--ab-done-text);
-  background: rgba(139, 217, 160, 0.12);
+  background: rgba(106, 168, 255, 0.12);
 }
 .outcome-partial {
   color: var(--ab-waiting-text);
@@ -733,20 +733,20 @@
   align-items: flex-start;
   gap: 0.6rem;
   padding: 1.5rem;
-  border-radius: 20px;
+  border-radius: 12px;
   border: 2px dashed var(--glass-border-strong);
   background: var(--glass-bg-soft);
   transition: border-color 0.15s, background-color 0.15s;
 }
 .drop.over {
   border-color: var(--ab-running);
-  background: rgba(127, 214, 232, 0.08);
+  background: rgba(62, 207, 142, 0.08);
 }
 .drop p {
   margin: 0;
 }
 .drop-title {
-  font-weight: 800;
+  font-weight: 650;
   font-size: 1.1rem;
 }
 .drop-ok {
@@ -784,7 +784,7 @@
   }
   .lab-card {
     padding: 1.2rem 1rem;
-    border-radius: 20px;
+    border-radius: 12px;
   }
   .record-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -830,7 +830,7 @@
 .h2h-group h3 {
   margin: 0 0 0.25rem;
   font-size: 1.25rem;
-  font-weight: 800;
+  font-weight: 650;
 }
 .h2h-group > p {
   margin: 0 0 1rem;
@@ -848,7 +848,7 @@
 .h2h-chart {
   margin: 0;
   padding: 1rem 1.1rem 1.1rem;
-  border-radius: 14px;
+  border-radius: 8px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg-soft);
   min-width: 0;
@@ -865,7 +865,7 @@
   margin-bottom: 0.8rem;
 }
 .h2h-title {
-  font-weight: 800;
+  font-weight: 650;
   color: var(--ab-text);
 }
 .h2h-note {
@@ -928,7 +928,7 @@
   font-variant-numeric: tabular-nums;
 }
 .h2h-value b {
-  font-weight: 800;
+  font-weight: 650;
 }
 .h2h-times {
   font-size: 0.74rem;
@@ -1036,7 +1036,7 @@
   place-items: center;
   height: 22px;
   font-size: 0.72rem;
-  font-weight: 800;
+  font-weight: 650;
   color: #0f1b2d;
 }
 .h2h-seg:first-child {
@@ -1099,7 +1099,7 @@
 .h2h-table-frame {
   margin-top: 0.8rem;
   overflow-x: auto;
-  border-radius: 14px;
+  border-radius: 8px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg-soft);
   animation: table-in 0.25s ease-out;
@@ -1126,11 +1126,11 @@
   border-bottom: 0;
 }
 .h2h-table tbody tr:nth-child(even) > * {
-  background: rgba(127, 214, 232, 0.035);
+  background: rgba(62, 207, 142, 0.035);
 }
 .h2h-table thead th {
   font-size: 0.8rem;
-  font-weight: 800;
+  font-weight: 650;
   color: var(--ab-muted);
   background: var(--glass-bg-soft);
 }
@@ -1172,11 +1172,11 @@
   min-width: 11rem;
 }
 .h2h-best .h2h-cell-main {
-  font-weight: 850;
+  font-weight: 650;
 }
 .h2h-badge {
   font-size: 0.66rem;
-  font-weight: 800;
+  font-weight: 650;
   padding: 0.05rem 0.45rem;
   border-radius: 999px;
   color: var(--ab-done-text);

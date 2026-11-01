@@ -1,7 +1,7 @@
 {
  "ran_at": "2026-10-24T12:06:52+00:00",
  "sdk": {
-  "name": "agentbuild-sdk",
+  "name": "criogen",
   "version": "0.1.0",
   "language": "Python"
  },
@@ -423,7 +423,7 @@
    "group": "With a real model",
    "title": "Specialists and patterns with a real model",
    "claim": "One-line pipelines of built-in specialists work with a real model: a writer and critic loop, and a planner into a summarizer.",
-   "code": "async def live_patterns():\n    from agentbuild import patterns\n\n    review = await patterns.quick(\"writer <-> critic\", model=real()).run(\n        \"Write a two-sentence product blurb for a standing desk. It must mention the price $249 and free delivery.\"\n    )\n    show(\"writer <-> critic\", review.explain())\n    check(\"it ended (approved, or the round cap) with an output\", review.stop_reason in (\"approved\", \"max_rounds\") and bool(review.output))\n    check(\"the blurb has the required facts\", \"$249\" in review.output and \"deliver\" in review.output.lower())\n    plan = await patterns.quick(\"planner > summarizer\", model=real()).run(\"Goal: hold a small bake sale on Saturday\")\n    show(\"planner > summarizer\", plan.explain())\n    check(\"both steps ran\", [t[\"step\"] for t in plan.trace] == [\"planner\", \"summarizer\"])",
+   "code": "async def live_patterns():\n    from criogen import patterns\n\n    review = await patterns.quick(\"writer <-> critic\", model=real()).run(\n        \"Write a two-sentence product blurb for a standing desk. It must mention the price $249 and free delivery.\"\n    )\n    show(\"writer <-> critic\", review.explain())\n    check(\"it ended (approved, or the round cap) with an output\", review.stop_reason in (\"approved\", \"max_rounds\") and bool(review.output))\n    check(\"the blurb has the required facts\", \"$249\" in review.output and \"deliver\" in review.output.lower())\n    plan = await patterns.quick(\"planner > summarizer\", model=real()).run(\"Goal: hold a small bake sale on Saturday\")\n    show(\"planner > summarizer\", plan.explain())\n    check(\"both steps ran\", [t[\"step\"] for t in plan.trace] == [\"planner\", \"summarizer\"])",
    "steps": [
     {
      "label": "writer <-> critic",
@@ -458,7 +458,7 @@
    "group": "With a real model",
    "title": "A real coordinator picks the right specialist",
    "claim": "Given two specialists, the coordinator model chooses the one that fits and answers from it.",
-   "code": "async def live_coordinator():\n    from agentbuild import patterns\n\n    asked = []\n\n    @tool(read_only=True)\n    def get_order(order_id: str) -> dict:\n        \"\"\"Look up an order by id.\"\"\"\n        asked.append(order_id)\n        return {\"order_id\": order_id, \"status\": \"shipped\"}\n\n    orders = Agent(real(), instructions=\"You answer order status questions. Use get_order. Be brief.\", tools=[get_order])\n    jokes = Agent(real(), instructions=\"You tell one short, clean joke.\")\n    triage = patterns.coordinator(real(), {\"orders\": (orders, \"Order status and delivery questions\"), \"jokes\": (jokes, \"Tells a joke\")})\n    result = await triage.run(\"Where is order A-1001?\")\n    show(\"answer\", result.text)\n    show(\"specialists the coordinator called\", [m.get(\"name\") or m.get(\"tool\") for m in tool_results(result)])\n    check(\"the order specialist's tool ran with the right id\", asked == [\"A-1001\"])",
+   "code": "async def live_coordinator():\n    from criogen import patterns\n\n    asked = []\n\n    @tool(read_only=True)\n    def get_order(order_id: str) -> dict:\n        \"\"\"Look up an order by id.\"\"\"\n        asked.append(order_id)\n        return {\"order_id\": order_id, \"status\": \"shipped\"}\n\n    orders = Agent(real(), instructions=\"You answer order status questions. Use get_order. Be brief.\", tools=[get_order])\n    jokes = Agent(real(), instructions=\"You tell one short, clean joke.\")\n    triage = patterns.coordinator(real(), {\"orders\": (orders, \"Order status and delivery questions\"), \"jokes\": (jokes, \"Tells a joke\")})\n    result = await triage.run(\"Where is order A-1001?\")\n    show(\"answer\", result.text)\n    show(\"specialists the coordinator called\", [m.get(\"name\") or m.get(\"tool\") for m in tool_results(result)])\n    check(\"the order specialist's tool ran with the right id\", asked == [\"A-1001\"])",
    "steps": [
     {
      "label": "answer",

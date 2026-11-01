@@ -1,5 +1,6 @@
 // The components MDX pages use, by name (the Astro site's Starlight
 // components and its own, rebuilt in React).
+import Link from "next/link";
 import { isValidElement, type ComponentProps, type ReactNode } from "react";
 import Aside from "./Aside";
 import { CardGrid, LinkCard } from "./Cards";
@@ -32,7 +33,14 @@ function Table(props: ComponentProps<"table">) {
   );
 }
 
+// Links to other pages of the site move without reloading the page.
+function A({ href = "", ...props }: ComponentProps<"a">) {
+  if (href.startsWith("/") && !href.startsWith("/api/") && !/\.\w+$/.test(href.split("#")[0])) return <Link href={href} {...props} />;
+  return <a href={href} {...props} />;
+}
+
 export const mdxComponents = {
+  a: A,
   pre: Pre,
   table: Table,
   Aside,

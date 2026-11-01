@@ -2,18 +2,18 @@
 # between its `// [show]` and `// [/show]` lines, and compiled here
 # (`cargo check`) so the docs follow the API. Not a workspace member.
 [package]
-name = "agentbuild-website-snippets"
+name = "criogen-website-snippets"
 version = "0.0.0"
 edition = "2024"
 publish = false
 
 [dependencies]
-agentbuild-core = { path = "../../../crates/agentbuild-core" }
-agentbuild-providers = { path = "../../../crates/agentbuild-providers" }
-agentbuild-agent = { path = "../../../crates/agentbuild-agent", features = ["sqlite", "postgres", "encryption"] }
-agentbuild-storage = { path = "../../../crates/agentbuild-storage", features = ["sqlite", "postgres", "encryption"] }
-agentbuild-telemetry = { path = "../../../crates/agentbuild-telemetry" }
-agentbuild-gateway = { path = "../../../crates/agentbuild-gateway" }
+criogen-core = { path = "../../../crates/criogen-core" }
+criogen-providers = { path = "../../../crates/criogen-providers" }
+criogen-agent = { path = "../../../crates/criogen-agent", features = ["sqlite", "postgres", "encryption"] }
+criogen-storage = { path = "../../../crates/criogen-storage", features = ["sqlite", "postgres", "encryption"] }
+criogen-telemetry = { path = "../../../crates/criogen-telemetry" }
+criogen-gateway = { path = "../../../crates/criogen-gateway" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 serde_json = "1"
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "net"] }

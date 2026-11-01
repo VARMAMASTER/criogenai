@@ -16,6 +16,59 @@ description: OpenAI, Anthropic, Gemini, OpenRouter and self-hosted models, with 
 | vLLM and any OpenAI-compatible server | Your URL (a key is never sent over plain `http://` to another machine unless you pass `allow_insecure_http` / `allowInsecureHttp`) | optional |
 | Any Anthropic-compatible server | Your URL (Rust) | optional |
 
+## Keep your keys in the environment
+
+Every provider reads its key from its usual environment variable, so you can
+keep several side by side and pick a model by changing one string. Put them in a
+`.env` file next to your code (and add `.env` to `.gitignore`):
+
+```sh
+OPENAI_API_KEY=sk-...
+ANTHROPIC_API_KEY=sk-ant-...
+GEMINI_API_KEY=...
+OPENROUTER_API_KEY=sk-or-...
+```
+
+<Tabs syncKey="lang">
+<TabItem label="Python">
+
+```python
+from criogen import Agent, load_env, env
+
+load_env()                      # reads ./.env; never replaces a variable already set
+print(env.status())             # {"openai": True, "anthropic": True, ...}: yes or no, never a key
+
+fast = Agent("openai:gpt-5-mini")
+careful = Agent("anthropic:claude-sonnet-5-5")
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```ts
+import { Agent, loadEnv, envStatus } from "criogen";
+
+loadEnv();                      // reads ./.env; never replaces a variable already set
+console.log(envStatus());       // { openai: true, anthropic: true, ... }: yes or no, never a key
+
+const fast = new Agent({ model: "openai:gpt-5-mini" });
+const careful = new Agent({ model: "anthropic:claude-sonnet-5-5" });
+```
+
+</TabItem>
+</Tabs>
+
+- Call `load_env()` / `loadEnv()` **before** you build a model; the key is read then.
+- It returns the **names** it set, never the values. A variable that is already
+  set wins; pass `override=True` / `{ override: true }` to replace it.
+- A missing file is fine (a deployment sets real environment variables instead);
+  pass `required=True` / `{ required: true }` to insist on it.
+- A model with no key fails at once and says which variable to set, instead of
+  failing later with an `auth` error from the provider.
+- Quotes, `export NAME=value`, and `#` comments work. There is no variable
+  expansion.
+- In Rust, pass the key you read with `std::env::var` to the provider.
+
 ## What every model gets
 
 - **Streaming**, assembled into one message the same way for every

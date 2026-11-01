@@ -1,5 +1,5 @@
 "use client";
-// The playground: the same job in AgentBuild and in LangChain, each in its own
+// The playground: the same job in Criogen and in LangChain, each in its own
 // process against one fake model server, measured from outside. With a
 // playground server running on this computer (playground/server.py) the page
 // runs jobs there and streams the results; without one it replays recordings
@@ -280,7 +280,7 @@ export default function Playground({ recorded }: { recorded: Recorded | null }) 
               </span>
             </div>
             <p className="lab-muted pg-small">
-              <b>Benchmark</b> runs AgentBuild, LangChain, LangChain, AgentBuild and averages each framework&apos;s two passes, so order and background load
+              <b>Benchmark</b> runs Criogen, LangChain, LangChain, Criogen and averages each framework&apos;s two passes, so order and background load
               cancel out; use it for numbers you intend to quote. <b>Run both at once</b> starts both together for a side-by-side view; they compete for the
               same CPU, so do not quote it.
             </p>
@@ -376,7 +376,7 @@ export default function Playground({ recorded }: { recorded: Recorded | null }) 
             <thead>
               <tr>
                 <th scope="col">Measurement</th>
-                <th scope="col">AgentBuild</th>
+                <th scope="col">Criogen</th>
                 <th scope="col">LangChain</th>
                 <th scope="col">Difference</th>
               </tr>
@@ -385,9 +385,9 @@ export default function Playground({ recorded }: { recorded: Recorded | null }) 
               {rows.map((c) => (
                 <tr key={c.row.key}>
                   <th scope="row">{c.row.label}</th>
-                  <td className={c.win === "agentbuild" ? "pg-win" : ""}>
-                    {fmt(c.agentbuild, c.row.digits)}
-                    {c.agentbuild != null ? c.row.unit : ""}
+                  <td className={c.win === "criogen" ? "pg-win" : ""}>
+                    {fmt(c.criogen, c.row.digits)}
+                    {c.criogen != null ? c.row.unit : ""}
                   </td>
                   <td className={c.win === "langchain" ? "pg-win" : ""}>
                     {fmt(c.langchain, c.row.digits)}

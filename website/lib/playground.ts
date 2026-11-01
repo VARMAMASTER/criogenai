@@ -3,9 +3,9 @@
 // into what the page shows. Every number is computed from those events; the
 // page invents none.
 
-export type Fw = "agentbuild" | "langchain";
+export type Fw = "criogen" | "langchain";
 export const FRAMEWORKS: { id: Fw; label: string }[] = [
-  { id: "agentbuild", label: "AgentBuild" },
+  { id: "criogen", label: "Criogen" },
   { id: "langchain", label: "LangChain" },
 ];
 
@@ -80,7 +80,7 @@ export interface PlayState {
 
 export function fresh(): PlayState {
   const one = (): FwState => ({ status: "waiting", passes: [], tools: [], samples: [], answer: "", metrics: {} });
-  return { fw: { agentbuild: one(), langchain: one() } };
+  return { fw: { criogen: one(), langchain: one() } };
 }
 
 const mean = (list: (number | undefined)[]): number | undefined => {
@@ -189,7 +189,7 @@ export const ROWS: Row[] = [
 
 export interface Compared {
   row: Row;
-  agentbuild?: number;
+  criogen?: number;
   langchain?: number;
   win: Fw | null;
   note: string;
@@ -202,7 +202,7 @@ export const fmt = (n: number | undefined, digits = 0): string =>
 export function compare(state: PlayState): Compared[] {
   const out: Compared[] = [];
   for (const row of ROWS) {
-    const x = state.fw.agentbuild.metrics[row.key];
+    const x = state.fw.criogen.metrics[row.key];
     const y = state.fw.langchain.metrics[row.key];
     if (x == null && y == null) continue;
     let win: Fw | null = null;
@@ -211,11 +211,11 @@ export function compare(state: PlayState): Compared[] {
       const abAhead = row.higher ? x > y : x < y;
       const ratio = row.higher ? (abAhead ? x / y : y / x) : abAhead ? y / x : x / y;
       if (ratio >= 1.1) {
-        win = abAhead ? "agentbuild" : "langchain";
-        note = `${abAhead ? "AgentBuild" : "LangChain"} ${fmt(ratio, ratio < 10 ? 1 : 0)}× ${row.higher ? "higher" : "lower"}`;
+        win = abAhead ? "criogen" : "langchain";
+        note = `${abAhead ? "Criogen" : "LangChain"} ${fmt(ratio, ratio < 10 ? 1 : 0)}× ${row.higher ? "higher" : "lower"}`;
       } else note = "within 10%";
     }
-    out.push({ row, agentbuild: x, langchain: y, win, note });
+    out.push({ row, criogen: x, langchain: y, win, note });
   }
   return out;
 }

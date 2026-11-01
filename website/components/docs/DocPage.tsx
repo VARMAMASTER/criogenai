@@ -1,5 +1,4 @@
 import type { Metadata } from "next";
-import "@/styles/docs.css";
 import { loadDoc } from "@/lib/docs";
 import { mdxComponents } from "../mdx";
 import DocsShell from "./DocsShell";

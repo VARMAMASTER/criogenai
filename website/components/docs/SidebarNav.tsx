@@ -1,6 +1,7 @@
 "use client";
 // The docs sidebar: groups that fold, the current page highlighted.
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { SIDEBAR, hrefOf } from "@/lib/nav";
 import { Chevron } from "../icons";
 
@@ -38,9 +39,9 @@ export default function SidebarNav({ current, onNavigate, idPrefix }: { current:
               <ul id={listId} className="sb-items" hidden={!open}>
                 {group.items.map((item) => (
                   <li key={item.slug}>
-                    <a href={hrefOf(item.slug)} aria-current={item.slug === current ? "page" : undefined} onClick={onNavigate}>
+                    <Link href={hrefOf(item.slug)} aria-current={item.slug === current ? "page" : undefined} onClick={onNavigate}>
                       {item.label}
-                    </a>
+                    </Link>
                   </li>
                 ))}
               </ul>

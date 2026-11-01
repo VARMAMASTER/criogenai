@@ -34,6 +34,14 @@ http
       res.writeHead(403).end();
       return;
     }
+    // Next asks for a page's segment data as `__next.docs.$c$slug.__PAGE__.txt`
+    // and writes it as `__next.docs/$c$slug/__PAGE__.txt`: map one to the other.
+    if (!fs.existsSync(file) && /^__next\.[^.]+\..+\.txt$/.test(path.basename(file))) {
+      const dir = path.dirname(file);
+      const [head, tail, ...rest] = path.basename(file, ".txt").split(".");
+      const mapped = path.join(dir, `${head}.${tail}`, ...rest) + ".txt";
+      if (fs.existsSync(mapped)) file = mapped;
+    }
     if (fs.existsSync(file) && fs.statSync(file).isDirectory()) {
       if (!url.pathname.endsWith("/")) {
         res.writeHead(308, { Location: `${url.pathname}/${url.search}` }).end();

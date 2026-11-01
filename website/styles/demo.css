@@ -4,7 +4,7 @@
 .demo-group h3 {
   margin: 1.6rem 0 0.6rem;
   font-size: 1.1rem;
-  font-weight: 800;
+  font-weight: 650;
 }
 .demo-card {
   border: 1px solid var(--glass-border);
@@ -42,7 +42,7 @@
   white-space: nowrap;
 }
 .demo-mark {
-  font-weight: 900;
+  font-weight: 650;
 }
 .demo-ok {
   color: var(--ab-done-text);
@@ -169,7 +169,7 @@
 }
 .chat-text {
   padding: 0.55rem 0.85rem;
-  border-radius: 14px;
+  border-radius: 8px;
   border: 1px solid var(--glass-border);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -186,7 +186,7 @@
 }
 .chat-approval {
   border: 2px solid var(--ab-waiting);
-  border-radius: 14px;
+  border-radius: 8px;
   padding: 0.8rem 1rem;
 }
 .chat-call {

@@ -1,5 +1,5 @@
 type Error = Box<dyn std::error::Error>;
-use agentbuild_providers::{Endpoint, ProviderModel};
+use criogen_providers::{Endpoint, ProviderModel};
 
 pub async fn memory() -> Result<(), Error> {
     let model = ProviderModel::new(
@@ -7,8 +7,8 @@ pub async fn memory() -> Result<(), Error> {
         "gpt-5-mini",
     )?;
     // [show]
-    use agentbuild_agent::{Agent, AgentInput, Memory};
-    use agentbuild_storage::{Namespace, Storage};
+    use criogen_agent::{Agent, AgentInput, Memory};
+    use criogen_storage::{Namespace, Storage};
 
     let storage = Storage::connect("sqlite://agent.db").await?;
     let agent = Agent::builder(model)
@@ -35,11 +35,11 @@ pub async fn memory() -> Result<(), Error> {
 pub async fn semantic() -> Result<(), Error> {
     let key = std::env::var("OPENAI_API_KEY")?;
     let model = ProviderModel::new(Endpoint::openai(key.clone()), "gpt-5-mini")?;
-    let storage = agentbuild_storage::Storage::in_memory();
+    let storage = criogen_storage::Storage::in_memory();
     // [show semantic]
-    use agentbuild_agent::{Agent, Memory, put_embedded};
-    use agentbuild_providers::ProviderEmbedder;
-    use agentbuild_storage::Namespace;
+    use criogen_agent::{Agent, Memory, put_embedded};
+    use criogen_providers::ProviderEmbedder;
+    use criogen_storage::Namespace;
     use serde_json::json;
 
     let embedder = ProviderEmbedder::new(Endpoint::openai(key), "text-embedding-3-small")?;

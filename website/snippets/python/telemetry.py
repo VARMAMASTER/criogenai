@@ -1,9 +1,9 @@
-from agentbuild import Agent
+from criogen import Agent
 
 
 async def main() -> None:
     # [show]
-    from agentbuild import Agent, Telemetry
+    from criogen import Agent, Telemetry
 
     # LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL
     langfuse = Telemetry.langfuse()

@@ -1,5 +1,5 @@
 type Error = Box<dyn std::error::Error>;
-use agentbuild_providers::{Endpoint, ProviderModel};
+use criogen_providers::{Endpoint, ProviderModel};
 
 fn model() -> Result<ProviderModel, Error> {
     Ok(ProviderModel::new(
@@ -10,8 +10,8 @@ fn model() -> Result<ProviderModel, Error> {
 
 pub async fn tools() -> Result<(), Error> {
     // [show]
-    use agentbuild_agent::{Agent, Limits, ToolError, tool_fn};
-    use agentbuild_providers::ToolSpec;
+    use criogen_agent::{Agent, Limits, ToolError, tool_fn};
+    use criogen_providers::ToolSpec;
     use serde_json::json;
 
     let refund = tool_fn(
@@ -48,7 +48,7 @@ pub async fn tools() -> Result<(), Error> {
 
 pub async fn structured() -> Result<(), Error> {
     // [show structured]
-    use agentbuild_agent::Agent;
+    use criogen_agent::Agent;
     use serde_json::json;
 
     let agent = Agent::builder(model()?)
@@ -70,8 +70,8 @@ pub async fn structured() -> Result<(), Error> {
 
 pub async fn testing() -> Result<(), Error> {
     // [show testing]
-    use agentbuild_agent::Agent;
-    use agentbuild_providers::{FakeModel, FakeReply};
+    use criogen_agent::Agent;
+    use criogen_providers::{FakeModel, FakeReply};
     use serde_json::json;
 
     // Scripted replies: no network, no cost, the same answer every time.
@@ -88,7 +88,7 @@ pub async fn testing() -> Result<(), Error> {
 
 pub async fn subagents() -> Result<(), Error> {
     // [show subagents]
-    use agentbuild_agent::Agent;
+    use criogen_agent::Agent;
 
     let researcher = Agent::builder(model()?)
         .instructions("Find facts about orders. Be precise.")
@@ -105,11 +105,11 @@ pub async fn subagents() -> Result<(), Error> {
 
 pub async fn hooks() -> Result<(), Error> {
     // [show hooks]
-    use agentbuild_agent::{
+    use criogen_agent::{
         Agent, Hook, HookAction, HookContext, HookError, ToolCallRequest, ToolError, ToolNext,
         ToolOutput,
     };
-    use agentbuild_providers::BoxFuture;
+    use criogen_providers::BoxFuture;
 
     /// Blocks large refunds and stops long runs.
     struct Guard;

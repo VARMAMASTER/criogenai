@@ -1,9 +1,9 @@
 // [show]
-import { Storage } from "agentbuild-sdk";
+import { Storage } from "criogen";
 
 const storage = new Storage({
   url: "postgres://app:secret@db.internal/agents",
-  encryptionKeys: process.env.AGENTBUILD_ENCRYPTION_KEYS, // "k1:<64 hex digits>"
+  encryptionKeys: process.env.CRIOGEN_ENCRYPTION_KEYS, // "k1:<64 hex digits>"
   audit: true,
   retention: { threadTtlSecs: 30 * 86_400 },
 });

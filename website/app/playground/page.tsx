@@ -13,7 +13,7 @@ import type { Recorded } from "@/lib/playground";
 export const metadata: Metadata = {
   title: "Playground",
   description:
-    "Type one message and watch AgentBuild and LangChain handle it, side by side, against the same fake model server and the same tools, with CPU and memory measured from outside.",
+    "Type one message and watch Criogen and LangChain handle it, side by side, against the same fake model server and the same tools, with CPU and memory measured from outside.",
 };
 
 /** The recordings are made by playground/record.py into public/playground/. */
@@ -26,9 +26,9 @@ function loadRecorded(): Recorded | null {
 }
 
 const RUN_COMMANDS = [
-  "python benches/compare/setup.py --only agentbuild   # once",
+  "python benches/compare/setup.py --only criogen   # once",
   "python benches/compare/setup.py --only langgraph    # once",
-  "target/compare/venvs/agentbuild/bin/python playground/server.py   # Windows: Scripts/python.exe",
+  "target/compare/venvs/criogen/bin/python playground/server.py   # Windows: Scripts/python.exe",
   "# serves on http://127.0.0.1:4600; reload this page",
 ].join("\n");
 
@@ -42,7 +42,7 @@ export default function PlaygroundPage() {
       <main id="main" className="lab-main">
         <header className="lab-hero">
           <p className="lab-eyebrow">Playground</p>
-          <h1>Compare AgentBuild and LangChain on one job</h1>
+          <h1>Compare Criogen and LangChain on one job</h1>
           <p className="lab-lede">
             Send a message through the same agent in both frameworks and compare latency, throughput, CPU and memory. Each framework runs in its
             own process against one scripted model server, and the measurements are taken from outside by the same code.
@@ -62,7 +62,7 @@ export default function PlaygroundPage() {
             </dd>
             <dt>Agents</dt>
             <dd>
-              Each framework&apos;s standard tool-calling agent with default settings: <code>Agent</code> in AgentBuild, <code>create_agent</code> in
+              Each framework&apos;s standard tool-calling agent with default settings: <code>Agent</code> in Criogen, <code>create_agent</code> in
               LangChain. Both use the same synchronous tools with the same names, arguments and delays.
             </dd>
             <dt>Measurement</dt>
@@ -76,8 +76,8 @@ export default function PlaygroundPage() {
           <h3 className="pg-sub">Known differences and limits</h3>
           <ul>
             <li>
-              Defaults differ. Inspecting the requests the server received shows AgentBuild streaming the reply (<code>stream: true</code>) and LangChain
-              requesting a complete one (<code>stream: false</code>). This adds parsing work on the AgentBuild side. Defaults also differ in what each
+              Defaults differ. Inspecting the requests the server received shows Criogen streaming the reply (<code>stream: true</code>) and LangChain
+              requesting a complete one (<code>stream: false</code>). This adds parsing work on the Criogen side. Defaults also differ in what each
               framework does for you, such as argument validation and retries; this compares defaults, not feature sets.
             </li>
             <li>

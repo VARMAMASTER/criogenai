@@ -32,7 +32,7 @@ export const CLASS: Record<string, string> = {
   storage: "StorageError",
   validation: "ValidationError",
   cancelled: "CancelledError",
-  other: "AgentBuildError",
+  other: "CriogenError",
 };
 
 export function errorCatalog(): ErrorEntry[] {

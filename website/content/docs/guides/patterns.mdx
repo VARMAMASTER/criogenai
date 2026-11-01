@@ -3,7 +3,7 @@ title: Patterns, specialists and web search
 description: Ready-made agent designs (pipelines, review loops, coordinators, swarms), default specialist agents you can extend, and web search tools, in Python, TypeScript and Rust.
 ---
 
-Most multi-agent systems are one of a dozen shapes. AgentBuild ships each shape
+Most multi-agent systems are one of a dozen shapes. Criogen ships each shape
 as a function, so you pick one instead of wiring it. They are built from the
 agents and workflows you already know, so you can inspect them, run them with
 durable threads, and extend them. The same shapes, names and limits exist in
@@ -15,9 +15,9 @@ Python, TypeScript and Rust.
 <TabItem label="Python">
 
 ```python
-from agentbuild import patterns
+from criogen import patterns
 
-# A model for the specialists: pass one, or set AGENTBUILD_MODEL="openai:gpt-5-mini".
+# A model for the specialists: pass one, or set CRIOGEN_MODEL="openai:gpt-5-mini".
 flow = patterns.quick("researcher > writer", model="openai:gpt-5-mini")
 result = await flow.run("Write about solar panels")
 print(result)             # the answer
@@ -28,9 +28,9 @@ print(result.explain())   # each step, in order
 <TabItem label="TypeScript">
 
 ```ts
-import { patterns } from "agentbuild-sdk";
+import { patterns } from "criogen";
 
-// A model for the specialists: pass one, or set AGENTBUILD_MODEL="openai:gpt-5-mini".
+// A model for the specialists: pass one, or set CRIOGEN_MODEL="openai:gpt-5-mini".
 const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
 const result = await flow.run("Write about solar panels");
 console.log(String(result));      // the answer
@@ -41,7 +41,7 @@ console.log(result.explain());    // each step, in order
 <TabItem label="Rust">
 
 ```rust
-use agentbuild_agent::patterns;
+use criogen_agent::patterns;
 
 // Specialists need a model: pass an `Arc<dyn Model>` (Rust has no model strings).
 let flow = patterns::quick("researcher > writer", model.clone())?;
@@ -142,7 +142,7 @@ and default settings. Built in: `researcher`, `summarizer`, `classifier`,
 <TabItem label="Python">
 
 ```python
-from agentbuild import specialists
+from criogen import specialists
 
 agent = specialists.writer.build("openai:gpt-5-mini")
 
@@ -160,7 +160,7 @@ specialists.register(specialists.Specialist(
 <TabItem label="TypeScript">
 
 ```ts
-import { specialists } from "agentbuild-sdk";
+import { specialists } from "criogen";
 
 const agent = specialists.writer.build("openai:gpt-5-mini");
 
@@ -178,7 +178,7 @@ specialists.register(new specialists.Specialist(
 <TabItem label="Rust">
 
 ```rust
-use agentbuild_agent::specialists::{self, Specialist};
+use criogen_agent::specialists::{self, Specialist};
 
 let agent = specialists::writer().build(model.clone())?;
 
@@ -204,7 +204,7 @@ specialists::register(
 <TabItem label="Python">
 
 ```python
-from agentbuild import Agent, web
+from criogen import Agent, web
 
 agent = Agent("openai:gpt-5-mini", tools=[web.search(), web.fetch()])
 ```
@@ -213,7 +213,7 @@ agent = Agent("openai:gpt-5-mini", tools=[web.search(), web.fetch()])
 <TabItem label="TypeScript">
 
 ```ts
-import { Agent, web } from "agentbuild-sdk";
+import { Agent, web } from "criogen";
 
 const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
 ```
@@ -222,8 +222,8 @@ const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.
 <TabItem label="Rust">
 
 ```rust
-// Cargo feature `web` (off by default): agentbuild-agent = { version = "0.1", features = ["web"] }
-use agentbuild_agent::web;
+// Cargo feature `web` (off by default): criogen-agent = { version = "0.1", features = ["web"] }
+use criogen_agent::web;
 
 let agent = Agent::builder(model)
     .tool(web::search()?)
@@ -255,7 +255,7 @@ trail and storage like any other.
 <TabItem label="Python">
 
 ```python
-from agentbuild import Storage
+from criogen import Storage
 
 app = patterns.human_review(my_agent).compile(Storage("sqlite:///app.db"))
 await app.thread("release-1", actor="user:ada").run({"input": "Release the dataset?"})
@@ -269,7 +269,7 @@ flow.workflow.add_node(...)   # the plain Workflow, to add nodes and edges
 <TabItem label="TypeScript">
 
 ```ts
-import { Storage } from "agentbuild-sdk";
+import { Storage } from "criogen";
 
 const app = patterns.humanReview(myAgent).compile(new Storage({ url: "sqlite:///app.db" }));
 await app.thread("release-1", { actor: "user:ada" }).run({ input: "Release the dataset?" });

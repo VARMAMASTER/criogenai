@@ -1,7 +1,7 @@
-// Installs so far, toward the 10,000 at which AgentBuild's code opens.
+// Installs so far, toward the 10,000 at which Criogen's code opens.
 // Read at build time from the public download statistics: npm's
-// downloads API for agentbuild-sdk (its platform addons are not counted
-// again) and pypistats.org for agentbuild (without mirrors).
+// downloads API for criogen (its platform addons are not counted
+// again) and pypistats.org for criogen (without mirrors).
 //
 // Limit: pypistats keeps the last 180 days only. Before the first release
 // is that old, switch PyPI to an all-time source (pepy.tech's API or
@@ -9,9 +9,9 @@
 
 export const GOAL = 10_000;
 const FIRST_DAY = "2026-10-01";
-const NPM = "agentbuild-sdk";
-// Ours is agentbuild-sdk ("agentbuild" on PyPI is another project's).
-const PYPI: string | null = "agentbuild-sdk";
+const NPM = "criogen";
+// Ours is criogen.
+const PYPI: string | null = "criogen";
 
 export type Installs =
   | { status: "counted"; total: number; npm: number; pypi: number; asOf: string }

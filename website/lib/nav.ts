@@ -11,8 +11,8 @@ export interface NavGroup {
 }
 
 export const SITE = {
-  title: "AgentBuild",
-  url: "https://agentbuild.vercel.app",
+  title: "Criogen",
+  url: "https://criogen.vercel.app",
   description:
     "AI agents and workflows on a Rust engine, from Rust, Python or TypeScript: tools, approvals, durable threads, memory, an audit trail and an LLM gateway.",
 };
@@ -21,7 +21,7 @@ export const SIDEBAR: NavGroup[] = [
   {
     label: "Get started",
     items: [
-      { label: "What AgentBuild is", slug: "" },
+      { label: "What Criogen is", slug: "" },
       { label: "Install", slug: "install" },
       { label: "Quickstart", slug: "quickstart" },
       { label: "Status: built and planned", slug: "status" },

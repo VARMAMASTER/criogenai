@@ -38,7 +38,7 @@ function RecordCard({ set, href, blobHref, title }: { set: DataSet; href: string
       <div className="record-head">
         <h2>{title}</h2>
         {download && (
-          <a className="lab-button" href={download} download={set.key === "ours" ? "agentbuild-compare-results.json" : undefined}>
+          <a className="lab-button" href={download} download={set.key === "ours" ? "criogen-compare-results.json" : undefined}>
             Download raw JSON
           </a>
         )}

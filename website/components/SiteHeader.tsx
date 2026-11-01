@@ -1,28 +1,30 @@
 // The landing page's and the lab's header: a floating glass pill.
+import Link from "next/link";
+import LogoMark from "./LogoMark";
 import ThemeToggle from "./ThemeToggle";
 
 export default function SiteHeader({ current }: { current?: "benchmarks" | "playground" | "demo" }) {
   return (
     <header className="top glass">
-      <a className="brand" href="/">
-        <img src="/favicon.svg" alt="" width="26" height="26" />
-        <span>AgentBuild</span>
-      </a>
+      <Link className="brand" href="/">
+        <LogoMark size={28} />
+        <span>criogen</span>
+      </Link>
       <div className="top-right">
         <nav aria-label="Main">
-          <a href="/docs/">Docs</a>
-          <a href="/docs/reference/api/" className="top-api">
+          <Link href="/docs/">Docs</Link>
+          <Link href="/docs/reference/api/" className="top-api">
             API
-          </a>
-          <a href="/benchmarks/" aria-current={current === "benchmarks" ? "page" : undefined}>
+          </Link>
+          <Link href="/benchmarks/" aria-current={current === "benchmarks" ? "page" : undefined}>
             Benchmarks
-          </a>
-          <a href="/playground/" aria-current={current === "playground" ? "page" : undefined}>
+          </Link>
+          <Link href="/playground/" aria-current={current === "playground" ? "page" : undefined}>
             Playground
-          </a>
-          <a href="/demo/" aria-current={current === "demo" ? "page" : undefined}>
+          </Link>
+          <Link href="/demo/" aria-current={current === "demo" ? "page" : undefined}>
             Demo
-          </a>
+          </Link>
         </nav>
         <ThemeToggle compact />
       </div>
@@ -33,11 +35,11 @@ export default function SiteHeader({ current }: { current?: "benchmarks" | "play
 export function SiteFooter() {
   return (
     <footer className="bottom glass">
-      <span>AgentBuild, free to use</span>
+      <span>Criogen, free to use</span>
       <nav aria-label="Footer">
-        <a href="/docs/">Docs</a>
-        <a href="/docs/status/">Status</a>
-        <a href="/docs/reference/errors/">Error codes</a>
+        <Link href="/docs/">Docs</Link>
+        <Link href="/docs/status/">Status</Link>
+        <Link href="/docs/reference/errors/">Error codes</Link>
         <a href="/llms.txt">llms.txt</a>
       </nav>
     </footer>

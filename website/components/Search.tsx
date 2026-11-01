@@ -4,6 +4,7 @@
 // button, Ctrl+K / Cmd+K or "/". A native modal dialog keeps focus inside and
 // closes on Escape.
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { SearchIcon } from "./icons";
 
 interface Hit {
@@ -133,11 +134,11 @@ export default function Search({ compact = false }: { compact?: boolean }) {
               <ul>
                 {hits.map((h) => (
                   <li key={h.url}>
-                    <a href={h.url} onClick={() => dialog.current?.close()}>
+                    <Link href={h.url} onClick={() => dialog.current?.close()}>
                       <span className="search-hit-title">{h.title}</span>
                       {/* Excerpts come from our own pages, with <mark> around the match. */}
                       <span className="search-hit-excerpt" dangerouslySetInnerHTML={{ __html: h.excerpt }} />
-                    </a>
+                    </Link>
                   </li>
                 ))}
               </ul>

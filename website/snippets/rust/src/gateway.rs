@@ -4,8 +4,8 @@ pub async fn gateway() -> Result<(), Error> {
     // [show]
     use std::sync::Arc;
 
-    use agentbuild_gateway::Gateway;
-    use agentbuild_providers::{Endpoint, ProviderModel};
+    use criogen_gateway::Gateway;
+    use criogen_providers::{Endpoint, ProviderModel};
 
     let openai = ProviderModel::new(
         Endpoint::openai(std::env::var("OPENAI_API_KEY")?),

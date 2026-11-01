@@ -1,5 +1,5 @@
 type Error = Box<dyn std::error::Error>;
-use agentbuild_agent::Agent;
+use criogen_agent::Agent;
 
 pub async fn threads(agent: Agent) -> Result<(), Error> {
     // [show]

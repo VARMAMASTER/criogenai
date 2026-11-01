@@ -1,4 +1,4 @@
-from agentbuild import tool
+from criogen import tool
 
 
 @tool
@@ -9,7 +9,7 @@ def issue_refund(order_id: str, amount: float) -> str:
 
 async def main() -> None:
     # [show]
-    from agentbuild import Agent, Decision, Storage
+    from criogen import Agent, Decision, Storage
 
     agent = Agent(
         "openai:gpt-5-mini",

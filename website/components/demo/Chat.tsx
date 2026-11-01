@@ -1,5 +1,5 @@
 "use client";
-// Try it: a chat with a support agent built on the real AgentBuild SDK. The
+// Try it: a chat with a support agent built on the real Criogen SDK. The
 // agent runs in demos/feature-tour/chat_server.py on this computer (it needs
 // no account here and keeps model keys out of the browser); the panel beside
 // the chat shows what the SDK did: tool calls, the approval gate, memory and
@@ -53,10 +53,10 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 
 function visitorId(): string {
   try {
-    const saved = localStorage.getItem("agentbuild-demo-visitor");
+    const saved = localStorage.getItem("criogen-demo-visitor");
     if (saved) return saved;
     const fresh = uid();
-    localStorage.setItem("agentbuild-demo-visitor", fresh);
+    localStorage.setItem("criogen-demo-visitor", fresh);
     return fresh;
   } catch {
     return uid();
@@ -188,19 +188,19 @@ export default function Chat() {
     return (
       <div>
         <p className="lab-muted">
-          The chat runs a real AgentBuild agent, so it needs the demo server on your computer (it keeps your model keys out of the browser). Start it, then
+          The chat runs a real Criogen agent, so it needs the demo server on your computer (it keeps your model keys out of the browser). Start it, then
           reload this page:
         </p>
         <pre className="demo-cmd">python demos/feature-tour/chat_server.py   # http://127.0.0.1:4700</pre>
         <p className="lab-muted pg-small">
-          It reads provider keys from <code>~/.agentbuild-keys.env</code> (Gemini, OpenRouter or OpenAI), listens on 127.0.0.1 only, and accepts calls from this
+          It reads provider keys from <code>~/.criogen-keys.env</code> (Gemini, OpenRouter or OpenAI), listens on 127.0.0.1 only, and accepts calls from this
           site&apos;s pages only. The scenarios in the other tabs show everything the chat can do, recorded.
         </p>
       </div>
     );
   }
   if (info.models.length === 0) {
-    return <p className="lab-muted">The demo server is running but found no model key. Add one to ~/.agentbuild-keys.env (GEMINI_API_KEY, OPENROUTER_API_KEY or OPENAI_API_KEY) and restart it.</p>;
+    return <p className="lab-muted">The demo server is running but found no model key. Add one to ~/.criogen-keys.env (GEMINI_API_KEY, OPENROUTER_API_KEY or OPENAI_API_KEY) and restart it.</p>;
   }
 
   const pending = approvals[0];
@@ -301,7 +301,7 @@ export default function Chat() {
         {usage && <p className="lab-muted pg-small">{usage}</p>}
       </div>
 
-      <aside className="chat-side" aria-label="What AgentBuild did">
+      <aside className="chat-side" aria-label="What Criogen did">
         <h3>Under the hood</h3>
         <section>
           <h4>Approval gate</h4>

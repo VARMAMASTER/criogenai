@@ -12,8 +12,36 @@ export function currentTheme(): Theme {
   return document.documentElement.dataset.theme === "light" ? "light" : "dark";
 }
 
-export function setTheme(theme: Theme): void {
-  document.documentElement.dataset.theme = theme;
+/**
+ * Switch the theme. With the View Transitions API the new theme spreads from
+ * `origin` (the toggle) as a circle; without it, or when the visitor asks for
+ * reduced motion, the colours fade (or just switch).
+ */
+export function setTheme(theme: Theme, origin?: { x: number; y: number }): void {
+  const root = document.documentElement;
+  const apply = () => {
+    root.dataset.theme = theme;
+  };
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const start = (document as Document & { startViewTransition?: (cb: () => void) => { ready: Promise<void> } }).startViewTransition;
+  if (reduce) {
+    apply();
+  } else if (start && origin) {
+    const radius = Math.hypot(Math.max(origin.x, innerWidth - origin.x), Math.max(origin.y, innerHeight - origin.y));
+    const transition = start.call(document, apply);
+    transition.ready
+      .then(() =>
+        root.animate(
+          { clipPath: [`circle(0px at ${origin.x}px ${origin.y}px)`, `circle(${radius}px at ${origin.x}px ${origin.y}px)`] },
+          { duration: 600, easing: "cubic-bezier(0.22, 1, 0.36, 1)", pseudoElement: "::view-transition-new(root)" },
+        ),
+      )
+      .catch(() => {});
+  } else {
+    root.classList.add("theme-fade");
+    apply();
+    window.setTimeout(() => root.classList.remove("theme-fade"), 400);
+  }
   try {
     localStorage.setItem(THEME_KEY, theme);
   } catch {

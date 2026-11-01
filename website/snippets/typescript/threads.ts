@@ -1,4 +1,4 @@
-import { Agent } from "agentbuild-sdk";
+import { Agent } from "criogen";
 
 declare const agent: Agent;
 

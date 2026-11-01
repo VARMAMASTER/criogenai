@@ -9,23 +9,23 @@ and the gateway, so code that checks codes works everywhere. Codes may be
 added; before 1.0 none is renamed or removed.
 
 ```python
-from agentbuild import AgentBuildError, ThreadBusyError
+from criogen import CriogenError, ThreadBusyError
 
 try:
     await chat.send("Hello")
 except ThreadBusyError:
     ...                      # another run holds the thread
-except AgentBuildError as error:
+except CriogenError as error:
     print(error.code, error.message, error.details)
 ```
 
 ```ts
-import { isAgentBuildError } from "agentbuild-sdk";
+import { isCriogenError } from "criogen";
 
 try {
   await chat.send("Hello");
 } catch (error) {
-  if (isAgentBuildError(error, "thread_busy")) { /* … */ }
+  if (isCriogenError(error, "thread_busy")) { /* … */ }
 }
 ```
 

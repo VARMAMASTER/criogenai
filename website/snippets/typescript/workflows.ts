@@ -1,4 +1,4 @@
-import { END, Storage, Workflow, suspend } from "agentbuild-sdk";
+import { END, Storage, Workflow, suspend } from "criogen";
 
 // [show]
 const app = new Workflow()

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
 import { Arrow } from "./icons";
 
 export function CardGrid({ children }: { children?: ReactNode }) {
@@ -15,9 +16,16 @@ export function LinkCard({ title, description, href }: { title: string; descript
       <Arrow className="link-card-arrow" />
     </>
   );
+  // The generated API references (/api/...) are separate static sites, not pages of this app.
+  if (href.startsWith("/api/") || !href.startsWith("/"))
+    return (
+      <a className="link-card" href={href}>
+        {inner}
+      </a>
+    );
   return (
-    <a className="link-card" href={href}>
+    <Link className="link-card" href={href}>
       {inner}
-    </a>
+    </Link>
   );
 }

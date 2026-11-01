@@ -35,7 +35,7 @@ export function loadRecorded(): Recorded {
   if (!v.ok) {
     if (!fixture) {
       // A broken committed file should fail the build, not ship an empty lab.
-      throw new Error(`public/bench/results.json does not match agentbuild-compare/1:\n- ${v.errors.join("\n- ")}`);
+      throw new Error(`public/bench/results.json does not match criogen-compare/1:\n- ${v.errors.join("\n- ")}`);
     }
     return { data: null, errors: v.errors, fixture, href: null };
   }

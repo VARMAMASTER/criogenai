@@ -4,10 +4,10 @@ pub async fn compliance() -> Result<(), Error> {
     // [show]
     use std::time::Duration;
 
-    use agentbuild_storage::{AuditQuery, Keyring, Retention, Storage};
+    use criogen_storage::{AuditQuery, Keyring, Retention, Storage};
 
-    // AGENTBUILD_ENCRYPTION_KEYS="k1:<64 hex digits>"  (openssl rand -hex 32)
-    let keys = Keyring::from_env("AGENTBUILD_ENCRYPTION_KEYS")?;
+    // CRIOGEN_ENCRYPTION_KEYS="k1:<64 hex digits>"  (openssl rand -hex 32)
+    let keys = Keyring::from_env("CRIOGEN_ENCRYPTION_KEYS")?;
     let storage = Storage::connect_encrypted("postgres://app:secret@db.internal/agents", keys)
         .await?
         .with_audit()

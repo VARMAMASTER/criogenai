@@ -1,44 +1,45 @@
 /*
- * AgentBuild's colours are the states of a run: a colour on the site means
+ * Criogen's colours are the states of a run: a colour on the site means
  * what it means in a run (running, waiting for a person, done, failed).
- * Dark first; a light theme for every page.
+ * Graphite surfaces, one green accent (a live run). Dark first; a light
+ * theme for every page.
  */
 :root {
   color-scheme: dark;
-  --ab-ink: #0f1b2d;        /* page */
-  --ab-surface: #16263d;    /* panels, code */
-  --ab-surface-2: #1c3150;  /* raised */
-  --ab-line: #25405c;       /* borders */
-  --ab-text: #e6edf5;
-  --ab-muted: #9fb3c8;
-  --ab-faint: #6b829b;
-  --ab-fine: #8ea4bc;
-  --ab-running: #7fd6e8;    /* the brand colour */
-  --ab-waiting: #f2b544;
-  --ab-done: #8bd9a0;
-  --ab-failed: #f27d72;
+  --ab-ink: #0b0d10;        /* page */
+  --ab-surface: #12151a;    /* panels, code */
+  --ab-surface-2: #181c22;  /* raised */
+  --ab-line: #262b33;       /* borders */
+  --ab-text: #e8eaed;
+  --ab-muted: #9aa3ad;
+  --ab-faint: #78828e;
+  --ab-fine: #8d97a3;
+  --ab-running: #3ecf8e;    /* the brand colour */
+  --ab-waiting: #f5b544;
+  --ab-done: #6aa8ff;
+  --ab-failed: #f2685c;
   /* The same states as text on the page's background. */
-  --ab-running-text: #7fd6e8;
-  --ab-waiting-text: #f2b544;
-  --ab-done-text: #8bd9a0;
-  --ab-failed-text: #f27d72;
+  --ab-running-text: #5fe0a6;
+  --ab-waiting-text: #f5b544;
+  --ab-done-text: #8dbcff;
+  --ab-failed-text: #f58b81;
 
-  --ab-font: "Nunito Variable", system-ui, sans-serif;
+  --ab-font: "IBM Plex Sans Variable", system-ui, sans-serif;
   --ab-mono: "JetBrains Mono Variable", ui-monospace, monospace;
 
   /* The docs' scale (as Starlight's, dark). */
-  --c-accent-low: #12384a;
-  --c-accent: #3fb6d1;
-  --c-accent-high: #bfeef8;
-  --c-accent-text: #bfeef8;
+  --c-accent-low: #0f2a20;
+  --c-accent: #3ecf8e;
+  --c-accent-high: #b8f5d6;
+  --c-accent-text: #7de8b4;
   --c-white: #ffffff;
-  --c-gray-1: #e6edf5;
-  --c-gray-2: #c4d2e1;
-  --c-gray-3: #9fb3c8;
-  --c-gray-4: #6b829b;
-  --c-gray-5: #3a5370;
-  --c-gray-6: #1c3150;
-  --c-black: #0f1b2d;
+  --c-gray-1: #e8eaed;
+  --c-gray-2: #c3c9d0;
+  --c-gray-3: #9aa3ad;
+  --c-gray-4: #78828e;
+  --c-gray-5: #343a43;
+  --c-gray-6: #181c22;
+  --c-black: #0b0d10;
 
   /* Frameworks in the benchmark lab (categorical, validated for both themes;
      never the run-state colours, which mean pass / partial / fail there). */
@@ -50,26 +51,34 @@
 
 :root[data-theme="light"] {
   color-scheme: light;
-  --ab-text: #0f1b2d;
-  --ab-muted: #4b6380;
-  --ab-faint: #7a91aa;
-  --ab-fine: #5b7390;
-  --ab-running-text: #0f6f86;
+  --ab-ink: #fafaf9;
+  --ab-surface: #f2f3f1;
+  --ab-surface-2: #e9ebe8;
+  --ab-line: #dcdfdb;
+  --ab-text: #14171a;
+  --ab-muted: #4a535c;
+  --ab-faint: #6b747e;
+  --ab-fine: #55606a;
+  --ab-running: #12915c;
+  --ab-waiting: #b87400;
+  --ab-done: #2563c9;
+  --ab-failed: #c2372b;
+  --ab-running-text: #0b7a4b;
   --ab-waiting-text: #8a5a00;
-  --ab-done-text: #237a3c;
+  --ab-done-text: #1d4fa3;
   --ab-failed-text: #b3392e;
 
-  --c-accent-low: #d4f1f7;
-  --c-accent: #0f6f86;
-  --c-accent-high: #0b4352;
-  --c-accent-text: #0f6f86;
-  --c-white: #0f1b2d;
-  --c-gray-1: #16263d;
-  --c-gray-2: #25405c;
-  --c-gray-3: #4b6380;
-  --c-gray-4: #7a91aa;
-  --c-gray-5: #c4d2e1;
-  --c-gray-6: #e8eef5;
+  --c-accent-low: #d8f3e5;
+  --c-accent: #12915c;
+  --c-accent-high: #0a4f33;
+  --c-accent-text: #0b7a4b;
+  --c-white: #14171a;
+  --c-gray-1: #1b1f23;
+  --c-gray-2: #343b42;
+  --c-gray-3: #4a535c;
+  --c-gray-4: #6b747e;
+  --c-gray-5: #d5d9d4;
+  --c-gray-6: #eceeeb;
   --c-black: #ffffff;
 
   --fw-1: #2a78d6;

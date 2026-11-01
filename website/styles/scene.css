@@ -3,9 +3,9 @@
   display: grid;
   grid-template-columns: minmax(0, 1.7fr) minmax(16rem, 1fr);
   border: 1px solid var(--glass-border);
-  border-radius: 24px;
+  border-radius: 12px;
   background:
-    radial-gradient(40rem 22rem at 25% 0%, rgba(127, 214, 232, 0.1), transparent 70%),
+    radial-gradient(40rem 22rem at 25% 0%, rgba(62, 207, 142, 0.1), transparent 70%),
     var(--glass-bg);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
@@ -54,7 +54,7 @@
   opacity: 1;
   animation: flow 0.6s linear infinite;
 }
-.edge[data-state="done"] .edge-line { stroke: rgba(139, 217, 160, 0.6); }
+.edge[data-state="done"] .edge-line { stroke: rgba(106, 168, 255, 0.6); }
 .edge[data-state="skip"] .edge-line { stroke: rgba(159, 179, 200, 0.4); stroke-dasharray: 3 6; }
 .edge[data-state="fail"] .edge-line { stroke: var(--ab-failed); }
 .edge[data-state="wait"] .edge-line { stroke: var(--ab-waiting); stroke-dasharray: 7 6; }
@@ -90,7 +90,7 @@
 .node[data-state="wait"] .node-label { fill: var(--ab-waiting); }
 .node[data-state="wait"] .node-halo { stroke: var(--ab-waiting); opacity: 0.8; animation: breathe 0.8s ease-in-out infinite; }
 
-.node[data-state="done"] .node-box { fill: rgba(139, 217, 160, 0.12); stroke: var(--ab-done); }
+.node[data-state="done"] .node-box { fill: rgba(106, 168, 255, 0.12); stroke: var(--ab-done); }
 .node[data-state="done"] .node-label { fill: var(--ab-done); }
 
 .node[data-state="fail"] .node-box { fill: rgba(242, 125, 114, 0.14); stroke: var(--ab-failed); }
@@ -158,7 +158,7 @@
   gap: 0.5rem 0.8rem;
   padding: 0.6rem 0.7rem 0.6rem 1rem;
   border: 1px solid rgba(242, 181, 68, 0.7);
-  border-radius: 18px;
+  border-radius: 12px;
   background: rgba(40, 34, 20, 0.55);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
   backdrop-filter: blur(16px) saturate(160%);
@@ -311,7 +311,7 @@
   fill: rgba(242, 181, 68, 0.2);
 }
 :root[data-theme="light"] .node[data-state="done"] .node-box {
-  fill: rgba(139, 217, 160, 0.22);
+  fill: rgba(106, 168, 255, 0.22);
   stroke: #4cae6a;
 }
 :root[data-theme="light"] .node[data-state="wait"] .node-label {

@@ -1,5 +1,5 @@
 // [show]
-import { Agent, FakeModel, FakeReply, ToolError, tool } from "agentbuild-sdk";
+import { Agent, FakeModel, FakeReply, ToolError, tool } from "criogen";
 
 const issueRefund = tool<{ orderId: string; amount: number }>({
   name: "issue_refund",
@@ -52,7 +52,7 @@ const support = new Agent({
 // [/show subagents]
 
 // [show hooks]
-import type { Hook } from "agentbuild-sdk";
+import type { Hook } from "criogen";
 
 const guard: Hook = {
   name: "guard",

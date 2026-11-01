@@ -1,5 +1,5 @@
 // [show]
-import { Agent, Embedder, Memory, Storage } from "agentbuild-sdk";
+import { Agent, Embedder, Memory, Storage } from "criogen";
 
 const storage = new Storage("sqlite:///agent.db");
 const agent = new Agent({

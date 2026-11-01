@@ -74,7 +74,7 @@ p.pg-error {
   margin: 0.6rem 0;
   padding: 0.7rem 0.9rem;
   min-height: 3rem;
-  border-radius: 14px;
+  border-radius: 8px;
   background: var(--glass-bg-soft);
   overflow-wrap: anywhere;
   white-space: pre-wrap;
@@ -282,7 +282,7 @@ p.pg-error {
   font-size: 0.82rem;
 }
 .pg-table td.pg-win {
-  font-weight: 800;
+  font-weight: 650;
   color: var(--ab-done-text);
 }
 .pg-note {
@@ -298,7 +298,7 @@ p.pg-error {
   margin: 0.8rem 0 1.4rem;
 }
 .pg-method dt {
-  font-weight: 800;
+  font-weight: 650;
 }
 .pg-method dd {
   margin: 0;
@@ -307,7 +307,7 @@ p.pg-error {
 .pg-sub {
   margin: 0 0 0.5rem;
   font-size: 1.05rem;
-  font-weight: 800;
+  font-weight: 650;
 }
 @media (max-width: 40rem) {
   .pg-method {

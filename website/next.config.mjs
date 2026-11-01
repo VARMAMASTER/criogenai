@@ -1,4 +1,4 @@
-// The AgentBuild website: the landing page, the docs (/docs/) and the
+// The Criogen website: the landing page, the docs (/docs/) and the
 // benchmark lab (/benchmarks/), exported as static files (out/) for Vercel.
 import path from "node:path";
 import { fileURLToPath } from "node:url";

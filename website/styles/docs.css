@@ -8,7 +8,7 @@
   --nav-h: 4rem;
   --sidebar-w: 18.75rem;
   --toc-w: 18rem;
-  --radius: 16px;
+  --radius: 10px;
   --content-w: 45rem;
   font-size: 16px;
   color: var(--c-gray-2);
@@ -61,7 +61,7 @@ html.drawer-open {
   gap: 0.6rem;
   color: var(--c-white);
   text-decoration: none;
-  font-weight: 850;
+  font-weight: 650;
   font-size: 1.2rem;
   min-height: 2.5rem;
   border-radius: 10px;
@@ -103,7 +103,7 @@ html.drawer-open {
   gap: 0.55rem;
   min-height: 2.5rem;
   padding: 0 0.6rem 0 0.9rem;
-  border-radius: 999px;
+  border-radius: 8px;
   background: var(--glass-bg-soft);
   border: 1px solid var(--glass-border-strong);
   box-shadow: var(--glass-highlight);
@@ -162,7 +162,7 @@ html.drawer-open {
 .d-sheet {
   min-width: 0;
   margin: 1.25rem;
-  border-radius: 28px;
+  border-radius: 12px;
   background: var(--glass-bg);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
@@ -200,10 +200,10 @@ html.drawer-open {
   min-height: 2.5rem;
   padding: 0.35rem 0.6rem 0.35rem 0.5rem;
   border: 0;
-  border-radius: 999px;
+  border-radius: 8px;
   background: transparent;
   color: var(--c-white);
-  font-weight: 800;
+  font-weight: 650;
   font-size: 0.98rem;
   cursor: pointer;
   text-align: start;
@@ -231,7 +231,7 @@ html.drawer-open {
   align-items: center;
   min-height: 2.5rem;
   padding: 0.4em 0.85rem;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid transparent;
   color: var(--c-gray-2);
   text-decoration: none;
@@ -247,21 +247,21 @@ html.drawer-open {
 }
 .sb-items a[aria-current="page"],
 .sb-items a[aria-current="page"]:hover {
-  background: rgba(127, 214, 232, 0.16);
-  border-color: rgba(127, 214, 232, 0.35);
+  background: rgba(62, 207, 142, 0.16);
+  border-color: rgba(62, 207, 142, 0.35);
   color: var(--c-accent-text);
-  font-weight: 800;
-  box-shadow: 0 6px 20px -12px rgba(127, 214, 232, 0.8);
+  font-weight: 650;
+  box-shadow: 0 6px 20px -12px rgba(62, 207, 142, 0.8);
 }
 :root[data-theme="light"] .sb-items a[aria-current="page"] {
   background: rgba(63, 182, 209, 0.14);
-  border-color: rgba(15, 111, 134, 0.25);
+  border-color: rgba(18, 145, 92, 0.25);
 }
 
 /* Table of contents: small, an accent rail on the current heading. */
 .toc h2 {
   font-size: 0.8rem;
-  font-weight: 800;
+  font-weight: 650;
   color: var(--c-gray-3);
   margin: 0.5rem 0 0.5rem;
   letter-spacing: 0.01em;
@@ -318,7 +318,7 @@ html.drawer-open {
   text-align: start;
 }
 .toc-mobile-label {
-  font-weight: 800;
+  font-weight: 650;
   color: var(--c-white);
   white-space: nowrap;
 }
@@ -352,9 +352,9 @@ html.drawer-open {
 }
 .d-title h1 {
   margin: 0;
-  max-width: var(--content-w);
+  max-width: none;
   font-size: 2.6rem;
-  font-weight: 850;
+  font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.15;
   color: var(--c-white);
@@ -364,7 +364,7 @@ html.drawer-open {
   padding: 1.5rem 1.5rem 0.5rem;
 }
 .prose {
-  max-width: calc(var(--content-w) + 3rem);
+  max-width: none;
   line-height: 1.7;
   overflow-wrap: break-word;
 }
@@ -378,7 +378,7 @@ html.drawer-open {
 }
 .prose :is(h2, h3, h4) {
   color: var(--c-white);
-  font-weight: 800;
+  font-weight: 650;
   letter-spacing: -0.01em;
   line-height: 1.25;
 }
@@ -453,7 +453,7 @@ html.drawer-open {
 .code-block {
   position: relative;
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius, 16px);
+  border-radius: var(--radius, 10px);
   background: rgba(4, 12, 26, 0.5);
   -webkit-backdrop-filter: blur(10px);
   backdrop-filter: blur(10px);
@@ -519,7 +519,7 @@ html.drawer-open {
 .prose .ab-tablist button {
   min-height: 2.5rem;
   padding: 0.3rem 1rem;
-  border-radius: 999px;
+  border-radius: 8px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--c-gray-3);
@@ -532,8 +532,8 @@ html.drawer-open {
   color: var(--c-white);
 }
 .prose .ab-tablist button[aria-selected="true"] {
-  background: rgba(127, 214, 232, 0.14);
-  border-color: rgba(127, 214, 232, 0.35);
+  background: rgba(62, 207, 142, 0.14);
+  border-color: rgba(62, 207, 142, 0.35);
   color: var(--c-white);
 }
 .prose [data-tab-panel] > * + * {
@@ -550,8 +550,8 @@ html.drawer-open {
 html[data-lang="python"] .prose .ab-synced[data-has-python]:not([data-hydrated]) button[data-tab-lang="python"],
 html[data-lang="typescript"] .prose .ab-synced[data-has-typescript]:not([data-hydrated]) button[data-tab-lang="typescript"],
 html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) button[data-tab-lang="rust"] {
-  background: rgba(127, 214, 232, 0.14);
-  border-color: rgba(127, 214, 232, 0.35);
+  background: rgba(62, 207, 142, 0.14);
+  border-color: rgba(62, 207, 142, 0.35);
   color: var(--c-white);
 }
 html[data-lang="python"] .prose .ab-synced[data-has-python]:not([data-hydrated]) button:not([data-tab-lang="python"]),
@@ -564,11 +564,11 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
 
 /* Callouts: admonitions in tinted glass. */
 .callout {
-  --tint: rgba(127, 214, 232, 0.1);
+  --tint: rgba(62, 207, 142, 0.1);
   --edge: var(--c-accent);
   --title: var(--c-accent-text);
   border-inline-start: 4px solid var(--edge);
-  border-radius: var(--radius, 16px);
+  border-radius: var(--radius, 10px);
   padding: 1rem 1.15rem;
   background: var(--tint);
   -webkit-backdrop-filter: blur(10px);
@@ -599,7 +599,7 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
   align-items: center;
   gap: 0.5rem;
   margin: 0 0 0.4rem;
-  font-weight: 800;
+  font-weight: 650;
   color: var(--title);
 }
 .callout-title svg {
@@ -622,7 +622,7 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
 .table-wrap {
   overflow-x: auto;
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius, 16px);
+  border-radius: var(--radius, 10px);
   background: var(--glass-bg-soft);
   scrollbar-width: thin;
   scrollbar-color: var(--c-gray-5) transparent;
@@ -668,7 +668,7 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
   justify-content: space-between;
   gap: 0.75rem;
   padding: 1rem 1.25rem;
-  border-radius: 20px;
+  border-radius: 12px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg-soft);
   box-shadow: var(--glass-highlight);
@@ -676,9 +676,9 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
   transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 .link-card:hover {
-  border-color: rgba(127, 214, 232, 0.5);
+  border-color: rgba(62, 207, 142, 0.5);
   transform: translateY(-2px);
-  box-shadow: var(--glass-highlight), 0 14px 30px -18px rgba(127, 214, 232, 0.7);
+  box-shadow: var(--glass-highlight), 0 14px 30px -18px rgba(62, 207, 142, 0.7);
 }
 .link-card-text {
   display: flex;
@@ -687,7 +687,7 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
 }
 .link-card-title {
   color: var(--c-white);
-  font-weight: 800;
+  font-weight: 650;
   font-size: 1.05rem;
 }
 .link-card-desc {
@@ -732,7 +732,7 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
   gap: 2.5rem;
   margin-top: 3rem;
   padding: 0 1.5rem 2rem;
-  max-width: calc(var(--content-w) + 3rem);
+  max-width: none;
 }
 .pager {
   display: grid;
@@ -744,7 +744,7 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
   flex-direction: column;
   gap: 0.2rem;
   padding: 1rem 1.25rem;
-  border-radius: 20px;
+  border-radius: 12px;
   border: 1px solid var(--glass-border);
   background: var(--glass-bg-soft);
   box-shadow: var(--glass-highlight);
@@ -752,9 +752,9 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
   transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
 }
 .pager a:hover {
-  border-color: rgba(127, 214, 232, 0.5);
+  border-color: rgba(62, 207, 142, 0.5);
   transform: translateY(-2px);
-  box-shadow: var(--glass-highlight), 0 14px 30px -18px rgba(127, 214, 232, 0.7);
+  box-shadow: var(--glass-highlight), 0 14px 30px -18px rgba(62, 207, 142, 0.7);
 }
 .pager .pager-next {
   text-align: end;
@@ -766,7 +766,7 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
 .pager-title {
   color: var(--c-accent-text);
   font-size: 1.05rem;
-  font-weight: 800;
+  font-weight: 650;
 }
 .d-columns {
   display: grid;
@@ -812,7 +812,7 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
   margin: 10vh auto auto;
   padding: 0;
   border: 1px solid var(--glass-border-strong);
-  border-radius: 20px;
+  border-radius: 12px;
   background: var(--glass-bg-strong);
   -webkit-backdrop-filter: blur(28px) saturate(170%);
   backdrop-filter: blur(28px) saturate(170%);
@@ -893,7 +893,7 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
   flex-direction: column;
   gap: 0.2rem;
   padding: 0.7rem 0.9rem;
-  border-radius: 14px;
+  border-radius: 8px;
   text-decoration: none;
   color: var(--c-gray-2);
 }
@@ -904,7 +904,7 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
 }
 .search-hit-title {
   color: var(--c-accent-text);
-  font-weight: 800;
+  font-weight: 650;
 }
 .search-hit-excerpt {
   font-size: 0.88rem;
@@ -974,7 +974,7 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
   align-items: center;
   min-height: 2.5rem;
   padding: 0 0.85rem;
-  border-radius: 999px;
+  border-radius: 8px;
   color: var(--c-gray-2);
   text-decoration: none;
   font-weight: 700;
@@ -1050,7 +1050,7 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
   }
   .d-sheet {
     margin: 0.75rem 0.5rem;
-    border-radius: 20px;
+    border-radius: 12px;
   }
   .d-title {
     padding: 1.75rem 1rem 1.25rem;
@@ -1089,4 +1089,10 @@ html[data-lang="rust"] .prose .ab-synced[data-has-rust]:not([data-hydrated]) but
   .toc-chev {
     transition: none;
   }
+}
+
+/* The page fills the sheet: tables, code and cards use the full width;
+   only running text keeps a readable line length. */
+.prose > :is(p, ul, ol, blockquote) {
+  max-width: 62rem;
 }

@@ -32,7 +32,7 @@ for (const f of fs.readdirSync(schemas).filter((f) => f.endsWith(".json"))) {
 }
 
 const env = { BENCH_FIXTURE: fixture ? "1" : "" };
-if (fixture) console.warn("\n[agentbuild] FIXTURE MODE: the benchmark lab shows fake numbers. Do not deploy this build.\n");
+if (fixture) console.warn("\n[criogen] FIXTURE MODE: the benchmark lab shows fake numbers. Do not deploy this build.\n");
 
 const next = path.join(root, "node_modules", "next", "dist", "bin", "next");
 if (mode === "dev") {
@@ -40,5 +40,28 @@ if (mode === "dev") {
 } else {
   run(next, ["build"], env);
   run(path.join(root, "node_modules", "pagefind", "lib", "runner", "bin.cjs"), ["--site", "out"]);
-  if (fixture) console.warn("\n[agentbuild] out/ was built with the FIXTURE: do not deploy it.\n");
+  dottedSegments(path.join(root, "out"));
+  if (fixture) console.warn("\n[criogen] out/ was built with the FIXTURE: do not deploy it.\n");
+}
+
+// Next writes a page's data for client navigation as
+// `__next.docs/$c$slug/__PAGE__.txt` but asks for `__next.docs.$c$slug.__PAGE__.txt`.
+// A static host serves only the files that exist, so write the second name too
+// (the first stays): then navigation and prefetching work on any host.
+function dottedSegments(dir) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (!entry.isDirectory()) continue;
+    if (entry.name.startsWith("__next.")) {
+      const walk = (d, prefix) => {
+        for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+          if (e.isDirectory()) walk(path.join(d, e.name), `${prefix}.${e.name}`);
+          else if (e.name.endsWith(".txt")) fs.copyFileSync(path.join(d, e.name), path.join(dir, `${prefix}.${e.name}`));
+        }
+      };
+      walk(full, entry.name);
+    } else {
+      dottedSegments(full);
+    }
+  }
 }

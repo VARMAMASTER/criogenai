@@ -18,7 +18,10 @@ export default function ThemeToggle({ compact = false }: { compact?: boolean }) 
     <button
       type="button"
       className="theme-toggle"
-      onClick={() => setTheme(currentTheme() === "light" ? "dark" : "light")}
+      onClick={(e) => {
+        const box = e.currentTarget.getBoundingClientRect();
+        setTheme(currentTheme() === "light" ? "dark" : "light", { x: box.left + box.width / 2, y: box.top + box.height / 2 });
+      }}
       aria-label={theme ? `Theme: ${theme}. Switch to ${next}` : "Switch theme"}
       title={theme ? `Switch to the ${next} theme` : "Switch theme"}
     >

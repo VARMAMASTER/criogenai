@@ -10,13 +10,13 @@ import { loadRecorded } from "@/lib/bench-data";
 export const metadata: Metadata = {
   title: "Benchmark lab",
   description:
-    "AgentBuild, LangGraph and CrewAI on the same work with the same simulated model: speed, load, memory, reliability and footprint, from the raw results file.",
+    "Criogen, LangGraph and CrewAI on the same work with the same simulated model: speed, load, memory, reliability and footprint, from the raw results file.",
 };
 
 /** The kit is built by benches/compare/package.py into public/bench/. */
-const KIT = "/bench/agentbuild-compare-kit.zip";
+const KIT = "/bench/criogen-compare-kit.zip";
 const KIT_COMMANDS = [
-  "cd agentbuild-compare-kit",
+  "cd criogen-compare-kit",
   "python setup.py      # once: a virtual environment per framework (pinned versions)",
   "python run.py        # everything, about 25 minutes → bench/results/<date>-<machine>.json",
   "python run.py quick  # a short smoke test (not for comparing)",
@@ -50,14 +50,14 @@ export default function BenchmarksPage() {
       <main id="main" className="lab-main">
         <header className="lab-hero">
           <p className="lab-eyebrow">Benchmark lab</p>
-          <h1>AgentBuild, LangGraph and CrewAI, on the same work</h1>
+          <h1>Criogen, LangGraph and CrewAI, on the same work</h1>
           <p className="lab-lede">
             All three in Python, in the way their own documentation shows, against one simulated model with the same replies and delays.
             Each scenario runs in a fresh process per framework. Everything below is read from one results file: the machine, the versions,
             the command and every measurement.
           </p>
           <p className="lab-muted">
-            For what AgentBuild&apos;s Rust engine, SDK bridges and gateway cost on their own, see <a href="/docs/reference/benchmarks/">Benchmarks</a> in
+            For what Criogen&apos;s Rust engine, SDK bridges and gateway cost on their own, see <a href="/docs/reference/benchmarks/">Benchmarks</a> in
             the docs.
           </p>
         </header>

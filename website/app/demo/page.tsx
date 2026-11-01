@@ -13,11 +13,11 @@ import { byGroup, COVERAGE, loadTour, valueText, type TourFeature, type TourFile
 export const metadata: Metadata = {
   title: "Demo",
   description:
-    "Every AgentBuild feature on the status page, run for real: the code, what it printed and the checks it passed, with a simulated model and with a real one.",
+    "Every Criogen feature on the status page, run for real: the code, what it printed and the checks it passed, with a simulated model and with a real one.",
 };
 
 const RUN_COMMANDS = [
-  "pip install agentbuild-sdk",
+  "# needs the criogen Python package (not on PyPI yet)",
   "python demos/feature-tour/tour.py                 # simulated model: no network, no keys",
   "python demos/feature-tour/tour.py --live gemini   # a real model (GEMINI_API_KEY); or: --live openai",
 ].join("\n");
@@ -108,7 +108,7 @@ export default async function DemoPage() {
           <p className="lab-eyebrow">Demo</p>
           <h1>Every feature, run for real</h1>
           <p className="lab-lede">
-            Each scenario below is ordinary AgentBuild code. It was run, and the page shows that exact code, what it printed and the checks it had to pass.
+            Each scenario below is ordinary Criogen code. It was run, and the page shows that exact code, what it printed and the checks it had to pass.
             Chat with the agent yourself, or read the recorded tours: one with a scripted model, so it is exact and repeatable, and one where a real model decides.
           </p>
           <p className="lab-muted">
@@ -185,7 +185,7 @@ export default async function DemoPage() {
         <section className="lab-card" aria-labelledby="demo-run">
           <h2 id="demo-run">Run it yourself</h2>
           <p className="lab-muted">
-            The tour is one Python file. It writes the files this page reads; keys for the real-model tour are read from <code>~/.agentbuild-keys.env</code>{" "}
+            The tour is one Python file. It writes the files this page reads; keys for the real-model tour are read from <code>~/.criogen-keys.env</code>{" "}
             and never written anywhere.
           </p>
           <div className="prose">

@@ -4,8 +4,10 @@
 // a menu button opens the sidebar as a drawer (a modal dialog: focus stays
 // inside, Escape closes it).
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 import { SECTIONS, sectionOf } from "@/lib/nav";
 import { Close, Menu } from "../icons";
+import LogoMark from "../LogoMark";
 import Search from "../Search";
 import ThemeToggle from "../ThemeToggle";
 import SidebarNav from "./SidebarNav";
@@ -52,15 +54,15 @@ export default function DocsHeader({ slug }: { slug: string }) {
         >
           <Menu />
         </button>
-        <a className="dh-brand" href="/">
-          <img src="/mark.svg" alt="" width="34" height="34" />
-          <span>AgentBuild</span>
-        </a>
+        <Link className="dh-brand" href="/">
+          <LogoMark size={32} />
+          <span>criogen</span>
+        </Link>
         <nav className="dh-sections" aria-label="Sections">
           {SECTIONS.map((s) => (
-            <a key={s.id} href={s.href} aria-current={section === s.id ? "page" : undefined}>
+            <Link key={s.id} href={s.href} aria-current={section === s.id ? "page" : undefined}>
               {s.label}
-            </a>
+            </Link>
           ))}
         </nav>
       </div>
@@ -81,21 +83,21 @@ export default function DocsHeader({ slug }: { slug: string }) {
       >
         <div className="drawer-panel">
           <div className="drawer-head">
-            <a className="dh-brand" href="/">
-              <img src="/mark.svg" alt="" width="30" height="30" />
-              <span>AgentBuild</span>
-            </a>
+            <Link className="dh-brand" href="/">
+              <LogoMark size={28} />
+              <span>criogen</span>
+            </Link>
             <button type="button" className="icon-button" aria-label="Close the menu" onClick={close}>
               <Close />
             </button>
           </div>
           <nav className="drawer-sections" aria-label="Sections">
             {SECTIONS.map((s) => (
-              <a key={s.id} href={s.href} aria-current={section === s.id ? "page" : undefined} onClick={close}>
+              <Link key={s.id} href={s.href} aria-current={section === s.id ? "page" : undefined} onClick={close}>
                 {s.label}
-              </a>
+              </Link>
             ))}
-            <a href="/benchmarks/">Benchmarks</a>
+            <Link href="/benchmarks/">Benchmarks</Link>
           </nav>
           <div className="d-sidebar-scroll drawer-scroll">
             <SidebarNav current={slug} onNavigate={close} idPrefix="drawer" />

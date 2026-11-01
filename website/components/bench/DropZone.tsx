@@ -48,7 +48,7 @@ export default function DropZone({ onLoad, loaded, onClear }: { onLoad: (data: B
       >
         <p className="drop-title">Drop your results file here</p>
         <p className="lab-muted">
-          A <code>.json</code> file written by <code>run.py</code> (schema <code>agentbuild-compare/1</code>). It is read and checked in your
+          A <code>.json</code> file written by <code>run.py</code> (schema <code>criogen-compare/1</code>). It is read and checked in your
           browser; nothing is uploaded.
         </p>
         <button type="button" className="lab-button" onClick={() => input.current?.click()}>

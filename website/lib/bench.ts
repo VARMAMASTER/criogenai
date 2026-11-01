@@ -1,10 +1,10 @@
-// The framework comparison's results file, schema `agentbuild-compare/1`
+// The framework comparison's results file, schema `criogen-compare/1`
 // (docs/design/0016-framework-comparison.md §4), and a validator that runs
 // in the browser (for a file a visitor drops into the lab) and at build time.
 // Every number the lab shows comes from such a file. Any field may be
 // missing or null; the lab says so instead of guessing.
 
-export const SCHEMA = "agentbuild-compare/1";
+export const SCHEMA = "criogen-compare/1";
 
 export interface BenchFramework {
   label: string;
@@ -99,7 +99,7 @@ const RESULT_NUMBERS = [
   "model_us",
 ] as const;
 
-/** Check a parsed JSON value against `agentbuild-compare/1`. */
+/** Check a parsed JSON value against `criogen-compare/1`. */
 export function validate(raw: unknown): Validation {
   const errors: string[] = [];
   const warnings: string[] = [];
@@ -174,7 +174,7 @@ export function validate(raw: unknown): Validation {
 // ---- Presentation helpers (pure; used by the lab) ---------------------------
 
 /** Known frameworks first, in this order; then any other in the file. */
-export const FRAMEWORK_ORDER = ["agentbuild", "langgraph", "crewai"];
+export const FRAMEWORK_ORDER = ["criogen", "langgraph", "crewai"];
 
 export function frameworkIds(files: BenchFile[]): string[] {
   const seen = new Set<string>();
