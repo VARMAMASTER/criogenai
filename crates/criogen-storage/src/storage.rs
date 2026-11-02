@@ -519,6 +519,17 @@ impl ThreadLease {
             run.token = Some(token);
         }
     }
+
+    /// Whether this lease's run was asked to stop ([`Storage::cancel`] or
+    /// [`OnBusy::Interrupt`]), including before it registered a token with
+    /// [`set_cancel`](Self::set_cancel). Work done between taking the lease
+    /// and registering can check it.
+    pub fn interrupted(&self) -> bool {
+        self.slot.as_ref().is_some_and(|slot| {
+            let run = lock_slot(&slot.run);
+            run.interrupted || run.token.as_ref().is_some_and(CancelToken::is_cancelled)
+        })
+    }
 }
 
 impl Drop for ThreadLease {

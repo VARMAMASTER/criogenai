@@ -119,6 +119,13 @@ stops the run after 20 s; the user's "stop" button can call `controller.abort()`
 `for await` loop early cancels a stream. A cancelled thread call is still saved, and `retry()`
 continues it. Tools have their own timeout (`limits.toolTimeoutSecs`, default 60 s).
 
+To show the answer in a browser as it is written, send the events as Server-Sent Events from a
+route handler and read them with `fetch` in the page: the engine stays on the server, and the
+browser needs no Criogen package. The `examples/nextjs-route` folder has both halves, the
+`/api/agent/stream` route and a `useAgentStream()` React hook (answer, tool calls, busy, error,
+`stop()`). Send error codes to the browser, not error messages: a message can quote what the
+model or a tool saw.
+
 ## Tracing
 
 ```ts

@@ -9,6 +9,17 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+- **`ThreadLease::interrupted()`** (Rust, storage): whether the lease's run was asked to stop, also before
+  it registered its cancel token. The Postgres lock tests wait on it instead of a fixed delay; they failed
+  on a busy machine (reproduced: 17 failures in 20 loaded runs, none after).
+- **The Python package reports its real version**: `criogen.__version__` comes from the Rust crate, which
+  still said 0.1.0 in the 0.1.1 sources (the npm 0.1.1 packages are unaffected; the Python package was not
+  published yet). Tests in both SDKs now fail when the crate, npm and Python versions differ.
+- `scripts/smoke-registry.sh <version>`: installs a released npm version from the public registry with npm,
+  pnpm, yarn and bun and runs an agent with a tool call.
+- Example: streaming to the browser (`examples/nextjs-route`: an SSE route and a `useAgentStream()` React
+  hook), checked live in a Next.js 16 app.
+
 ## [0.1.1] - 2026-11-02
 
 From a team building on 0.1.0 (Axon Health): what blocked serverless Linux, and what apps need around the agent.

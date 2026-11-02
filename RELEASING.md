@@ -67,7 +67,12 @@ All crates and both SDKs share one version and are released together.
    PyPI, the platform packages `criogen-<platform>-<arch>` to
    npm, then `criogen` with them as optional dependencies.
 8. Check the crates on crates.io and docs.rs, `pip install criogen`
-   and `npm install criogen` on a clean machine.
+   and `npm install criogen` on a clean machine. For npm,
+   `bash scripts/smoke-registry.sh x.y.z` installs the version from the
+   public registry into new projects with npm, pnpm, yarn and bun (those
+   installed) and runs an agent with a tool call; it fails while a platform
+   package is missing or still waits for approval on npmjs.com. Run it on
+   each platform you can reach before telling users to upgrade.
 
 A published version cannot be replaced, only yanked. If something is wrong,
 fix it and release a new patch version.

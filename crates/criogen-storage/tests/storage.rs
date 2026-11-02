@@ -160,6 +160,33 @@ async fn leases_wait_reject_time_out_and_interrupt() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn a_lease_knows_it_was_interrupted_before_and_after_registering() {
+    let storage = Storage::in_memory();
+    let held = storage.lease("t").await.unwrap();
+    assert!(!held.interrupted());
+    let interrupting = {
+        let storage = storage.clone().on_busy(OnBusy::Interrupt);
+        tokio::spawn(async move { storage.lease("t").await.map(drop) })
+    };
+    while !held.interrupted() {
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    // Registering afterwards stops the run at once, and it stays interrupted.
+    let token = CancelToken::new();
+    held.set_cancel(token.clone());
+    assert!(token.is_cancelled());
+    assert!(held.interrupted());
+    drop(held);
+    interrupting.await.unwrap().unwrap();
+    // The next holder starts clean.
+    let next = storage.lease("t").await.unwrap();
+    assert!(!next.interrupted());
+    next.set_cancel(CancelToken::new());
+    assert!(storage.cancel("t"));
+    assert!(next.interrupted(), "a cancelled token counts too");
+}
+
+#[tokio::test(start_paused = true)]
 async fn cancel_reaches_the_registered_run_only_while_it_holds_the_lease() {
     let storage = Storage::in_memory();
     let token = CancelToken::new();

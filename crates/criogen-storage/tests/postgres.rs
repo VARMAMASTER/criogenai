@@ -323,17 +323,19 @@ async fn thread_locks_hold_across_processes() {
     // Other threads are independent.
     drop(b.lease("other").await.unwrap());
 
-    // Reject: at once.
+    // Reject: at once, not after a wait (a 30 s busy timeout it ignores; a
+    // loaded machine may still take a few seconds to reach the server).
     let started = Instant::now();
     let err = b
         .clone()
+        .busy_timeout(Duration::from_secs(30))
         .on_busy(OnBusy::Reject)
         .lease("t")
         .await
         .unwrap_err();
     assert_eq!(err.code(), "thread_busy");
     assert!(err.message.contains("another process"), "{}", err.message);
-    assert!(started.elapsed() < Duration::from_millis(500));
+    assert!(started.elapsed() < Duration::from_secs(10));
 
     // Wait: gives up after busy_timeout.
     let started = Instant::now();
@@ -493,8 +495,16 @@ async fn an_interrupt_reaches_only_the_holder_even_before_its_run_registers() {
     });
     tokio::time::sleep(Duration::from_millis(300)).await;
     let interrupting = tokio::spawn(async move { interrupter.lease("t").await.map(drop) });
-    // Wait until the interrupt was sent and heard.
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Wait until the interrupt was sent and heard (no fixed delay: a busy
+    // machine can take seconds), still before the run registers.
+    let deadline = Instant::now() + Duration::from_secs(15);
+    while !held.interrupted() {
+        assert!(
+            Instant::now() < deadline,
+            "the holder never heard the interrupt"
+        );
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
     let token = CancelToken::new();
     held.set_cancel(token.clone());
     assert!(token.is_cancelled(), "the holder missed the interrupt");

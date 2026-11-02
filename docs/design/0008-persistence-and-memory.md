@@ -697,6 +697,11 @@ releases the lock first, then the local lease.
 | `Reject` | Tries once; `thread_busy` ("another process runs it") |
 | `Interrupt` | Tries once. If the lock is held, sends an interrupt, then waits as `Wait`. The holder's process cancels its run (the token from `ThreadLease::set_cancel`) |
 
+An interrupt that arrives before the holder registers its token is kept: the
+token is cancelled as it is registered. `ThreadLease::interrupted()` reports
+either case, so work done between taking the lease and registering can stop
+early. The flag belongs to that lease only; the next holder starts clean.
+
 Postgres uses **session advisory locks**. The key is
 `hashtextextended('criogen/thread/' || thread_id, 0)`, computed by the
 server so every client agrees on it. One task owns each lock's

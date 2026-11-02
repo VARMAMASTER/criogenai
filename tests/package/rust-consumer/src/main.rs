@@ -511,6 +511,15 @@ async fn threads_keep_conversations() {
     use criogen_storage::{CheckpointStatus, OnBusy, Source, Storage};
 
     let storage = Storage::in_memory().on_busy(OnBusy::Reject);
+    {
+        // A lease, its cancel token, and whether it was asked to stop.
+        let lease = storage.lease("lease-check").await.unwrap();
+        let token = criogen_core::CancelToken::new();
+        lease.set_cancel(token.clone());
+        assert!(!lease.interrupted());
+        assert!(storage.cancel("lease-check"));
+        assert!(lease.interrupted() && token.is_cancelled());
+    }
     let refund = || {
         tool_fn(
             ToolSpec::new("refund", "Refund", json!({"type": "object"})),
