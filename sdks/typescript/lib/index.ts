@@ -8,6 +8,7 @@ export {
   CancelledError,
   LimitExceededError,
   ModelError,
+  NativeUnavailableError,
   StorageError,
   ThreadBusyError,
   ThreadSuspendedError,
@@ -48,4 +49,9 @@ export * as patterns from "./patterns";
 export * as specialists from "./specialists";
 export * as web from "./web";
 export { loadEnv, parseEnv, envStatus, keyName } from "./env";
+export { ready } from "./ready";
+export { estimateCost } from "./usage";
+export type { Redactor } from "./redact";
+export type { ModelUse, Price, RunFacts } from "./usage";
+export type { ReadyOptions, ReadyReport } from "./ready";
 export type { LoadEnvOptions } from "./env";

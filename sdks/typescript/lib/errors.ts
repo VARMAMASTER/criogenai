@@ -14,6 +14,13 @@ export class CriogenError extends Error {
   }
 }
 
+/**
+ * The native engine cannot be loaded on this system (`native_unavailable`).
+ * Thrown on first use, never at import: `details` names the platform, the
+ * architecture, the C library and the package that was tried.
+ */
+export class NativeUnavailableError extends CriogenError {}
+
 /** The model failed after retries (`model_failed`). */
 export class ModelError extends CriogenError {}
 /** A tool crashed (`tool_failed`); `cause` is the thrown value. */
@@ -45,6 +52,7 @@ const BY_CODE: Record<string, typeof CriogenError> = {
   cancelled: CancelledError,
   audit_failed: StorageError,
   resume_invalid: ValidationError,
+  native_unavailable: NativeUnavailableError,
 };
 
 /** The error class for a Rust error code. */

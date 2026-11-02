@@ -1,6 +1,8 @@
-// The native addon (design 0012 §4): loaded once from native/criogen.node.
+// The native addon (design 0012 §4): loaded on first use, never at import, so a
+// system it cannot run on gets a NativeUnavailableError where it is used.
 
 import * as path from "path";
+import { NativeUnavailableError } from "./errors";
 
 /** A JavaScript tool as the engine calls it: request JSON in, envelope JSON out. */
 export type NativeTool = (request: string) => Promise<string>;
@@ -69,6 +71,34 @@ interface Addon {
  * filter refused `criogen-win32-x64`, so Windows uses `criogen-windows-x64`. */
 export const PLATFORM_PACKAGES: Record<string, string> = { "win32-x64": "criogen-windows-x64" };
 
+/** This system, for error messages and `ready()`: platform, architecture, C library. */
+export function host(): { platform: string; arch: string; libc: string | null } {
+  let libc: string | null = null;
+  if (process.platform === "linux") {
+    try {
+      const report = process.report?.getReport?.() as { header?: { glibcVersionRuntime?: string } } | undefined;
+      const glibc = report?.header?.glibcVersionRuntime;
+      libc = glibc ? `glibc ${glibc}` : "musl (or no glibc)";
+    } catch {
+      libc = "unknown";
+    }
+  }
+  return { platform: process.platform, arch: process.arch, libc };
+}
+
+function unavailable(message: string, pkg: string, cause: unknown): NativeUnavailableError {
+  const h = host();
+  const where = `${h.platform}-${h.arch}${h.libc ? ` (${h.libc})` : ""}`;
+  const reason = cause instanceof Error ? cause.message.split(/\r?\n/)[0] : String(cause);
+  return new NativeUnavailableError(
+    "native_unavailable",
+    `${message} on ${where}: ${reason}. Supported: Linux x64 and ARM64 with glibc 2.28 or newer, ` +
+      `macOS (Apple Silicon, Intel), Windows x64; Node 18+, Node runtime (not Edge).`,
+    { ...h, package: pkg },
+    cause,
+  );
+}
+
 function load(): Addon {
   const local = path.join(__dirname, "..", "native", "criogen.node");
   const target = `${process.platform}-${process.arch}`;
@@ -78,28 +108,39 @@ function load(): Addon {
     return require(local);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ERR_DLOPEN_FAILED") {
-      // The file is there but cannot be loaded here (built for another system, or a
-      // C library it does not match, such as Alpine/musl).
-      throw new Error(
-        `criogen's engine could not be loaded on ${process.platform}-${process.arch}. ` +
-          `Supported: Linux (glibc) x64 and ARM64, macOS Apple Silicon and Intel, Windows x64. ` +
-          `To build it yourself: npm run build:native`,
-        { cause: error },
-      );
-    }
+    // The file is there but cannot be loaded here (built for another system, or
+    // a C library it does not match, such as an older glibc or musl).
+    if (code === "ERR_DLOPEN_FAILED") throw unavailable("criogen's engine could not be loaded", "native/criogen.node", error);
     if (code !== "MODULE_NOT_FOUND") throw error;
   }
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require(prebuilt);
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "MODULE_NOT_FOUND") throw error;
-    throw new Error(
-      `criogen has no native addon for ${process.platform}-${process.arch}: ` +
-        `install ${prebuilt}, or build from source (npm run build:native)`,
-    );
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ERR_DLOPEN_FAILED") throw unavailable(`criogen's engine (${prebuilt}) could not be loaded`, prebuilt, error);
+    if (code !== "MODULE_NOT_FOUND") throw error;
+    throw unavailable(`criogen has no engine package installed (${prebuilt})`, prebuilt, error);
   }
 }
 
-export const native: Addon = load();
+let loaded: Addon | undefined;
+let failure: unknown;
+
+/** The engine, loaded on first use (never at import); the same error each time it cannot load. */
+export function loadNative(): Addon {
+  if (loaded) return loaded;
+  if (failure !== undefined) throw failure;
+  try {
+    loaded = load();
+    return loaded;
+  } catch (error) {
+    failure = error;
+    throw error;
+  }
+}
+
+/** The engine. Importing criogen never loads it; the first property access does. */
+export const native: Addon = new Proxy({} as Addon, {
+  get: (_target, property) => Reflect.get(loadNative() as object, property),
+});

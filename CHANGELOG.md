@@ -9,6 +9,26 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-02
+
+From a team building on 0.1.0 (Axon Health): what blocked serverless Linux, and what apps need around the agent.
+
+- **Linux engine for glibc 2.28+**: the npm Linux packages are built in manylinux_2_28, like the wheels.
+  0.1.0's were built on a current Ubuntu and needed glibc 2.38, so they failed on Vercel and AWS Lambda
+  (glibc 2.34) with `GLIBC_2.38 not found`. The release workflow now fails if an addon needs glibc newer
+  than 2.28.
+- **The engine loads on first use, never at import** (TypeScript). Where it cannot load, that call throws
+  `NativeUnavailableError` (`native_unavailable`) naming the platform, architecture, C library and package,
+  instead of crashing the module that imported it.
+- **`ready()`** (both SDKs): checks the engine and, with a model, that it answers; never throws. For health checks.
+- **Run facts** (both SDKs): every result has `durationMs` / `duration_ms`, `answeredBy` / `answered_by` (the model
+  that wrote the answer, so a fallback shows) and `models` (calls and tokens per model); `estimateCost()` /
+  `estimate_cost()` prices a run from your prices.
+- **`redact`** (both SDKs): a function applied to every text before each model call (input, replies, tool
+  results), ahead of all hooks; the redacted transcript is what a thread saves.
+- Docs: "Using Criogen in your app" (runtimes, health check, typed output, usage and cost, redaction, tests,
+  streaming and cancelling, tracing, errors) and `examples/` (Next.js route handler, NestJS service).
+
 ### Kaggle's Model Proxy as a provider (design 0020)
 
 - `KaggleModel` (Rust), `Kaggle` / `"kaggle:<model>"` (Python), `kaggle()` / `"kaggle:<model>"`

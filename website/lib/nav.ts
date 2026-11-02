@@ -25,6 +25,7 @@ export const SIDEBAR: NavGroup[] = [
       { label: "Install", slug: "install" },
       { label: "Quickstart", slug: "quickstart" },
       { label: "Status: built and planned", slug: "status" },
+      { label: "Using Criogen in your app", slug: "guides/production" },
     ],
   },
   {

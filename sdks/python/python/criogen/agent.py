@@ -2,12 +2,15 @@
 
 import asyncio
 import json
+import time
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Sequence, Union
 
 from . import _native
 from .models import model_spec
 from .hooks import hook_adapter
+from .redact import Redaction
+from .usage import run_facts
 from .storage import Memory, Storage
 from .tools import Tool
 
@@ -57,6 +60,12 @@ class RunResult:
     tool_calls: int
     run_id: str
     raw: Dict[str, Any] = field(repr=False, default_factory=dict)
+    #: Wall time of the call, in milliseconds.
+    duration_ms: int = 0
+    #: ``{"provider", "model"}`` that wrote the last answer (a fallback shows here).
+    answered_by: Optional[Dict[str, str]] = None
+    #: Each model this call used: ``{"provider", "model", "calls", "usage"}``.
+    models: List[Dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -74,7 +83,9 @@ def _approvals(raw: Dict[str, Any]) -> List[ApprovalRequest]:
     ]
 
 
-def _result(raw: Dict[str, Any], output_model: Any, cls: type = RunResult, **extra: Any) -> Any:
+def _result(
+    raw: Dict[str, Any], output_model: Any, cls: type = RunResult, started: Optional[float] = None, **extra: Any
+) -> Any:
     output = raw.get("output")
     if output is not None and output_model is not None:
         output = output_model.model_validate(output)
@@ -90,13 +101,19 @@ def _result(raw: Dict[str, Any], output_model: Any, cls: type = RunResult, **ext
         tool_calls=raw.get("tool_calls", 0),
         run_id=raw.get("run_id", ""),
         raw=raw,
+        **run_facts(raw.get("messages") or [], started),
         **extra,
     )
 
 
-def _reply(raw: Dict[str, Any], output_model: Any) -> Reply:
+def _reply(raw: Dict[str, Any], output_model: Any, started: Optional[float] = None) -> Reply:
     return _result(
-        raw, output_model, Reply, version=raw.get("version", 0), checkpoint_id=raw.get("checkpoint_id", "")
+        raw,
+        output_model,
+        Reply,
+        started=started,
+        version=raw.get("version", 0),
+        checkpoint_id=raw.get("checkpoint_id", ""),
     )
 
 
@@ -177,7 +194,14 @@ class Agent:
         max_retry_after: Optional[float] = None,
         telemetry: Any = None,
         hooks: Sequence[Any] = (),
+        redact: Any = None,
     ):
+        """``redact``: a function ``text -> text`` (or a coroutine) applied to
+        every text before each model call (the input, replies, tool results),
+        ahead of all hooks, e.g. to strip patient identifiers before anything
+        reaches a provider. The redacted transcript is what a thread saves."""
+        if redact is not None:
+            hooks = [Redaction(redact), *hooks]
         for t in tools:
             if not isinstance(t, (Tool, AgentTool)):
                 raise TypeError(f"{t!r} is not a tool: decorate it with @tool, or use agent.as_tool(...)")
@@ -216,10 +240,11 @@ class Agent:
     async def run(self, input: str, **state: Any) -> RunResult:
         """Runs once (no thread). Keyword arguments set state keys (e.g. the
         user a memory belongs to)."""
+        started = time.monotonic()
         raw = await self._native.run(
             asyncio.get_running_loop(), json.dumps({"input": input, "state": state})
         )
-        return _result(raw, self._output_model)
+        return _result(raw, self._output_model, started=started)
 
     def run_sync(self, input: str, **state: Any) -> RunResult:
         """:meth:`run` for scripts (not inside an event loop)."""
@@ -268,6 +293,7 @@ class Stream:
         self._native = native
         self._output_model = output_model
         self._done = False
+        self._started = time.monotonic()
 
     def __aiter__(self) -> AsyncIterator[Event]:
         return self._events()
@@ -288,7 +314,7 @@ class Stream:
     async def reply(self) -> Reply:
         """Waits for the call; its saved reply."""
         raw = await self._native.finish(asyncio.get_running_loop())
-        return _reply(raw, self._output_model)
+        return _reply(raw, self._output_model, self._started)
 
     def cancel(self) -> None:
         """Cancels the run."""
@@ -310,7 +336,8 @@ class Thread:
         )
 
     async def _reply(self, op: str, **payload: Any) -> Reply:
-        return _reply(await self._op(op, **payload), self.agent._output_model)
+        started = time.monotonic()
+        return _reply(await self._op(op, **payload), self.agent._output_model, started)
 
     async def send(self, input: str, **state: Any) -> Reply:
         """Runs one turn: the stored conversation plus ``input``."""

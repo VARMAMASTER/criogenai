@@ -1,8 +1,10 @@
 // Agents and threads (design 0012 §2) over the Rust engine.
 
+import { type RunFacts, withRunFacts } from "./usage";
 import { native, NativeAgent, NativeStream } from "./native";
 import { translate } from "./errors";
 import { Hook, hookAdapter } from "./hooks";
+import { type Redactor, redactionHook } from "./redact";
 import { Model, modelSpec } from "./models";
 import { Memory, Storage } from "./storage";
 import { JsonSchema, Tool } from "./tools";
@@ -29,8 +31,8 @@ export const Decision = {
   respond: (message: string): Decision => ({ type: "respond", message }),
 };
 
-/** What a run produced. */
-export interface RunResult<Output = unknown> {
+/** What a run produced; `durationMs`, `answeredBy` and `models` say which models answered and how long it took. */
+export interface RunResult<Output = unknown> extends RunFacts {
   text: string | null;
   output: Output | null;
   messages: Record<string, unknown>[];
@@ -106,6 +108,12 @@ export interface AgentOptions {
   telemetry?: { readonly native: { readonly handle: number } };
   /** Code around the loop (see `Hook`): `onStart`, `beforeModel`, `afterModel`, `beforeTool`, `afterTool`, `onEnd`. */
   hooks?: Hook[];
+  /**
+   * Applied to every text before each model call (input, replies, tool
+   * results), ahead of all hooks: e.g. strip patient identifiers before
+   * anything reaches a provider. The redacted transcript is what is saved.
+   */
+  redact?: Redactor;
 }
 
 export interface CallOptions {
@@ -161,7 +169,8 @@ export class Agent<Output = unknown> {
     const agentTools = all.filter((t): t is AgentTool => t instanceof AgentTool);
     this.storage = options.storage instanceof Storage ? options.storage : new Storage({ url: options.storage });
     const failOnCrash = options.onToolException === "fail";
-    const hooks = (options.hooks ?? []).map((h) => hookAdapter(h, this.crashes, failOnCrash));
+    const allHooks = options.redact ? [redactionHook(options.redact), ...(options.hooks ?? [])] : (options.hooks ?? []);
+    const hooks = allHooks.map((h) => hookAdapter(h, this.crashes, failOnCrash));
     const config = {
       model: modelSpec(options.model),
       instructions: options.instructions,
@@ -195,7 +204,8 @@ export class Agent<Output = unknown> {
   async run(input: string, options: RunOptions = {}): Promise<RunResult<Output>> {
     const payload = JSON.stringify({ input, state: options.state ?? {} });
     try {
-      return JSON.parse(await cancellable(options.signal, (id) => this.native.run(payload, id)));
+      const started = Date.now();
+      return withRunFacts(JSON.parse(await cancellable(options.signal, (id) => this.native.run(payload, id))), started);
     } catch (error) {
       throw translate(error, this.crashes);
     }
@@ -225,6 +235,7 @@ export class Stream<Output = unknown> implements AsyncIterable<StreamEvent> {
   #native: NativeStream;
   #agent: Agent<Output>;
   #done = false;
+  #started = Date.now();
 
   /** @internal */
   constructor(nativeStream: NativeStream, agent: Agent<Output>) {
@@ -250,7 +261,7 @@ export class Stream<Output = unknown> implements AsyncIterable<StreamEvent> {
   /** Waits for the call; its saved reply. */
   async reply(): Promise<Reply<Output>> {
     try {
-      return JSON.parse(await this.#native.finish());
+      return withRunFacts(JSON.parse(await this.#native.finish()), this.#started);
     } catch (error) {
       throw translate(error, this.#agent.crashes);
     }
@@ -273,7 +284,8 @@ export class Thread<Output = unknown> {
   private async op<T>(op: string, payload: Record<string, unknown> = {}, signal?: AbortSignal): Promise<T> {
     const body = JSON.stringify({ ...payload, threadId: this.id, actor: this.actor });
     try {
-      return JSON.parse(await cancellable(signal, (id) => this.agent.native.thread(op, body, id)));
+      const started = Date.now();
+      return withRunFacts(JSON.parse(await cancellable(signal, (id) => this.agent.native.thread(op, body, id))), started);
     } catch (error) {
       throw translate(error, this.agent.crashes);
     }
