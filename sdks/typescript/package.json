@@ -1,9 +1,9 @@
 {
   "name": "criogen",
   "version": "0.1.1",
-  "description": "Agents with tools, approvals, durable threads and memory on a Rust engine",
+  "description": "The fast AI agent framework for TypeScript and Node.js, a LangChain and LangGraph alternative on a Rust engine: tool calling, multi-agent workflows, human approval, durable threads, memory and an LLM gateway",
   "license": "SEE LICENSE IN LICENSE",
-  "keywords": ["agents", "llm", "workflows", "ai", "tools"],
+  "keywords": ["ai", "ai-agents", "agent", "agent-framework", "llm", "llm-agents", "multi-agent", "agentic", "agent-orchestration", "workflow", "tool-calling", "function-calling", "langchain-alternative", "langgraph-alternative", "openai", "anthropic", "gemini", "rust", "typescript", "nextjs"],
   "homepage": "https://criogen.vercel.app",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

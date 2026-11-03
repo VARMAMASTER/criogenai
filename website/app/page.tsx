@@ -16,13 +16,17 @@ import SiteHeader, { SiteFooter } from "@/components/SiteHeader";
 import TabsClient from "@/components/TabsClient";
 import { highlight } from "@/lib/highlight";
 import { installs } from "@/lib/installs";
+import { facts, faqJsonLd, jsonLd, ms, pageMeta } from "@/lib/seo";
 import { LANG_ORDER, LANGS, snippet, type Lang } from "@/lib/snippets";
 
-export const metadata: Metadata = {
-  title: { absolute: "Criogen: AI agents that can wait for a person, survive a crash and show what they did" },
-  description:
-    "Run AI agents and workflows on a Rust engine from Python, TypeScript or Rust: tools, human approval, durable conversations, memory, encryption, an audit trail and an LLM gateway.",
-};
+const f = facts();
+
+export const metadata: Metadata = pageMeta({
+  title: "Criogen: the fast AI agent framework and LangChain alternative (Rust engine, Python, TypeScript)",
+  absolute: true,
+  description: `AI agents and workflows on a Rust engine, from Python or TypeScript: tools, human approval, durable threads, memory, an audit trail and an LLM gateway. ${f.vsLangGraph} less framework overhead per agent turn than LangGraph, ${f.vsCrewAI} less than CrewAI (benchmark of ${f.date}).`,
+  path: "/",
+});
 
 // Python and TypeScript are published first; the Rust crates come when
 // the code opens.
@@ -103,6 +107,14 @@ const scenes = [
 
 const faq = [
   {
+    q: "Is Criogen the fastest AI agent framework?",
+    a: `It has the lowest framework overhead of the frameworks we measured. On one machine (benchmark of ${f.date}), an agent turn costs ${ms(f.turn.criogen)} in Criogen, ${ms(f.turn.langgraph)} in LangGraph and ${ms(f.turn.crewai)} in CrewAI, and 1,000 agent runs at once take ${ms(f.crowd.criogen)} against ${ms(f.crowd.langgraph)} and ${ms(f.crowd.crewai)}. With one agent and a real model, the model's own time dominates and all three are close; the gap matters for many steps, many tools and many users at once. The benchmarks page has every number and the kit to rerun it.`,
+  },
+  {
+    q: "Is Criogen a LangChain or LangGraph alternative?",
+    a: `Yes. It covers what most teams use LangChain and LangGraph for: agents with tool calling, workflow graphs with branches, joins and loops, human approval, saved conversations and memory, from Python or TypeScript. It installs as one package (${f.footprint.criogen.packages} against ${f.footprint.langgraph.packages} for LangGraph) and passed ${f.reliability.criogen} of ${f.reliability.tests} reliability tests by default, against ${f.reliability.langgraph} for LangGraph. It does not have LangChain's catalogue of document loaders and integrations.`,
+  },
+  {
     q: "Is it ready for production?",
     a: "It is 0.1: tested on Windows and Linux with simulated and real models, but young. The API may change before 1.0. Start with a pilot, and see exactly what is built on the status page.",
   },
@@ -127,17 +139,23 @@ export default async function Home() {
       <a className="skip" href="#main">
         Skip to content
       </a>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd() }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: faqJsonLd(faq) }} />
       <SiteHeader />
 
       <main id="main">
         <section className="hero">
           <div className="hero-copy">
             <Reveal y={24}>
-              <h1>Run AI agents like production software.</h1>
+              <h1>
+                <span className="hero-eyebrow">The fast AI agent framework · a LangChain alternative</span>{" "}
+                Run AI agents like production software.
+              </h1>
             </Reveal>
             <Reveal delay={0.1}>
               <p className="lede">
-                A Rust engine with Python and TypeScript SDKs. Approval gates, durable conversations, encryption at rest and an audit
+                A Rust engine with Python and TypeScript SDKs: {f.vsLangGraph} less framework overhead per agent turn than LangGraph in{" "}
+                <a href="/benchmarks/">our benchmark</a>. Approval gates, durable conversations, encryption at rest and an audit
                 trail are part of the runtime, so your code is only the tools and the logic.
               </p>
             </Reveal>

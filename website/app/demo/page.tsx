@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
 import "@/styles/site.css";
 import "@/styles/docs.css";
 import "@/styles/lab.css";
@@ -10,11 +11,12 @@ import DemoTabs from "@/components/demo/DemoTabs";
 import SiteHeader, { SiteFooter } from "@/components/SiteHeader";
 import { byGroup, COVERAGE, loadTour, valueText, type TourFeature, type TourFile } from "@/lib/tour";
 
-export const metadata: Metadata = {
-  title: "Demo",
+export const metadata: Metadata = pageMeta({
+  title: "Demo: every feature, run for real",
   description:
-    "Every Criogen feature on the status page, run for real: the code, what it printed and the checks it passed, with a simulated model and with a real one.",
-};
+    "Every Criogen feature on the status page, run for real: agents, tools, approvals, threads, memory and workflows, with the code, what it printed and the checks it passed, with a simulated model and with a real one.",
+  path: "/demo/",
+});
 
 const RUN_COMMANDS = [
   "# needs the criogen Python package (coming to PyPI)",

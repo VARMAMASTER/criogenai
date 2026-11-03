@@ -148,6 +148,15 @@ function rehypeHeadings(toc: TocEntry[]) {
   };
 }
 
+/** Each doc's slug, title, description and Markdown source (no MDX compile): for the sitemap and llms.txt. */
+export function docSources(): { slug: string; title: string; description: string; body: string }[] {
+  return allSlugs().map((slug) => {
+    const { data, body } = frontmatter(fs.readFileSync(fileOf(slug), "utf8"));
+    const text = body.replace(/^<Benchmarks \/>$/m, () => benchmarksMarkdown());
+    return { slug, title: data.title ?? slug, description: data.description ?? "", body: text };
+  });
+}
+
 export async function loadDoc(slug: string): Promise<DocPage> {
   const source = fs.readFileSync(fileOf(slug), "utf8");
   const { data, body } = frontmatter(source);

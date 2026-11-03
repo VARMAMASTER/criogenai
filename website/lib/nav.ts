@@ -14,7 +14,7 @@ export const SITE = {
   title: "Criogen",
   url: "https://criogen.vercel.app",
   description:
-    "AI agents and workflows on a Rust engine, from Rust, Python or TypeScript: tools, approvals, durable threads, memory, an audit trail and an LLM gateway.",
+    "A fast AI agent framework and LangChain alternative: agents and workflows on a Rust engine, used from Python, TypeScript or Rust, with tools, approvals, durable threads, memory, an audit trail and an LLM gateway.",
 };
 
 export const SIDEBAR: NavGroup[] = [

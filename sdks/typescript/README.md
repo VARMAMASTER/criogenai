@@ -1,8 +1,11 @@
 # criogen
 
-Agents with tools, human approval, durable threads, long-term memory, an
-audit trail and encryption at rest, on [Criogen](https://criogen.vercel.app)'s
-Rust engine (design 0012).
+**The fast AI agent framework for TypeScript and Node.js**, a LangChain and
+LangGraph alternative: agents with tool calling, multi-agent workflows, human
+approval, durable threads, long-term memory, an audit trail and encryption at
+rest, on [Criogen](https://criogen.vercel.app)'s Rust engine. In
+[our benchmark](https://criogen.vercel.app/benchmarks/) (run from Python) an agent turn costs
+0.29 ms of framework overhead, against 1.23 ms for LangGraph and 34 ms for CrewAI.
 
 > `npm install criogen` (or `pnpm add criogen`, `yarn add criogen`, `bun add criogen`).
 > The engine for your platform installs with it: Linux (x64, ARM64), macOS (Apple

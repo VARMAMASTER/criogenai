@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
 import "@/styles/site.css";
 import "@/styles/docs.css";
 import "@/styles/lab.css";
@@ -10,11 +11,12 @@ import Playground from "@/components/playground/Playground";
 import SiteHeader, { SiteFooter } from "@/components/SiteHeader";
 import type { Recorded } from "@/lib/playground";
 
-export const metadata: Metadata = {
-  title: "Playground",
+export const metadata: Metadata = pageMeta({
+  title: "Playground: Criogen vs LangChain, side by side",
   description:
     "Type one message and watch Criogen and LangChain handle it, side by side, against the same fake model server and the same tools, with CPU and memory measured from outside.",
-};
+  path: "/playground/",
+});
 
 /** The recordings are made by playground/record.py into public/playground/. */
 function loadRecorded(): Recorded | null {

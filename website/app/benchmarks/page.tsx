@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { pageMeta, speedLine } from "@/lib/seo";
 import "@/styles/site.css";
 import "@/styles/docs.css";
 import "@/styles/lab.css";
@@ -7,11 +8,11 @@ import Code from "@/components/Code";
 import SiteHeader, { SiteFooter } from "@/components/SiteHeader";
 import { loadRecorded } from "@/lib/bench-data";
 
-export const metadata: Metadata = {
-  title: "Benchmark lab",
-  description:
-    "Criogen, LangGraph and CrewAI on the same work with the same simulated model: speed, load, memory, reliability and footprint, from the raw results file.",
-};
+export const metadata: Metadata = pageMeta({
+  title: "AI agent framework benchmarks: Criogen vs LangGraph vs CrewAI",
+  description: `Which AI agent framework is fastest? Criogen, LangGraph and CrewAI on the same work with the same simulated model: speed, load, memory, reliability and footprint, from the raw results file. ${speedLine()}`,
+  path: "/benchmarks/",
+});
 
 /** The kit is built by benches/compare/package.py into public/bench/. */
 const KIT = "/bench/criogen-compare-kit.zip";

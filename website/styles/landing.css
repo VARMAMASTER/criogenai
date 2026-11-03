@@ -24,6 +24,21 @@
   max-width: 20ch;
   color: var(--ab-text);
 }
+.landing .hero-eyebrow {
+  display: block;
+  margin: 0 0 0.9rem;
+  color: var(--ab-running-text);
+  font-size: 0.82rem;
+  font-weight: 650;
+  line-height: 1.4;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.landing .lede a {
+  color: var(--ab-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
 .landing .lede {
   font-size: 1.15rem;
   color: var(--ab-muted);

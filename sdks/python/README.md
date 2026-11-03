@@ -7,9 +7,11 @@ pip install criogen
 > Wheels for Linux (x64, ARM64), macOS (Apple Silicon, Intel) and Windows (x64);
 > Python 3.9 or newer.
 
-Agents and workflows with tools, human approval, durable threads, long-term memory, an
-audit trail and encryption at rest, on [Criogen](https://criogen.vercel.app)'s
-Rust engine (design 0011).
+**The fast AI agent framework for Python**, a LangChain and LangGraph alternative:
+agents and workflows with tool calling, human approval, durable threads, long-term
+memory, an audit trail and encryption at rest, on [Criogen](https://criogen.vercel.app)'s
+Rust engine. In [our benchmark](https://criogen.vercel.app/benchmarks/) an agent turn
+costs 0.29 ms of framework overhead, against 1.23 ms for LangGraph and 34 ms for CrewAI.
 
 ```python
 import asyncio

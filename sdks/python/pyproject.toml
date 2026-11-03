@@ -5,12 +5,12 @@ build-backend = "maturin"
 [project]
 name = "criogen"
 version = "0.1.1"
-description = "Agents and workflows on a Rust engine: tools, approvals, durable threads, memory"
+description = "The fast AI agent framework for Python, a LangChain and LangGraph alternative on a Rust engine: tool calling, multi-agent workflows, human approval, durable threads, memory"
 readme = "README.md"
 requires-python = ">=3.9"
 license = "LicenseRef-Criogen-Free"
 license-files = ["LICENSE"]
-keywords = ["agents", "llm", "workflows", "ai", "tools"]
+keywords = ["ai", "ai-agents", "agent-framework", "llm", "llm-agents", "multi-agent", "agentic", "agent-orchestration", "workflow", "tool-calling", "function-calling", "langchain-alternative", "langgraph-alternative", "openai", "anthropic", "gemini", "rust", "asyncio"]
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
@@ -21,12 +21,20 @@ classifiers = [
     "Programming Language :: Rust",
     "Framework :: AsyncIO",
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Typing :: Typed",
 ]
 
 [project.urls]
 Homepage = "https://criogen.vercel.app"
 Documentation = "https://criogen.vercel.app/docs/"
+Benchmarks = "https://criogen.vercel.app/benchmarks/"
 
 [project.optional-dependencies]
 pydantic = ["pydantic>=2"]
