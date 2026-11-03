@@ -22,7 +22,7 @@ export function GET() {
     "",
     `${speedLine()} Install footprint: ${f.footprint.criogen.packages} package, ${f.footprint.criogen.install_mb} MB, ${ms(f.footprint.criogen.import_ms)} to import (LangGraph: ${f.footprint.langgraph.packages} packages, ${f.footprint.langgraph.install_mb} MB, ${ms(f.footprint.langgraph.import_ms)}). Reliability tests passed by default: Criogen ${f.reliability.criogen} of ${f.reliability.tests}, LangGraph ${f.reliability.langgraph}, CrewAI ${f.reliability.crewai}. With one agent and a real model, the model's time dominates and the frameworks are close; the difference shows with many steps, many tool calls and many concurrent runs. Full numbers and a kit to rerun them: ${SITE.url}/benchmarks/`,
     "",
-    "Install: `npm install criogen` (Node 18+, Linux x64/ARM64, macOS, Windows x64). Python: `pip install criogen` (wheels built, PyPI release pending). Free to use, also commercially.",
+    "Install: `npm install criogen` (Node 18+, Linux x64/ARM64, macOS, Windows x64). Python: `pip install criogen` (Python 3.9+, the same platforms). Free to use, also commercially.",
     "",
     "## Docs",
     "",

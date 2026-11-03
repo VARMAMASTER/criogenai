@@ -119,7 +119,7 @@ write our own implementation.
   for it: `Thread::with_options`, `ToolContext::metadata`. Workflows
   (0015): `Workflow`, nodes (functions or agents), routes, joins, goto,
   reducers, suspend/resume, threads (`sdks/python/tests/test_workflow.py`).
-  Package name **`criogen`** on PyPI (import `criogen`; not published yet).
+  Package name **`criogen`** on PyPI (import `criogen`; published from 0.1.2).
   Since then (0017):
   sub-agents, retries and fallbacks, semantic memory, telemetry and
   hooks in both SDKs; Zod / Standard Schema tool input in TypeScript;
@@ -230,8 +230,11 @@ write our own implementation.
 - **Released (2026-11-01): npm `criogen@0.1.0`** (`latest`) with platform packages
   `criogen-linux-x64`, `-linux-arm64`, `-darwin-arm64`, `-darwin-x64` and `criogen-windows-x64`
   (npm's spam filter refused `criogen-win32-x64`; the loader maps `win32-x64` to it). Built and
-  tested per platform by `sdk-packages.yml` (dry run), published from this machine. PyPI waits for
-  a token or trusted publisher; the wheels are built. Site: https://criogen.vercel.app.
+  tested per platform by `sdk-packages.yml` (dry run), published from this machine. 0.1.1: serverless
+  Linux, lazy loading, `ready()`, run facts, `redact`. 0.1.2 (2026-11-03): metadata only on npm (engine
+  packages stay 0.1.1); **PyPI `criogen==0.1.2`** with wheels for the same five platforms, built by
+  `sdk-packages.yml` and uploaded with the pinned `maturin upload` (`PYPI_TOKEN` in `~/.criogen-keys.env`).
+  Check a release with `scripts/smoke-registry.sh <version>`. Site: https://criogen.vercel.app.
 - **Not started:** vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 

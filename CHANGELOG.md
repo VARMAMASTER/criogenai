@@ -11,7 +11,8 @@ All crates in this repository share one version number.
 
 ## [0.1.2] - 2026-11-03
 
-npm `criogen@0.1.2`: the package page and search metadata. The engine is unchanged: 0.1.2 installs the
+**First PyPI release**: `pip install criogen` (wheels for Linux x64/ARM64 with glibc 2.28+, macOS Apple
+Silicon/Intel, Windows x64; Python 3.9+). npm `criogen@0.1.2`: the package page and search metadata. The engine is unchanged: 0.1.2 installs the
 0.1.1 platform packages (`criogen-<platform>-<arch>@0.1.1`), and the TypeScript code is the same as 0.1.1.
 
 - **npm and PyPI metadata**: descriptions, keywords and classifiers that say what Criogen is (an AI agent

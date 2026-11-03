@@ -19,7 +19,7 @@ export const metadata: Metadata = pageMeta({
 });
 
 const RUN_COMMANDS = [
-  "# needs the criogen Python package (coming to PyPI)",
+  "pip install criogen                                 # the Python package",
   "python demos/feature-tour/tour.py                 # simulated model: no network, no keys",
   "python demos/feature-tour/tour.py --live gemini   # a real model (GEMINI_API_KEY); or: --live openai",
 ].join("\n");
