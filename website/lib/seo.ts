@@ -21,6 +21,12 @@ function median(data: Recorded, scenario: string, framework: string): number {
   return row.median_ms;
 }
 
+/** The npm package's version (sdks/typescript/package.json), the released one. */
+function packageVersion(): string {
+  const file = path.join(process.cwd(), "..", "sdks", "typescript", "package.json");
+  return (JSON.parse(fs.readFileSync(file, "utf8")) as { version: string }).version;
+}
+
 /** "4×", "100×": rounded down, never flattering. */
 function times(slow: number, fast: number): string {
   const ratio = slow / fast;
@@ -107,7 +113,7 @@ export function jsonLd(): string {
       applicationCategory: "DeveloperApplication",
       applicationSubCategory: "AI agent framework",
       operatingSystem: "Linux, macOS, Windows",
-      softwareVersion: "0.1.1",
+      softwareVersion: packageVersion(),
       programmingLanguage: ["Python", "TypeScript", "Rust"],
       url: `${SITE.url}/`,
       downloadUrl: "https://www.npmjs.com/package/criogen",

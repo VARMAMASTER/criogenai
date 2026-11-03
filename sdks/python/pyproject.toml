@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "criogen"
-version = "0.1.1"
+version = "0.1.2"
 description = "The fast AI agent framework for Python, a LangChain and LangGraph alternative on a Rust engine: tool calling, multi-agent workflows, human approval, durable threads, memory"
 readme = "README.md"
 requires-python = ">=3.9"

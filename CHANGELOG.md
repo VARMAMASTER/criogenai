@@ -9,6 +9,16 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-03
+
+npm `criogen@0.1.2`: the package page and search metadata. The engine is unchanged: 0.1.2 installs the
+0.1.1 platform packages (`criogen-<platform>-<arch>@0.1.1`), and the TypeScript code is the same as 0.1.1.
+
+- **npm and PyPI metadata**: descriptions, keywords and classifiers that say what Criogen is (an AI agent
+  framework, a LangChain and LangGraph alternative), and READMEs that open with the measured overhead.
+- **Website**: every page has its own title, description, canonical URL and link card (`/og.png`);
+  `sitemap.xml`, `robots.txt`, `llms.txt` and `llms-full.txt`; structured data (SoftwareApplication, FAQPage).
+  The claims are read from the benchmark results file when the site is built.
 - **`ThreadLease::interrupted()`** (Rust, storage): whether the lease's run was asked to stop, also before
   it registered its cancel token. The Postgres lock tests wait on it instead of a fixed delay; they failed
   on a busy machine (reproduced: 17 failures in 20 loaded runs, none after).
