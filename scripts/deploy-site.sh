@@ -29,3 +29,6 @@ trap 'rm -rf "$stage"' EXIT
 cp -r "$root/website/out" "$stage/site"
 cd "$stage"
 npx --yes vercel@59.26.0 deploy site --prod --yes --name criogen --scope varmamasters-projects
+
+# Tell Bing and Yandex about the pages (never fails the deploy).
+bash "$root/scripts/indexnow.sh" || true
