@@ -5,11 +5,12 @@ import os
 import pytest
 
 from criogen import OpenAI, env, load_env
+from criogen.models import _KEYS
 
 
 @pytest.fixture(autouse=True)
 def clean(monkeypatch):
-    for name in ("OPENAI_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "MY_OTHER_VAR"):
+    for name in (*_KEYS.values(), "MY_OTHER_VAR"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -71,7 +72,7 @@ def test_several_providers_side_by_side_and_status(tmp_path):
     f = tmp_path / ".env"
     f.write_text("OPENAI_API_KEY=o\nANTHROPIC_API_KEY=a\n", encoding="utf-8")
     load_env(f)
-    assert env.status() == {"openai": True, "gemini": False, "anthropic": True, "openrouter": False}
+    assert env.status() == {name: name in ("openai", "anthropic") for name in _KEYS}
     assert OpenAI("gpt-5-mini").spec()["api_key"] == "o"
     assert env.key_name("gemini") == "GEMINI_API_KEY"
     with pytest.raises(ValueError, match="unknown provider"):

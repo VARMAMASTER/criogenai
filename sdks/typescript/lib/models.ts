@@ -1,18 +1,36 @@
 // Models (design 0012 §2): real providers, and FakeModel for tests. Each turns
 // into a small JSON spec the engine builds the model from. Strings work too:
-// "openai:gpt-5-mini" takes its key from OPENAI_API_KEY.
+// "openai:gpt-5-mini" takes its key from OPENAI_API_KEY, "deepseek:deepseek-chat"
+// from DEEPSEEK_API_KEY (every name in KEYS, plus ollama, lmstudio and kaggle).
 
 export interface ModelOptions {
   apiKey?: string;
   baseUrl?: string;
 }
 
+/**
+ * Where each named provider's key lives (design 0006 §4.1). The tests check
+ * this against the engine's own table (`presets()` in the native module).
+ */
 export const KEYS: Record<string, string> = {
   openai: "OPENAI_API_KEY",
   gemini: "GEMINI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
+  deepseek: "DEEPSEEK_API_KEY",
+  mistral: "MISTRAL_API_KEY",
+  xai: "XAI_API_KEY",
+  groq: "GROQ_API_KEY",
+  cerebras: "CEREBRAS_API_KEY",
+  together: "TOGETHER_API_KEY",
+  fireworks: "FIREWORKS_API_KEY",
+  qwen: "DASHSCOPE_API_KEY",
+  moonshot: "MOONSHOT_API_KEY",
+  zai: "ZAI_API_KEY",
 };
+
+/** Named providers that need no key (servers on this machine). */
+const LOCAL = ["ollama", "lmstudio"];
 
 /** A model on a provider's API. */
 export class ProviderModel {
@@ -60,7 +78,31 @@ export const gemini = (model: string, options?: ModelOptions) => new ProviderMod
 export const anthropic = (model: string, options?: ModelOptions) => new ProviderModel("anthropic", model, options);
 export const openrouter = (model: string, options?: ModelOptions) => new ProviderModel("openrouter", model, options);
 export const ollama = (model: string, options?: { baseUrl?: string }) => new ProviderModel("ollama", model, options);
-/** Any OpenAI-compatible server (vLLM, LM Studio, a gateway). */
+/** LM Studio on this machine (or `baseUrl`), no key. */
+export const lmstudio = (model: string, options?: { baseUrl?: string }) => new ProviderModel("lmstudio", model, options);
+/** DeepSeek (DEEPSEEK_API_KEY), e.g. deepseek("deepseek-chat"). */
+export const deepseek = (model: string, options?: ModelOptions) => new ProviderModel("deepseek", model, options);
+/** Mistral AI (MISTRAL_API_KEY), e.g. mistral("mistral-large-latest"). */
+export const mistral = (model: string, options?: ModelOptions) => new ProviderModel("mistral", model, options);
+/** xAI's Grok models (XAI_API_KEY). */
+export const xai = (model: string, options?: ModelOptions) => new ProviderModel("xai", model, options);
+/** Groq's fast inference for open models (GROQ_API_KEY). */
+export const groq = (model: string, options?: ModelOptions) => new ProviderModel("groq", model, options);
+/** Cerebras's fast inference for open models (CEREBRAS_API_KEY). */
+export const cerebras = (model: string, options?: ModelOptions) => new ProviderModel("cerebras", model, options);
+/** Together AI's open models (TOGETHER_API_KEY). */
+export const together = (model: string, options?: ModelOptions) => new ProviderModel("together", model, options);
+/** Fireworks AI's open models (FIREWORKS_API_KEY). */
+export const fireworks = (model: string, options?: ModelOptions) => new ProviderModel("fireworks", model, options);
+/**
+ * Qwen on Alibaba Cloud Model Studio, international endpoint (DASHSCOPE_API_KEY).
+ * China: `baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1"`.
+ */
+export const qwen = (model: string, options?: ModelOptions) => new ProviderModel("qwen", model, options);
+/** Moonshot AI's Kimi models (MOONSHOT_API_KEY). China keys: `baseUrl: "https://api.moonshot.cn/v1"`. */
+export const moonshot = (model: string, options?: ModelOptions) => new ProviderModel("moonshot", model, options);
+/** Z.ai's GLM models (ZAI_API_KEY). China keys: `baseUrl: "https://open.bigmodel.cn/api/paas/v4"`. */
+export const zai = (model: string, options?: ModelOptions) => new ProviderModel("zai", model, options);
 /**
  * Any OpenAI-compatible server. `allowInsecureHttp`: send the key over plain
  * `http://` to another machine (a vLLM server on your LAN); refused by
@@ -70,6 +112,15 @@ export const openaiCompatible = (
   model: string,
   options: ModelOptions & { baseUrl: string; name?: string; allowInsecureHttp?: boolean },
 ) => new ProviderModel("openai_compatible", model, options);
+
+/**
+ * Any server that speaks Anthropic's Messages API: a self-hosted gateway, or a
+ * provider's Anthropic-style endpoint (DeepSeek, Z.ai, Qwen and Moonshot offer one).
+ */
+export const anthropicCompatible = (
+  model: string,
+  options: ModelOptions & { baseUrl: string; name?: string; allowInsecureHttp?: boolean },
+) => new ProviderModel("anthropic_compatible", model, options);
 
 /** One scripted answer of a FakeModel. */
 export type FakeReply = { text: string } | { toolCalls: { name: string; args: Record<string, unknown> }[] };
@@ -177,7 +228,7 @@ export function modelSpec(model: Model): Record<string, unknown> {
   if (typeof model === "string") {
     const at = model.indexOf(":");
     const provider = at > 0 ? model.slice(0, at) : "";
-    const known = ["openai", "gemini", "anthropic", "openrouter", "ollama", "kaggle"];
+    const known = [...Object.keys(KEYS), ...LOCAL, "kaggle"];
     if (!known.includes(provider)) {
       throw new TypeError(`model "${model}": use "provider:model" with provider one of ${known.join(", ")}`);
     }

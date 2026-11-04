@@ -45,6 +45,8 @@ mod model;
 #[cfg(feature = "http")]
 mod openai_chat;
 #[cfg(feature = "http")]
+mod presets;
+#[cfg(feature = "http")]
 mod provider;
 mod request;
 mod sse;
@@ -73,6 +75,8 @@ pub use message::{
 pub use model::{BoxFuture, DeltaSink, Model};
 #[cfg(feature = "http")]
 pub use openai_chat::OpenAiQuirks;
+#[cfg(feature = "http")]
+pub use presets::{PRESETS, Preset, preset};
 #[cfg(feature = "http")]
 pub use provider::{Endpoint, Protocol, ProviderEmbedder, ProviderModel, preview_request};
 pub use request::{

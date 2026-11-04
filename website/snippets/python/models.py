@@ -1,10 +1,17 @@
 # [show]
-from criogen import Agent, Anthropic, Gemini, Ollama, OpenAI, OpenAICompatible, Retry
+from criogen import Agent, Anthropic, AnthropicCompatible, Gemini, Groq, Ollama, OpenAI, OpenAICompatible, Qwen, Retry
 
 Agent("openai:gpt-5-mini")  # key from OPENAI_API_KEY
 Agent(Anthropic("claude-sonnet-5-5"))  # ANTHROPIC_API_KEY
 Agent(Gemini("gemini-2.5-flash"))  # GEMINI_API_KEY
 Agent(OpenAI("gpt-5-mini", api_key="sk-…"))  # or pass the key yourself
+
+# Open models on fast hosts, by name: deepseek, mistral, xai, groq, cerebras,
+# together, fireworks, qwen, moonshot, zai.
+Agent("deepseek:deepseek-chat")  # DEEPSEEK_API_KEY
+Agent(Groq("llama-3.3-70b-versatile"))  # GROQ_API_KEY
+Agent(Qwen("qwen-plus", base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"))  # China endpoint
+Agent(AnthropicCompatible("glm-5.2", base_url="https://api.z.ai/api/anthropic", api_key="…"))
 
 # Self-hosted: nothing leaves your network.
 Agent(Ollama("llama3.2"))

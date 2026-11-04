@@ -26,7 +26,7 @@ use criogen_core::{
 use criogen_providers::{
     BlockDelta, BoxFuture, Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, KaggleModel,
     Message, MessageDelta, Model, ModelError, ModelErrorKind, ModelRequest, ModelResponse,
-    OutputSpec, ProviderEmbedder, ProviderModel, Settings, ToolAnnotations, ToolSpec,
+    OutputSpec, ProviderEmbedder, ProviderModel, Settings, ToolAnnotations, ToolSpec, preset,
 };
 use criogen_storage::{
     AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
@@ -88,6 +88,21 @@ pub fn cancel_call(id: u32) {
     if let Some(token) = lock(tokens()).get(&id) {
         token.cancel();
     }
+}
+
+/// The named providers (design 0006 §4.1) as JSON: `[{"name", "title",
+/// "baseUrl", "keyEnv", "anthropic"}]`. The SDK's own key table is checked
+/// against it in the tests.
+#[napi]
+pub fn presets() -> String {
+    let all: Vec<Value> = criogen_providers::PRESETS
+        .iter()
+        .map(|p| {
+            serde_json::json!({"name": p.name, "title": p.title, "baseUrl": p.base_url,
+                "keyEnv": p.key_env, "anthropic": p.anthropic})
+        })
+        .collect();
+    Value::Array(all).to_string()
 }
 
 /// Forgets an id whose call never started.
@@ -235,25 +250,25 @@ fn kaggle_model(spec: &Value, name: &str) -> napi::Result<Arc<dyn Model>> {
 fn endpoint(spec: &Value) -> napi::Result<Endpoint> {
     let kind = text(spec, "kind").ok_or_else(|| bad("a model needs a `kind`"))?;
     let key = text(spec, "apiKey").map(str::to_string);
-    let need_key = || {
-        key.clone()
-            .ok_or_else(|| bad(format!("the `{kind}` model needs an API key")))
-    };
     let mut endpoint = match kind {
-        "openai" => Endpoint::openai(need_key()?),
-        "gemini" => Endpoint::gemini(need_key()?),
-        "anthropic" => Endpoint::anthropic(need_key()?),
-        "openrouter" => Endpoint::openrouter(need_key()?),
-        "ollama" => Endpoint::ollama(),
         "openai_compatible" => Endpoint::openai_compatible(
             text(spec, "name").unwrap_or("custom"),
             text(spec, "baseUrl").ok_or_else(|| bad("`openai_compatible` needs a `baseUrl`"))?,
             key.clone(),
         ),
-        other => return Err(bad(format!("unknown model kind `{other}`"))),
+        "anthropic_compatible" => Endpoint::anthropic_compatible(
+            text(spec, "name").unwrap_or("custom"),
+            text(spec, "baseUrl").ok_or_else(|| bad("`anthropic_compatible` needs a `baseUrl`"))?,
+            key.clone(),
+        ),
+        // Every named provider (design 0006 §4.1): one table in criogen-providers.
+        named => match preset(named) {
+            Some(p) => p.endpoint(key.clone()).map_err(|err| bad(err.message))?,
+            None => return Err(bad(format!("unknown model kind `{named}`"))),
+        },
     };
     if let Some(base) = text(spec, "baseUrl")
-        && kind != "openai_compatible"
+        && !kind.ends_with("_compatible")
     {
         endpoint = endpoint.with_base_url(base);
     }

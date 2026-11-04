@@ -60,6 +60,8 @@ interface Addon {
   newCancelId(): number;
   cancelCall(id: number): void;
   releaseCancelId(id: number): void;
+  /** The named providers (design 0006 §4.1) as JSON. */
+  presets(): string;
 }
 
 /**

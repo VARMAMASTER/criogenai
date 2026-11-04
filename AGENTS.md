@@ -223,6 +223,15 @@ write our own implementation.
   `crates/criogen-agent/tests/patterns.rs`, `web.rs` (feature `web`). Website: `/playground/`,
   `/demo/` (`demos/feature-tour/`: `tour.py` records scripted and `--live`
   tours into `website/public/demo/`; `chat_server.py` is the chat backend).
+- **Implemented: named providers (0006 §4.1).** `criogen_providers::PRESETS` / `preset(name)`:
+  one table (name, protocol, base URL, key variable, quirks) for openai, anthropic, gemini,
+  openrouter, deepseek, mistral, xai, groq, cerebras, together, fireworks, qwen, moonshot, zai,
+  ollama, lmstudio. Both SDK bridges and the gateway build named providers only from it; the SDKs'
+  key tables are tested against it (`_native.PRESETS`, addon `presets()`). `AnthropicCompatible` /
+  `anthropicCompatible` in the SDKs. Tests: `crates/criogen-providers/tests/presets.rs`,
+  `sdks/python/tests/test_providers.py`, `sdks/typescript/test/providers.test.js` (local servers
+  only). Research and what is still missing (Responses API, Azure, Bedrock, Vertex):
+  `docs/research/providers-2026.md`.
 - **Implemented: Kaggle's Model Proxy (0020).** `criogen_providers::KaggleModel` mints the
   hourly proxy token from a Kaggle API token and renews it; `kaggle:` model strings in both SDKs
   and `provider = "kaggle"` in the gateway. Tests: `crates/criogen-providers/tests/kaggle.rs`,

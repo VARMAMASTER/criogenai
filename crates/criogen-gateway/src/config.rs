@@ -4,7 +4,7 @@
 
 use std::sync::Arc;
 
-use criogen_providers::{Endpoint, KaggleModel, Model, ProviderModel};
+use criogen_providers::{Endpoint, KaggleModel, Model, ProviderModel, preset};
 use serde::Deserialize;
 
 use crate::{BudgetPeriod, Gateway, GatewayBuilder, GatewayError, KeyLimits};
@@ -179,30 +179,38 @@ impl Config {
                     continue;
                 }
                 let mut endpoint = match m.provider.as_str() {
-                    "openai" => Endpoint::openai(need_key()?),
-                    "gemini" => Endpoint::gemini(need_key()?),
-                    "anthropic" => Endpoint::anthropic(need_key()?),
-                    "openrouter" => Endpoint::openrouter(need_key()?),
-                    "ollama" => Endpoint::ollama(),
-                    "openai_compatible" => {
+                    kind @ ("openai_compatible" | "anthropic_compatible") => {
                         let base = m.base_url.clone().ok_or_else(|| {
                             GatewayError::Config(format!(
-                                "route `{}`: `openai_compatible` needs `base_url`",
+                                "route `{}`: `{kind}` needs `base_url`",
                                 route.name
                             ))
                         })?;
-                        Endpoint::openai_compatible("custom", base, key.clone())
+                        if kind == "openai_compatible" {
+                            Endpoint::openai_compatible("custom", base, key.clone())
+                        } else {
+                            Endpoint::anthropic_compatible("custom", base, key.clone())
+                        }
                     }
-                    other => {
-                        return Err(GatewayError::Config(format!(
-                            "route `{}`: unknown provider `{other}`",
-                            route.name
-                        ))
-                        .into());
-                    }
+                    // Every named provider (design 0006 §4.1).
+                    named => match preset(named) {
+                        Some(p) if p.key_env.is_some() => p
+                            .endpoint(Some(need_key()?))
+                            .map_err(|err| GatewayError::Config(err.message))?,
+                        Some(p) => p
+                            .endpoint(key.clone())
+                            .map_err(|err| GatewayError::Config(err.message))?,
+                        None => {
+                            return Err(GatewayError::Config(format!(
+                                "route `{}`: unknown provider `{named}`",
+                                route.name
+                            ))
+                            .into());
+                        }
+                    },
                 };
                 if let Some(base) = &m.base_url
-                    && m.provider != "openai_compatible"
+                    && !m.provider.ends_with("_compatible")
                 {
                     endpoint = endpoint.with_base_url(base);
                 }
@@ -333,6 +341,14 @@ mod tests {
                 "[[routes]]\nname = \"x\"\nmodels = [{ provider = \"openai\", model = \"m\" }]",
                 "needs `api_key_env`",
             ),
+            (
+                "[[routes]]\nname = \"x\"\nmodels = [{ provider = \"deepseek\", model = \"m\" }]",
+                "needs `api_key_env`",
+            ),
+            (
+                "[[routes]]\nname = \"x\"\nmodels = [{ provider = \"anthropic_compatible\", model = \"m\" }]",
+                "needs `base_url`",
+            ),
         ] {
             let err = Config::parse(text)
                 .and_then(|c| c.into_gateway_with(env))
@@ -340,5 +356,25 @@ mod tests {
                 .to_string();
             assert!(err.contains(needle), "{err} (wanted {needle})");
         }
+    }
+
+    #[test]
+    fn named_providers_come_from_the_shared_table() {
+        let text = r#"
+            [[routes]]
+            name = "open"
+            models = [
+              { provider = "deepseek", model = "deepseek-chat", api_key_env = "TEST_OPENAI_KEY" },
+              { provider = "groq", model = "llama-3.3-70b-versatile", api_key_env = "TEST_OPENAI_KEY" },
+              { provider = "anthropic_compatible", model = "glm-5.2", base_url = "https://api.z.ai/api/anthropic", api_key_env = "TEST_OPENAI_KEY" },
+              { provider = "lmstudio", model = "qwen3" },
+            ]
+        "#;
+        let gateway = Config::parse(text).unwrap().into_gateway_with(env).unwrap();
+        let providers: Vec<_> = gateway.inner.routes["open"]
+            .iter()
+            .map(|m| m.provider())
+            .collect();
+        assert_eq!(providers, ["deepseek", "groq", "custom", "lmstudio"]);
     }
 }

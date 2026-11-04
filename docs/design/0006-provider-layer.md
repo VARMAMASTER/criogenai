@@ -212,6 +212,57 @@ No guessing the provider from the model name (LangChain does this,
 Messages: research §10.6. Both are normative for implementation. Each row
 becomes a golden test case (§8).
 
+### 4.1 Named providers (2026-11-04)
+
+Research: [providers-2026.md](../research/providers-2026.md). One table,
+`criogen_providers::PRESETS`, holds every provider Criogen knows by name:
+its name in model strings, wire protocol, base URL, the environment variable
+its key usually lives in, and its quirks. `Preset::endpoint(api_key)` builds
+the `Endpoint`. Both SDK bridges and the gateway build named providers from
+this table only, so a name means the same thing everywhere. The SDKs keep
+their own name → variable table (they read the key before the engine
+loads); a test in each SDK checks it against the engine's (`PRESETS` in the
+Python module, `presets()` in the Node addon).
+
+| Name | Provider | Base URL | Key |
+|---|---|---|---|
+| `openai` | OpenAI | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
+| `anthropic` | Anthropic (Messages) | `https://api.anthropic.com/v1` | `ANTHROPIC_API_KEY` |
+| `gemini` | Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `GEMINI_API_KEY` |
+| `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
+| `deepseek` | DeepSeek | `https://api.deepseek.com/v1` | `DEEPSEEK_API_KEY` |
+| `mistral` | Mistral AI | `https://api.mistral.ai/v1` | `MISTRAL_API_KEY` |
+| `xai` | xAI | `https://api.x.ai/v1` | `XAI_API_KEY` |
+| `groq` | Groq | `https://api.groq.com/openai/v1` | `GROQ_API_KEY` |
+| `cerebras` | Cerebras | `https://api.cerebras.ai/v1` | `CEREBRAS_API_KEY` |
+| `together` | Together AI | `https://api.together.xyz/v1` | `TOGETHER_API_KEY` |
+| `fireworks` | Fireworks AI | `https://api.fireworks.ai/inference/v1` | `FIREWORKS_API_KEY` |
+| `qwen` | Qwen (Alibaba Cloud Model Studio, international) | `https://dashscope-intl.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` |
+| `moonshot` | Moonshot AI (Kimi) | `https://api.moonshot.ai/v1` | `MOONSHOT_API_KEY` |
+| `zai` | Z.ai (GLM) | `https://api.z.ai/api/paas/v4` | `ZAI_API_KEY` |
+| `ollama` | Ollama | `http://localhost:11434/v1` | none |
+| `lmstudio` | LM Studio | `http://localhost:1234/v1` | none |
+
+Quirks: `deepseek` and `moonshot` get earlier reasoning back as
+`reasoning_content` on assistant messages (their thinking models need it
+when they call tools); `mistral` and `cerebras` are sent no
+`stream_options` (Cerebras documents a 400 for fields it does not support;
+for Mistral this is caution), so their streams carry no token counts; `xai`,
+`groq`, `together` and `fireworks` accept `parallel_tool_calls`. Everything
+else keeps the OpenAI-compatible defaults.
+
+Rules: a hosted provider without a key fails before sending (`invalid_request`)
+and the message names the variable, never a value. A `base_url` overrides the
+preset's (the China endpoints of Qwen, Kimi and GLM, a proxy); the key stays
+the provider's. `openai_compatible` and `anthropic_compatible` (both SDKs, the
+gateway) take any `base_url` for servers with no name here. Model names are
+passed through unchanged; Criogen keeps no list of models.
+
+Checked against scripted local servers (`tests/presets.rs`, both SDKs'
+provider tests); not yet live against each provider (manual, like
+`tests/live`). Not covered here, each with its own design note when built:
+the OpenAI Responses API, Azure OpenAI, Amazon Bedrock, Google Vertex AI.
+
 ## 5. Streaming
 
 - Our own incremental **SSE parser** (~150 lines, WHATWG rules), tested with

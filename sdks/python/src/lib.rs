@@ -27,7 +27,7 @@ use criogen_core::{
 use criogen_providers::{
     BlockDelta, BoxFuture, Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, KaggleModel,
     Message, MessageDelta, Model, ModelError, ModelErrorKind, ModelRequest, ModelResponse,
-    OutputSpec, ProviderEmbedder, ProviderModel, Settings, ToolAnnotations, ToolSpec,
+    OutputSpec, ProviderEmbedder, ProviderModel, Settings, ToolAnnotations, ToolSpec, preset,
 };
 use criogen_storage::{
     AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
@@ -332,25 +332,26 @@ fn kaggle_model(spec: &Value, name: &str) -> Result<Arc<dyn Model>, Failure> {
 fn endpoint(spec: &Value) -> Result<Endpoint, Failure> {
     let kind = text(spec, "kind").ok_or_else(|| bad("a model needs a `kind`"))?;
     let key = text(spec, "api_key").map(str::to_string);
-    let need_key = || {
-        key.clone()
-            .ok_or_else(|| bad(format!("the `{kind}` model needs an API key")))
-    };
     let mut endpoint = match kind {
-        "openai" => Endpoint::openai(need_key()?),
-        "gemini" => Endpoint::gemini(need_key()?),
-        "anthropic" => Endpoint::anthropic(need_key()?),
-        "openrouter" => Endpoint::openrouter(need_key()?),
-        "ollama" => Endpoint::ollama(),
         "openai_compatible" => Endpoint::openai_compatible(
             text(spec, "name").unwrap_or("custom"),
             text(spec, "base_url").ok_or_else(|| bad("`openai_compatible` needs a `base_url`"))?,
             key.clone(),
         ),
-        other => return Err(bad(format!("unknown model kind `{other}`"))),
+        "anthropic_compatible" => Endpoint::anthropic_compatible(
+            text(spec, "name").unwrap_or("custom"),
+            text(spec, "base_url")
+                .ok_or_else(|| bad("`anthropic_compatible` needs a `base_url`"))?,
+            key.clone(),
+        ),
+        // Every named provider (design 0006 §4.1): one table in criogen-providers.
+        named => match preset(named) {
+            Some(p) => p.endpoint(key.clone()).map_err(|err| bad(err.message))?,
+            None => return Err(bad(format!("unknown model kind `{named}`"))),
+        },
     };
     if let Some(base) = text(spec, "base_url")
-        && kind != "openai_compatible"
+        && !kind.ends_with("_compatible")
     {
         endpoint = endpoint.with_base_url(base);
     }
@@ -2126,6 +2127,20 @@ impl NativeStream {
     }
 }
 
+/// The named providers (design 0006 §4.1) as JSON: `[{"name", "title",
+/// "base_url", "key_env", "anthropic"}]`. The SDK's own key table is
+/// checked against it in the tests.
+fn presets_json() -> String {
+    let all: Vec<Value> = criogen_providers::PRESETS
+        .iter()
+        .map(|p| {
+            serde_json::json!({"name": p.name, "title": p.title, "base_url": p.base_url,
+                "key_env": p.key_env, "anthropic": p.anthropic})
+        })
+        .collect();
+    Value::Array(all).to_string()
+}
+
 /// The module.
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -2137,5 +2152,6 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NativeTelemetry>()?;
     m.add_class::<NativeStream>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
+    m.add("PRESETS", presets_json())?;
     Ok(())
 }

@@ -8,8 +8,9 @@ const path = require("node:path");
 
 const sdk = require(process.env.CRIOGEN_SDK || path.join(__dirname, ".."));
 const { loadEnv, parseEnv, envStatus, keyName, openai } = sdk;
+const { KEYS } = require(path.join(process.env.CRIOGEN_SDK || path.join(__dirname, ".."), "dist", "models.js"));
 
-const NAMES = ["OPENAI_API_KEY", "GEMINI_API_KEY", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "MY_OTHER_VAR"];
+const NAMES = [...Object.values(KEYS), "MY_OTHER_VAR"];
 const saved = Object.fromEntries(NAMES.map((n) => [n, process.env[n]]));
 function clean() {
   for (const n of NAMES) delete process.env[n];
@@ -84,7 +85,10 @@ test("several providers side by side, and a missing key says which variable to s
   clean();
   try {
     loadEnv(tmpEnv("OPENAI_API_KEY=o\nANTHROPIC_API_KEY=a\n"));
-    assert.deepEqual(envStatus(), { openai: true, gemini: false, anthropic: true, openrouter: false });
+    assert.deepEqual(
+      envStatus(),
+      Object.fromEntries(Object.keys(KEYS).map((name) => [name, name === "openai" || name === "anthropic"])),
+    );
     assert.equal(keyName("gemini"), "GEMINI_API_KEY");
     assert.throws(() => keyName("nope"), /unknown provider/);
     delete process.env.OPENAI_API_KEY;

@@ -1,6 +1,6 @@
 ---
 title: Models and providers
-description: OpenAI, Anthropic, Gemini, OpenRouter and self-hosted models, with fallback.
+description: OpenAI, Anthropic, Gemini, DeepSeek, Mistral, Groq, xAI, Qwen, Kimi, GLM, OpenRouter and self-hosted models, with fallback.
 ---
 
 
@@ -11,11 +11,28 @@ description: OpenAI, Anthropic, Gemini, OpenRouter and self-hosted models, with 
 | OpenAI | Chat Completions API | `OPENAI_API_KEY` |
 | Anthropic (Claude) | Messages API, natively (reasoning, caching) | `ANTHROPIC_API_KEY` |
 | Google Gemini | Its OpenAI-compatible endpoint | `GEMINI_API_KEY` |
-| OpenRouter | OpenAI-compatible | `OPENROUTER_API_KEY` |
+| OpenRouter (hundreds of models) | OpenAI-compatible | `OPENROUTER_API_KEY` |
+| DeepSeek | `deepseek:` | `DEEPSEEK_API_KEY` |
+| Mistral AI | `mistral:` | `MISTRAL_API_KEY` |
+| xAI (Grok) | `xai:` | `XAI_API_KEY` |
+| Groq | `groq:` | `GROQ_API_KEY` |
+| Cerebras | `cerebras:` | `CEREBRAS_API_KEY` |
+| Together AI | `together:` | `TOGETHER_API_KEY` |
+| Fireworks AI | `fireworks:` | `FIREWORKS_API_KEY` |
+| Qwen (Alibaba Cloud Model Studio) | `qwen:` (international endpoint; pass `base_url` for China) | `DASHSCOPE_API_KEY` |
+| Moonshot AI (Kimi) | `moonshot:` (pass `base_url` for China keys) | `MOONSHOT_API_KEY` |
+| Z.ai (GLM) | `zai:` (pass `base_url` for China keys) | `ZAI_API_KEY` |
 | Kaggle Model Proxy (prototypes) | OpenAI-compatible; Criogen mints and renews the hourly proxy token | `KAGGLE_API_TOKEN` or `~/.kaggle/access_token` |
-| Ollama, LM Studio | Local, OpenAI-compatible | none |
+| Ollama, LM Studio | `ollama:`, `lmstudio:`; local, OpenAI-compatible | none |
 | vLLM and any OpenAI-compatible server | Your URL (a key is never sent over plain `http://` to another machine unless you pass `allow_insecure_http` / `allowInsecureHttp`) | optional |
-| Any Anthropic-compatible server | Your URL (Rust) | optional |
+| Any Anthropic-compatible server | Your URL: `AnthropicCompatible` / `anthropicCompatible` | optional |
+
+Each name works as a string (`"groq:llama-3.3-70b-versatile"`) or as a class
+(`Groq(...)` in Python, `groq(...)` in TypeScript). Model names go to the
+provider unchanged, so a new model works the day it ships. Not yet built: the
+OpenAI Responses API, Azure OpenAI, Amazon Bedrock and Google Vertex AI (reach
+Azure's v1 API today with `OpenAICompatible` and your resource's
+`/openai/v1` URL).
 
 ## Keep your keys in the environment
 

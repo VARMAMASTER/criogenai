@@ -1,10 +1,17 @@
 // [show]
-import { Agent, anthropic, gemini, ollama, openai, openaiCompatible } from "criogen";
+import { Agent, anthropic, anthropicCompatible, gemini, groq, ollama, openai, openaiCompatible, qwen } from "criogen";
 
 new Agent({ model: "openai:gpt-5-mini" }); // key from OPENAI_API_KEY
 new Agent({ model: anthropic("claude-sonnet-5-5") }); // ANTHROPIC_API_KEY
 new Agent({ model: gemini("gemini-2.5-flash") }); // GEMINI_API_KEY
 new Agent({ model: openai("gpt-5-mini", { apiKey: "sk-…" }) }); // or pass the key yourself
+
+// Open models on fast hosts, by name: deepseek, mistral, xai, groq, cerebras,
+// together, fireworks, qwen, moonshot, zai.
+new Agent({ model: "deepseek:deepseek-chat" }); // DEEPSEEK_API_KEY
+new Agent({ model: groq("llama-3.3-70b-versatile") }); // GROQ_API_KEY
+new Agent({ model: qwen("qwen-plus", { baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1" }) }); // China endpoint
+new Agent({ model: anthropicCompatible("glm-5.2", { baseUrl: "https://api.z.ai/api/anthropic", apiKey: "…" }) });
 
 // Self-hosted: nothing leaves your network.
 new Agent({ model: ollama("llama3.2") });

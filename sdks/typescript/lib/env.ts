@@ -7,6 +7,11 @@
 //   ANTHROPIC_API_KEY   "anthropic:claude-sonnet-5-5"
 //   GEMINI_API_KEY      "gemini:gemini-2.5-flash"
 //   OPENROUTER_API_KEY  "openrouter:meta-llama/llama-3.3-70b-instruct"
+//   DEEPSEEK_API_KEY    "deepseek:deepseek-chat"
+//   GROQ_API_KEY        "groq:llama-3.3-70b-versatile"
+//
+// and the same for mistral, xai, cerebras, together, fireworks, qwen
+// (DASHSCOPE_API_KEY), moonshot and zai (keyName(provider) gives the variable).
 //
 // loadEnv() reads a .env file into process.env (call it before you build a
 // model). It never prints or returns a value, and never replaces a variable

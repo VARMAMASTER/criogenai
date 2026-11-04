@@ -28,6 +28,7 @@ async fn main() {
     model_inside_a_workflow_node().await;
     provider_errors_and_transcripts();
     anthropic_request_body();
+    named_providers();
     agent_with_tools().await;
     telemetry_never_breaks_a_run().await;
     approval_before_a_tool_runs().await;
@@ -302,6 +303,26 @@ fn provider_errors_and_transcripts() {
         Some(ToolStatus::Cancelled)
     );
     println!("  provider error classification, transcript repair: ok");
+}
+
+/// Named providers (design 0006 §4.1): one table, an endpoint per name.
+fn named_providers() {
+    use criogen_providers::{PRESETS, ProviderModel, preset, preview_request};
+    let groq = preset("groq").expect("groq is a named provider");
+    assert_eq!(groq.key_env, Some("GROQ_API_KEY"));
+    assert!(groq.endpoint(None).is_err(), "a hosted provider needs a key");
+    let endpoint = groq.endpoint(Some("gsk-unused".into())).unwrap();
+    let (body, _) = preview_request(
+        &endpoint,
+        "llama-3.3-70b-versatile",
+        &ModelRequest::new(vec![Message::user("hi")]),
+        false,
+    )
+    .unwrap();
+    assert_eq!(body["model"], "llama-3.3-70b-versatile");
+    ProviderModel::new(endpoint, "llama-3.3-70b-versatile").unwrap();
+    assert!(PRESETS.iter().any(|p| p.name == "deepseek"));
+    println!("  named providers: ok ({} names)", PRESETS.len());
 }
 
 /// The Anthropic protocol: the exact body, without sending it.

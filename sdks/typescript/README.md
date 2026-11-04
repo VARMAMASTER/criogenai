@@ -90,7 +90,9 @@ never prints values and never overrides a variable that is already set.
   and a tamper-evident audit trail that records who did what, without the content.
 - **Observability.** Hooks around model and tool calls, OpenTelemetry export and a
   Langfuse preset. Content is left out unless you turn it on.
-- **Any model.** OpenAI, Anthropic, Gemini, OpenRouter, and self-hosted Ollama, vLLM or
+- **Any model.** OpenAI, Anthropic, Gemini, DeepSeek, Mistral, xAI, Groq, Cerebras,
+  Together, Fireworks, Qwen, Kimi (Moonshot), GLM (Z.ai) and OpenRouter by name, any
+  OpenAI- or Anthropic-compatible server by URL, and self-hosted Ollama, vLLM or
   LM Studio, so data can stay on your own servers. `Gateway` makes plain chat, stream
   and embedding calls with the same retries and fallbacks.
 
@@ -161,6 +163,22 @@ const app = new Workflow()
   .compile({ storage: new Storage({ url: "sqlite://app.db" }) });
 
 const turn = await app.thread("ticket-7").run({ text: "I was charged twice", amount: 40 });
+```
+
+## Models
+
+```ts
+import { Agent, anthropic, groq, ollama, openaiCompatible } from "criogen";
+
+new Agent({ model: "openai:gpt-5-mini" }); // OPENAI_API_KEY
+new Agent({ model: anthropic("claude-sonnet-5-5") }); // ANTHROPIC_API_KEY
+new Agent({ model: "deepseek:deepseek-chat" }); // DEEPSEEK_API_KEY
+new Agent({ model: groq("llama-3.3-70b-versatile") }); // GROQ_API_KEY
+new Agent({ model: ollama("llama3.2") }); // self-hosted
+new Agent({ model: openaiCompatible("qwen3", { baseUrl: "http://gpu-box:8000/v1" }) }); // vLLM, LM Studio
+
+// Rate limits, overload and outages go to the next model.
+new Agent({ model: "openai:gpt-5-mini", fallbacks: [ollama("llama3.2")], modelRetry: { maxAttempts: 4 } });
 ```
 
 ## Testing without a model

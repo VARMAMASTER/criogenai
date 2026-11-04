@@ -95,7 +95,9 @@ never prints values and never overrides a variable that is already set.
   and a tamper-evident audit trail that records who did what, without the content.
 - **Observability.** Hooks around model and tool calls, OpenTelemetry export and a
   Langfuse preset. Content is left out unless you turn it on.
-- **Any model.** OpenAI, Anthropic, Gemini, OpenRouter, and self-hosted Ollama, vLLM or
+- **Any model.** OpenAI, Anthropic, Gemini, DeepSeek, Mistral, xAI, Groq, Cerebras,
+  Together, Fireworks, Qwen, Kimi (Moonshot), GLM (Z.ai) and OpenRouter by name, any
+  OpenAI- or Anthropic-compatible server by URL, and self-hosted Ollama, vLLM or
   LM Studio, so data can stay on your own servers. `Gateway` makes plain chat, stream
   and embedding calls with the same retries and fallbacks.
 
@@ -185,11 +187,13 @@ turn = await app.thread("ticket-7").run({"text": "I was charged twice", "amount"
 ## Models
 
 ```python
-from criogen import Agent, Anthropic, Gemini, Ollama, OpenAICompatible, Retry
+from criogen import Agent, Anthropic, Gemini, Groq, Ollama, OpenAICompatible, Retry
 
 Agent("openai:gpt-5-mini")                                   # OPENAI_API_KEY
 Agent(Anthropic("claude-sonnet-5-5"))                        # ANTHROPIC_API_KEY
 Agent(Gemini("gemini-2.5-flash"))                            # GEMINI_API_KEY
+Agent("deepseek:deepseek-chat")                              # DEEPSEEK_API_KEY
+Agent(Groq("llama-3.3-70b-versatile"))                       # GROQ_API_KEY
 Agent(Ollama("llama3.2"))                                    # self-hosted
 Agent(OpenAICompatible("qwen3", base_url="http://gpu-box:8000/v1"))   # vLLM, LM Studio
 

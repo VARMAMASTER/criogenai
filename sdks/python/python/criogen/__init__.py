@@ -26,16 +26,28 @@ from .errors import (
     ValidationError,
 )
 from .models import (
+    XAI,
+    ZAI,
     Anthropic,
+    AnthropicCompatible,
+    Cerebras,
+    DeepSeek,
     Embedder,
     FakeModel,
     FakeReply,
+    Fireworks,
     Gemini,
+    Groq,
     Kaggle,
+    LMStudio,
+    Mistral,
+    Moonshot,
     Ollama,
     OpenAI,
     OpenAICompatible,
     OpenRouter,
+    Qwen,
+    Together,
 )
 from . import env, patterns, specialists, web
 from .env import load_env
@@ -66,5 +78,7 @@ __all__ = [
     "OpenAICompatible", "OpenRouter", "Reply", "Retry", "RunResult", "StorageError", "Storage", "Stream",
     "Telemetry", "Thread", "ThreadBusyError", "ThreadSuspendedError", "Tool", "ToolCall", "ToolContext", "ToolError",
     "ToolExecutionError", "ToolResult", "ValidationError", "Workflow", "WorkflowResult", "WorkflowThread",
+    "AnthropicCompatible", "Cerebras", "DeepSeek", "Fireworks", "Groq", "LMStudio", "Mistral", "Moonshot",
+    "Qwen", "Together", "XAI", "ZAI",
     "__version__", "env", "estimate_cost", "goto", "load_env", "ready", "ready_sync", "patterns", "specialists", "suspend", "tool", "web",
 ]

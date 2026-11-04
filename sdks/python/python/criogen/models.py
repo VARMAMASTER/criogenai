@@ -2,17 +2,30 @@
 
 Each turns into a small JSON spec the Rust engine builds the model from.
 Strings work too: ``"openai:gpt-5-mini"`` takes its key from
-``OPENAI_API_KEY``.
+``OPENAI_API_KEY``, ``"deepseek:deepseek-chat"`` from ``DEEPSEEK_API_KEY``
+(every name in ``_KEYS``, plus ``ollama``, ``lmstudio`` and ``kaggle``).
 """
 
 import os
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union
 
+# Where each named provider's key lives (design 0006 §4.1). The tests check
+# this against the engine's own table (``_native.PRESETS``).
 _KEYS = {
     "openai": "OPENAI_API_KEY",
     "gemini": "GEMINI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
     "openrouter": "OPENROUTER_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+    "xai": "XAI_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "cerebras": "CEREBRAS_API_KEY",
+    "together": "TOGETHER_API_KEY",
+    "fireworks": "FIREWORKS_API_KEY",
+    "qwen": "DASHSCOPE_API_KEY",
+    "moonshot": "MOONSHOT_API_KEY",
+    "zai": "ZAI_API_KEY",
 }
 
 
@@ -71,6 +84,70 @@ class OpenRouter(_Model):
     kind = "openrouter"
 
 
+class DeepSeek(_Model):
+    """DeepSeek (``DEEPSEEK_API_KEY``), e.g. ``DeepSeek("deepseek-chat")``."""
+
+    kind = "deepseek"
+
+
+class Mistral(_Model):
+    """Mistral AI (``MISTRAL_API_KEY``), e.g. ``Mistral("mistral-large-latest")``."""
+
+    kind = "mistral"
+
+
+class XAI(_Model):
+    """xAI's Grok models (``XAI_API_KEY``)."""
+
+    kind = "xai"
+
+
+class Groq(_Model):
+    """Groq's fast inference for open models (``GROQ_API_KEY``)."""
+
+    kind = "groq"
+
+
+class Cerebras(_Model):
+    """Cerebras's fast inference for open models (``CEREBRAS_API_KEY``)."""
+
+    kind = "cerebras"
+
+
+class Together(_Model):
+    """Together AI's open models (``TOGETHER_API_KEY``)."""
+
+    kind = "together"
+
+
+class Fireworks(_Model):
+    """Fireworks AI's open models (``FIREWORKS_API_KEY``)."""
+
+    kind = "fireworks"
+
+
+class Qwen(_Model):
+    """Qwen on Alibaba Cloud Model Studio, international endpoint
+    (``DASHSCOPE_API_KEY``). For the China endpoint pass
+    ``base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"``."""
+
+    kind = "qwen"
+
+
+class Moonshot(_Model):
+    """Moonshot AI's Kimi models (``MOONSHOT_API_KEY``). China keys:
+    ``base_url="https://api.moonshot.cn/v1"``."""
+
+    kind = "moonshot"
+
+
+class ZAI(_Model):
+    """Z.ai's GLM models (``ZAI_API_KEY``). China keys:
+    ``base_url="https://open.bigmodel.cn/api/paas/v4"``."""
+
+    kind = "zai"
+
+
 class Kaggle:
     """Kaggle's Model Proxy (design 0020): the hosted models your Kaggle
     account's AI-model allowance pays for, e.g.
@@ -122,8 +199,15 @@ class Ollama(_Model):
     kind = "ollama"
 
 
+class LMStudio(_Model):
+    """LM Studio on this machine (or ``base_url``), no key."""
+
+    kind = "lmstudio"
+
+
 class OpenAICompatible(_Model):
-    """Any OpenAI-compatible server (vLLM, LM Studio, a gateway)."""
+    """Any OpenAI-compatible server (vLLM, a gateway, a provider without a
+    name here)."""
 
     kind = "openai_compatible"
 
@@ -147,6 +231,14 @@ class OpenAICompatible(_Model):
         spec["name"] = self.name
         spec["allow_insecure_http"] = self.allow_insecure_http
         return spec
+
+
+class AnthropicCompatible(OpenAICompatible):
+    """Any server that speaks Anthropic's Messages API: a self-hosted
+    gateway, or a provider's Anthropic-style endpoint (DeepSeek, Z.ai,
+    Qwen and Moonshot offer one)."""
+
+    kind = "anthropic_compatible"
 
 
 class FakeReply:
@@ -218,7 +310,18 @@ def model_spec(model: Any) -> Dict[str, Any]:
             "gemini": Gemini,
             "anthropic": Anthropic,
             "openrouter": OpenRouter,
+            "deepseek": DeepSeek,
+            "mistral": Mistral,
+            "xai": XAI,
+            "groq": Groq,
+            "cerebras": Cerebras,
+            "together": Together,
+            "fireworks": Fireworks,
+            "qwen": Qwen,
+            "moonshot": Moonshot,
+            "zai": ZAI,
             "ollama": Ollama,
+            "lmstudio": LMStudio,
             "kaggle": Kaggle,
         }
         if not sep or provider not in classes:

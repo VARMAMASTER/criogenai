@@ -9,6 +9,17 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+- **Ten more providers by name** (design 0006 §4.1): `deepseek`, `mistral`, `xai`, `groq`,
+  `cerebras`, `together`, `fireworks`, `qwen` (Alibaba Cloud Model Studio), `moonshot` (Kimi) and
+  `zai` (GLM), plus `lmstudio`, as model strings (`"groq:llama-3.3-70b-versatile"`) and as classes
+  (`Groq(...)` in Python, `groq(...)` in TypeScript) and gateway providers. Keys come from each
+  provider's usual variable (`DEEPSEEK_API_KEY`, `DASHSCOPE_API_KEY`, …). One table in Rust,
+  `criogen_providers::PRESETS`, now defines every named provider for both SDKs and the gateway; each
+  SDK's tests check its key table against it. DeepSeek and Kimi get earlier reasoning back when they
+  call tools; Mistral and Cerebras are sent no `stream_options`.
+- **`AnthropicCompatible`** in Python and **`anthropicCompatible`** in TypeScript (and
+  `anthropic_compatible` in the gateway): any server that speaks Anthropic's Messages API.
+
 - **Docs: SQLite addresses.** The examples said `sqlite:///support.db`, which means a file at the
   root of the drive (`/support.db`) and fails with "unable to open database file". They now say
   `sqlite://support.db` (a file in the current folder); `sqlite:///` stays for absolute paths.
