@@ -245,7 +245,7 @@ dependencies = [
 
 [[package]]
 name = "criogen-node"
-version = "0.1.2"
+version = "0.1.3"
 dependencies = [
  "criogen-agent",
  "criogen-core",

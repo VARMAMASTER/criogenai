@@ -1,6 +1,6 @@
 {
   "name": "criogen",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "The fast AI agent framework for TypeScript and Node.js, a LangChain and LangGraph alternative on a Rust engine: tool calling, multi-agent workflows, human approval, durable threads, memory and an LLM gateway",
   "license": "SEE LICENSE IN LICENSE",
   "keywords": ["ai", "ai-agents", "agent", "agent-framework", "llm", "llm-agents", "multi-agent", "agentic", "agent-orchestration", "workflow", "tool-calling", "function-calling", "langchain-alternative", "langgraph-alternative", "openai", "anthropic", "gemini", "rust", "typescript", "nextjs"],

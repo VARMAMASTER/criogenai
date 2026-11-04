@@ -2,7 +2,7 @@
 # building it needs Python. Built with maturin (see pyproject.toml).
 [package]
 name = "criogen-python"
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"

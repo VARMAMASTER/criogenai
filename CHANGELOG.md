@@ -9,6 +9,8 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-04
+
 - **Ten more providers by name** (design 0006 §4.1): `deepseek`, `mistral`, `xai`, `groq`,
   `cerebras`, `together`, `fireworks`, `qwen` (Alibaba Cloud Model Studio), `moonshot` (Kimi) and
   `zai` (GLM), plus `lmstudio`, as model strings (`"groq:llama-3.3-70b-versatile"`) and as classes
