@@ -14,7 +14,7 @@ const agent = new Agent({
   model: "openai:gpt-5-mini",
   tools: [issueRefund],
   approve: ["issue_refund"], // a person decides before it runs
-  storage: new Storage("sqlite:///support.db"),
+  storage: new Storage("sqlite://support.db"),
 });
 
 const chat = agent.thread("ticket-7", { actor: "user:ada" });

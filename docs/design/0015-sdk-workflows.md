@@ -29,7 +29,7 @@ wf.route("classify", lambda s: s["category"], {"billing": "approve", "other": EN
 wf.edge("approve", "billing")
 wf.edge("billing", END)
 
-app = wf.compile(storage=Storage("sqlite:///app.db"))   # validated in Rust
+app = wf.compile(storage=Storage("sqlite://app.db"))   # validated in Rust
 result = await app.run({"text": "I was charged twice", "amount": 40})
 thread = app.thread("ticket-7", actor="user:ada")
 turn = await thread.run({...})

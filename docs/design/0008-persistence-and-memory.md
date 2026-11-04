@@ -7,7 +7,7 @@ interactive API sketched in [0007](0007-public-api.md). Research input:
 
 ## Goals
 
-1. **One parameter turns it on.** `storage="sqlite:///agent.db"` gives
+1. **One parameter turns it on.** `storage="sqlite://agent.db"` gives
    conversations, crash recovery, approval/resume, history and long-term memory.
    No extra setup code.
 2. **Interactive by default.** Chatting, approving, rewinding and inspecting are
@@ -37,7 +37,7 @@ interactive API sketched in [0007](0007-public-api.md). Research input:
 ### 2.1 Turning it on
 
 ```python
-agent = Agent(model=…, tools=[…], storage="sqlite:///agent.db")       # file, zero setup
+agent = Agent(model=…, tools=[…], storage="sqlite://agent.db")       # file, zero setup
 agent = Agent(model=…, tools=[…], storage="postgres://user@host/db")  # production
 agent = Agent(model=…, tools=[…])                                      # in-memory (lost on exit)
 ```
@@ -189,7 +189,7 @@ language-specific class names (LangGraph's msgpack embeds Python class paths,
 | Backend | URL | Use | Vector search |
 |---|---|---|---|
 | In-memory | (default) | Tests, scripts | brute force |
-| SQLite | `sqlite:///path.db` | Local apps, single process, edge | `sqlite-vec` (optional feature) |
+| SQLite | `sqlite://path.db` | Local apps, single process, edge | `sqlite-vec` (optional feature) |
 | Postgres | `postgres://…` | Production, multi-process | `pgvector` (optional feature) |
 | Custom | `Storage(checkpointer=…, memory=…)` | Anything else | implementer's choice |
 

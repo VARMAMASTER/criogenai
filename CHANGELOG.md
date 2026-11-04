@@ -9,6 +9,12 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+- **Docs: SQLite addresses.** The examples said `sqlite:///support.db`, which means a file at the
+  root of the drive (`/support.db`) and fails with "unable to open database file". They now say
+  `sqlite://support.db` (a file in the current folder); `sqlite:///` stays for absolute paths.
+- **Package pages.** The npm and PyPI READMEs now describe every feature with checked examples,
+  the measured numbers (with how they were measured) and links to the docs and the other package.
+
 ## [0.1.2] - 2026-11-03
 
 **First PyPI release**: `pip install criogen` (wheels for Linux x64/ARM64 with glibc 2.28+, macOS Apple

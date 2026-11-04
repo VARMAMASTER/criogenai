@@ -1,7 +1,7 @@
 // [show]
 import { Agent, Embedder, Memory, Storage } from "criogen";
 
-const storage = new Storage("sqlite:///agent.db");
+const storage = new Storage("sqlite://agent.db");
 const agent = new Agent({
   model: "openai:gpt-5-mini",
   storage,

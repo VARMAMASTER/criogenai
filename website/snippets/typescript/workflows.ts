@@ -14,7 +14,7 @@ const app = new Workflow()
   .route("classify", (state) => String(state.category), { billing: "approve", other: "answer" })
   .edge("approve", END)
   .edge("answer", END)
-  .compile({ storage: new Storage({ url: "sqlite:///app.db" }) }); // every graph problem, reported at once
+  .compile({ storage: new Storage({ url: "sqlite://app.db" }) }); // every graph problem, reported at once
 
 // Durable: the pause waits in the database, for days if needed.
 const turn = await app.thread("ticket-7").run({ text: "I was charged twice", amount: 40 });

@@ -44,7 +44,7 @@ const agent = new Agent({
   tools: [getOrder],
   approve: ["issue_refund"],
   output: resolutionSchema,                         // JSON Schema → result.output
-  storage: "sqlite:///support.db",                  // or new Storage({ url, encryptionKeys, audit, retention })
+  storage: "sqlite://support.db",                  // or new Storage({ url, encryptionKeys, audit, retention })
   memory: Memory.byState("user_id", "users"),
 });
 

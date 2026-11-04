@@ -2,7 +2,7 @@ async def main() -> None:
     # [show]
     from criogen import Agent, Memory, Storage
 
-    storage = Storage("sqlite:///agent.db")
+    storage = Storage("sqlite://agent.db")
     agent = Agent(
         "openai:gpt-5-mini",
         storage=storage,

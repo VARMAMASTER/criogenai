@@ -11,7 +11,7 @@ export interface RetentionOptions {
 }
 
 export interface StorageOptions {
-  /** `undefined` (process memory), "sqlite:///path.db" or "postgres://…". */
+  /** `undefined` (process memory), "sqlite://path.db" or "postgres://…". */
   url?: string;
   /** "k2:<64 hex>,k1:<64 hex>" (the first is active): encryption at rest. */
   encryptionKeys?: string;

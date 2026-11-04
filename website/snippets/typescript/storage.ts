@@ -2,7 +2,7 @@
 import { Storage } from "criogen";
 
 // One process: a SQLite file. Tables are created on first use.
-let storage = new Storage("sqlite:///agent.db");
+let storage = new Storage("sqlite://agent.db");
 
 // Several processes or machines: Postgres. A thread is used by one run at a
 // time, across every process.

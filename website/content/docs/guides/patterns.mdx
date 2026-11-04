@@ -257,7 +257,7 @@ trail and storage like any other.
 ```python
 from criogen import Storage
 
-app = patterns.human_review(my_agent).compile(Storage("sqlite:///app.db"))
+app = patterns.human_review(my_agent).compile(Storage("sqlite://app.db"))
 await app.thread("release-1", actor="user:ada").run({"input": "Release the dataset?"})
 # Days later, from another process:
 await app.thread("release-1", actor="user:boss").resume({"review": "approve"})
@@ -271,7 +271,7 @@ flow.workflow.add_node(...)   # the plain Workflow, to add nodes and edges
 ```ts
 import { Storage } from "criogen";
 
-const app = patterns.humanReview(myAgent).compile(new Storage({ url: "sqlite:///app.db" }));
+const app = patterns.humanReview(myAgent).compile(new Storage({ url: "sqlite://app.db" }));
 await app.thread("release-1", { actor: "user:ada" }).run({ input: "Release the dataset?" });
 // Days later, from another process:
 await app.thread("release-1", { actor: "user:boss" }).resume({ review: "approve" });

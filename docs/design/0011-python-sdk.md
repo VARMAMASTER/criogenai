@@ -46,7 +46,7 @@ agent = Agent(
     tools=[get_order],
     approve=["issue_refund"],                      # human approval for these tools
     output=Resolution,                             # a Pydantic model or a JSON Schema dict
-    storage="sqlite:///support.db",                # or "postgres://…", or Storage(...)
+    storage="sqlite://support.db",                # or "postgres://…", or Storage(...)
 )
 result = await agent.run("Where is order A-1001?")
 result.text, result.output, result.usage

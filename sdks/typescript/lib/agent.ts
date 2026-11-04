@@ -91,7 +91,7 @@ export interface AgentOptions {
    * ToolExecutionError, the exception as its `cause`).
    */
   onToolException?: "returnToModel" | "returnGeneric" | "fail";
-  /** A Storage, a URL ("sqlite:///x.db", "postgres://…"), or in memory. */
+  /** A Storage, a URL ("sqlite://x.db", "postgres://…"), or in memory. */
   storage?: Storage | string;
   memory?: Memory;
   /** Models tried in order when the previous one fails with a transient error (after its retries). */

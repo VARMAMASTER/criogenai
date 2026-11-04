@@ -23,7 +23,7 @@ async def main() -> None:
     wf.start("classify")
     wf.route("classify", lambda s: s["category"], {"billing": "approve", "other": "answer"})
     wf.edge("approve", END).edge("answer", END)
-    app = wf.compile(storage=Storage("sqlite:///app.db"))  # every graph problem, reported at once
+    app = wf.compile(storage=Storage("sqlite://app.db"))  # every graph problem, reported at once
 
     # Durable: the pause waits in the database, for days if needed.
     turn = await app.thread("ticket-7").run({"text": "I was charged twice", "amount": 40})

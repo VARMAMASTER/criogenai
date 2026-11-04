@@ -15,7 +15,7 @@ async def main() -> None:
         "openai:gpt-5-mini",
         tools=[issue_refund],
         approve=["issue_refund"],  # a person decides before it runs
-        storage=Storage("sqlite:///support.db"),
+        storage=Storage("sqlite://support.db"),
     )
 
     chat = agent.thread("ticket-7", actor="user:ada")

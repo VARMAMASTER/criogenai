@@ -3,7 +3,7 @@ async def main() -> None:
     from criogen import Storage
 
     # One process: a SQLite file. Tables are created on first use.
-    storage = Storage("sqlite:///agent.db")
+    storage = Storage("sqlite://agent.db")
 
     # Several processes or machines: Postgres. A thread is used by one run
     # at a time, across every process.

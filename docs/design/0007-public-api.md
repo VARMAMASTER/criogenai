@@ -210,7 +210,7 @@ restarts, history and memory. All interactive features are methods on a
 ```python
 agent = Agent(model=…, tools=[get_order, issue_refund],
               hooks=[Approve(tools=["issue_refund"])],
-              storage="sqlite:///support.db")          # or postgres://…
+              storage="sqlite://support.db")          # or postgres://…
 
 chat = agent.thread("user-42")
 reply = await chat.send("Order A-1001 arrived broken, please refund")

@@ -11,7 +11,7 @@ from . import _native
 
 class Storage:
     """Threads, memory and the audit trail. ``url``: ``None`` (process
-    memory), ``"sqlite:///path.db"`` or ``"postgres://…"``.
+    memory), ``"sqlite://path.db"`` or ``"postgres://…"``.
 
     ``encryption_keys``: ``"k2:<64 hex>,k1:<64 hex>"`` (the first is
     active) encrypts content at rest. ``audit=True`` records who did what.
