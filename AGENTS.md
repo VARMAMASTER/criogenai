@@ -243,6 +243,10 @@ write our own implementation.
   Linux, lazy loading, `ready()`, run facts, `redact`. 0.1.2 (2026-11-03): metadata only on npm (engine
   packages stay 0.1.1); **PyPI `criogen==0.1.2`** with wheels for the same five platforms, built by
   `sdk-packages.yml` and uploaded with the pinned `maturin upload` (`PYPI_TOKEN` in `~/.criogen-keys.env`).
+  0.1.3 (2026-11-04): named providers (deepseek, mistral, xai, groq, cerebras, together,
+  fireworks, qwen, moonshot, zai, lmstudio) and `AnthropicCompatible`; all six npm packages and
+  PyPI wheels for Linux x64/ARM64, macOS ARM64 and Windows x64. The macOS Intel wheel is missing
+  (GitHub never gave the `macos-15-intel` job a runner), so pip on Intel Macs installs 0.1.2.
   Check a release with `scripts/smoke-registry.sh <version>`. Site: https://criogen.vercel.app.
 - **Not started:** vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.

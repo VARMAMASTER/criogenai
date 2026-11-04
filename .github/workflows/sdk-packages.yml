@@ -161,6 +161,10 @@ jobs:
         run: |
           cd sdks/typescript
           version="$(node -p "require('./package.json').version")"
+          # Install and compile first: the lockfile does not list the platform
+          # packages, so `npm ci` refuses once they are optional dependencies.
+          npm ci --ignore-scripts --no-audit --no-fund
+          npx tsc -p tsconfig.json
           # The main package depends on every platform package, optionally.
           node -e '
             const fs = require("fs");
@@ -172,8 +176,6 @@ jobs:
             pkg.files = pkg.files.filter((f) => !f.startsWith("native"));
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           ' "$version"
-          npm ci --ignore-scripts --no-audit --no-fund
-          npx tsc -p tsconfig.json
       - name: publish the platform packages, then the main one
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
