@@ -24,7 +24,7 @@ extendable specialist agents, and Tavily/Brave search with a safe page reader
 any OpenAI client in front of any provider Criogen speaks, with
 fallback, keys and usage records.
 
-**Website:** docs, a benchmark lab, a playground that runs Criogen and
+**Website:** docs, a benchmark lab, a pattern playground (every common agent pattern, runnable in the browser), a live comparison that runs Criogen and
 LangChain side by side, and a demo page (`website/`).
 
 Measured costs (per step, per tool call, gateway overhead, SDK bridges,

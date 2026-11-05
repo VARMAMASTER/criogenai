@@ -149,7 +149,7 @@ export default async function Home() {
           <div className="hero-copy">
             <Reveal y={24}>
               <h1>
-                <span className="hero-eyebrow">The fast AI agent framework · a LangChain alternative</span>{" "}
+                <span className="hero-eyebrow">The simplest, fastest way to build AI agents · a LangChain alternative</span>{" "}
                 Run AI agents like production software.
               </h1>
             </Reveal>

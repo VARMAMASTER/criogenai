@@ -211,6 +211,14 @@ write our own implementation.
   landing page, docs (MDX in `content/docs`, code samples compiled from
   `snippets/`), benchmark lab, install counter. `npm run build` /
   `npm run preview` (port 4400); checked by `ci-local.sh` step `website`.
+  Pattern playground (`/playground/`, 2026-11-05): 19 agent patterns
+  (`website/lib/patterns/`: reasoning, multi-agent, IBM's five agent types),
+  one page each with a diagram, a step-by-step run (a JavaScript copy of the
+  control flow with scripted replies, not the engine) and the Criogen code
+  (`snippets/*/patterns.*`, one region per pattern). Optional visitor key:
+  React state only, sent by the browser straight to the provider
+  (`lib/patterns/providers.ts`), at most 16 calls a run, tools simulated.
+  The Criogen-vs-LangChain comparison moved to `/benchmarks/#live`.
 - **Security audit (2026-10-22):** four reviewers, findings verified and
   fixed (CHANGELOG "Security audit"); `scripts/check-supply-chain.sh`
   guards the build and release. New rules below (10–12).

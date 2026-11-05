@@ -1,12 +1,17 @@
+import fs from "node:fs";
+import path from "node:path";
 import type { Metadata } from "next";
 import { pageMeta, speedLine } from "@/lib/seo";
 import "@/styles/site.css";
 import "@/styles/docs.css";
 import "@/styles/lab.css";
+import "@/styles/playground.css";
 import Lab from "@/components/bench/Lab";
 import Code from "@/components/Code";
+import Playground from "@/components/playground/Playground";
 import SiteHeader, { SiteFooter } from "@/components/SiteHeader";
 import { loadRecorded } from "@/lib/bench-data";
+import type { Recorded as CompareRecorded } from "@/lib/playground";
 
 export const metadata: Metadata = pageMeta({
   title: "AI agent framework benchmarks: Criogen vs LangGraph vs CrewAI",
@@ -21,6 +26,22 @@ const KIT_COMMANDS = [
   "python setup.py      # once: a virtual environment per framework (pinned versions)",
   "python run.py        # everything, about 25 minutes → bench/results/<date>-<machine>.json",
   "python run.py quick  # a short smoke test (not for comparing)",
+].join("\n");
+
+/** The live comparison's recordings, made by playground/record.py into public/playground/. */
+function loadCompare(): CompareRecorded | null {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(process.cwd(), "public", "playground", "recorded.json"), "utf-8")) as CompareRecorded;
+  } catch {
+    return null;
+  }
+}
+
+const COMPARE_COMMANDS = [
+  "python benches/compare/setup.py --only criogen   # once",
+  "python benches/compare/setup.py --only langgraph    # once",
+  "target/compare/venvs/criogen/bin/python playground/server.py   # Windows: Scripts/python.exe",
+  "# serves on http://127.0.0.1:4600; reload this page",
 ].join("\n");
 
 export default function BenchmarksPage() {
@@ -63,6 +84,58 @@ export default function BenchmarksPage() {
           </p>
         </header>
         <Lab recorded={recorded.data} fixture={recorded.fixture} href={recorded.href} recordedErrors={recorded.errors} runSection={runSection} />
+        <header className="lab-hero" id="live">
+          <p className="lab-eyebrow">Live comparison</p>
+          <h2 className="pg-title">Criogen and LangChain on one job, side by side</h2>
+          <p className="lab-lede">
+            Send a message through the same agent in both frameworks and compare latency, throughput, CPU and memory. Each framework runs in its
+            own process against one scripted model server, and the measurements are taken from outside by the same code. For exploration on a
+            single machine; the results above are the reference.
+          </p>
+        </header>
+        <Playground recorded={loadCompare()} />
+        <section className="lab-card" aria-labelledby="pg-method">
+          <h2 id="pg-method">How the live comparison works</h2>
+          <dl className="pg-method">
+            <dt>Model</dt>
+            <dd>
+              One local server speaks the OpenAI wire format and gives both frameworks identical scripted replies. Each framework builds requests and
+              parses responses with its own client. No real model is called.
+            </dd>
+            <dt>Agents</dt>
+            <dd>
+              Each framework&apos;s standard tool-calling agent with default settings: <code>Agent</code> in Criogen, <code>create_agent</code> in
+              LangChain. Both use the same synchronous tools with the same names, arguments and delays.
+            </dd>
+            <dt>Measurement</dt>
+            <dd>
+              CPU and memory are sampled every 100 ms from outside each process with <code>psutil</code>, including import time. The model server runs
+              in a separate process and is charged to neither framework.
+            </dd>
+            <dt>Order</dt>
+            <dd>The benchmark runs A, B, B, A, each pass in a fresh process, and averages the two passes of each framework.</dd>
+          </dl>
+          <h3 className="pg-sub">Known differences and limits</h3>
+          <ul>
+            <li>
+              Defaults differ. Criogen streams the reply (<code>stream: true</code>) and LangChain requests a complete one (<code>stream: false</code>),
+              which adds parsing work on the Criogen side. This compares defaults, not feature sets.
+            </li>
+            <li>
+              With realistic model and tool latency, both spend most of a run waiting, so median run time converges. The differences that remain are
+              memory, CPU and behaviour under concurrent load.
+            </li>
+            <li>One machine, one measurement per click. Repeat before drawing conclusions from small differences.</li>
+          </ul>
+          <h3 className="pg-sub">Run it locally</h3>
+          <p className="lab-muted">
+            The server binds to 127.0.0.1 and accepts requests only from this site&apos;s pages. Set up the two Python environments once, then start it
+            and reload this page; the source switches to Live.
+          </p>
+          <div className="prose">
+            <Code code={COMPARE_COMMANDS} lang="sh" />
+          </div>
+        </section>
       </main>
       <SiteFooter />
     </div>

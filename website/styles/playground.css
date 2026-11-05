@@ -318,3 +318,9 @@ p.pg-error {
     margin-bottom: 0.7rem;
   }
 }
+
+.lab-hero .pg-title {
+  margin: 0 0 1rem;
+  font-size: clamp(1.6rem, 3vw, 2.2rem);
+  letter-spacing: -0.02em;
+}

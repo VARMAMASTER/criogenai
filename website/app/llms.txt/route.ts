@@ -32,7 +32,8 @@ export function GET() {
     "",
     `- [Every doc in one file](${SITE.url}/llms-full.txt)`,
     `- [Benchmark lab](${SITE.url}/benchmarks/): Criogen, LangGraph and CrewAI on the same work`,
-    `- [Playground](${SITE.url}/playground/): Criogen and LangChain side by side`,
+    `- [Benchmark lab, live comparison](${SITE.url}/benchmarks/#live): Criogen and LangChain side by side on one job`,
+    `- [Pattern playground](${SITE.url}/playground/): every common agent pattern (ReAct, Reflexion, ReWOO, supervisor, swarm, IBM's agent types…), runnable in the browser, with the Criogen code`,
     "",
   ].join("\n");
   return new Response(text, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
