@@ -128,14 +128,14 @@ impl Storage {
         .await
     }
 
-    /// Runs [`prune`](Self::prune) now and then every `every`, in a Tokio
-    /// task, until the returned [`Pruner`] is dropped. After the first pass
+    /// Runs [`prune`](Self::prune) now and then every `every`, in a task
+    /// (Tokio's on servers), until the returned [`Pruner`] is dropped. After the first pass
     /// only threads committed since the previous one are shortened.
     pub fn spawn_pruner(&self, every: Duration) -> Pruner {
         let storage = self.clone();
         let last = Arc::new(Mutex::new(None));
         let report = last.clone();
-        let task = tokio::spawn(async move {
+        let task = criogen_rt::spawn(async move {
             let mut since = None;
             loop {
                 let started = now_ms();
@@ -144,7 +144,7 @@ impl Storage {
                     since = Some(started.saturating_sub(CLOCK_MARGIN_MS));
                 }
                 *report.lock().unwrap_or_else(|e| e.into_inner()) = Some(result);
-                tokio::time::sleep(every).await;
+                criogen_rt::sleep(every).await;
             }
         });
         Pruner { task, last }
@@ -223,7 +223,7 @@ impl Storage {
 /// task.
 #[derive(Debug)]
 pub struct Pruner {
-    task: tokio::task::JoinHandle<()>,
+    task: criogen_rt::JoinHandle<()>,
     last: Arc<Mutex<Option<Result<PruneReport, StorageError>>>>,
 }
 

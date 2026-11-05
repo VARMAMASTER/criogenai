@@ -3,8 +3,12 @@
     "target": "ES2022",
     "module": "commonjs",
     "moduleResolution": "node",
-    "lib": ["ES2022"],
-    "types": ["node"],
+    "lib": [
+      "ES2022"
+    ],
+    "types": [
+      "node"
+    ],
     "declaration": true,
     "outDir": "dist",
     "rootDir": "lib",
@@ -12,5 +16,10 @@
     "esModuleInterop": true,
     "skipLibCheck": false
   },
-  "include": ["lib/**/*.ts"]
+  "include": [
+    "lib/**/*.ts"
+  ],
+  "exclude": [
+    "lib/browser/**"
+  ]
 }

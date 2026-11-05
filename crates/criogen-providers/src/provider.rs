@@ -361,6 +361,14 @@ impl ProviderModel {
                 if !betas.is_empty() {
                     wire = wire.header("anthropic-beta", betas.join(","));
                 }
+                // From a page, Anthropic's API answers only callers that say
+                // so: the key is the page user's own (design 0021). Its own
+                // API only; another server's CORS rules may not allow it.
+                if criogen_rt::IN_JAVASCRIPT_HOST
+                    && endpoint.base_url.starts_with("https://api.anthropic.com")
+                {
+                    wire = wire.header("anthropic-dangerous-direct-browser-access", "true");
+                }
             }
         }
         for (name, value) in &endpoint.headers {

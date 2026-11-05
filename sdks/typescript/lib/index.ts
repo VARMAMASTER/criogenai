@@ -20,6 +20,7 @@ export {
   Embedder,
   FakeModel,
   FakeReply,
+  FunctionModel,
   KaggleModel,
   ProviderModel,
   anthropic,
@@ -42,7 +43,7 @@ export {
   xai,
   zai,
 } from "./models";
-export type { KaggleOptions, Model, ModelOptions } from "./models";
+export type { KaggleOptions, Model, ModelAnswer, ModelCall, ModelOptions } from "./models";
 export { ChatStream, Gateway } from "./gateway";
 export type { ChatInput, ChatOptions, ChatReply, Chunk, GatewayOptions } from "./gateway";
 export { ToolResult } from "./hooks";

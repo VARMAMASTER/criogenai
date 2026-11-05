@@ -210,7 +210,7 @@ impl FakeModel {
             // Windows): yield instead, so zero means zero.
             YieldOnce(false).await;
         } else {
-            tokio::time::sleep(delay).await;
+            criogen_rt::sleep(delay).await;
         }
 
         let fail = |kind, message: String| {

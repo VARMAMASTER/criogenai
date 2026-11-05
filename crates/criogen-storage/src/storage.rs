@@ -364,7 +364,7 @@ impl Storage {
     /// both. Without thread locks, [`Checkpointer::commit`]'s
     /// compare-and-set still keeps another process from forking a thread.
     pub async fn lease(&self, thread: &str) -> Result<ThreadLease, StorageError> {
-        let started = tokio::time::Instant::now();
+        let started = criogen_rt::Instant::now();
         let mut lease = self.local_lease(thread).await?;
         if let Some(locks) = &self.locks {
             let slot = lease.slot.as_ref().expect("a new lease has its slot");
@@ -379,7 +379,7 @@ impl Storage {
         locks: &Arc<dyn ThreadLocks>,
         thread: &str,
         slot: &Arc<Slot>,
-        started: tokio::time::Instant,
+        started: criogen_rt::Instant,
     ) -> Result<HeldLock, StorageError> {
         // Another process interrupts: cancel this lease's run, even if it
         // registers its token only later. Weak: the lease table forgets
@@ -433,7 +433,7 @@ impl Storage {
                 if on_busy == OnBusy::Interrupt {
                     slot.interrupt(generation);
                 }
-                match tokio::time::timeout(self.busy_timeout, lock.lock_owned()).await {
+                match criogen_rt::timeout(self.busy_timeout, lock.lock_owned()).await {
                     Ok(guard) => guard,
                     Err(_) => {
                         drop(slot);

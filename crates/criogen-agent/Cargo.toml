@@ -23,8 +23,11 @@ criogen-storage = { path = "../criogen-storage", version = "0.1.0" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-# `rt`: tool calls run as tasks; `sync`: the parallel-call semaphore; `time`: tool timeouts.
-tokio = { workspace = true, features = ["rt", "sync", "time"] }
+# `sync`: the parallel-call semaphore.
+tokio = { workspace = true, features = ["sync"] }
+# Tasks and timers (tool calls run as tasks, tool timeouts, backoff): Tokio on
+# servers, the JavaScript event loop in the browser (design 0021).
+criogen-rt = { path = "../criogen-rt", version = "0.1.0" }
 reqwest = { version = "0.13", optional = true, default-features = false, features = ["rustls", "system-proxy"] }
 
 [features]

@@ -4,6 +4,7 @@
 // default; with a key in KeyPanel, a real model makes the decisions.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { makeCtx, MAX_MODEL_CALLS, type Decision, type Line } from "@/lib/patterns/engine";
+import { runOnEngine } from "@/lib/patterns/live";
 import { byId } from "@/lib/patterns";
 import Diagram from "./Diagram";
 import KeyPanel from "./KeyPanel";
@@ -68,7 +69,7 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
     setRunning(true);
     const t0 = performance.now();
     const ctx = makeCtx({
-      conn: live ? conn : null,
+      live,
       speed,
       params,
       signal: ctl.signal,
@@ -88,7 +89,9 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
       },
     });
     try {
-      const out = await def.run(ctx, input.trim() || def.task);
+      const task = input.trim() || def.task;
+      if (!def.engine) throw new Error("this pattern has no engine run");
+      const out = await runOnEngine({ ...def, engine: def.engine }, ctx, task, { conn: live ? conn : null, speed, signal: ctl.signal });
       if (!ctl.signal.aborted) {
         setAnswer(out);
         setTook(performance.now() - t0);
@@ -144,6 +147,7 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
           <h2 id="sb-run">Run it</h2>
           <span className={`sb-mode ${live ? "sb-mode-live" : ""}`}>
             {!def.usesModel ? "No model needed" : live ? "Real model · simulated tools" : "Scripted model · no key needed"}
+            {def.engine ? " · Criogen engine in your browser" : ""}
           </span>
         </div>
         <Diagram graph={def.graph} active={active} edge={edge} visited={visited} title={def.title} />
@@ -247,10 +251,17 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
             <p>{answer}</p>
           </div>
         )}
-        <p className="sb-small sb-honest">
-          This run is a small JavaScript copy of the pattern&apos;s control flow, so it can work in your browser. It is not the Criogen engine.
-          The code below is how you build the same pattern with Criogen.
-        </p>
+        {def.engine ? (
+          <p className="sb-small sb-honest">
+            This run is the TypeScript code below, running on the Criogen engine in your browser (WebAssembly). Without a key, a scripted
+            model stands in for <code>MODEL</code>; with your key, your provider answers, called from this tab. The tools return made-up data.
+          </p>
+        ) : (
+          <p className="sb-small sb-honest">
+            This run is a small JavaScript copy of the pattern&apos;s control flow, so it can work in your browser. It is not the Criogen engine.
+            The code below is how you build the same pattern with Criogen.
+          </p>
+        )}
       </section>
 
       <section className="sb-card" aria-labelledby="sb-code">

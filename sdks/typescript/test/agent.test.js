@@ -10,6 +10,10 @@ const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 
+// CRIOGEN_ENGINE=wasm runs this suite on the browser's engine (design 0021);
+// what needs a server is skipped there, with the reason.
+const serverOnly = (why) => (process.env.CRIOGEN_ENGINE === "wasm" ? `server only: ${why}` : false);
+
 const sdk = require(process.env.CRIOGEN_SDK || path.join(__dirname, ".."));
 const {
   Agent,
@@ -186,7 +190,7 @@ test("semantic memory finds facts by meaning and falls back to keywords", async 
   assert.match(JSON.stringify(toolResults(await broken.run("search"))[0].content), /red car/);
 });
 
-test("telemetry exports runs without their content", async () => {
+test("telemetry exports runs without their content", { skip: serverOnly("telemetry export") }, async () => {
   const http = require("node:http");
   const received = [];
   const server = http.createServer((req, res) => {
@@ -457,7 +461,7 @@ test("reject, decide with an edit, invalid decisions, rewind", async () => {
   assert.equal((await chat.rewind(oldest)).source, "fork");
 });
 
-test("SQLite threads survive a new agent; memory, retention and audit", async () => {
+test("SQLite threads survive a new agent; memory, retention and audit", { skip: serverOnly("SQLite") }, async () => {
   const db = tempDb("sqlite");
   try {
     const first = new Agent({ model: new FakeModel(["Hello Ada"]), storage: new Storage({ url: db.url, audit: true }) });
@@ -489,7 +493,7 @@ test("SQLite threads survive a new agent; memory, retention and audit", async ()
   }
 });
 
-test("encrypted storage keeps text unreadable and refuses to open without its keys", async () => {
+test("encrypted storage keeps text unreadable and refuses to open without its keys", { skip: serverOnly("encryption at rest") }, async () => {
   const db = tempDb("enc");
   try {
     const keys = "k1:" + "ab".repeat(32);

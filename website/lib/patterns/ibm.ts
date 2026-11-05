@@ -1,8 +1,9 @@
 // IBM's five classic agent types (https://www.ibm.com/think/topics/ai-agent-types):
 // simple reflex, model-based reflex, goal-based, utility-based, learning.
-// They describe how an agent decides; none of these needs a model, so they
-// run the same with or without a key.
-import { rng, type PatternDef } from "./engine";
+// They describe how an agent decides. Four need no model; the utility-based
+// agent asks one to explain its choice. Each runs its code sample on the
+// engine (casts.ts).
+import type { PatternDef } from "./engine";
 
 // ------------------------------------------------------------ simple reflex
 
@@ -38,25 +39,6 @@ const simpleReflex: PatternDef = {
       ["rules", "cool", "> target + 1"],
     ],
   },
-  async run(ctx) {
-    const target = ctx.params.target ?? 21;
-    const readings = [17.5, 19.2, 21.0, 23.6, 22.4, 20.6, 19.4];
-    const counts = { heat: 0, idle: 0, cool: 0 };
-    ctx.say("rules", "note", `IF t < ${target - 1} THEN heat · IF t > ${target + 1} THEN cool · ELSE idle`);
-    for (const t of readings) {
-      ctx.at("sensor");
-      ctx.say("sensor", "state", `${t.toFixed(1)} °C`, "sensor");
-      await ctx.pause(350);
-      ctx.at("rules");
-      await ctx.pause(250);
-      const action = t < target - 1 ? "heat" : t > target + 1 ? "cool" : "idle";
-      counts[action]++;
-      ctx.at(action);
-      ctx.say("actuator", "tool", action, action);
-      await ctx.pause(350);
-    }
-    return `7 readings → heat ${counts.heat}×, idle ${counts.idle}×, cool ${counts.cool}×. No memory and no model: each action came from the reading alone.`;
-  },
 };
 
 // ------------------------------------------------------- model-based reflex
@@ -91,70 +73,9 @@ const modelReflex: PatternDef = {
       ["act", "model", "what my action changed"],
     ],
   },
-  async run(ctx) {
-    const rooms = ["A", "B", "C", "D"];
-    const dirty: Record<string, boolean> = { A: true, B: false, C: true, D: true };
-    const known: Record<string, "?" | "clean"> = { A: "?", B: "?", C: "?", D: "?" };
-    let at = 0;
-    const map = () => rooms.map((r, i) => `${i === at ? "[" : " "}${r}:${known[r] === "clean" ? "✓" : "?"}${i === at ? "]" : " "}`).join(" ");
-    for (let step = 0; step < 14; step++) {
-      const room = rooms[at];
-      ctx.at("sensor");
-      ctx.say("sensor", "state", `In ${room}: ${dirty[room] ? "dirty" : "clean"}`, "sensor");
-      await ctx.pause(300);
-      ctx.at("model");
-      if (!dirty[room]) known[room] = "clean";
-      ctx.say("model", "state", map(), "model");
-      await ctx.pause(300);
-      ctx.at("rules");
-      await ctx.pause(200);
-      ctx.at("act");
-      if (dirty[room]) {
-        dirty[room] = false;
-        known[room] = "clean";
-        ctx.say("act", "tool", `suck (${room})`, "act");
-      } else if (rooms.every((r) => known[r] === "clean")) {
-        ctx.say("act", "tool", "stop: the model says every room is clean", "act");
-        ctx.at("model");
-        return `All four rooms clean after ${step + 1} steps. It stopped because its internal model knew every room was clean, something no single reading could tell it.`;
-      } else {
-        at = rooms.findIndex((r) => known[r] !== "clean");
-        ctx.say("act", "tool", `move to ${rooms[at]} (the nearest room not known to be clean)`, "act");
-      }
-      await ctx.pause(250);
-    }
-    return "Stopped at the step cap.";
-  },
 };
 
 // --------------------------------------------------------------- goal-based
-
-const MAP: Record<string, string[]> = {
-  Depot: ["Market", "Mill"],
-  Mill: ["Depot", "Bridge"],
-  Market: ["Depot", "Park", "Bridge"],
-  Bridge: ["Mill", "Market", "Clinic"],
-  Park: ["Market", "Clinic"],
-  Clinic: ["Bridge", "Park"],
-};
-
-function route(from: string, to: string, closed: Set<string>): string[] | null {
-  const seen = new Set([from]);
-  const queue: string[][] = [[from]];
-  while (queue.length) {
-    const path = queue.shift()!;
-    const last = path[path.length - 1];
-    if (last === to) return path;
-    for (const next of MAP[last]) {
-      const road = [last, next].sort().join("–");
-      if (!seen.has(next) && !closed.has(road)) {
-        seen.add(next);
-        queue.push([...path, next]);
-      }
-    }
-  }
-  return null;
-}
 
 const goalBased: PatternDef = {
   id: "goal-based",
@@ -188,46 +109,9 @@ const goalBased: PatternDef = {
       ["act", "arrive", "goal reached"],
     ],
   },
-  async run(ctx) {
-    const closed = new Set<string>();
-    let here = "Depot";
-    let replans = 0;
-    for (let step = 0; step < 10; step++) {
-      ctx.at("sense");
-      if (here === "Market" && !closed.size) {
-        closed.add("Bridge–Market");
-        ctx.say("sense", "error", "Road Market–Bridge just closed.", "sense");
-      } else ctx.say("sense", "state", `At ${here}`, "sense");
-      await ctx.pause(300);
-      ctx.at("plan");
-      const path = route(here, "Clinic", closed);
-      if (!path) return "No route left to the Clinic.";
-      if (step === 0 || closed.size > replans) {
-        if (step > 0) replans++;
-        ctx.say("planner", "note", `${step === 0 ? "Plan" : "Replan"}: ${path.join(" → ")} (${path.length - 1} hops)`, "plan");
-      }
-      await ctx.pause(300);
-      here = path[1];
-      ctx.at("act");
-      ctx.say("drone", "tool", `fly to ${here}`, "act");
-      await ctx.pause(350);
-      if (here === "Clinic") {
-        ctx.at("arrive");
-        return `Delivered after ${step + 1} hops and ${replans} replan. The agent acted on its goal, not on a fixed rule.`;
-      }
-    }
-    return "Stopped at the step cap.";
-  },
 };
 
 // ------------------------------------------------------------ utility-based
-
-const FLIGHTS = [
-  { name: "Budget, 1 stop", price: 180, hours: 9.5, stops: 1 },
-  { name: "Direct, early", price: 340, hours: 5, stops: 0 },
-  { name: "Night, 2 stops", price: 140, hours: 14, stops: 2 },
-  { name: "Direct, flexible", price: 460, hours: 5, stops: 0 },
-];
 
 const utilityBased: PatternDef = {
   id: "utility-based",
@@ -241,7 +125,7 @@ const utilityBased: PatternDef = {
   use: ["Trade-offs between several criteria", "Many options that all reach the goal", "Recommendations, pricing, scheduling"],
   avoid: ["Preferences you cannot express as weights", "Only one acceptable option"],
   task: "Book a flight from Lisbon to Berlin.",
-  usesModel: false,
+  usesModel: true,
   criogen: { kind: "primitives", api: "A tool or node that scores options" },
   params: [
     { id: "price", label: "Price matters", min: 0, max: 10, value: 6 },
@@ -263,43 +147,9 @@ const utilityBased: PatternDef = {
       ["choose", "book"],
     ],
   },
-  async run(ctx) {
-    const w = { price: ctx.params.price ?? 6, time: ctx.params.time ?? 4, comfort: ctx.params.comfort ?? 5 };
-    const total = w.price + w.time + w.comfort || 1;
-    ctx.say("utility", "note", `U = ${(w.price / total).toFixed(2)}·cheap + ${(w.time / total).toFixed(2)}·fast + ${(w.comfort / total).toFixed(2)}·few stops (each 0–1)`);
-    const minP = Math.min(...FLIGHTS.map((f) => f.price));
-    const maxP = Math.max(...FLIGHTS.map((f) => f.price));
-    const minH = Math.min(...FLIGHTS.map((f) => f.hours));
-    const maxH = Math.max(...FLIGHTS.map((f) => f.hours));
-    const scored = [];
-    for (const f of FLIGHTS) {
-      ctx.at("options");
-      await ctx.pause(200);
-      const cheap = 1 - (f.price - minP) / (maxP - minP);
-      const fast = 1 - (f.hours - minH) / (maxH - minH);
-      const few = 1 - f.stops / 2;
-      const u = (w.price * cheap + w.time * fast + w.comfort * few) / total;
-      scored.push({ f, u });
-      ctx.at("utility");
-      ctx.say("utility", "state", `${f.name}: $${f.price}, ${f.hours} h, ${f.stops} stop${f.stops === 1 ? "" : "s"} → U = ${u.toFixed(2)}`, "utility");
-      await ctx.pause(300);
-    }
-    ctx.at("choose");
-    await ctx.pause(300);
-    const best = scored.reduce((a, b) => (b.u > a.u ? b : a));
-    ctx.at("book");
-    ctx.say("booking", "tool", `book “${best.f.name}”`, "book");
-    return `Booked “${best.f.name}” ($${best.f.price}, ${best.f.hours} h): the highest utility, ${best.u.toFixed(2)}, for these weights.`;
-  },
 };
 
 // ------------------------------------------------------------------ learning
-
-const STYLES = [
-  { name: "short", p: 0.45 },
-  { name: "detailed", p: 0.6 },
-  { name: "friendly + steps", p: 0.8 },
-];
 
 const learning: PatternDef = {
   id: "learning",
@@ -333,33 +183,6 @@ const learning: PatternDef = {
       ["learn", "perf", "better estimates"],
       ["explore", "perf"],
     ],
-  },
-  async run(ctx) {
-    const eps = (ctx.params.explore ?? 20) / 100;
-    const rand = rng(7);
-    const value = STYLES.map(() => 0);
-    const tries = STYLES.map(() => 0);
-    let good = 0;
-    const show = () => STYLES.map((s, i) => `${s.name} ${tries[i] ? value[i].toFixed(2) : "–"} (${tries[i]})`).join(" · ");
-    for (let ep = 1; ep <= 40; ep++) {
-      const exploring = rand() < eps || tries.every((t) => t === 0);
-      const i = exploring ? Math.floor(rand() * STYLES.length) : value.indexOf(Math.max(...value));
-      if (exploring) ctx.at("explore");
-      ctx.at("perf");
-      ctx.at("env");
-      const liked = rand() < STYLES[i].p;
-      good += liked ? 1 : 0;
-      ctx.at("critic");
-      tries[i]++;
-      value[i] += ((liked ? 1 : 0) - value[i]) / tries[i];
-      ctx.at("learn");
-      if (ep <= 6 || ep % 8 === 0) {
-        ctx.say(`conversation ${ep}`, "state", `${exploring ? "explore" : "exploit"}: ${STYLES[i].name} → ${liked ? "👍" : "👎"}   |   ${show()}`, "learn");
-        await ctx.pause(ep <= 6 ? 420 : 300);
-      } else await ctx.pause(60);
-    }
-    const best = STYLES[value.indexOf(Math.max(...value))].name;
-    return `After 40 conversations it prefers “${best}” (estimated rating ${Math.max(...value).toFixed(2)}); ${good}/40 customers were happy. Nobody told it the answer: the critic's feedback did.`;
   },
 };
 

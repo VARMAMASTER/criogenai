@@ -9,6 +9,28 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+- **The engine in the browser** (design 0021): the same Rust engine, compiled to WebAssembly, behind
+  the same TypeScript API, as `criogen/web` (`await ready()` loads it, about 550 KB compressed).
+  Agents, tools, approvals, typed output, threads, workflows and the gateway run in a page or a Web
+  Worker; storage is in the tab's memory, and what needs a server (databases, encryption at rest,
+  telemetry export, web tools) fails with the new error code `unsupported`. Model calls go through
+  the browser's `fetch` with the server's rules: no redirects, the 64 MiB limit, keys never over
+  plain http to another machine, a cancelled run stops its download; Anthropic's own API gets the
+  header it asks browser callers for. Tested in Chromium, Firefox and WebKit, with the whole
+  TypeScript test suite run on the WebAssembly engine too, and as a package in a new app.
+- **`FunctionModel`** (TypeScript, both engines): a model whose every call goes to a JavaScript
+  function (a model running in the page, your own client, scripted replies chosen by what the
+  request says). Answers are text, tool calls, a message, or a classified error, retried like a
+  provider's. **`Gateway.chat` takes `tools`**, so a `FunctionModel` can pass an agent's request on to
+  a real model.
+- **One bridge for both TypeScript engines** (`crates/criogen-js`): the Node addon now uses the same
+  configuration, envelope and result code as the WebAssembly module. **`criogen-rt`**: the engine's
+  tasks and timers are Tokio on servers (unchanged) and the JavaScript event loop in the browser.
+- **Playground on the engine.** Every pattern on the website's playground now runs its TypeScript
+  code sample, as shown, on the engine in the visitor's browser: a scripted `FunctionModel` without a
+  key, the visitor's provider with one. Running them for real found a bug in the router sample (a
+  message's `content` must be content blocks), fixed in both languages.
+
 ## [0.1.3] - 2026-11-04
 
 - **Ten more providers by name** (design 0006 §4.1): `deepseek`, `mistral`, `xai`, `groq`,

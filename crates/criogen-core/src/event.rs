@@ -3,7 +3,7 @@
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -393,7 +393,7 @@ impl Hub {
 }
 
 fn now_ms() -> u64 {
-    SystemTime::now()
+    criogen_rt::system_now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_millis() as u64)
 }

@@ -1,10 +1,12 @@
 // Every pattern on the playground, in sidebar order.
+import { CASTS } from "./casts";
 import type { PatternDef } from "./engine";
 import { IBM } from "./ibm";
 import { MULTI } from "./multi";
 import { REASONING } from "./reasoning";
 
-export const PATTERNS: PatternDef[] = [...REASONING, ...MULTI, ...IBM];
+/** Every pattern runs its code sample on the engine in the browser (casts.ts). */
+export const PATTERNS: PatternDef[] = [...REASONING, ...MULTI, ...IBM].map((p) => ({ ...p, engine: CASTS[p.id] ?? p.engine }));
 
 export const GROUPS: { name: PatternDef["group"]; about: string }[] = [
   { name: "Reasoning", about: "One agent, different ways to think." },

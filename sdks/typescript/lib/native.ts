@@ -1,8 +1,9 @@
-// The native addon (design 0012 §4): loaded on first use, never at import, so a
-// system it cannot run on gets a NativeUnavailableError where it is used.
+// The engine (design 0012 §4, design 0021): the Node addon on servers, the
+// same engine as WebAssembly in the browser. Loaded on first use, never at
+// import, so a system it cannot run on gets a NativeUnavailableError where it
+// is used. Both engines have this interface (one Rust bridge, criogen-js).
 
-import * as path from "path";
-import { NativeUnavailableError } from "./errors";
+import * as node from "./native-node";
 
 /** A JavaScript tool as the engine calls it: request JSON in, envelope JSON out. */
 export type NativeTool = (request: string) => Promise<string>;
@@ -51,7 +52,8 @@ export interface NativeWorkflow {
   thread(op: string, payload: string, cancelId: number): Promise<string>;
 }
 
-interface Addon {
+/** What both engines export. */
+export interface Addon {
   NativeStorage: new (spec: string) => NativeStorage;
   NativeAgent: new (config: string, tools: NativeTool[], storage: NativeStorage, hooks: NativeTool[]) => NativeAgent;
   NativeTelemetry: new (spec: string) => NativeTelemetry;
@@ -62,84 +64,65 @@ interface Addon {
   releaseCancelId(id: number): void;
   /** The named providers (design 0006 §4.1) as JSON. */
   presets(): string;
+  /** Registers a JavaScript model function (design 0021 §7); its handle names it in model specs. */
+  registerFunction(fn: NativeTool): number;
+  /** Forgets a model function (models built from it keep working). */
+  releaseFunction(handle: number): void;
 }
 
-/**
- * The addon: one built from source (native/criogen.node, as
- * scripts/test-typescript.sh makes), else the prebuilt package for this
- * platform (criogen-<platform>-<arch>, an optional dependency).
- */
-/** Platform packages whose name differs from criogen-<platform>-<arch>: npm's spam
- * filter refused `criogen-win32-x64`, so Windows uses `criogen-windows-x64`. */
-export const PLATFORM_PACKAGES: Record<string, string> = { "win32-x64": "criogen-windows-x64" };
-
-/** This system, for error messages and `ready()`: platform, architecture, C library. */
-export function host(): { platform: string; arch: string; libc: string | null } {
-  let libc: string | null = null;
-  if (process.platform === "linux") {
-    try {
-      const report = process.report?.getReport?.() as { header?: { glibcVersionRuntime?: string } } | undefined;
-      const glibc = report?.header?.glibcVersionRuntime;
-      libc = glibc ? `glibc ${glibc}` : "musl (or no glibc)";
-    } catch {
-      libc = "unknown";
-    }
-  }
-  return { platform: process.platform, arch: process.arch, libc };
+/** Where the engine runs: platform, architecture, C library. */
+export interface HostInfo {
+  platform: string;
+  arch: string;
+  libc: string | null;
 }
 
-function unavailable(message: string, pkg: string, cause: unknown): NativeUnavailableError {
-  const h = host();
-  const where = `${h.platform}-${h.arch}${h.libc ? ` (${h.libc})` : ""}`;
-  const reason = cause instanceof Error ? cause.message.split(/\r?\n/)[0] : String(cause);
-  return new NativeUnavailableError(
-    "native_unavailable",
-    `${message} on ${where}: ${reason}. Supported: Linux x64 and ARM64 with glibc 2.28 or newer, ` +
-      `macOS (Apple Silicon, Intel), Windows x64; Node 18+, Node runtime (not Edge).`,
-    { ...h, package: pkg },
-    cause,
-  );
+/** How an engine is found: the Node addon (the default) or WebAssembly (the browser entry). */
+export interface EngineLoader {
+  /** The engine, now; throws a NativeUnavailableError when it cannot be had. */
+  load(): Addon;
+  /** Gets the engine ready (WebAssembly compiles asynchronously); `source` says where it is. */
+  prepare(source?: unknown): Promise<void>;
+  /** This system, for error messages and `ready()`. */
+  host(): HostInfo;
 }
 
-function load(): Addon {
-  const local = path.join(__dirname, "..", "native", "criogen.node");
-  const target = `${process.platform}-${process.arch}`;
-  const prebuilt = PLATFORM_PACKAGES[target] ?? `criogen-${target}`;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require(local);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    // The file is there but cannot be loaded here (built for another system, or
-    // a C library it does not match, such as an older glibc or musl).
-    if (code === "ERR_DLOPEN_FAILED") throw unavailable("criogen's engine could not be loaded", "native/criogen.node", error);
-    if (code !== "MODULE_NOT_FOUND") throw error;
-  }
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    return require(prebuilt);
-  } catch (error) {
-    const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ERR_DLOPEN_FAILED") throw unavailable(`criogen's engine (${prebuilt}) could not be loaded`, prebuilt, error);
-    if (code !== "MODULE_NOT_FOUND") throw error;
-    throw unavailable(`criogen has no engine package installed (${prebuilt})`, prebuilt, error);
-  }
-}
+/** Platform packages whose name differs from criogen-<platform>-<arch>. */
+export const PLATFORM_PACKAGES: Record<string, string> = node.PLATFORM_PACKAGES;
 
+let loader: EngineLoader = node.nodeLoader;
 let loaded: Addon | undefined;
 let failure: unknown;
+
+/** @internal Selects the engine (the browser entry chooses WebAssembly). */
+export function useEngineLoader(next: EngineLoader): void {
+  loader = next;
+  loaded = undefined;
+  failure = undefined;
+}
+
+/** This system, for error messages and `ready()`: platform, architecture, C library. */
+export function host(): HostInfo {
+  return loader.host();
+}
 
 /** The engine, loaded on first use (never at import); the same error each time it cannot load. */
 export function loadNative(): Addon {
   if (loaded) return loaded;
   if (failure !== undefined) throw failure;
   try {
-    loaded = load();
+    loaded = loader.load();
     return loaded;
   } catch (error) {
     failure = error;
     throw error;
   }
+}
+
+/** Gets the engine ready, then forgets an earlier "not loaded yet". */
+export async function prepareNative(source?: unknown): Promise<void> {
+  await loader.prepare(source);
+  if (!loaded) failure = undefined;
 }
 
 /** The engine. Importing criogen never loads it; the first property access does. */

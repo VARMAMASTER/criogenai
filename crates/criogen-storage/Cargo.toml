@@ -26,6 +26,9 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "sync", "time"] }
 # Checkpoint ids (v7: ordered by creation time).
 uuid.workspace = true
+# Tasks and timers off Tokio's postgres paths: Tokio on servers, the
+# JavaScript event loop in the browser (design 0021).
+criogen-rt = { path = "../criogen-rt", version = "0.1.0" }
 # The audit trail's hash chain (SHA-256). sqlx already depends on it.
 sha2 = "0.10"
 # The SQL backends (features `sqlite`, `postgres`): async, one crate for

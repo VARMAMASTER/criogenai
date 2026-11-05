@@ -20,9 +20,17 @@ all-features = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-# `sync`: event channel and cancel tokens. `time`: timeouts, deadlines, backoff.
-tokio = { workspace = true, features = ["rt", "sync", "time"] }
+# `sync`: event channel and cancel tokens.
+tokio = { workspace = true, features = ["sync"] }
 uuid.workspace = true
+# Tasks and timers (concurrent nodes, timeouts, deadlines, backoff): Tokio on
+# servers, the JavaScript event loop in the browser (design 0021).
+criogen-rt = { path = "../criogen-rt", version = "0.1.0" }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+# In the browser: run ids take their time and randomness from JavaScript
+# (Date.now, crypto.getRandomValues).
+uuid = { workspace = true, features = ["js"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "test-util"] }

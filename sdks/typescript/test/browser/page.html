@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>criogen in the browser: tests</title>
+</head>
+<body>
+  <pre id="out">running…</pre>
+  <script type="module">
+    import { run } from "./tests.js";
+    const provider = new URL(location.href).searchParams.get("provider");
+    try {
+      window.__results = await run({ provider });
+    } catch (error) {
+      window.__results = [{ name: "the test page", ok: false, error: String(error?.stack ?? error) }];
+    }
+    document.getElementById("out").textContent = window.__results
+      .map((r) => `${r.ok ? "ok  " : "FAIL"} ${r.name}${r.ok ? "" : `\n     ${r.error}`}`)
+      .join("\n");
+    window.__done = true;
+  </script>
+</body>
+</html>

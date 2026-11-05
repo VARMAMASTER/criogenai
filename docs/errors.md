@@ -91,6 +91,7 @@ Generated from [`schemas/error-codes.json`](../schemas/error-codes.json) (design
 |---|---|---|---|---|---|
 | `invalid_agent` | developer | no | `ValidationError` | - | An SDK agent configuration the engine could not build. |
 | `invalid_workflow` | developer | no | `ValidationError` | - | An SDK workflow that does not validate (`details.issues` lists the problems). |
+| `unsupported` | developer | no | `CriogenError` | - | The feature needs a server, and here the engine runs as WebAssembly in a JavaScript host (the browser, design 0021): databases (SQLite, Postgres), encryption at rest, telemetry export, web tools. |
 
 ## Gateway errors (`error.code` in the HTTP body)
 

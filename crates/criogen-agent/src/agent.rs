@@ -3,7 +3,7 @@
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::sync::Arc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use criogen_core::{
     BoxFuture, BuildError, END, EventObserver, Node, NodeContext, NodeError, NodeOutput, Reducer,
@@ -15,11 +15,11 @@ use criogen_providers::{
     ModelRequest, ModelResponse, OutputSpec, OutputStrategy, Role, ToolIssue, ToolResultError,
     ToolSpec, ToolStatus, Usage, transcript, validate_tools,
 };
+use criogen_rt::{JoinSet, RealInstant};
 use criogen_storage::{AuditEvent, MemoryStore, ScopedMemory, Storage, StorageError, sha256_hex};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use tokio::sync::Semaphore;
-use tokio::task::JoinSet;
 
 use crate::approval::{APPROVAL_INTERRUPT, Approval, ApprovalRequest, Decision, check_decisions};
 use crate::hooks::{Hook, HookContext, HookError, ModelNext, Outcome, ToolCallRequest, ToolNext};
@@ -1553,7 +1553,7 @@ async fn model_step(
         events: events.clone(),
         deadline: ctx
             .remaining_time()
-            .map(|left| tokio::time::Instant::now() + left),
+            .map(|left| criogen_rt::Instant::now() + left),
         seed: ctx.task_id(),
     };
     let deadline_hit = std::sync::atomic::AtomicBool::new(false);
@@ -2180,7 +2180,7 @@ async fn tools_step(
                 "tool_call_started",
                 json!({"call_id": call.call_id, "tool": call.name, "args": call.args}),
             );
-            let started = Instant::now();
+            let started = RealInstant::now();
             // Only retry-safe tools (read-only or idempotent) are retried,
             // after a retryable error or a timeout (0002 §5.2).
             let max_attempts = if retry_safe {
@@ -2201,7 +2201,7 @@ async fn tools_step(
                     name: call.name.clone(),
                     args: call.args.clone(),
                 };
-                let outcome = tokio::time::timeout(timeout, CatchPanic(chain.call(request)))
+                let outcome = criogen_rt::timeout(timeout, CatchPanic(chain.call(request)))
                     .await
                     .map(|caught| {
                         caught.unwrap_or_else(|panic| {
@@ -2228,7 +2228,7 @@ async fn tools_step(
                         "retry_in_ms": delay.as_millis() as u64,
                     }),
                 );
-                tokio::time::sleep(delay).await;
+                criogen_rt::sleep(delay).await;
                 attempt += 1;
             };
             let mut state = Map::new();

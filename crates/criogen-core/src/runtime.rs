@@ -5,10 +5,9 @@ use std::sync::Arc;
 use std::task::Poll;
 use std::time::Duration;
 
+use criogen_rt::{Instant, JoinHandle, JoinSet};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::task::{JoinHandle, JoinSet};
-use tokio::time::Instant;
 
 use crate::cancel::CancelToken;
 use crate::error::{NodeError, RunError, RunErrorKind};
@@ -410,7 +409,9 @@ impl Workflow {
         let cancel = options.cancel.get_or_insert_with(CancelToken::new).clone();
         let workflow = self.clone();
         let handle =
-            tokio::spawn(async move { workflow.run_with(input, options.events(sender)).await });
+            criogen_rt::spawn(
+                async move { workflow.run_with(input, options.events(sender)).await },
+            );
         RunStream {
             events: Some(events),
             handle: Some(handle),
@@ -712,7 +713,7 @@ impl<'g> Run<'g> {
                 Some(deadline) => {
                     match race(
                         self.cancel.cancelled(),
-                        tokio::time::sleep_until(deadline.at),
+                        criogen_rt::sleep_until(deadline.at),
                     )
                     .await
                     {
@@ -1067,7 +1068,7 @@ impl<'g> Run<'g> {
                             // Grace period: nodes may finish cleaning up.
                             // Their results are discarded either way.
                             let drain = async { while tasks.join_next().await.is_some() {} };
-                            let _ = tokio::time::timeout(self.cancel_grace, drain).await;
+                            let _ = criogen_rt::timeout(self.cancel_grace, drain).await;
                             "run_cancelled"
                         }
                         Stop::Deadline => "deadline_exceeded",
@@ -1294,7 +1295,7 @@ impl<'g> Run<'g> {
             RunErrorKind::Cancelled | RunErrorKind::DeadlineExceeded { .. }
         ) {
             // The run is stopping: give a slow subscriber the grace period, no more.
-            let _ = tokio::time::timeout(self.cancel_grace, self.flush()).await;
+            let _ = criogen_rt::timeout(self.cancel_grace, self.flush()).await;
         } else {
             self.flush().await;
         }
@@ -1394,7 +1395,7 @@ impl NodeTask {
             };
             let fut = self.node.run(ctx, self.state.clone());
             let result = match (attempt_end, self.policy.timeout_ms) {
-                (Some(end), Some(ms)) => match tokio::time::timeout_at(end, fut).await {
+                (Some(end), Some(ms)) => match criogen_rt::timeout_at(end, fut).await {
                     Ok(result) => result,
                     // `run_nodes` fires this node's token (via the step token).
                     Err(_) => return Err(Failure::Timeout(ms)),
@@ -1420,7 +1421,7 @@ impl NodeTask {
                 message: error.to_string(),
                 retry_in_ms: u64::try_from(delay.as_millis()).unwrap_or(u64::MAX),
             });
-            if let Either::Left(()) = race(self.cancel.cancelled(), tokio::time::sleep(delay)).await
+            if let Either::Left(()) = race(self.cancel.cancelled(), criogen_rt::sleep(delay)).await
             {
                 return Err(Failure::Cancelled);
             }

@@ -6,6 +6,10 @@ const assert = require("node:assert/strict");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
 
+// CRIOGEN_ENGINE=wasm runs this suite on the browser's engine (design 0021);
+// what needs a server is skipped there, with the reason.
+const serverOnly = (why) => (process.env.CRIOGEN_ENGINE === "wasm" ? `server only: ${why}` : false);
+
 const SDK = process.env.CRIOGEN_SDK || path.join(__dirname, "..");
 const { ready, FakeModel, kaggle } = require(SDK);
 
@@ -38,7 +42,7 @@ test("ready() reports a model it cannot use, and never throws", async () => {
   }
 });
 
-test("an engine that cannot load: import works, first use throws a typed error, ready() reports it", () => {
+test("an engine that cannot load: import works, first use throws a typed error, ready() reports it", { skip: serverOnly("loading the Node addon") }, () => {
   // A child process where loading any criogen .node file fails as on a system with an old glibc.
   const script = `
     const Module = require("module");

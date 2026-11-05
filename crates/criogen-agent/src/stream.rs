@@ -5,8 +5,8 @@ use std::future::Future;
 
 use criogen_core::{CancelToken, Event, EventKind, EventReceiver, RunOptions, event_channel};
 use criogen_providers::{BlockDelta, Message, MessageDelta, ToolStatus};
+use criogen_rt::JoinHandle;
 use serde_json::{Map, Value};
-use tokio::task::JoinHandle;
 
 use crate::agent::{Agent, AgentError, AgentInput, AgentResult};
 use crate::approval::{ApprovalRequest, Decision};
@@ -170,7 +170,7 @@ impl Agent {
         options = options.cancel_token(cancel.clone()).events(sender);
         let agent = self.clone();
         let input = input.into();
-        let handle = tokio::spawn(async move { agent.run_with(input, options).await });
+        let handle = criogen_rt::spawn(async move { agent.run_with(input, options).await });
         AgentStream {
             events: Some(events),
             handle: Some(handle),
@@ -205,7 +205,7 @@ impl ThreadStream {
         let (sender, events) = event_channel(STREAM_CAPACITY);
         let cancel = CancelToken::new();
         options = options.cancel_token(cancel.clone()).events(sender);
-        let handle = tokio::spawn(operation(thread.clone(), options));
+        let handle = criogen_rt::spawn(operation(thread.clone(), options));
         Self {
             events: Some(events),
             handle: Some(handle),

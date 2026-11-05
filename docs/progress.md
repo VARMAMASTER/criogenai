@@ -83,6 +83,36 @@ remaining tasks one by one"), same full cycle:
 
 ## Log
 
+### 2026-11-05: the engine in the browser (design 0021)
+
+The user asked for the playground to run the real engine in the browser, and
+for stable, well-tested client-side agents ("full stack"), with servers as
+before. Done:
+
+- `crates/criogen-rt`: the part of Tokio the engine uses (spawn, JoinSet,
+  sleep, timeouts, Instant), re-exported from Tokio on servers, on the
+  JavaScript event loop in `wasm32-unknown-unknown`. Engine crates call it.
+- `criogen-providers`: the transport's bytes move through reqwest on
+  servers and `fetch` in JavaScript hosts; everything else is shared.
+- `crates/criogen-js`: the TypeScript bridge (configurations, envelopes,
+  results), now under both the Node addon and the new WebAssembly binding
+  (`sdks/typescript/web`). `FunctionModel` and gateway `tools` added there.
+- TypeScript: `criogen/web` (lib/browser), the engine registry
+  (native.ts / native-node.ts), `ready({ wasm })`, `host-env.ts`,
+  `scripts/build-web.mjs`, `CRIOGEN_ENGINE=wasm` for the suite.
+- Tests: criogen-rt on WebAssembly (15, timed), the TypeScript suite on both
+  engines (102 tests; 5 server-only skipped on WebAssembly), 31 checks in
+  Chromium, Firefox and WebKit, the package in a new app; `scripts/test-web.sh`,
+  ci-local step `web`.
+- Website: the playground runs each pattern's TypeScript sample on the
+  engine (website/engine, scripts/build-engine.mjs, lib/patterns/live.ts and
+  casts.ts); scripts/test-playground.mjs runs all 19 and a visitor's key
+  (OpenAI, Anthropic) against mocks. New guide: In the browser.
+
+Not yet: publishing (the npm package with `dist-web` waits for the user),
+edge runtimes (Cloudflare Workers, Vercel Edge), browser numbers on the
+benchmarks page, `tools` on the Python gateway, the macOS Intel wheel.
+
 ### 2026-10-24: patterns, specialists, web tools; playground and demo
 
 - **Design 0019** and its implementation in Python, TypeScript and Rust:

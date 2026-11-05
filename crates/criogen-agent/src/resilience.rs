@@ -13,8 +13,8 @@ use criogen_providers::{
     BoxFuture, Capabilities, DeltaSink, Dispatch, MessageDelta, Model, ModelError, ModelErrorKind,
     ModelRequest, ModelResponse,
 };
+use criogen_rt::Instant;
 use serde_json::json;
-use tokio::time::Instant;
 
 /// How model calls are retried and where they fall back to.
 pub(crate) struct ModelChain {
@@ -114,7 +114,7 @@ impl ModelChain {
                 {
                     return Err(ChainError::Deadline(Box::new(error)));
                 }
-                tokio::time::sleep(wait).await;
+                criogen_rt::sleep(wait).await;
                 attempt += 1;
             };
             let falls_back = has_fallback

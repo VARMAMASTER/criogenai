@@ -17,6 +17,8 @@ criogen-providers = { path = "../../crates/criogen-providers" }
 criogen-storage = { path = "../../crates/criogen-storage", features = ["sqlite", "postgres", "encryption"] }
 criogen-agent = { path = "../../crates/criogen-agent", features = ["sqlite", "postgres", "encryption"] }
 criogen-telemetry = { path = "../../crates/criogen-telemetry" }
+# The bridge shared with the browser engine (design 0021).
+criogen-js = { path = "../../crates/criogen-js", features = ["encryption"] }
 napi = { version = "3", default-features = false, features = ["napi6", "tokio_rt", "serde-json"] }
 napi-derive = "3"
 serde = "1"

@@ -1,4 +1,4 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::UNIX_EPOCH;
 
 use criogen_core::{BoxFuture, PendingWrite, Snapshot, State};
 use serde::{Deserialize, Serialize};
@@ -345,7 +345,7 @@ pub fn merge_pending(snapshot: &mut Snapshot, node: &str, write: PendingWrite) {
 }
 
 pub(crate) fn now_ms() -> u64 {
-    SystemTime::now()
+    criogen_rt::system_now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)

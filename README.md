@@ -20,11 +20,16 @@ hierarchical, swarm, human review, one-line `quick("researcher > writer")`),
 extendable specialist agents, and Tavily/Brave search with a safe page reader
 (design 0019; guide: `website/content/docs/guides/patterns.mdx`).
 
+**In the browser:** the same engine compiled to WebAssembly, behind the same
+TypeScript API (`criogen/web`): agents run in a page or a Web Worker, tested
+in Chromium, Firefox and WebKit (design 0021; guide:
+`website/content/docs/guides/browser.mdx`). Not on npm yet.
+
 **LLM gateway:** a first slice in [`crates/criogen-gateway`](crates/criogen-gateway):
 any OpenAI client in front of any provider Criogen speaks, with
 fallback, keys and usage records.
 
-**Website:** docs, a benchmark lab, a pattern playground (every common agent pattern, runnable in the browser), a live comparison that runs Criogen and
+**Website:** docs, a benchmark lab, a pattern playground (every common agent pattern, its code sample running on the engine in the visitor's browser), a live comparison that runs Criogen and
 LangChain side by side, and a demo page (`website/`).
 
 Measured costs (per step, per tool call, gateway overhead, SDK bridges,

@@ -6,12 +6,29 @@
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
-    "types": ["node"],
-    "typeRoots": ["../../../sdks/typescript/node_modules/@types"],
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "../../../sdks/typescript/node_modules/@types"
+    ],
     "paths": {
-      "criogen": ["../../../sdks/typescript/dist/index.d.ts"],
-      "zod": ["../../../sdks/typescript/node_modules/zod/index.d.ts"]
-    }
+      "criogen": [
+        "../../../sdks/typescript/dist/index.d.ts"
+      ],
+      "zod": [
+        "../../../sdks/typescript/node_modules/zod/index.d.ts"
+      ],
+      "criogen/web": [
+        "../../../sdks/typescript/dist/index.d.ts"
+      ]
+    },
+    "lib": [
+      "ES2022",
+      "DOM"
+    ]
   },
-  "include": ["*.ts"]
+  "include": [
+    "*.ts"
+  ]
 }

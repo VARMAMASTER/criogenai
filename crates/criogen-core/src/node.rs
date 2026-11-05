@@ -3,9 +3,9 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
+use criogen_rt::Instant;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use tokio::time::Instant;
 
 use crate::cancel::CancelToken;
 use crate::error::NodeError;

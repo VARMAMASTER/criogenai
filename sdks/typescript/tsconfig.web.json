@@ -1,0 +1,20 @@
+{
+  "$comment": "The browser entry (design 0021): types only; scripts/build-web.mjs bundles it with esbuild.",
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist-web/types",
+    "rootDir": "lib"
+  },
+  "include": [
+    "lib/browser/index.ts"
+  ],
+  "exclude": []
+}

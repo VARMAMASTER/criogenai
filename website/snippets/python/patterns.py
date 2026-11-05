@@ -192,7 +192,7 @@ async def router() -> None:
         wf.add_node(name, agent)  # an agent node reads and writes `messages`
         wf.edge(name, END)
     wf.start("route").route("route", lambda s: s["team"], {n: n for n in teams})
-    result = await wf.compile().run({"input": "I was charged twice", "messages": [{"role": "user", "content": "I was charged twice"}]})
+    result = await wf.compile().run({"input": "I was charged twice", "messages": [{"role": "user", "content": [{"type": "text", "text": "I was charged twice"}]}]})
     # [/show router]
 
 

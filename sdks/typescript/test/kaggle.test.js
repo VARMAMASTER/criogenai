@@ -6,6 +6,10 @@ const assert = require("node:assert/strict");
 const fs = require("node:fs");
 const http = require("node:http");
 const os = require("node:os");
+
+// CRIOGEN_ENGINE=wasm runs this suite on the browser's engine (design 0021);
+// what needs a server is skipped there, with the reason.
+const serverOnly = (why) => (process.env.CRIOGEN_ENGINE === "wasm" ? `server only: ${why}` : false);
 const path = require("node:path");
 
 const sdk = require(process.env.CRIOGEN_SDK || path.join(__dirname, ".."));
@@ -100,7 +104,7 @@ test("a pre-minted proxy token works, and JSON never shows a token", async () =>
   assert.equal(result.text, "answer from openai/gpt-oss-120b");
 });
 
-test("without credentials the error says what to set; the token file is found", async () => {
+test("without credentials the error says what to set; the token file is found", { skip: serverOnly("credentials from the environment and ~/.kaggle") }, async () => {
   const saved = { ...process.env };
   try {
     for (const name of ["MODEL_PROXY_URL", "MODEL_PROXY_API_KEY", "KAGGLE_API_TOKEN"]) delete process.env[name];

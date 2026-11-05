@@ -3,6 +3,9 @@
 // "openai:gpt-5-mini" takes its key from OPENAI_API_KEY, "deepseek:deepseek-chat"
 // from DEEPSEEK_API_KEY (every name in KEYS, plus ollama, lmstudio and kaggle).
 
+import { envVar, hasEnv } from "./host-env";
+import { native } from "./native";
+
 export interface ModelOptions {
   apiKey?: string;
   baseUrl?: string;
@@ -46,10 +49,12 @@ export class ProviderModel {
     this.kind = kind;
     this.model = model;
     this.baseUrl = options.baseUrl;
-    this.#apiKey = options.apiKey ?? (KEYS[kind] ? process.env[KEYS[kind]] : undefined);
+    this.#apiKey = options.apiKey ?? (KEYS[kind] ? envVar(KEYS[kind]) : undefined);
     if (KEYS[kind] && !this.#apiKey && !options.baseUrl) {
       throw new Error(
-        `no API key for ${kind}: set ${KEYS[kind]} in the environment or a .env file (loadEnv()), or pass apiKey`,
+        hasEnv()
+          ? `no API key for ${kind}: set ${KEYS[kind]} in the environment or a .env file (loadEnv()), or pass apiKey`
+          : `no API key for ${kind}: pass apiKey (a browser has no environment variables)`,
       );
     }
     this.#name = options.name;
@@ -221,7 +226,83 @@ export class KaggleModel {
 /** A model on Kaggle's Model Proxy, e.g. kaggle("google/gemini-3.6-flash"). */
 export const kaggle = (model: string, options?: KaggleOptions) => new KaggleModel(model, options);
 
-export type Model = string | ProviderModel | KaggleModel | FakeModel;
+
+/**
+ * What a model function receives: the request as the engine sends it to a
+ * provider (`ModelRequest` in schemas/criogen.schema.json): the messages so
+ * far, the tools it may call, the settings and the output schema.
+ */
+export interface ModelCall {
+  messages: Record<string, unknown>[];
+  tools?: Record<string, unknown>[];
+  settings?: Record<string, unknown>;
+  output?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
+/**
+ * A model function's answer: text, tool calls (`FakeReply.toolCall`), an
+ * exact assistant message, or a classified error (`{ error: { kind:
+ * "rate_limited", message } }` is retried as a provider's would be).
+ */
+export type ModelAnswer = string | FakeReply | { message: Record<string, unknown> } | { error: { kind: string; message: string } };
+
+/** Releases a function model's engine handle once the object is gone. */
+const releaseHandle =
+  typeof FinalizationRegistry === "function"
+    ? new FinalizationRegistry<number>((handle) => {
+        try {
+          native.releaseFunction(handle);
+        } catch {
+          // The engine is gone too.
+        }
+      })
+    : undefined;
+
+/**
+ * A model written in JavaScript (design 0021 §7): for each model call the
+ * engine calls `respond` with the request, and the agent loop (tools,
+ * approvals, retries, limits) goes on with its answer. For a model that runs
+ * in the page (WebGPU, a browser's built-in model), your own client, or
+ * scripted replies chosen by what the request says (tests and demos, where
+ * several agents share one model). If `respond` throws, the call fails with
+ * `model_failed`.
+ */
+export class FunctionModel {
+  readonly kind = "function";
+  readonly name: string;
+  readonly #respond: (call: ModelCall) => ModelAnswer | Promise<ModelAnswer>;
+  #handle: number | undefined;
+
+  constructor(respond: (call: ModelCall) => ModelAnswer | Promise<ModelAnswer>, options: { name?: string } = {}) {
+    if (typeof respond !== "function") throw new TypeError("FunctionModel needs a function: (call) => answer");
+    this.#respond = respond;
+    this.name = options.name ?? "function";
+  }
+
+  /** The JSON spec: the function is registered with the engine on first use. */
+  spec(): Record<string, unknown> {
+    if (this.#handle === undefined) {
+      const respond = this.#respond;
+      this.#handle = native.registerFunction(async (request: string) => {
+        try {
+          const answer = await respond(JSON.parse(request) as ModelCall);
+          return JSON.stringify(typeof answer === "string" ? { text: answer } : answer);
+        } catch (error) {
+          return JSON.stringify({ crash: error instanceof Error ? `${error.name}: ${error.message}` : String(error) });
+        }
+      });
+      releaseHandle?.register(this, this.#handle);
+    }
+    return { kind: "function", handle: this.#handle, name: this.name };
+  }
+
+  toJSON(): Record<string, unknown> {
+    return { kind: "function", name: this.name };
+  }
+}
+
+export type Model = string | ProviderModel | KaggleModel | FakeModel | FunctionModel;
 
 /** The JSON spec of a model object or "provider:model" string. */
 export function modelSpec(model: Model): Record<string, unknown> {
@@ -253,7 +334,7 @@ export class Embedder {
   }
 
   private static provider(kind: string, model: string, options: ModelOptions & { dimensions?: number } = {}): Embedder {
-    const apiKey = options.apiKey ?? (KEYS[kind] ? process.env[KEYS[kind]] : undefined);
+    const apiKey = options.apiKey ?? (KEYS[kind] ? envVar(KEYS[kind]) : undefined);
     return new Embedder({ kind, model, apiKey, baseUrl: options.baseUrl, dimensions: options.dimensions });
   }
 

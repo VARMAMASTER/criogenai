@@ -4,18 +4,33 @@
 //! (connect, first byte, idle between chunks, total) and recording how far
 //! the request got ([`Dispatch`]). It never retries: errors are classified
 //! and returned, and the caller decides.
+//!
+//! Two backends move the bytes (design 0021): reqwest on servers, the host's
+//! `fetch` in the browser (WebAssembly). Everything else here (timeouts,
+//! the size limit, refusing redirects, classifying errors, redacting keys)
+//! is shared, so both behave the same.
 
 use std::time::Duration;
 
-use tokio::time::Instant;
+use criogen_rt::Instant;
 
 use crate::error::{Dispatch, HttpFailure, ModelError, ModelErrorKind, classify_http};
+
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+#[path = "transport/reqwest_backend.rs"]
+mod backend;
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+#[path = "transport/fetch_backend.rs"]
+mod backend;
 
 /// Timeouts for one attempt (0003 §5.1 defaults).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct HttpConfig {
-    /// Establishing the connection, including TLS. Default 10 s.
+    /// Establishing the connection, including TLS. Default 10 s. (In the
+    /// browser, `fetch` has no separate connect step: the first-byte and
+    /// total timeouts cover it.)
     pub connect_timeout: Duration,
     /// Until the response headers arrive. Default: the total timeout.
     pub first_byte_timeout: Option<Duration>,
@@ -119,7 +134,7 @@ impl WireRequest {
 /// Sends [`WireRequest`]s. Cheap to clone; clones share the connection pool.
 #[derive(Clone)]
 pub struct Transport {
-    client: reqwest::Client,
+    client: backend::Client,
     config: HttpConfig,
     secrets: Vec<String>,
 }
@@ -139,17 +154,13 @@ impl Transport {
         // No redirects: an LLM API never needs one, and a redirected POST
         // would carry the prompt and any non-standard auth header (such as
         // `x-api-key`) to another host.
-        let client = reqwest::Client::builder()
-            .connect_timeout(config.connect_timeout)
-            .redirect(reqwest::redirect::Policy::none())
-            .build()
-            .map_err(|err| {
-                ModelError::new(
-                    ModelErrorKind::Unknown,
-                    format!("could not create the HTTP client: {}", describe(&err)),
-                )
-                .with_dispatch(Dispatch::NotSent)
-            })?;
+        let client = backend::Client::new(&config).map_err(|message| {
+            ModelError::new(
+                ModelErrorKind::Unknown,
+                format!("could not create the HTTP client: {message}"),
+            )
+            .with_dispatch(Dispatch::NotSent)
+        })?;
         Ok(Self {
             client,
             config,
@@ -189,11 +200,7 @@ impl Transport {
             .min(self.config.total_timeout);
         let first_byte = Instant::now() + first_byte_limit;
 
-        let mut builder = self.client.post(&request.url).body(request.body.clone());
-        for (name, value) in &request.headers {
-            builder = builder.header(name, value);
-        }
-        let response = match tokio::time::timeout_at(first_byte, builder.send()).await {
+        let response = match criogen_rt::timeout_at(first_byte, self.client.post(request)).await {
             Ok(Ok(response)) => response,
             Ok(Err(err)) => return Err(self.request_error(err, Dispatch::Sent)),
             Err(_) => {
@@ -204,7 +211,8 @@ impl Transport {
             }
         };
 
-        let status = response.status().as_u16();
+        let status = response.status();
+        let redirect = response.is_redirect();
         let mut body = Body {
             response,
             transport: self.clone(),
@@ -213,7 +221,7 @@ impl Transport {
             received: 0,
         };
         // A redirect is an error: it was not followed (see `new`).
-        if (300..400).contains(&status) {
+        if redirect {
             return Err(ModelError::new(
                 ModelErrorKind::InvalidRequest,
                 format!(
@@ -228,12 +236,7 @@ impl Transport {
             return Ok(body);
         }
 
-        let headers: Vec<(String, String)> = body
-            .response
-            .headers()
-            .iter()
-            .filter_map(|(n, v)| Some((n.as_str().to_string(), v.to_str().ok()?.to_string())))
-            .collect();
+        let headers = body.response.headers();
         // Read the error body (bounded by the same timeouts); a failure here
         // still leaves a useful status-based classification.
         let mut text = Vec::new();
@@ -246,7 +249,7 @@ impl Transport {
         let text = String::from_utf8_lossy(&text);
         let error = classify_http(
             &HttpFailure::new(status, &headers, &text),
-            std::time::SystemTime::now(),
+            criogen_rt::system_now(),
         );
         Err(error.redact(&self.secret_refs()))
     }
@@ -255,21 +258,9 @@ impl Transport {
         self.secrets.iter().map(String::as_str).collect()
     }
 
-    fn request_error(&self, err: reqwest::Error, dispatch: Dispatch) -> ModelError {
-        let (kind, dispatch) = if err.is_connect() {
-            // Never reached the server (DNS, refused, TLS): safe to retry.
-            let kind = if err.is_timeout() {
-                ModelErrorKind::Timeout
-            } else {
-                ModelErrorKind::Network
-            };
-            (kind, Dispatch::NotSent)
-        } else if err.is_timeout() {
-            (ModelErrorKind::Timeout, dispatch)
-        } else {
-            (ModelErrorKind::Network, dispatch)
-        };
-        ModelError::new(kind, describe(&err.without_url()))
+    fn request_error(&self, err: backend::Error, dispatch: Dispatch) -> ModelError {
+        let (kind, dispatch) = err.classify(dispatch);
+        ModelError::new(kind, err.describe())
             .with_dispatch(dispatch)
             .redact(&self.secret_refs())
     }
@@ -279,7 +270,7 @@ impl Transport {
 /// timeouts.
 #[derive(Debug)]
 pub struct Body {
-    response: reqwest::Response,
+    response: backend::Response,
     transport: Transport,
     deadline: Instant,
     /// Body of a success response (errors are `Streaming`, not `Sent`).
@@ -299,22 +290,19 @@ impl Body {
         } else {
             Dispatch::Sent
         };
-        match tokio::time::timeout_at(limit, self.response.chunk()).await {
+        let max = self.transport.config.max_response_bytes;
+        let allowed = max.saturating_sub(self.received);
+        match criogen_rt::timeout_at(limit, self.response.chunk(allowed)).await {
             Ok(Ok(chunk)) => {
-                let chunk = chunk.map(|bytes| bytes.to_vec());
                 self.received = self
                     .received
                     .saturating_add(chunk.as_ref().map_or(0, Vec::len));
-                let max = self.transport.config.max_response_bytes;
                 if self.received > max {
-                    return Err(ModelError::new(
-                        ModelErrorKind::InvalidResponse,
-                        format!("the response is larger than the limit of {max} bytes"),
-                    )
-                    .with_dispatch(dispatch));
+                    return Err(too_large(max, dispatch));
                 }
                 Ok(chunk)
             }
+            Ok(Err(err)) if err.is_too_large() => Err(too_large(max, dispatch)),
             Ok(Err(err)) => Err(self.transport.request_error(err, dispatch)),
             Err(_) => {
                 let config = &self.transport.config;
@@ -332,19 +320,14 @@ impl Body {
     }
 }
 
-fn timeout(message: String, dispatch: Dispatch) -> ModelError {
-    ModelError::new(ModelErrorKind::Timeout, message).with_dispatch(dispatch)
+fn too_large(max: usize, dispatch: Dispatch) -> ModelError {
+    ModelError::new(
+        ModelErrorKind::InvalidResponse,
+        format!("the response is larger than the limit of {max} bytes"),
+    )
+    .with_dispatch(dispatch)
 }
 
-/// The error and its causes (call it on an error without its URL, which may
-/// carry a key).
-fn describe(err: &reqwest::Error) -> String {
-    let mut text = err.to_string();
-    let mut source = std::error::Error::source(err);
-    while let Some(cause) = source {
-        text.push_str(": ");
-        text.push_str(&cause.to_string());
-        source = cause.source();
-    }
-    text
+fn timeout(message: String, dispatch: Dispatch) -> ModelError {
+    ModelError::new(ModelErrorKind::Timeout, message).with_dispatch(dispatch)
 }

@@ -15,6 +15,7 @@
 // nest as steps of other patterns.
 
 import { Agent, type AgentOptions, type AgentTool } from "./agent";
+import { envVar } from "./host-env";
 import type { Model } from "./models";
 import type { Storage } from "./storage";
 import type { Tool } from "./tools";
@@ -66,7 +67,7 @@ export class PatternResult {
 
 function defaultModel(model: Model | undefined): Model {
   if (model !== undefined) return model;
-  const named = process.env[DEFAULT_MODEL_ENV];
+  const named = envVar(DEFAULT_MODEL_ENV);
   if (named) return named;
   throw new Error(
     `this pattern needs a model for its specialists: pass { model: "openai:gpt-5-mini" } (or any model), or set the ${DEFAULT_MODEL_ENV} environment variable`,

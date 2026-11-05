@@ -211,14 +211,32 @@ write our own implementation.
   landing page, docs (MDX in `content/docs`, code samples compiled from
   `snippets/`), benchmark lab, install counter. `npm run build` /
   `npm run preview` (port 4400); checked by `ci-local.sh` step `website`.
-  Pattern playground (`/playground/`, 2026-11-05): 19 agent patterns
+  Pattern playground (`/playground/`): 19 agent patterns
   (`website/lib/patterns/`: reasoning, multi-agent, IBM's five agent types),
-  one page each with a diagram, a step-by-step run (a JavaScript copy of the
-  control flow with scripted replies, not the engine) and the Criogen code
-  (`snippets/*/patterns.*`, one region per pattern). Optional visitor key:
-  React state only, sent by the browser straight to the provider
-  (`lib/patterns/providers.ts`), at most 16 calls a run, tools simulated.
+  one page each with a diagram, a run and the Criogen code
+  (`snippets/*/patterns.*`, one region per pattern). The run is the
+  TypeScript sample itself on the engine in the browser (design 0021):
+  `scripts/build-engine.mjs` bundles the samples into
+  `public/engine/playground.js` with `website/engine/runtime.js` as
+  "criogen" (the real engine plus a report of tools, nodes and storage);
+  `lib/patterns/live.ts` sets the samples' `MODEL` (snippets/typescript/
+  model.ts) to a `FunctionModel`: scripted per agent (`casts.ts`) without a
+  key, the visitor's provider through the engine with one (React state
+  only, at most 16 calls a run, tools return made-up data).
+  `scripts/test-playground.mjs` runs all 19 and a key (mocked providers).
   The Criogen-vs-LangChain comparison moved to `/benchmarks/#live`.
+- **Implemented: the engine in the browser (0021).** `crates/criogen-rt`
+  (Tokio on servers, the JavaScript event loop on `wasm32-unknown-unknown`:
+  spawn, JoinSet, timers, Instant); the providers' transport moves bytes
+  with reqwest or `fetch`; `crates/criogen-js` is the TypeScript bridge
+  under both the Node addon and `sdks/typescript/web` (wasm-bindgen).
+  TypeScript `criogen/web` (`lib/browser`, `await ready()`), in-memory
+  storage, `unsupported` for what needs a server. `FunctionModel` (models
+  written in JavaScript, both engines) and gateway `tools`. Build:
+  `node sdks/typescript/scripts/build-web.mjs`; tests:
+  `bash scripts/test-web.sh` (criogen-rt on WebAssembly, the TypeScript
+  suite with `CRIOGEN_ENGINE=wasm`, Chromium/Firefox/WebKit, the package in
+  a new app), ci-local step `web`. Not on npm yet (waits for a release).
 - **Security audit (2026-10-22):** four reviewers, findings verified and
   fixed (CHANGELOG "Security audit"); `scripts/check-supply-chain.sh`
   guards the build and release. New rules below (10–12).
@@ -288,6 +306,8 @@ cargo deny --all-features check  # advisories, licenses, sources (deny.toml)
 bash scripts/ci-local.sh         # the whole CI pipeline, locally (--quick: rust step only)
 bash scripts/test-python.sh      # Python SDK: wheel into a new venv, consumer + pytest
 bash scripts/test-typescript.sh  # TypeScript SDK: npm tarball into a new project, consumer + node --test
+node sdks/typescript/scripts/build-web.mjs   # the engine as WebAssembly: criogen/web (needs the wasm32 target, wasm-bindgen-cli)
+bash scripts/test-web.sh         # the engine in the browser: WebAssembly tests, the suite on it, 3 browsers, the package
 cargo run -p criogen-bench --release   # benchmarks (docs/benchmarks.md)
 cargo run -p criogen-gateway -- --config crates/criogen-gateway/examples/gateway.toml   # the LLM gateway
 bash scripts/get-postgres.sh     # portable PostgreSQL into ~/.criogen/postgres (once)
@@ -322,11 +342,15 @@ git-ignored. REA is not registered as an MCP server in any agent config.
    to `docs/design/` first, or in the same change. Number new docs
    sequentially (`0002-…`).
 2. **Keep the core small.** Add a dependency only with a stated reason. Current
-   deps: tokio (features `rt`, `sync`, `time`; no `macros`), serde, serde_json,
-   thiserror, uuid (v7 run ids). Dev only: tokio `test-util` for the paused
-   clock. `criogen-providers` follows the budget in research
-   `litellm-providers.md` §10.11 (today: serde, serde_json, thiserror, uuid,
-   tokio `time`, reqwest behind the `http` feature).
+   deps: tokio (`sync`), criogen-rt (tasks and timers: Tokio `rt` + `time`
+   on servers, the JavaScript event loop in the browser, design 0021),
+   serde, serde_json, thiserror, uuid (v7 run ids). Dev only: tokio
+   `test-util` for the paused clock. `criogen-providers` follows the budget
+   in research `litellm-providers.md` §10.11 (today: serde, serde_json,
+   thiserror, uuid, criogen-rt, reqwest behind the `http` feature on
+   servers, wasm-bindgen/js-sys/web-sys for `fetch` in the browser).
+   Engine crates call `criogen_rt`, never `tokio::spawn` or `tokio::time`
+   (those panic in the browser).
    Transport tests use a scripted local TCP server
    (`tests/transport.rs`), never the network.
 3. **Engine semantics live in Rust only.** SDKs must not reimplement

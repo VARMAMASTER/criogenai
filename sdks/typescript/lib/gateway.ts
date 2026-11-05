@@ -16,6 +16,12 @@ export interface ChatOptions {
   maxTokens?: number;
   /** A JSON Schema the answer must match; `reply.output` is then the parsed JSON. */
   output?: Record<string, unknown>;
+  /**
+   * Tools the model may call (tool specs, as a FunctionModel's `call.tools`):
+   * the reply's `message` then holds its tool calls, for you to run. With
+   * this, a FunctionModel can pass an agent's request on to a real model.
+   */
+  tools?: Record<string, unknown>[];
   /** Aborting cancels the call (the HTTP request stops). */
   signal?: AbortSignal;
 }
@@ -109,8 +115,8 @@ export class Gateway {
   }
 
   private static payload(model: Model, input: ChatInput, options: ChatOptions): string {
-    const { instructions, temperature, maxTokens, output } = options;
-    return JSON.stringify({ model: modelSpec(model), input, instructions, temperature, maxTokens, output });
+    const { instructions, temperature, maxTokens, output, tools } = options;
+    return JSON.stringify({ model: modelSpec(model), input, instructions, temperature, maxTokens, output, tools });
   }
 
   /** One answer. */

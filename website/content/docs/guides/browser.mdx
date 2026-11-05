@@ -1,0 +1,83 @@
+---
+title: In the browser (WebAssembly)
+description: Run Criogen agents in a web page or a Web Worker, on the same Rust engine compiled to WebAssembly, with the same TypeScript API.
+---
+
+The TypeScript package also runs **in the browser**: the same Rust engine,
+compiled to WebAssembly, behind the same API. Agents, tools, approvals,
+typed output, threads, workflows and the gateway work as on a server; the
+agent loop runs in the visitor's tab (or a Web Worker), so a run costs your
+servers nothing. The [playground](/playground/) runs its code samples this way.
+
+## Start
+
+<Sample name="browser" only={["typescript"]} />
+
+- Import from **`criogen/web`** (an ES module; bundlers pick it up like any
+  other). Call **`await ready()`** once first: it fetches and compiles the
+  engine, about 550 KB compressed, cached by the browser after.
+- The engine file (`criogen_bg.wasm`) is loaded from next to the script.
+  Vite and webpack copy it for you; with a bundler that does not, copy it
+  from `node_modules/criogen/dist-web/` or say where it is:
+
+<Sample name="browser" region="locate" only={["typescript"]} />
+
+- A page with a strict Content-Security-Policy needs `'wasm-unsafe-eval'`
+  in `script-src` to compile WebAssembly.
+
+## Keys and providers
+
+A browser has no environment variables: pass `apiKey`. **A key in a page is
+visible to whoever uses the page.** That is fine for a person's own key in
+their own tab (the playground does this: the key goes from the tab to the
+provider and nowhere else). In a product, do not ship your key: point the
+model at your own server, or at a [Criogen gateway](/docs/guides/gateway/)
+with a virtual key per user and its limits.
+
+The provider must accept calls from a browser page (CORS). OpenAI, Anthropic
+(Criogen adds the header Anthropic asks browser callers for), Gemini's
+OpenAI-compatible endpoint and OpenRouter do; a local Ollama needs
+`OLLAMA_ORIGINS`. When a call is refused, the error says it may be CORS. The
+usual rules still hold: redirects are never followed, a key never goes over
+plain `http` to another machine, a response over 64 MiB is refused, and a
+cancelled run stops its download.
+
+## Models written in JavaScript
+
+`FunctionModel` is a model whose every call goes to a function: a model
+running in the page (WebGPU, a browser's built-in model), your own client, or
+scripted replies chosen by what the request says. It works on servers too.
+
+<Sample name="browser" region="function-model" only={["typescript"]} />
+
+The function gets the request (messages, tools, settings) and answers with
+text, tool calls, a full message, or `{ error: { kind, message } }`: a
+`rate_limited` or `overloaded` error is retried like a provider's. A throw
+fails the call with `model_failed`. To watch or change every request and
+still use a real model, pass it on through the gateway:
+
+<Sample name="browser" region="forward" only={["typescript"]} />
+
+## What needs a server
+
+These fail with the error code `unsupported` in the browser:
+
+- **Databases.** Storage is in the tab's memory: a thread lasts as long as
+  the page. SQLite and Postgres, encryption at rest and durable audit
+  trails need a server.
+- **Telemetry export** (Langfuse, OpenTelemetry) and the **web tools**
+  (search, reading pages).
+
+## Good to know
+
+- **One thread.** Tasks are concurrent, not parallel: model and tool calls
+  overlap (they mostly wait), heavy computation does not spread over cores.
+- **Background tabs.** Browsers slow timers in background tabs, and phones
+  may pause them: short, interactive runs fit best. Long or durable runs
+  belong on a server.
+- **Speed.** Criogen's own work is a fraction of a millisecond per run on a
+  server, and a model call takes seconds; WebAssembly is somewhat slower
+  than native, which matters little next to the model. What a visitor can
+  feel is the network: each model call travels from their connection.
+- **Tested** in Chromium, Firefox and WebKit (Safari's engine), and with the
+  same test suite as the Node package.

@@ -1,8 +1,10 @@
 // Build or develop the site: `node scripts/run.mjs [--fixture] build|dev`.
 //
-// build: copies ../schemas into public/schemas, runs `next build` (a static
+// build: copies ../schemas into public/schemas, builds the playground's
+//        engine into public/engine (scripts/build-engine.mjs: the engine as
+//        WebAssembly and the code samples on it), runs `next build` (a static
 //        export into out/), then indexes out/ with Pagefind for the search.
-// dev:   the same copy, then `next dev`.
+// dev:   the same copies, then `next dev`.
 // --fixture: the benchmark lab shows fixtures/bench-sample.json (fake
 //        numbers, marked as such on the page) instead of
 //        public/bench/results.json. For development only: never deploy a
@@ -30,6 +32,9 @@ fs.mkdirSync(target, { recursive: true });
 for (const f of fs.readdirSync(schemas).filter((f) => f.endsWith(".json"))) {
   fs.copyFileSync(path.join(schemas, f), path.join(target, f));
 }
+
+// The playground runs its code samples on the engine in the browser (design 0021).
+run(path.join(root, "scripts", "build-engine.mjs"), []);
 
 const env = { BENCH_FIXTURE: fixture ? "1" : "" };
 if (fixture) console.warn("\n[criogen] FIXTURE MODE: the benchmark lab shows fake numbers. Do not deploy this build.\n");

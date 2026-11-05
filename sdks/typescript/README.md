@@ -195,6 +195,26 @@ const result = await testAgent.run("Where is A-1?"); // result.text === "It has 
 
 Scripted replies, no network, the same answer every time.
 
+## In the browser
+
+The same engine, compiled to WebAssembly, behind the same API: agents run in
+a page or a Web Worker.
+
+```ts
+import { Agent, openai, ready } from "criogen/web";
+
+await ready(); // loads the engine once (about 550 KB compressed)
+const agent = new Agent({ model: openai("gpt-5-mini", { apiKey: theUsersOwnKey }), tools: [weather] });
+const result = await agent.run("Picnic weather in Lisbon?");
+```
+
+Storage is in the tab's memory; databases, encryption at rest, telemetry
+export and web tools need a server (they fail with `unsupported`). A key in
+a page is visible to whoever uses it: in a product, point models at your own
+server or a Criogen gateway. `FunctionModel` plugs in a model written in
+JavaScript, such as one running in the page.
+[Guide](https://criogen.vercel.app/docs/guides/browser/).
+
 ## Also on PyPI
 
 The same engine and the same features for Python: `pip install criogen`

@@ -1,46 +1,6 @@
 // Single-agent reasoning patterns: ReAct, Chain of Thought, Tree of
 // Thoughts, Plan-and-Solve, ReWOO and Reflexion.
-import { after, field, score, type PatternDef } from "./engine";
-
-// ------------------------------------------------------------------ tools
-
-const FORECAST: Record<string, string> = {
-  lisbon: "24 °C, sunny, wind 8 km/h, 5% chance of rain",
-  london: "14 °C, showers from 15:00, 70% chance of rain",
-  oslo: "9 °C, cloudy, 20% chance of rain",
-};
-function weather(city: string): string {
-  const key = city.trim().toLowerCase().split(/[ ,]/)[0];
-  return `${city.trim() || "?"}: ${FORECAST[key] ?? "19 °C, partly cloudy, 15% chance of rain"}`;
-}
-function calendar(day: string): string {
-  return /sun/i.test(day) ? "Sunday: family lunch 13:00–16:00, free in the morning" : "Saturday: free after 11:00, dinner at 20:00";
-}
-
-const FACTS: { keys: string[]; value: string }[] = [
-  { keys: ["capital", "france"], value: "Paris" },
-  { keys: ["capital", "japan"], value: "Tokyo" },
-  { keys: ["population", "paris"], value: "about 2.1 million (city proper)" },
-  { keys: ["population", "tokyo"], value: "about 14 million (Tokyo Metropolis)" },
-  { keys: ["population", "france"], value: "about 68 million" },
-  { keys: ["population", "japan"], value: "about 124 million" },
-];
-/** A tiny knowledge base: the fact whose keywords all appear in the query. */
-function search(query: string): string {
-  const q = query.toLowerCase();
-  return FACTS.find((f) => f.keys.every((k) => q.includes(k)))?.value ?? "no result";
-}
-/** Arithmetic only: digits, operators and brackets, nothing else is evaluated. */
-function calc(expr: string): string {
-  const clean = expr.trim();
-  if (!clean || clean.length > 80 || !/^[\d.+\-*/() ]+$/.test(clean)) return "cannot compute (numbers and + - * / only)";
-  try {
-    const value = Function(`"use strict"; return (${clean});`)() as unknown;
-    return typeof value === "number" && Number.isFinite(value) ? String(Math.round(value * 100) / 100) : "cannot compute";
-  } catch {
-    return "cannot compute";
-  }
-}
+import type { PatternDef } from "./engine";
 
 // ------------------------------------------------------------------ ReAct
 
@@ -77,40 +37,6 @@ const react: PatternDef = {
       ["think", "answer", "final"],
     ],
   },
-  async run(ctx, input) {
-    const system = [
-      "You are a ReAct agent. Tools: weather(city) returns today's forecast; calendar(day) lists the user's plans for Saturday or Sunday.",
-      "Every reply has exactly two lines:",
-      "THOUGHT: <one short sentence>",
-      "then either ACTION: <tool>: <input>   or   FINAL: <the answer for the user>",
-    ].join("\n");
-    const script = [
-      "THOUGHT: I need the forecast for Lisbon first.\nACTION: weather: Lisbon",
-      "THOUGHT: Sunny and warm. Now I check when the user is free.\nACTION: calendar: Saturday",
-      "THOUGHT: Saturday afternoon is free and the weather is good.\nFINAL: Yes. Saturday after 11:00 is ideal: 24 °C, sunny, 5% chance of rain. Bring sunscreen.",
-    ];
-    ctx.at("user");
-    ctx.say("user", "user", input, "user");
-    let transcript = `Question: ${input}`;
-    for (let turn = 0; turn < 6; turn++) {
-      const reply = await ctx.ask({ node: "think", who: "agent", system, prompt: transcript, scripted: script[Math.min(turn, script.length - 1)] });
-      const final = after(reply, "FINAL");
-      const action = field(reply, "ACTION");
-      if (final != null || !action) {
-        ctx.at("answer");
-        return final ?? reply;
-      }
-      const [name, ...rest] = action.split(":");
-      const arg = rest.join(":").trim().replace(/^\(|\)$/g, "") || name.replace(/^.*\(|\)$/g, "");
-      const tool = name.trim().toLowerCase().startsWith("cal") ? "calendar" : name.trim().toLowerCase().startsWith("wea") ? "weather" : null;
-      const observation = tool
-        ? await ctx.tool({ node: tool, name: `${tool}()`, input: arg, run: tool === "weather" ? weather : calendar })
-        : `unknown tool "${name.trim()}"`;
-      transcript += `\n${reply}\nOBSERVATION: ${observation}`;
-    }
-    ctx.at("answer");
-    return "Stopped after 6 turns without an answer.";
-  },
 };
 
 // -------------------------------------------------------- Chain of Thought
@@ -141,20 +67,6 @@ const cot: PatternDef = {
       ["q", "reason"],
       ["reason", "a"],
     ],
-  },
-  async run(ctx, input) {
-    ctx.at("q");
-    ctx.say("user", "user", input, "q");
-    const reply = await ctx.ask({
-      node: "reason",
-      who: "model",
-      system: "Think step by step. Write your reasoning as short numbered steps, then a last line: ANSWER: <the answer>.",
-      prompt: input,
-      scripted:
-        "1. Let c be coffees and m muffins: c + m = 4.\n2. The cost: 3c + 2m = 10.\n3. From step 1, m = 4 − c, so 3c + 8 − 2c = 10.\n4. That gives c = 2, and m = 2.\n5. Check: 2 × $3 + 2 × $2 = $10.\nANSWER: 2 coffees (and 2 muffins).",
-    });
-    ctx.at("a");
-    return field(reply, "ANSWER") ?? reply;
   },
 };
 
@@ -197,48 +109,6 @@ const tot: PatternDef = {
       ["judge", "grow", "best"],
     ],
   },
-  async run(ctx, input) {
-    ctx.at("p");
-    ctx.say("user", "user", input, "p");
-    const ideas = await ctx.ask({
-      node: "propose",
-      who: "proposer",
-      system: "Propose exactly three clearly different approaches to the problem, one per line, numbered 1. 2. 3. Each line: the approach and one example. No other text.",
-      prompt: input,
-      scripted:
-        "1. A pun on programming terms, e.g. “Java the Hutt”\n2. A developer ritual, e.g. “Stand-up”\n3. A keyboard shortcut, e.g. “Ctrl+Brew”",
-    });
-    const lines = [...ideas.matchAll(/^\s*\**\s*([1-3])[.)]\s*(.+)$/gm)].map((m) => m[2].trim());
-    while (lines.length < 3) lines.push(`(no idea ${lines.length + 1})`);
-    const scripted = [
-      "SCORE: 6. Fun, but it borrows a film character and is hard to trademark.",
-      "SCORE: 7. Relatable for developers, a little generic for a café.",
-      "SCORE: 9. Short, memorable, clearly coffee and clearly for developers.",
-    ];
-    const scores: number[] = [];
-    for (let i = 0; i < 3; i++) {
-      ctx.at(`t${i + 1}`);
-      const reply = await ctx.ask({
-        node: "judge",
-        who: "evaluator",
-        system: "You evaluate one idea for the problem. First line: SCORE: <1-10>, then one sentence why.",
-        prompt: `Problem: ${input}\nIdea: ${lines[i]}`,
-        scripted: scripted[i],
-      });
-      scores.push(score(field(reply, "SCORE") ?? reply, 1, 10, 5));
-    }
-    const best = scores.indexOf(Math.max(...scores));
-    ctx.say("tree", "state", `Scores: ${scores.map((s, i) => `idea ${i + 1} = ${s}`).join(", ")}. Growing idea ${best + 1}; the others are pruned.`);
-    ctx.at(`t${best + 1}`);
-    const final = await ctx.ask({
-      node: "grow",
-      who: "developer",
-      system: "Develop the chosen idea into a final answer: the name, a one-line tagline, and why it works, in at most three sentences.",
-      prompt: `Problem: ${input}\nChosen idea: ${lines[best]}`,
-      scripted: "Ctrl+Brew. Tagline: “Commit to coffee.” It reads as a keyboard shortcut every developer knows, says coffee in one word, and fits on a cup.",
-    });
-    return final;
-  },
 };
 
 // -------------------------------------------------------- Plan-and-Solve
@@ -276,46 +146,6 @@ const planSolve: PatternDef = {
       ["exec", "solve"],
       ["solve", "done"],
     ],
-  },
-  async run(ctx, input) {
-    ctx.at("goal");
-    ctx.say("user", "user", input, "goal");
-    const plan = await ctx.ask({
-      node: "plan",
-      who: "planner",
-      system: "Write a plan of exactly three short numbered steps (1. 2. 3.) to complete the task. Steps only, no other text.",
-      prompt: input,
-      scripted: "1. List what makes 1970s houses different (insulation, radiators).\n2. Explain how a heat pump performs in those conditions.\n3. Give the conditions under which it is worth it.",
-    });
-    const steps = [...plan.matchAll(/^\s*\**\s*(\d)[.)]\s*(.+)$/gm)].map((m) => m[2].trim()).slice(0, 4);
-    if (!steps.length) steps.push(input);
-    const scripted = [
-      "Most have thin wall insulation, single or early double glazing, and radiators sized for 70 °C water.",
-      "Heat pumps are most efficient at 35–50 °C flow temperatures; with small radiators and heat loss they may struggle on cold days.",
-      "Worth it after loft and wall insulation, with a few radiators upsized; otherwise running costs can exceed gas.",
-    ];
-    const results: string[] = [];
-    for (let i = 0; i < steps.length; i++) {
-      const out = await ctx.ask({
-        node: "exec",
-        who: `executor (step ${i + 1})`,
-        system: "Carry out one step of a plan. Answer in at most two sentences.",
-        prompt: `Task: ${input}\nResults so far:\n${results.join("\n") || "(none)"}\nNow do step ${i + 1}: ${steps[i]}`,
-        scripted: scripted[Math.min(i, scripted.length - 1)],
-      });
-      results.push(`${i + 1}. ${out}`);
-      ctx.at("notes");
-    }
-    const answer = await ctx.ask({
-      node: "solve",
-      who: "writer",
-      system: "Write the final brief from the step results, in at most four sentences, plain language.",
-      prompt: `Task: ${input}\nStep results:\n${results.join("\n")}`,
-      scripted:
-        "Yes, with preparation. A 1970s house usually loses heat fast and has radiators sized for hot water, while heat pumps work best with warm water. Insulate the loft and walls first and upsize a few radiators. Then a heat pump is efficient and usually cheaper to run than gas.",
-    });
-    ctx.at("done");
-    return answer;
   },
 };
 
@@ -355,50 +185,9 @@ const rewoo: PatternDef = {
       ["solver", "answer"],
     ],
   },
-  async run(ctx, input) {
-    ctx.at("task");
-    ctx.say("user", "user", input, "task");
-    const plan = await ctx.ask({
-      node: "planner",
-      who: "planner",
-      system: [
-        "Plan all tool calls needed, before any runs. Tools: search[query] looks up a fact (capitals, populations); calc[expression] does arithmetic.",
-        "Write one line per call as: #E1 = search[...]. Later lines may use earlier results, like search[population of #E1].",
-        "In calc, use the numbers of earlier results via their #E names only if they are plain numbers; otherwise write the numbers you expect, in millions.",
-        "Only the #E lines, nothing else.",
-      ].join("\n"),
-      prompt: input,
-      scripted: "#E1 = search[capital of France]\n#E2 = search[capital of Japan]\n#E3 = search[population of #E1]\n#E4 = search[population of #E2]\n#E5 = calc[14 - 2.1]",
-    });
-    const evidence: Record<string, string> = {};
-    const steps = [...plan.matchAll(/#E(\d+)\s*=\s*(\w+)\s*\[([^\]]*)\]/g)].slice(0, 8);
-    if (!steps.length) ctx.say("worker", "note", "The plan had no #E lines; the solver works from the question alone.");
-    for (const [, n, toolName, rawArg] of steps) {
-      const arg = rawArg.replace(/#E(\d+)/g, (_, k: string) => evidence[`#E${k}`] ?? `#E${k}`);
-      const isCalc = toolName.toLowerCase().startsWith("calc");
-      evidence[`#E${n}`] = await ctx.tool({ node: isCalc ? "calc" : "search", name: `#E${n} ${isCalc ? "calc" : "search"}`, input: arg, run: isCalc ? calc : search });
-    }
-    ctx.say("worker", "state", `Evidence: ${Object.entries(evidence).map(([k, v]) => `${k} = ${v}`).join("; ") || "none"}`);
-    const answer = await ctx.ask({
-      node: "solver",
-      who: "solver",
-      system: "Answer the task from the plan and the evidence only. At most two sentences.",
-      prompt: `Task: ${input}\nPlan:\n${plan}\nEvidence:\n${Object.entries(evidence).map(([k, v]) => `${k} = ${v}`).join("\n")}`,
-      scripted: "Tokyo, with about 14 million people against about 2.1 million in Paris (city proper): roughly 11.9 million more.",
-    });
-    ctx.at("answer");
-    return answer;
-  },
 };
 
 // --------------------------------------------------------------- Reflexion
-
-const CHECKS: [string, (t: string) => boolean][] = [
-  ["at most 200 characters", (t) => t.length <= 200],
-  ["mentions the price $49", (t) => t.includes("$49")],
-  ["no hashtags", (t) => !t.includes("#")],
-  ["no stacked exclamation marks", (t) => !/!!/.test(t)],
-];
 
 const reflexion: PatternDef = {
   id: "reflexion",
@@ -433,48 +222,6 @@ const reflexion: PatternDef = {
       ["memory", "actor", "retry"],
       ["eval", "done", "pass"],
     ],
-  },
-  async run(ctx, input) {
-    ctx.at("task");
-    ctx.say("user", "user", input, "task");
-    ctx.say("checks", "note", `The evaluator checks: ${CHECKS.map(([n]) => n).join(", ")}.`);
-    const lessons: string[] = [];
-    const attempts = [
-      "🎧 Meet SoundVeil, our BEST noise-cancelling headphones EVER!! Crystal sound, 30 h battery and all-day comfort for just $49. Grab yours today before they're gone!!! #audio #launch",
-      "Meet SoundVeil: noise-cancelling headphones with a 30-hour battery, for $49. Quiet when you want it.",
-    ];
-    let text = "";
-    for (let round = 0; round < 3; round++) {
-      text = await ctx.ask({
-        node: "actor",
-        who: `writer (attempt ${round + 1})`,
-        system: "Write one tweet for the task. Reply with the tweet only.",
-        prompt: lessons.length ? `${input}\n\nLessons from earlier attempts:\n${lessons.map((l) => `- ${l}`).join("\n")}` : input,
-        scripted: attempts[Math.min(round, attempts.length - 1)],
-      });
-      text = text.replace(/^["“]|["”]$/g, "").trim();
-      ctx.at("eval");
-      await ctx.pause(300);
-      const failed = CHECKS.filter(([, ok]) => !ok(text)).map(([n]) => n);
-      ctx.say("checks", failed.length ? "error" : "state", failed.length ? `Failed: ${failed.join(", ")} (${text.length} characters).` : `All four checks pass (${text.length} characters).`, "eval");
-      if (!failed.length) {
-        ctx.at("done");
-        return text;
-      }
-      if (round === 2) break;
-      const lesson = await ctx.ask({
-        node: "reflect",
-        who: "self-reflection",
-        system: "An attempt failed some checks. Write one line starting LESSON: that says what to do differently next time.",
-        prompt: `Task: ${input}\nAttempt: ${text}\nFailed checks: ${failed.join(", ")}`,
-        scripted: "LESSON: Drop hashtags and stacked exclamation marks; keep one concrete benefit and the price, under 200 characters.",
-      });
-      lessons.push(field(lesson, "LESSON") ?? lesson);
-      ctx.at("memory");
-      ctx.say("memory", "state", `Lessons kept: ${lessons.length}`, "memory");
-    }
-    ctx.at("done");
-    return `${text}\n\n(Still failing after 3 attempts: the loop stops at its cap.)`;
   },
 };
 

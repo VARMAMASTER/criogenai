@@ -21,9 +21,17 @@
 #   typescript  the TypeScript SDK: lint of its bridge, type check,
 #               scripts/test-typescript.sh (tarball into a new project;
 #               skipped without Node 18+)
+#   web         the engine in the browser (design 0021): lint of the
+#               engine crates and the WebAssembly binding for
+#               wasm32-unknown-unknown, scripts/test-web.sh (the runtime
+#               as WebAssembly, the suite on the WebAssembly engine,
+#               Chromium, Firefox and WebKit, the package in a new app;
+#               skipped without the wasm32 target or wasm-bindgen)
 #   website     the website: its type check, every code sample checked
 #               against the API (website/scripts/check-snippets.sh), the
-#               static build (skipped without Node 20.9+)
+#               static build, and the playground on it in Chromium (every
+#               pattern on the engine, a visitor's key; skipped without
+#               Node 20.9+)
 #
 # Usage: scripts/ci-local.sh            all steps
 #        scripts/ci-local.sh --quick    rust step only
@@ -36,7 +44,7 @@ export CARGO_TERM_COLOR=always
 # Incremental build files take a lot of disk and do not help a full run.
 export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
 
-all=(rust postgres msrv supply deps standalone package python typescript website)
+all=(rust postgres msrv supply deps standalone package python typescript web website)
 if [[ $# -eq 0 ]]; then
   steps=("${all[@]}")
 elif [[ $1 == --quick ]]; then
@@ -158,6 +166,23 @@ step_typescript() {
   run bash scripts/test-typescript.sh
 }
 
+step_web() {
+  if ! rustup target list --installed 2>/dev/null | grep -qx wasm32-unknown-unknown; then
+    skipped+=("web (no wasm32 target: rustup target add wasm32-unknown-unknown)")
+    return
+  fi
+  if ! command -v wasm-bindgen >/dev/null 2>&1; then
+    skipped+=("web (no wasm-bindgen: cargo install wasm-bindgen-cli --locked --version <web/Cargo.lock's>)")
+    return
+  fi
+  local manifest=sdks/typescript/web/Cargo.toml
+  run cargo fmt --manifest-path "$manifest" --check
+  run cargo clippy -p criogen-rt -p criogen-core -p criogen-providers -p criogen-storage -p criogen-agent -p criogen-js --target wasm32-unknown-unknown -- -D warnings
+  run cargo clippy -p criogen-rt --target wasm32-unknown-unknown --tests -- -D warnings
+  run cargo clippy --manifest-path "$manifest" --target wasm32-unknown-unknown -- -D warnings
+  run bash scripts/test-web.sh
+}
+
 step_website() {
   if ! node -e 'const [a, b] = process.versions.node.split(".").map(Number); process.exit(a > 20 || (a === 20 && b >= 9) ? 0 : 1)' >/dev/null 2>&1; then
     skipped+=("website (no Node 20.9+)")
@@ -167,11 +192,12 @@ step_website() {
   run npm --prefix website run check
   run bash website/scripts/check-snippets.sh
   run npm --prefix website run build
+  run node website/scripts/test-playground.mjs
 }
 
 for step in "${steps[@]}"; do
   case $step in
-    rust | postgres | msrv | supply | deps | standalone | package | python | typescript | website) ;;
+    rust | postgres | msrv | supply | deps | standalone | package | python | typescript | web | website) ;;
     *)
       echo "unknown step: $step (steps: ${all[*]})" >&2
       exit 2

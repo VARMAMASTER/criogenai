@@ -20,16 +20,43 @@ all-features = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-# `time`: timeouts and FakeModel's simulated latency.
-tokio = { workspace = true, features = ["time"] }
 uuid.workspace = true
+# Timers: timeouts and FakeModel's simulated latency (Tokio on servers, the
+# JavaScript event loop in the browser; design 0021).
+criogen-rt = { path = "../criogen-rt", version = "0.1.0" }
+
+# Servers.
+[target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dependencies]
 # HTTP transport (feature `http`). rustls with the OS trust store (platform
 # verifier), HTTP/2, and HTTP(S)_PROXY support for corporate networks.
 reqwest = { version = "0.13", optional = true, default-features = false, features = ["rustls", "http2", "system-proxy"] }
 
+# The browser (and other JavaScript hosts), as WebAssembly (design 0021).
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+# Run ids take their time and randomness from JavaScript (Date.now,
+# crypto.getRandomValues).
+uuid = { workspace = true, features = ["js"] }
+# HTTP transport (feature `http`) over the host's `fetch`.
+wasm-bindgen = { version = "0.2", optional = true }
+wasm-bindgen-futures = { version = "0.4", optional = true }
+js-sys = { version = "0.3", optional = true }
+web-sys = { version = "0.3", optional = true, features = [
+    "AbortController",
+    "AbortSignal",
+    "Headers",
+    "ReadableStream",
+    "ReadableStreamDefaultReader",
+    "Request",
+    "RequestInit",
+    "RequestRedirect",
+    "Response",
+    "ResponseType",
+] }
+
 [features]
 default = ["http"]
-http = ["dep:reqwest"]
+# Real providers over HTTP: reqwest on servers, `fetch` in the browser.
+http = ["dep:reqwest", "dep:wasm-bindgen", "dep:wasm-bindgen-futures", "dep:js-sys", "dep:web-sys"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "test-util", "net", "io-util"] }

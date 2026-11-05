@@ -49,6 +49,7 @@ export const SIDEBAR: NavGroup[] = [
       { label: "Encryption, audit, retention", slug: "guides/compliance" },
       { label: "Models and providers", slug: "guides/models" },
       { label: "The LLM gateway", slug: "guides/gateway" },
+      { label: "In the browser (WebAssembly)", slug: "guides/browser" },
       { label: "Tracing (Langfuse, OpenTelemetry)", slug: "guides/telemetry" },
     ],
   },

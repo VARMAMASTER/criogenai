@@ -18,6 +18,10 @@ sdks/python/python/criogen/_native*.so
 # TypeScript SDK build outputs.
 sdks/typescript/native/
 sdks/typescript/dist/
+# The browser engine's build (design 0021): scripts/build-web.mjs.
+sdks/typescript/dist-web/
+sdks/typescript/web-dist/
+website/public/engine/
 sdks/typescript/node_modules/
 
 # Browser screenshots from local website checks

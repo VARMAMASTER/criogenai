@@ -167,7 +167,7 @@ impl KaggleModel {
     /// The current proxy model; mints a token when there is none, when it is
     /// due for renewal, or when `renew` is set.
     async fn current(&self, renew: bool) -> Result<Arc<ProviderModel>, ModelError> {
-        let now = SystemTime::now();
+        let now = criogen_rt::system_now();
         if let Some(session) = self.session.lock().expect("session lock").clone()
             && (!renew || !self.can_renew())
             && session.renew_at.is_none_or(|at| now < at)
@@ -236,7 +236,7 @@ impl KaggleModel {
             &self.model,
             self.config.clone(),
         )?;
-        let now = SystemTime::now();
+        let now = criogen_rt::system_now();
         let latest = now + MAX_LIFETIME;
         let renew_at = field("expiryTime")
             .and_then(parse_rfc3339)
