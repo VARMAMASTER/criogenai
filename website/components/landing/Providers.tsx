@@ -3,7 +3,7 @@
 // allowance can call. Numbers carry the date they were checked.
 import Link from "next/link";
 import Reveal from "@/components/motion/Reveal";
-import { LOGOS } from "./logos";
+import BrandIcon from "./BrandIcon";
 
 /** OpenRouter's public model list, counted on this date. */
 const OPENROUTER_MODELS = { count: 452, checked: "2026-11-01" };
@@ -20,10 +20,28 @@ const KAGGLE_MODELS = [
   "ibm/granite-4.0-h-small",
 ];
 
-const ORDER = ["anthropic", "googlegemini", "openrouter", "kaggle", "ollama", "lmstudio", "vllm"];
+/** Every provider with a name in criogen_providers::PRESETS, plus Kaggle: [icon slug, name]. */
+const NAMED: [slug: string | undefined, name: string][] = [
+  [undefined, "OpenAI"],
+  ["anthropic", "Anthropic"],
+  ["googlegemini", "Google Gemini"],
+  ["openrouter", "OpenRouter"],
+  ["deepseek", "DeepSeek"],
+  ["mistralai", "Mistral AI"],
+  [undefined, "xAI"],
+  [undefined, "Groq"],
+  [undefined, "Cerebras"],
+  [undefined, "Together AI"],
+  [undefined, "Fireworks AI"],
+  ["qwen", "Qwen (Alibaba)"],
+  ["moonshotai", "Moonshot AI (Kimi)"],
+  [undefined, "Z.ai (GLM)"],
+  ["kaggle", "Kaggle"],
+  ["ollama", "Ollama"],
+  ["lmstudio", "LM Studio"],
+];
 
 export default function Providers() {
-  const logos = ORDER.map((slug) => LOGOS.find((l) => l.slug === slug)).filter((l) => l !== undefined);
   return (
     <section className="providers" aria-labelledby="providers-title">
       <h2 id="providers-title">Works with your models</h2>
@@ -34,34 +52,26 @@ export default function Providers() {
       </p>
 
       <Reveal>
-        <ul className="logo-grid" aria-label="Providers with a built-in preset">
-          <li className="logo-tile">
-            <span className="logo-word" aria-hidden="true">
-              OpenAI
-            </span>
-            <span className="logo-name">OpenAI</span>
-          </li>
-          {logos.map((logo) => (
-            <li className="logo-tile" key={logo.slug}>
-              <svg viewBox="0 0 24 24" role="img" aria-hidden="true" className="logo-svg">
-                <path d={logo.path} />
-              </svg>
-              <span className="logo-name">{logo.title}</span>
+        <ul className="logo-grid" aria-label="Providers Criogen calls by name">
+          {NAMED.map(([slug, name]) => (
+            <li className="logo-tile" key={name}>
+              <BrandIcon slug={slug} name={name} className="logo-svg" />
+              <span className="logo-name">{name}</span>
             </li>
           ))}
           <li className="logo-tile logo-any">
             <span className="logo-plus" aria-hidden="true">
               +
             </span>
-            <span className="logo-name">Any OpenAI- or Anthropic-compatible server</span>
+            <span className="logo-name">Any OpenAI- or Anthropic-compatible server (vLLM, LiteLLM, your own)</span>
           </li>
         </ul>
       </Reveal>
 
       <div className="provider-stats">
         <Reveal className="stat glass" delay={0.05}>
-          <b>8</b>
-          <span>providers with a built-in preset, plus any compatible server you point it at</span>
+          <b>{NAMED.length}</b>
+          <span>providers by name (a key variable and the right settings built in), plus any compatible server you point it at</span>
         </Reveal>
         <Reveal className="stat glass" delay={0.1}>
           <b>{OPENROUTER_MODELS.count}</b>
@@ -94,7 +104,7 @@ export default function Providers() {
 
       <p className="fine">
         Logos are trademarks of their owners and are shown only to say which services Criogen works with (icons from
-        Simple Icons, CC0). Criogen is not affiliated with or endorsed by them.
+        Simple Icons, CC0; a plain initial where there is none). Criogen is not affiliated with or endorsed by them.
       </p>
     </section>
   );

@@ -240,6 +240,22 @@ html.theme-fade *::after {
   stroke-dashoffset: 0;
   animation: logo-draw-a 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+.logo-body {
+  fill: color-mix(in srgb, var(--ab-running) 20%, transparent);
+}
+.logo-flame {
+  stroke: var(--ab-waiting);
+  fill: color-mix(in srgb, var(--ab-waiting) 40%, transparent);
+  transform-box: fill-box;
+  transform-origin: top center;
+  animation: logo-flame-a 0.45s 0.7s ease-out backwards;
+}
+.brand:hover .logo-flame,
+.dh-brand:hover .logo-flame {
+  animation: logo-flame-b 0.45s 0.7s ease-out backwards;
+}
+@keyframes logo-flame-a { from { transform: scaleY(0); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
+@keyframes logo-flame-b { from { transform: scaleY(0); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
 .logo-core {
   fill: var(--ab-waiting);
   transform-box: fill-box;
@@ -267,6 +283,9 @@ html.theme-fade *::after {
 @media (prefers-reduced-motion: reduce) {
   .logo-hex,
   .logo-core,
+  .logo-flame,
+  .brand:hover .logo-flame,
+  .dh-brand:hover .logo-flame,
   .brand:hover .logo-hex,
   .brand:hover .logo-core,
   .dh-brand:hover .logo-hex,
@@ -310,6 +329,11 @@ html.theme-fade *::after {
     watermark-fade-in 1.2s 1.8s ease-out backwards,
     watermark-pulse 6s 3.2s ease-in-out infinite;
 }
+.watermark-flame {
+  stroke: var(--ab-waiting);
+  opacity: 0.12;
+  animation: watermark-fade-in 1.2s 1.8s ease-out backwards;
+}
 :root[data-theme="light"] .watermark-hex {
   opacity: 0.12;
 }
@@ -329,6 +353,7 @@ html.theme-fade *::after {
 }
 @media (prefers-reduced-motion: reduce) {
   .watermark-hex,
+  .watermark-flame,
   .watermark-core {
     animation: none;
   }

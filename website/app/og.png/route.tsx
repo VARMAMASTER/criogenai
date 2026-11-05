@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { MARK } from "@/lib/mark";
 import { facts, ms } from "@/lib/seo";
 
 export const dynamic = "force-static";
@@ -20,8 +21,10 @@ export function GET() {
       <div style={{ width: "100%", height: "100%", display: "flex", flexDirection: "column", background: "#0b0d10", color: "#e8eaed", padding: "64px 72px", fontFamily: "sans-serif" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <svg width="72" height="72" viewBox="0 0 32 32" fill="none">
-            <path d="M22 6.2 H10.4 L4.6 16 L10.4 25.8 H22" stroke="#3ecf8e" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />
-            <circle cx="16.5" cy="16" r="3.4" fill="#f5b544" />
+            <path d={MARK.flame} fill={MARK.amber} fillOpacity={0.4} stroke={MARK.amber} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={MARK.body} fill={MARK.green} fillOpacity={0.2} stroke={MARK.green} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={MARK.fins} stroke={MARK.green} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx={MARK.core.cx} cy={MARK.core.cy} r={MARK.core.r} fill={MARK.amber} />
           </svg>
           <div style={{ fontSize: 52, fontWeight: 700 }}>Criogen</div>
         </div>

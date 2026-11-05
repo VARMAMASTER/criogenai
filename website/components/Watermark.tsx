@@ -4,6 +4,7 @@
 // decoration only: no pointer events, hidden from assistive technology, and
 // still (and just as faint) when the visitor asks for reduced motion.
 import { motion, useReducedMotion, useScroll, useSpring, useTransform } from "motion/react";
+import { MARK } from "@/lib/mark";
 
 export default function Watermark() {
   const reduce = useReducedMotion();
@@ -19,15 +20,10 @@ export default function Watermark() {
         fill="none"
         style={reduce ? undefined : { y, rotate }}
       >
-        <path
-          className="watermark-hex"
-          pathLength={1}
-          d="M22 6.2 H10.4 L4.6 16 L10.4 25.8 H22"
-          strokeWidth="1.1"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-        <circle className="watermark-core" cx="16.5" cy="16" r="2.2" />
+        <path className="watermark-hex" pathLength={1} d={MARK.body} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
+        <path className="watermark-hex" pathLength={1} d={MARK.fins} strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path className="watermark-flame" d={MARK.flame} strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" />
+        <circle className="watermark-core" cx={MARK.core.cx} cy={MARK.core.cy} r={MARK.core.r * 0.75} />
       </motion.svg>
     </div>
   );

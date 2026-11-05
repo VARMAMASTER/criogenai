@@ -1,32 +1,71 @@
-// A slow band of model names under the hero, moving left to right. Every name
-// is a model Criogen agents could call on 2026-11-01: through OpenRouter's
-// public list, or tested on Kaggle's allowance. Pure CSS: it pauses on hover
-// and stands still (wrapped) for visitors who ask for reduced motion.
+// Two slow bands under the hero, moving in opposite directions: the providers
+// Criogen calls by name (their icons), and models Criogen agents could call
+// on 2026-11-01 (through OpenRouter's public list, or tested on Kaggle's
+// allowance). Pure CSS: they pause on hover and stand still (wrapped) for
+// visitors who ask for reduced motion.
+import BrandIcon from "./BrandIcon";
 
-const MODELS: [maker: string, model: string][] = [
-  ["Anthropic", "Claude Sonnet 5"],
-  ["Google", "Gemini 3.6 Flash"],
-  ["OpenAI", "GPT-5.4 nano"],
-  ["NVIDIA", "Nemotron 3.5 Super"],
-  ["Meta", "Llama 4 Maverick"],
-  ["Microsoft", "Phi 4"],
-  ["Mistral", "Mistral Large 4"],
-  ["DeepSeek", "DeepSeek V4.1 Flash"],
-  ["Qwen", "Qwen3.8 Max"],
-  ["xAI", "Grok 4.7"],
-  ["Google", "Gemma 4 31B"],
-  ["Moonshot", "Kimi K3"],
-  ["Cohere", "Command A+"],
-  ["Amazon", "Nova Premier"],
-  ["OpenAI", "gpt-oss-120b"],
-  ["IBM", "Granite 4.0"],
+/** Named providers (criogen_providers::PRESETS, plus Kaggle): [icon slug, name]. */
+const PROVIDERS: [slug: string | undefined, name: string][] = [
+  [undefined, "OpenAI"],
+  ["anthropic", "Anthropic"],
+  ["googlegemini", "Gemini"],
+  ["openrouter", "OpenRouter"],
+  ["deepseek", "DeepSeek"],
+  ["mistralai", "Mistral"],
+  [undefined, "xAI"],
+  ["qwen", "Qwen"],
+  ["moonshotai", "Moonshot · Kimi"],
+  [undefined, "Z.ai · GLM"],
+  [undefined, "Groq"],
+  [undefined, "Cerebras"],
+  [undefined, "Together AI"],
+  [undefined, "Fireworks AI"],
+  ["kaggle", "Kaggle"],
+  ["ollama", "Ollama"],
+  ["lmstudio", "LM Studio"],
+  ["vllm", "vLLM"],
 ];
 
-function Track({ hidden }: { hidden?: boolean }) {
+/** [icon slug, maker, model]. */
+const MODELS: [slug: string | undefined, maker: string, model: string][] = [
+  ["claude", "Anthropic", "Claude Sonnet 5"],
+  ["googlegemini", "Google", "Gemini 3.6 Flash"],
+  [undefined, "OpenAI", "GPT-5.4 nano"],
+  ["nvidia", "NVIDIA", "Nemotron 3.5 Super"],
+  ["meta", "Meta", "Llama 4 Maverick"],
+  [undefined, "Microsoft", "Phi 4"],
+  ["mistralai", "Mistral", "Mistral Large 4"],
+  ["deepseek", "DeepSeek", "DeepSeek V4.1 Flash"],
+  ["qwen", "Qwen", "Qwen3.8 Max"],
+  [undefined, "xAI", "Grok 4.7"],
+  ["google", "Google", "Gemma 4 31B"],
+  ["kimi", "Moonshot", "Kimi K3"],
+  [undefined, "Cohere", "Command A+"],
+  [undefined, "Amazon", "Nova Premier"],
+  [undefined, "OpenAI", "gpt-oss-120b"],
+  [undefined, "IBM", "Granite 4.0"],
+];
+
+function ProviderTrack({ hidden }: { hidden?: boolean }) {
   return (
     <ul className="marquee-list" aria-hidden={hidden || undefined}>
-      {MODELS.map(([maker, model]) => (
+      {PROVIDERS.map(([slug, name]) => (
+        <li className="marquee-pill marquee-provider" key={name}>
+          <BrandIcon slug={slug} name={name} />
+          <span className="marquee-maker-name">{name}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function ModelTrack({ hidden }: { hidden?: boolean }) {
+  return (
+    <ul className="marquee-list" aria-hidden={hidden || undefined}>
+      {MODELS.map(([slug, maker, model]) => (
         <li className="marquee-pill" key={`${maker}-${model}`}>
+          <BrandIcon slug={slug} name={maker} />
           <span className="marquee-maker">{maker}</span>
           <span className="marquee-model">{model}</span>
         </li>
@@ -37,14 +76,18 @@ function Track({ hidden }: { hidden?: boolean }) {
 
 export default function ModelMarquee() {
   return (
-    <section className="marquee" aria-label="Some of the models Criogen agents can call">
-      <p className="marquee-caption">
-        One agent API for 450+ models: OpenAI, Anthropic, Gemini, OpenRouter, Kaggle, or your own servers
-      </p>
+    <section className="marquee" aria-label="Providers and some of the models Criogen agents can call">
+      <p className="marquee-caption">One agent API for 450+ models, from every major provider or your own servers</p>
+      <div className="marquee-window">
+        <div className="marquee-track marquee-rtl">
+          <ProviderTrack />
+          <ProviderTrack hidden />
+        </div>
+      </div>
       <div className="marquee-window">
         <div className="marquee-track">
-          <Track />
-          <Track hidden />
+          <ModelTrack />
+          <ModelTrack hidden />
         </div>
       </div>
     </section>
