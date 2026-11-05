@@ -23,6 +23,7 @@ export default function Watermark() {
         <path className="watermark-hex" pathLength={1} d={MARK.body} strokeWidth="0.9" strokeLinecap="round" strokeLinejoin="round" />
         <path className="watermark-hex" pathLength={1} d={MARK.fins} strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" />
         <path className="watermark-flame" d={MARK.flame} strokeWidth="0.8" strokeLinecap="round" strokeLinejoin="round" />
+        <path className="watermark-flame-core" d={MARK.flameCore} />
         <circle className="watermark-core" cx={MARK.core.cx} cy={MARK.core.cy} r={MARK.core.r * 0.75} />
       </motion.svg>
     </div>

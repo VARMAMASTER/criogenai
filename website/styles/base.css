@@ -227,8 +227,10 @@ html.theme-fade *::after {
   }
 }
 
-/* The Criogen mark (components/LogoMark.tsx). The hover rules use their own
-   copies of the keyframes (-b) so that hovering starts the animation again. */
+/* The Criogen mark (components/LogoMark.tsx). On load: the outline draws
+   itself, the core pops in, the engine ignites, then the flame flickers for
+   good. Hovering the brand link launches the rocket: it shakes, lifts and
+   settles while the flame roars and exhaust puffs fall away. */
 .logo-mark {
   display: block;
   flex: none;
@@ -238,59 +240,142 @@ html.theme-fade *::after {
   stroke: var(--ab-running);
   stroke-dasharray: 1;
   stroke-dashoffset: 0;
-  animation: logo-draw-a 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: logo-draw 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .logo-body {
   fill: color-mix(in srgb, var(--ab-running) 20%, transparent);
 }
-.logo-flame {
-  stroke: var(--ab-waiting);
-  fill: color-mix(in srgb, var(--ab-waiting) 40%, transparent);
-  transform-box: fill-box;
-  transform-origin: top center;
-  animation: logo-flame-a 0.45s 0.7s ease-out backwards;
-}
-.brand:hover .logo-flame,
-.dh-brand:hover .logo-flame {
-  animation: logo-flame-b 0.45s 0.7s ease-out backwards;
-}
-@keyframes logo-flame-a { from { transform: scaleY(0); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
-@keyframes logo-flame-b { from { transform: scaleY(0); opacity: 0; } to { transform: scaleY(1); opacity: 1; } }
 .logo-core {
   fill: var(--ab-waiting);
   transform-box: fill-box;
   transform-origin: center;
   animation:
-    logo-pop-a 0.5s 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards,
-    logo-pulse-a 1.1s 1.2s ease-in-out 1;
+    logo-pop 0.5s 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards,
+    logo-pulse 1.1s 1.2s ease-in-out 1;
 }
-.brand:hover .logo-hex,
-.dh-brand:hover .logo-hex {
-  animation: logo-draw-b 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+/* Ignition scales the whole flame group; the paths inside flicker on their
+   own, so the two animations never fight over one transform. */
+.logo-ignite,
+.logo-flame,
+.logo-flame-core {
+  transform-box: fill-box;
+  transform-origin: top center;
 }
-.brand:hover .logo-core,
-.dh-brand:hover .logo-core {
-  animation:
-    logo-pop-b 0.5s 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) backwards,
-    logo-pulse-b 1.1s 1.2s ease-in-out 1;
+.logo-ignite {
+  animation: logo-ignite 0.45s 0.7s ease-out backwards;
 }
-@keyframes logo-draw-a { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-@keyframes logo-draw-b { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
-@keyframes logo-pop-a { from { transform: scale(0); } to { transform: scale(1); } }
-@keyframes logo-pop-b { from { transform: scale(0); } to { transform: scale(1); } }
-@keyframes logo-pulse-a { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.35); } }
-@keyframes logo-pulse-b { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.35); } }
+.logo-flame {
+  stroke: var(--ab-waiting);
+  fill: color-mix(in srgb, var(--ab-waiting) 40%, transparent);
+  animation: logo-flicker 0.9s 1.15s ease-in-out infinite;
+}
+.logo-flame-core {
+  fill: color-mix(in srgb, var(--ab-waiting) 60%, #fff8e6);
+  animation: logo-flicker-core 0.55s 1.15s ease-in-out infinite alternate;
+}
+:root[data-theme="light"] .logo-flame-core {
+  fill: var(--ab-waiting);
+}
+.logo-rocket {
+  transform-box: view-box;
+}
+.logo-smoke circle {
+  fill: color-mix(in srgb, var(--ab-muted) 55%, transparent);
+  opacity: 0;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.brand:hover .logo-rocket,
+.dh-brand:hover .logo-rocket,
+.brand:focus-visible .logo-rocket,
+.dh-brand:focus-visible .logo-rocket {
+  animation: logo-launch 1.3s cubic-bezier(0.45, 0, 0.25, 1) both;
+}
+.brand:hover .logo-flame,
+.dh-brand:hover .logo-flame,
+.brand:focus-visible .logo-flame,
+.dh-brand:focus-visible .logo-flame {
+  animation: logo-roar 0.16s ease-in-out infinite alternate;
+}
+.brand:hover .logo-flame-core,
+.dh-brand:hover .logo-flame-core,
+.brand:focus-visible .logo-flame-core,
+.dh-brand:focus-visible .logo-flame-core {
+  animation: logo-roar-core 0.12s ease-in-out infinite alternate;
+}
+.brand:hover .logo-smoke circle,
+.dh-brand:hover .logo-smoke circle,
+.brand:focus-visible .logo-smoke circle,
+.dh-brand:focus-visible .logo-smoke circle {
+  animation: logo-puff 0.75s ease-out infinite;
+}
+.brand:hover .logo-smoke circle:nth-child(2),
+.dh-brand:hover .logo-smoke circle:nth-child(2),
+.brand:focus-visible .logo-smoke circle:nth-child(2),
+.dh-brand:focus-visible .logo-smoke circle:nth-child(2) {
+  animation-delay: 0.25s;
+}
+.brand:hover .logo-smoke circle:nth-child(3),
+.dh-brand:hover .logo-smoke circle:nth-child(3),
+.brand:focus-visible .logo-smoke circle:nth-child(3),
+.dh-brand:focus-visible .logo-smoke circle:nth-child(3) {
+  animation-delay: 0.5s;
+}
+
+@keyframes logo-draw { from { stroke-dashoffset: 1; } to { stroke-dashoffset: 0; } }
+@keyframes logo-pop { from { transform: scale(0); } to { transform: scale(1); } }
+@keyframes logo-pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.35); } }
+@keyframes logo-ignite {
+  0% { transform: scaleY(0); opacity: 0; }
+  60% { transform: scaleY(1.5); opacity: 1; }
+  100% { transform: scaleY(1); opacity: 1; }
+}
+@keyframes logo-flicker {
+  0%, 100% { transform: scale(1, 1); }
+  25% { transform: scale(0.92, 1.16); }
+  50% { transform: scale(1.05, 0.9); }
+  75% { transform: scale(0.96, 1.1); }
+}
+@keyframes logo-flicker-core {
+  from { transform: scale(1, 0.85); opacity: 0.85; }
+  to { transform: scale(0.9, 1.2); opacity: 1; }
+}
+@keyframes logo-roar {
+  from { transform: scale(1.05, 1.45); }
+  to { transform: scale(0.92, 1.75); }
+}
+@keyframes logo-roar-core {
+  from { transform: scale(1, 1.5); }
+  to { transform: scale(0.85, 1.9); }
+}
+@keyframes logo-launch {
+  0% { transform: translate(0, 0); }
+  6% { transform: translate(-0.5px, 0.3px); }
+  12% { transform: translate(0.5px, 0); }
+  18% { transform: translate(-0.5px, 0.3px); }
+  24% { transform: translate(0.4px, 0); }
+  30% { transform: translate(0, 0); }
+  55% { transform: translate(0, -8px); }
+  100% { transform: translate(0, 0); }
+}
+@keyframes logo-puff {
+  0% { opacity: 0.6; transform: translateY(-1px) scale(0.5); }
+  100% { opacity: 0; transform: translateY(4px) scale(1.8); }
+}
 @media (prefers-reduced-motion: reduce) {
   .logo-hex,
   .logo-core,
+  .logo-ignite,
   .logo-flame,
-  .brand:hover .logo-flame,
-  .dh-brand:hover .logo-flame,
-  .brand:hover .logo-hex,
-  .brand:hover .logo-core,
-  .dh-brand:hover .logo-hex,
-  .dh-brand:hover .logo-core {
-    animation: none;
+  .logo-flame-core,
+  .logo-rocket,
+  .logo-smoke circle,
+  .brand:hover *,
+  .dh-brand:hover *,
+  .brand:focus-visible *,
+  .dh-brand:focus-visible * {
+    animation: none !important;
   }
 }
 
@@ -332,8 +417,19 @@ html.theme-fade *::after {
 .watermark-flame {
   stroke: var(--ab-waiting);
   opacity: 0.12;
-  animation: watermark-fade-in 1.2s 1.8s ease-out backwards;
+  animation:
+    watermark-fade-in 1.2s 1.8s ease-out backwards,
+    watermark-flicker 1.4s 3s ease-in-out infinite;
 }
+.watermark-flame-core {
+  fill: var(--ab-waiting);
+  opacity: 0.1;
+  animation:
+    watermark-fade-in 1.2s 2s ease-out backwards,
+    watermark-flicker-core 0.9s 3s ease-in-out infinite alternate;
+}
+@keyframes watermark-flicker { 0%, 100% { opacity: 0.12; } 30% { opacity: 0.2; } 55% { opacity: 0.09; } 80% { opacity: 0.17; } }
+@keyframes watermark-flicker-core { from { opacity: 0.06; } to { opacity: 0.2; } }
 :root[data-theme="light"] .watermark-hex {
   opacity: 0.12;
 }
@@ -354,6 +450,7 @@ html.theme-fade *::after {
 @media (prefers-reduced-motion: reduce) {
   .watermark-hex,
   .watermark-flame,
+  .watermark-flame-core,
   .watermark-core {
     animation: none;
   }
