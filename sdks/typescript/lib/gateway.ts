@@ -3,7 +3,7 @@
 
 import { Retry, cancellable } from "./agent";
 import { translate } from "./errors";
-import { Embedder, Model, modelSpec } from "./models";
+import { Embedder, Model, modelSpec, requireFunctions } from "./models";
 import { native, NativeChatStream, NativeGateway } from "./native";
 
 /** Text, or messages (the transcript format of `result.messages`; `content` may be a string). */
@@ -116,6 +116,8 @@ export class Gateway {
 
   private static payload(model: Model, input: ChatInput, options: ChatOptions): string {
     const { instructions, temperature, maxTokens, output, tools } = options;
+    // An older engine would ignore `tools` without a word.
+    if (tools?.length) requireFunctions("Gateway tools");
     return JSON.stringify({ model: modelSpec(model), input, instructions, temperature, maxTokens, output, tools });
   }
 

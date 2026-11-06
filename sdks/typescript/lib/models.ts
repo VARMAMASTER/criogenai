@@ -3,6 +3,7 @@
 // "openai:gpt-5-mini" takes its key from OPENAI_API_KEY, "deepseek:deepseek-chat"
 // from DEEPSEEK_API_KEY (every name in KEYS, plus ollama, lmstudio and kaggle).
 
+import { errorFor } from "./errors";
 import { envVar, hasEnv } from "./host-env";
 import { native } from "./native";
 
@@ -247,6 +248,21 @@ export interface ModelCall {
  */
 export type ModelAnswer = string | FakeReply | { message: Record<string, unknown> } | { error: { kind: string; message: string } };
 
+/**
+ * Models written in JavaScript need an engine from 0.1.4 on. The engine
+ * package for this system may be older (a release can ship before every
+ * platform's engine is rebuilt): say so instead of failing obscurely.
+ */
+export function requireFunctions(what: string): void {
+  if (typeof (native as { registerFunction?: unknown }).registerFunction !== "function") {
+    throw errorFor(
+      "unsupported",
+      `${what} needs criogen's engine 0.1.4 or newer, and the engine package installed for this system is older: ` +
+        "it comes with the next release for this platform (Windows and the browser, criogen/web, have it now)",
+    );
+  }
+}
+
 /** Releases a function model's engine handle once the object is gone. */
 const releaseHandle =
   typeof FinalizationRegistry === "function"
@@ -283,6 +299,7 @@ export class FunctionModel {
   /** The JSON spec: the function is registered with the engine on first use. */
   spec(): Record<string, unknown> {
     if (this.#handle === undefined) {
+      requireFunctions("FunctionModel");
       const respond = this.#respond;
       this.#handle = native.registerFunction(async (request: string) => {
         try {

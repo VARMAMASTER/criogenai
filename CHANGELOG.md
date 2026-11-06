@@ -11,6 +11,11 @@ All crates in this repository share one version number.
 
 ## [0.1.4] - 2026-11-06
 
+- **Engine packages:** only `criogen-windows-x64` is 0.1.4 (built on Windows: GitHub Actions could
+  not run). Linux and macOS keep their 0.1.3 engine until the next release; there, `FunctionModel`
+  and gateway `tools` say so (`unsupported`) instead of failing obscurely. Everything else, and
+  `criogen/web` on every platform, is 0.1.4. PyPI stays at 0.1.3 (nothing changed for Python).
+
 - **The engine in the browser** (design 0021): the same Rust engine, compiled to WebAssembly, behind
   the same TypeScript API, as `criogen/web` (`await ready()` loads it, about 550 KB compressed).
   Agents, tools, approvals, typed output, threads, workflows and the gateway run in a page or a Web
