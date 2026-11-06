@@ -13,7 +13,7 @@
 // engine. What it does is reported to the page (the model's calls here, the
 // samples' tools, nodes and storage through engine/runtime.js) and told as a
 // story: the diagram lights up, the transcript fills in.
-import { MAX_MODEL_CALLS, Stopped, type Ctx, type PatternDef } from "./engine";
+import { MAX_MODEL_CALLS, Stopped, type Ctx, type PatternDef, type Timing } from "./engine";
 import type { Connection } from "./providers";
 
 /** A scripted answer: text, tool calls (with text before them), or typed output. */
@@ -134,7 +134,7 @@ function answer(reply: Reply, turn: number): unknown {
 }
 
 /** What the transcript says about a reply. */
-function describe(message: Message): string {
+function describe(message: Message, stopReason?: string | null): string {
   const parts: string[] = [];
   const said = text(message).trim();
   if (said) parts.push(said);
@@ -142,7 +142,29 @@ function describe(message: Message): string {
     if (b.type !== "tool_call") continue;
     parts.push(b.name === "final_output" ? `→ answers: ${short(b.args)}` : `→ calls ${b.name}(${short(b.args, 90)})`);
   }
-  return parts.join("\n") || "(no text)";
+  if (parts.length) return parts.join("\n");
+  return stopReason === "length"
+    ? "(no text: the model spent its whole token budget thinking before it wrote anything)"
+    : "(no text: the model answered with nothing)";
+}
+
+type Span = { kind: "model" | "tool" | "wait"; s: number; e: number };
+
+/**
+ * Splits [start, end] by what was happening, by wall clock: parallel calls
+ * overlap and are not counted twice. A model answering wins, then a tool
+ * running, then the playground pausing; the rest is Criogen and the page.
+ */
+function breakdown(spans: Span[], start: number, end: number): Pick<Timing, "model" | "tool" | "wait" | "engine"> {
+  const points = [...new Set([start, end, ...spans.flatMap((x) => [x.s, x.e])])].filter((t) => t >= start && t <= end).sort((a, b) => a - b);
+  const out = { model: 0, tool: 0, wait: 0, engine: 0 };
+  for (let i = 0; i < points.length - 1; i++) {
+    const [a, b] = [points[i], points[i + 1]];
+    const mid = (a + b) / 2;
+    const on = (kind: Span["kind"]) => spans.some((x) => x.kind === kind && x.s <= mid && x.e >= mid);
+    out[on("model") ? "model" : on("tool") ? "tool" : on("wait") ? "wait" : "engine"] += b - a;
+  }
+  return out;
 }
 
 function describeReply(reply: Reply): string {
@@ -193,6 +215,19 @@ export async function runOnEngine(
     );
   };
   let calls = 0;
+  let toolCalls = 0;
+  // Where the time goes: model calls, tool runs, and the playground's own
+  // pauses (to tell the story, or waiting for you); the rest is Criogen.
+  const spans: Span[] = [];
+  const timed = async <T>(kind: Span["kind"], work: () => Promise<T>): Promise<T> => {
+    const s = performance.now();
+    try {
+      return await work();
+    } finally {
+      spans.push({ kind, s, e: performance.now() });
+    }
+  };
+  const show: Ctx = { ...ctx, pause: (ms) => timed("wait", () => ctx.pause(ms)), human: (draft) => timed("wait", () => ctx.human(draft)) };
   const gateway = conn ? new engine.Gateway({ retry: { maxAttempts: 2 } }) : null;
   const upstream = conn ? realModel(engine, conn) : null;
 
@@ -207,17 +242,23 @@ export async function runOnEngine(
       ctx.thinking(true);
       try {
         if (gateway && upstream) {
-          const reply = await gateway.chat(upstream, call.messages, { tools: call.tools?.length ? call.tools : undefined, maxTokens: 700 });
+          // Reasoning models think within this budget too: leave room to write.
+          const s = performance.now();
+          const reply = (await timed("model", () =>
+            gateway.chat(upstream, call.messages, { tools: call.tools?.length ? call.tools : undefined, maxTokens: 4000 }),
+          )) as { message: Message; stopReason?: string | null };
           stopped();
-          ctx.say(actor.who, "model", describe(reply.message), actor.node);
+          ctx.say(actor.who, "model", describe(reply.message, reply.stopReason), actor.node, performance.now() - s);
           return { message: reply.message };
         }
         const turn = call.messages.filter((m) => m.role === "assistant").length;
         const reply =
           typeof actor.replies === "function" ? actor.replies(call, turn) : actor.replies[Math.min(turn, actor.replies.length - 1)];
         const said = describeReply(reply);
-        await ctx.pause(600 + Math.min(900, said.length * 4));
-        ctx.say(actor.who, "model", said, actor.node);
+        // The scripted model's "thinking" is a pause, to read along.
+        const s = performance.now();
+        await timed("model", () => ctx.pause(600 + Math.min(900, said.length * 4)));
+        ctx.say(actor.who, "model", said, actor.node, performance.now() - s);
         return answer(reply, turn);
       } finally {
         ctx.thinking(false);
@@ -227,26 +268,29 @@ export async function runOnEngine(
   );
 
   engine.observe({
-    tool: async (name: string, phase: string, value: unknown) => {
+    tool: async (name: string, phase: string, value: unknown, started?: number, ended?: number) => {
       stopped();
       const node = spec.tools?.[name] ?? spec.answer ?? "answer";
       if (phase === "start") {
         // The model's line already shows the call and its arguments.
         ctx.at(node);
         ctx.count("tool");
-        await ctx.pause(380);
+        toolCalls += 1;
+        await show.pause(380);
       } else {
-        ctx.say(`${name}()`, "tool", `← ${phase === "error" ? `threw ${String(value)}` : short(value)}`, node);
+        const ms = started !== undefined && ended !== undefined ? ended - started : undefined;
+        if (started !== undefined && ended !== undefined) spans.push({ kind: "tool", s: started, e: ended });
+        ctx.say(`${name}()`, "tool", `← ${phase === "error" ? `threw ${String(value)}` : short(value)}`, node, ms);
       }
     },
     node: async (name: string, phase: "start" | "end", value: Record<string, unknown>) => {
       stopped();
       const node = spec.nodes?.[name];
       if (node && phase === "start") ctx.at(node);
-      spec.narrate?.(name, phase, value ?? {}, ctx);
-      if (node && phase === "start" && !def.usesModel) await ctx.pause(320);
+      spec.narrate?.(name, phase, value ?? {}, show);
+      if (node && phase === "start" && !def.usesModel) await show.pause(320);
     },
-    storage: (op: "recall" | "remember", _ns: string, key: string, value: unknown) => spec.storage?.(op, key, value, ctx),
+    storage: (op: "recall" | "remember", _ns: string, key: string, value: unknown) => spec.storage?.(op, key, value, show),
     note: (note: string) => ctx.say("playground", "note", note),
   });
   engine.useModel(model);
@@ -257,7 +301,7 @@ export async function runOnEngine(
   const human = {
     askPerson: async (waiting: { draft?: string }) => {
       if (spec.review) ctx.at(spec.review.ask);
-      const decision = await ctx.human(String(waiting?.draft ?? ""));
+      const decision = await show.human(String(waiting?.draft ?? ""));
       if (spec.review) ctx.at(decision.kind === "reject" ? spec.review.rejected : spec.review.approved);
       if (decision.kind === "approve") return "approve";
       if (decision.kind === "edit") return { decision: "edit", text: decision.text };
@@ -266,6 +310,7 @@ export async function runOnEngine(
   };
   const sample = engine.samples[spec.sample];
   if (!sample) throw new Error(`no sample "${spec.sample}"`);
+  const start = performance.now();
   try {
     const out = await sample(input, def.id === "human-in-the-loop" ? human : extra);
     stopped();
@@ -276,5 +321,9 @@ export async function runOnEngine(
     throw error;
   } finally {
     engine.observe({});
+    if (!signal.aborted) {
+      const end = performance.now();
+      ctx.timing({ total: end - start, ...breakdown(spans, start, end), live: conn != null, modelCalls: calls, toolCalls });
+    }
   }
 }

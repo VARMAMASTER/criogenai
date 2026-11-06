@@ -3,7 +3,7 @@
 // transcript fills in, and the answer lands at the bottom. Scripted by
 // default; with a key in KeyPanel, a real model makes the decisions.
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { makeCtx, MAX_MODEL_CALLS, type Decision, type Line } from "@/lib/patterns/engine";
+import { makeCtx, MAX_MODEL_CALLS, type Decision, type Line, type Timing } from "@/lib/patterns/engine";
 import { runOnEngine } from "@/lib/patterns/live";
 import { byId } from "@/lib/patterns";
 import Diagram from "./Diagram";
@@ -39,6 +39,7 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
   const [waiting, setWaiting] = useState<{ draft: string; answer: (d: Decision) => void } | null>(null);
   const [edit, setEdit] = useState("");
   const [took, setTook] = useState<number | null>(null);
+  const [timing, setTiming] = useState<Timing | null>(null);
   const stop = useRef<AbortController | null>(null);
   const logRef = useRef<HTMLOListElement>(null);
   const live = conn != null && def.usesModel;
@@ -59,6 +60,7 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
     setError("");
     setWaiting(null);
     setTook(null);
+    setTiming(null);
   };
 
   const run = async () => {
@@ -81,6 +83,7 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
         },
         visited: (n) => setVisited((v) => (v.has(n) ? v : new Set(v).add(n))),
         counts: setCounts,
+        timing: setTiming,
         busy: setBusy,
         waitHuman: (draft, answer) => {
           setEdit(draft);
@@ -218,7 +221,10 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
               <span className="sb-who">
                 <i>{KIND_LABEL[l.kind]}</i> {l.who}
               </span>
-              <span className="sb-text">{l.text}</span>
+              <span className="sb-text">
+                {l.text}
+                {l.ms != null && <small className="sb-ms">{seconds(l.ms)}</small>}
+              </span>
             </li>
           ))}
           {waiting && (
@@ -251,6 +257,7 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
             <p>{answer}</p>
           </div>
         )}
+        {timing && <TimeSplit t={timing} />}
         {def.engine ? (
           <p className="sb-small sb-honest">
             This run is the TypeScript code below, running on the Criogen engine in your browser (WebAssembly). Without a key, a scripted
@@ -274,5 +281,43 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
         {code}
       </section>
     </article>
+  );
+}
+
+const seconds = (ms: number) => (ms >= 1000 ? `${(ms / 1000).toFixed(2)} s` : `${Math.max(0, Math.round(ms))} ms`);
+
+/** Where the run's time went, by wall clock (parallel calls are not counted twice). */
+function TimeSplit({ t }: { t: Timing }) {
+  const parts = [
+    { key: "model", label: t.live ? "Model (your provider, over the network)" : "Scripted model (a pause, to read along)", ms: t.model },
+    { key: "tool", label: "Tools (the sample's functions)", ms: t.tool },
+    { key: "engine", label: "Criogen engine and this page (everything else)", ms: t.engine },
+    { key: "wait", label: "Playground pauses (to tell the story, or waiting for you)", ms: t.wait },
+  ].filter((p) => p.ms > 0.5);
+  const total = Math.max(t.total, 1);
+  return (
+    <section className="sb-time" aria-label="Where the time went">
+      <h3>
+        Where the time went <span>{seconds(t.total)} in all</span>
+      </h3>
+      <div className="sb-time-bar" role="img" aria-label={parts.map((p) => `${p.label}: ${seconds(p.ms)}`).join("; ")}>
+        {parts.map((p) => (
+          <span key={p.key} className={`sb-tb-${p.key}`} style={{ width: `${Math.max(0.6, (100 * p.ms) / total)}%` }} />
+        ))}
+      </div>
+      <ul className="sb-time-legend">
+        {parts.map((p) => (
+          <li key={p.key}>
+            <i className={`sb-tb-${p.key}`} />
+            {p.label}: <b>{seconds(p.ms)}</b> ({((100 * p.ms) / total).toFixed(1)}%)
+          </li>
+        ))}
+      </ul>
+      <p className="sb-small">
+        {t.modelCalls} model call{t.modelCalls === 1 ? "" : "s"}, {t.toolCalls} tool call{t.toolCalls === 1 ? "" : "s"}. Criogen&apos;s share is
+        an upper bound: it also holds this page drawing the story. On a server, the engine&apos;s own work is a fraction of a millisecond per
+        step (<a href="/benchmarks/">benchmarks</a>).
+      </p>
+    </section>
   );
 }

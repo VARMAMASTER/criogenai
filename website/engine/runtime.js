@@ -21,12 +21,14 @@ export function tool(definition) {
     ...definition,
     run: async (args, ctx) => {
       await observer.tool?.(definition.name, "start", args);
+      // The tool's own time, without the page's narration.
+      const started = performance.now();
       try {
         const out = await definition.run(args, ctx);
-        await observer.tool?.(definition.name, "end", out);
+        await observer.tool?.(definition.name, "end", out, started, performance.now());
         return out;
       } catch (error) {
-        await observer.tool?.(definition.name, "error", error);
+        await observer.tool?.(definition.name, "error", error, started, performance.now());
         throw error;
       }
     },

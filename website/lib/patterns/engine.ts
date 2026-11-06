@@ -13,6 +13,26 @@ export interface Line {
   text: string;
   node?: string;
   live?: boolean;
+  /** How long the call took, in ms (model and tool lines). */
+  ms?: number;
+}
+
+/**
+ * Where a run's time went, by wall clock (parallel calls overlap, so nothing
+ * is counted twice): a model was answering; else a tool was running; else the
+ * playground was pausing to tell the story (or waiting for you); else
+ * Criogen and the page (the engine, the bridge, the transcript).
+ */
+export interface Timing {
+  total: number;
+  model: number;
+  tool: number;
+  wait: number;
+  engine: number;
+  /** A real provider answered (else the scripted model, whose time is a pause). */
+  live: boolean;
+  modelCalls: number;
+  toolCalls: number;
 }
 
 export interface GNode {
@@ -49,7 +69,7 @@ export interface Ctx {
   params: Record<string, number>;
   /** Highlights a node (and the edge from the last one). */
   at(node: string): void;
-  say(who: string, kind: Kind, text: string, node?: string): void;
+  say(who: string, kind: Kind, text: string, node?: string, ms?: number): void;
   pause(ms?: number): Promise<void>;
   /** Waits for the visitor to approve, edit or reject. */
   human(draft: string): Promise<Decision>;
@@ -57,6 +77,8 @@ export interface Ctx {
   count(kind: "model" | "tool"): void;
   /** Shows that a model is answering. */
   thinking(on: boolean): void;
+  /** Reports where the run's time went. */
+  timing(t: Timing): void;
 }
 
 export interface PatternDef {
@@ -88,6 +110,7 @@ export interface Hooks {
   counts(c: { model: number; tool: number }): void;
   busy(b: boolean): void;
   waitHuman(draft: string, answer: (d: Decision) => void): void;
+  timing(t: Timing): void;
 }
 
 /** A visitor's key never pays for a runaway loop. */
@@ -129,8 +152,8 @@ export function makeCtx(opts: {
       hooks.visited(node);
       last = node;
     },
-    say(who, kind, text, node) {
-      hooks.line({ id: ++id, who, kind, text, node });
+    say(who, kind, text, node, ms) {
+      hooks.line({ id: ++id, who, kind, text, node, ms });
     },
     pause: (ms = 450) => sleep(ms),
     human(draft) {
@@ -147,6 +170,9 @@ export function makeCtx(opts: {
     },
     thinking(on) {
       hooks.busy(on);
+    },
+    timing(t) {
+      hooks.timing(t);
     },
   };
   return ctx;

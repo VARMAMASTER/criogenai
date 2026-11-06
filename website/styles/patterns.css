@@ -603,3 +603,55 @@
     padding: 1rem;
   }
 }
+
+/* The run's time split (Story: TimeSplit). */
+.sb-ms {
+  margin-left: 0.6rem;
+  font-family: var(--ab-mono);
+  font-size: 0.75rem;
+  color: var(--ab-muted);
+  white-space: nowrap;
+}
+.sb-time {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 12px;
+  background: var(--glass-bg-soft);
+}
+.sb-time h3 {
+  margin: 0 0 0.6rem;
+  font-size: 0.95rem;
+}
+.sb-time h3 span {
+  margin-left: 0.4rem;
+  font-weight: 500;
+  color: var(--ab-muted);
+}
+.sb-time-bar {
+  display: flex;
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+  background: var(--glass-border);
+}
+.sb-time-legend {
+  list-style: none;
+  margin: 0.7rem 0 0.4rem;
+  padding: 0;
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+.sb-time-legend i {
+  display: inline-block;
+  width: 0.7rem;
+  height: 0.7rem;
+  border-radius: 3px;
+  margin-right: 0.45rem;
+  vertical-align: -1px;
+}
+.sb-tb-model { background: var(--ab-waiting); }
+.sb-tb-tool { background: #6e8efb; }
+.sb-tb-engine { background: var(--ab-running); }
+.sb-tb-wait { background: var(--ab-muted); opacity: 0.45; }

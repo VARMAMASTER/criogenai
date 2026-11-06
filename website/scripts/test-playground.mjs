@@ -58,6 +58,7 @@ async function runPattern(page, id) {
     error: document.querySelector(".sb-error")?.textContent ?? null,
     counts: document.querySelector(".sb-counts")?.textContent ?? "",
     mode: document.querySelector(".sb-mode")?.textContent ?? "",
+    time: document.querySelector(".sb-time")?.textContent ?? "",
   }));
 }
 
@@ -69,7 +70,8 @@ try {
     page.on("pageerror", (e) => errors.push(e.message));
     const r = await runPattern(page, id);
     await page.close();
-    const ok = r.answer && !r.error && !errors.length && r.mode.includes("Criogen engine");
+    // Every run says where its time went, Criogen's share included.
+    const ok = r.answer && !r.error && !errors.length && r.mode.includes("Criogen engine") && r.time.includes("Criogen engine and this page");
     console.log(`  ${ok ? "ok  " : "FAIL"} ${id}: ${r.counts}${ok ? "" : ` | ${r.error ?? ""} ${errors.join("; ")}`}`);
     if (!ok) failed += 1;
   }
