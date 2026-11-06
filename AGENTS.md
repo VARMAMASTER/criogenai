@@ -236,7 +236,10 @@ write our own implementation.
   `node sdks/typescript/scripts/build-web.mjs`; tests:
   `bash scripts/test-web.sh` (criogen-rt on WebAssembly, the TypeScript
   suite with `CRIOGEN_ENGINE=wasm`, Chromium/Firefox/WebKit, the package in
-  a new app), ci-local step `web`. Not on npm yet (waits for a release).
+  a new app), ci-local step `web`. Released in npm `criogen@0.1.4` (2026-11-06), with only the
+  Windows engine at 0.1.4 (GitHub Actions billing failed): Linux/macOS engine
+  packages stay 0.1.3 until `sdk-packages.yml` runs again; `requireFunctions`
+  in models.ts gives `unsupported` for FunctionModel/gateway tools there.
 - **Security audit (2026-10-22):** four reviewers, findings verified and
   fixed (CHANGELOG "Security audit"); `scripts/check-supply-chain.sh`
   guards the build and release. New rules below (10–12).

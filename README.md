@@ -23,7 +23,7 @@ extendable specialist agents, and Tavily/Brave search with a safe page reader
 **In the browser:** the same engine compiled to WebAssembly, behind the same
 TypeScript API (`criogen/web`): agents run in a page or a Web Worker, tested
 in Chromium, Firefox and WebKit (design 0021; guide:
-`website/content/docs/guides/browser.mdx`). Not on npm yet.
+`website/content/docs/guides/browser.mdx`). On npm from `criogen@0.1.4`.
 
 **LLM gateway:** a first slice in [`crates/criogen-gateway`](crates/criogen-gateway):
 any OpenAI client in front of any provider Criogen speaks, with
