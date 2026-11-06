@@ -9,6 +9,8 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-06
+
 - **The engine in the browser** (design 0021): the same Rust engine, compiled to WebAssembly, behind
   the same TypeScript API, as `criogen/web` (`await ready()` loads it, about 550 KB compressed).
   Agents, tools, approvals, typed output, threads, workflows and the gateway run in a page or a Web
