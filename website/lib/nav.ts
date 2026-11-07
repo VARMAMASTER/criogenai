@@ -48,6 +48,7 @@ export const SIDEBAR: NavGroup[] = [
       { label: "Storage: SQLite and Postgres", slug: "guides/storage" },
       { label: "Encryption, audit, retention", slug: "guides/compliance" },
       { label: "Models and providers", slug: "guides/models" },
+      { label: "MCP servers' tools", slug: "guides/mcp" },
       { label: "The LLM gateway", slug: "guides/gateway" },
       { label: "In the browser (WebAssembly)", slug: "guides/browser" },
       { label: "Tracing (Langfuse, OpenTelemetry)", slug: "guides/telemetry" },

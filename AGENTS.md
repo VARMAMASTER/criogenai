@@ -277,6 +277,16 @@ write our own implementation.
   PyPI wheels for Linux x64/ARM64, macOS ARM64 and Windows x64. The macOS Intel wheel is missing
   (GitHub never gave the `macos-15-intel` job a runner), so pip on Intel Macs installs 0.1.2.
   Check a release with `scripts/smoke-registry.sh <version>`. Site: https://criogen.vercel.app.
+- **Implemented: MCP client (0022).** `criogen_agent::mcp` (feature `mcp`:
+  Streamable HTTP over the providers' `Transport`, also in the browser;
+  `mcp-stdio`: servers started as a process): `McpServer::stdio/http/
+  from_spec` → `connect()` → `McpClient` (`tools`, `call`, `refresh`,
+  `describe`, `close`); MCP 2026-07-28 with `initialize` fallback; tools
+  only. `AgentBuilder::tools`, `Transport::exchange`. Python `criogen.mcp`
+  (`NativeMcp`), TypeScript `mcp` (criogen-js `mcp_*` by handle, both
+  engines). Tests: `criogen-agent/tests/mcp.rs` (harness = false: the test
+  binary is also the scripted stdio server), `tests/mcp_http.rs`,
+  `sdks/python/tests/test_mcp.py`, `sdks/typescript/test/mcp.test.js`.
 - **Not started:** vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 

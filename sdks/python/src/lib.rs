@@ -13,6 +13,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
+use criogen_agent::mcp::{McpClient, McpError, McpServer};
 use criogen_agent::{
     Agent, AgentError, AgentEvent, AgentInput, AgentResult, Approval, Decision, Hook, HookAction,
     HookContext, HookError, Limits, Memory, OnToolException, Reply, ResilientModel, Thread,
@@ -1521,7 +1522,8 @@ impl NativeAgent {
     /// the configuration's order; without `storage` it keeps threads in
     /// memory.
     #[new]
-    #[pyo3(signature = (config, tools, storage=None, agent_tools=Vec::new(), telemetry=None, hooks=Vec::new()))]
+    #[pyo3(signature = (config, tools, storage=None, agent_tools=Vec::new(), telemetry=None, hooks=Vec::new(), mcp=Vec::new()))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         config: &str,
         tools: Vec<(Py<PyAny>, bool)>,
@@ -1529,6 +1531,7 @@ impl NativeAgent {
         agent_tools: Vec<(String, String, Py<NativeAgent>)>,
         telemetry: Option<&NativeTelemetry>,
         hooks: Vec<(String, Py<PyAny>, Vec<String>)>,
+        mcp: Vec<(Py<NativeMcp>, Option<Vec<String>>)>,
     ) -> PyResult<Self> {
         let config: Value =
             serde_json::from_str(config).map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -1573,6 +1576,15 @@ impl NativeAgent {
         // Every run of this agent goes to the exporter (design 0017 §4).
         if let Some(telemetry) = telemetry {
             builder = builder.observe(telemetry.exporter.observer());
+        }
+        // MCP servers' tools (design 0022): all of a server's, or the named.
+        for (server, names) in mcp {
+            let client = server.get().client().map_err(py_failure)?;
+            for tool in client.tools() {
+                if names.as_ref().is_none_or(|n| n.contains(&tool.spec().name)) {
+                    builder = builder.shared_tool(tool);
+                }
+            }
         }
         // Agents as tools of this one (design 0017 §1).
         for (name, description, agent) in agent_tools {
@@ -2127,6 +2139,118 @@ impl NativeStream {
     }
 }
 
+// ---------- MCP servers (design 0022) ----------
+
+fn from_mcp(error: McpError) -> Failure {
+    Failure::new(error.code(), error.message)
+}
+
+/// A tool's output as JSON for Python: its text, its value, or its
+/// content blocks.
+fn tool_output_json(output: &ToolOutput) -> Value {
+    match output {
+        ToolOutput::Text(text) => json!({ "text": text }),
+        ToolOutput::Json(value) => json!({ "value": value }),
+        ToolOutput::Blocks(blocks) => json!({ "content": to_json(blocks) }),
+        ToolOutput::Rich { content, .. } => json!({ "content": to_json(content) }),
+        _ => Value::Null,
+    }
+}
+
+/// A connected MCP server. Made empty, filled by `connect`.
+#[pyclass(frozen)]
+struct NativeMcp {
+    client: Arc<Mutex<Option<McpClient>>>,
+}
+
+impl NativeMcp {
+    fn client(&self) -> Result<McpClient, Failure> {
+        lock(&self.client)
+            .clone()
+            .ok_or_else(|| Failure::new("mcp_closed", "the MCP server is not connected"))
+    }
+}
+
+#[pymethods]
+impl NativeMcp {
+    #[new]
+    fn new() -> Self {
+        Self {
+            client: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Starts or reaches the server: `{"info", "tools"}`.
+    fn connect<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+        spec: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let spec: Value =
+            serde_json::from_str(spec).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let server = McpServer::from_spec(&spec).map_err(|e| py_failure(from_mcp(e)))?;
+        let slot = self.client.clone();
+        spawn(py, event_loop, None, async move {
+            let client = server.connect().await.map_err(from_mcp)?;
+            let described = client.describe();
+            *lock(&slot) = Some(client);
+            Ok(described)
+        })
+    }
+
+    /// Lists the tools again: `{"info", "tools"}`.
+    fn refresh<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = self.client().map_err(py_failure)?;
+        spawn(py, event_loop, None, async move {
+            client.refresh().await.map_err(from_mcp)?;
+            Ok(client.describe())
+        })
+    }
+
+    /// Calls a tool: `{"ok": true, ...output}` or `{"ok": false, "error"}`.
+    fn call<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+        name: String,
+        args: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let args: Map<String, Value> =
+            serde_json::from_str(args).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let client = self.client().map_err(py_failure)?;
+        spawn(py, event_loop, None, async move {
+            Ok(match client.call(&name, args).await {
+                Ok(output) => {
+                    let mut value = tool_output_json(&output);
+                    value["ok"] = json!(true);
+                    value
+                }
+                Err(error) => json!({ "ok": false, "error": error.message }),
+            })
+        })
+    }
+
+    /// Stops the server.
+    fn close<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let client = lock(&self.client).clone();
+        spawn(py, event_loop, None, async move {
+            if let Some(client) = client {
+                client.close().await;
+            }
+            Ok(Value::Null)
+        })
+    }
+}
+
 /// The named providers (design 0006 §4.1) as JSON: `[{"name", "title",
 /// "base_url", "key_env", "anthropic"}]`. The SDK's own key table is
 /// checked against it in the tests.
@@ -2151,6 +2275,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NativeWorkflow>()?;
     m.add_class::<NativeTelemetry>()?;
     m.add_class::<NativeStream>()?;
+    m.add_class::<NativeMcp>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("PRESETS", presets_json())?;
     Ok(())

@@ -80,6 +80,8 @@ struct GettingStartedDoctests;
 mod agent;
 mod approval;
 mod hooks;
+#[cfg(feature = "mcp")]
+pub mod mcp;
 mod memory;
 mod nested;
 mod output;

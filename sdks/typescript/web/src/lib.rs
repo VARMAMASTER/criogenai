@@ -133,6 +133,37 @@ pub fn presets() -> String {
 
 /// Registers a JavaScript model function (design 0021 §7); the handle
 /// names it in model specs.
+/// Reaches an MCP server over HTTP (design 0022): `{handle, info, tools}`.
+#[wasm_bindgen(js_name = mcpConnect)]
+pub fn mcp_connect(spec: String) -> Promise {
+    promise(async move { criogen_js::mcp_connect(spec).await.map(JsValue::from) })
+}
+
+/// Lists a server's tools again.
+#[wasm_bindgen(js_name = mcpRefresh)]
+pub fn mcp_refresh(handle: u32) -> Promise {
+    promise(async move { criogen_js::mcp_refresh(handle).await.map(JsValue::from) })
+}
+
+/// Calls a server's tool: `{ok, text | value | content | error}`.
+#[wasm_bindgen(js_name = mcpCall)]
+pub fn mcp_call(handle: u32, name: String, args: String) -> Promise {
+    promise(async move {
+        criogen_js::mcp_call(handle, name, args)
+            .await
+            .map(JsValue::from)
+    })
+}
+
+/// Stops a server.
+#[wasm_bindgen(js_name = mcpClose)]
+pub fn mcp_close(handle: u32) -> Promise {
+    promise(async move {
+        criogen_js::mcp_close(handle).await;
+        Ok(JsValue::UNDEFINED)
+    })
+}
+
 #[wasm_bindgen(js_name = registerFunction)]
 pub fn register_function(function: Function) -> u32 {
     criogen_js::register_function(Arc::new(WebFunction(SendWrapper::new(function))))

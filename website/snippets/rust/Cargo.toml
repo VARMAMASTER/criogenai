@@ -10,7 +10,7 @@ publish = false
 [dependencies]
 criogen-core = { path = "../../../crates/criogen-core" }
 criogen-providers = { path = "../../../crates/criogen-providers" }
-criogen-agent = { path = "../../../crates/criogen-agent", features = ["sqlite", "postgres", "encryption"] }
+criogen-agent = { path = "../../../crates/criogen-agent", features = ["sqlite", "postgres", "encryption", "mcp-stdio"] }
 criogen-storage = { path = "../../../crates/criogen-storage", features = ["sqlite", "postgres", "encryption"] }
 criogen-telemetry = { path = "../../../crates/criogen-telemetry" }
 criogen-gateway = { path = "../../../crates/criogen-gateway" }

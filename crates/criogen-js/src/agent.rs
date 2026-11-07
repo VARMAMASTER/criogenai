@@ -393,6 +393,8 @@ pub fn build_agent(
         });
     }
     builder = extend(builder)?;
+    // MCP servers' tools, by handle (design 0022).
+    builder = crate::mcp::add_mcp_tools(builder, config)?;
     // Agents as tools of this one (design 0017 §1), by handle.
     for spec in config["agentTools"].as_array().cloned().unwrap_or_default() {
         let handle = spec["handle"].as_u64().unwrap_or_default() as u32;

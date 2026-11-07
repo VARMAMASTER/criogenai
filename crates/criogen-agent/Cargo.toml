@@ -44,12 +44,28 @@ encryption = ["criogen-storage/encryption"]
 # default: it adds `reqwest` (the HTTP client criogen-providers already
 # uses, same version and features, so no new crate) and tokio `net` for DNS.
 web = ["dep:reqwest", "tokio/net"]
+# Tools from MCP servers over Streamable HTTP (`criogen_agent::mcp`, design
+# 0022). Uses the providers' HTTP transport, so it also works in the browser.
+mcp = ["http"]
+# MCP servers started as a local process (stdio). Servers only: adds tokio's
+# `process` and `io-util` (no new crate).
+mcp-stdio = ["mcp", "tokio/process", "tokio/io-util"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "test-util", "net", "io-util"] }
 
 [lints]
 workspace = true
+
+[[test]]
+name = "mcp"
+# The test binary is also the scripted MCP server (started again by the tests).
+harness = false
+required-features = ["mcp-stdio"]
+
+[[test]]
+name = "mcp_http"
+required-features = ["mcp"]
 
 [[example]]
 name = "durable_agent"

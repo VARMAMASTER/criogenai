@@ -192,6 +192,37 @@ impl Transport {
 
     /// Sends `request` and returns the body of a 2xx response as it arrives.
     pub async fn open(&self, request: &WireRequest) -> Result<Body, ModelError> {
+        let exchange = self.exchange(request).await?;
+        if (200..300).contains(&exchange.status) {
+            return Ok(exchange.body);
+        }
+        let Exchange {
+            status,
+            headers,
+            mut body,
+        } = exchange;
+        // Read the error body (bounded by the same timeouts); a failure here
+        // still leaves a useful status-based classification.
+        let mut text = Vec::new();
+        while let Ok(Some(chunk)) = body.next_chunk().await {
+            text.extend_from_slice(&chunk);
+            if text.len() > 64 * 1024 {
+                break;
+            }
+        }
+        let text = String::from_utf8_lossy(&text);
+        let error = classify_http(
+            &HttpFailure::new(status, &headers, &text),
+            criogen_rt::system_now(),
+        );
+        Err(error.redact(&self.secret_refs()))
+    }
+
+    /// Sends `request` and returns the response whatever its status, with its
+    /// headers, for protocols that read their own error bodies (MCP, design
+    /// 0022). The body has the same timeouts and size limit; redirects are
+    /// still refused.
+    pub async fn exchange(&self, request: &WireRequest) -> Result<Exchange, ModelError> {
         let deadline = Instant::now() + self.config.total_timeout;
         let first_byte_limit = self
             .config
@@ -213,6 +244,7 @@ impl Transport {
 
         let status = response.status();
         let redirect = response.is_redirect();
+        let headers = response.headers();
         let mut body = Body {
             response,
             transport: self.clone(),
@@ -231,27 +263,12 @@ impl Transport {
             )
             .with_dispatch(Dispatch::Sent));
         }
-        if (200..300).contains(&status) {
-            body.streaming = true;
-            return Ok(body);
-        }
-
-        let headers = body.response.headers();
-        // Read the error body (bounded by the same timeouts); a failure here
-        // still leaves a useful status-based classification.
-        let mut text = Vec::new();
-        while let Ok(Some(chunk)) = body.next_chunk().await {
-            text.extend_from_slice(&chunk);
-            if text.len() > 64 * 1024 {
-                break;
-            }
-        }
-        let text = String::from_utf8_lossy(&text);
-        let error = classify_http(
-            &HttpFailure::new(status, &headers, &text),
-            criogen_rt::system_now(),
-        );
-        Err(error.redact(&self.secret_refs()))
+        body.streaming = (200..300).contains(&status);
+        Ok(Exchange {
+            status,
+            headers,
+            body,
+        })
     }
 
     fn secret_refs(&self) -> Vec<&str> {
@@ -266,7 +283,29 @@ impl Transport {
     }
 }
 
-/// The body of a 2xx response, read chunk by chunk with the idle and total
+/// A response of any status ([`Transport::exchange`]).
+#[derive(Debug)]
+#[non_exhaustive]
+pub struct Exchange {
+    /// The HTTP status.
+    pub status: u16,
+    /// Response headers, names in lower case.
+    pub headers: Vec<(String, String)>,
+    /// The body, read with the transport's timeouts and size limit.
+    pub body: Body,
+}
+
+impl Exchange {
+    /// The first header named `name` (any case).
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_str())
+    }
+}
+
+/// The body of a response, read chunk by chunk with the idle and total
 /// timeouts.
 #[derive(Debug)]
 pub struct Body {

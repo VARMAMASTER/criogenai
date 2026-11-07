@@ -77,6 +77,10 @@ export type { Goto, Interrupt, NodeContext, NodeFunction, Router, Suspend, Workf
 export * as patterns from "../patterns";
 export * as specialists from "../specialists";
 export * as web from "./web";
+// MCP servers over HTTP (design 0022); `mcp.stdio` needs a server.
+export * as mcp from "../mcp";
+export { McpServer, McpTool } from "../mcp";
+export type { HttpOptions, McpInfo, McpOptions, StdioOptions } from "../mcp";
 export { ready } from "../ready";
 export { estimateCost } from "../usage";
 export type { Redactor } from "../redact";

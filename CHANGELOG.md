@@ -9,6 +9,18 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+- **Tools from MCP servers** (design 0022): `mcp.stdio(command, args)` starts a server, `mcp.http(url)`
+  reaches one over Streamable HTTP; pass the server (all its tools) or some of its tools to an agent.
+  Python `criogen.mcp`, TypeScript `mcp` (in `criogen/web` too, HTTP only), Rust
+  `criogen_agent::mcp::McpServer` (features `mcp` and `mcp-stdio`) and `AgentBuilder::tools`. The
+  client speaks MCP 2026-07-28 and falls back to `initialize` for 2025-11-25 and older servers;
+  restarts a stdio server that exits; maps tool names to what model APIs accept (with an optional
+  prefix); bounds messages, calls, tool counts and schemas; does not trust a server's
+  `readOnlyHint` / `idempotentHint` unless asked; keeps header and env values out of every error.
+  Tools only: no sampling, elicitation, resources or prompts yet. New error codes `mcp_connect`,
+  `mcp_protocol`, `mcp_tool_name`, `mcp_tool_schema`, `mcp_timeout`, `mcp_closed`.
+- `Transport::exchange` (criogen-providers): a response of any status with its headers.
+
 ## [0.1.4] - 2026-11-06
 
 - **Engine packages:** only `criogen-windows-x64` is 0.1.4 (built on Windows: GitHub Actions could

@@ -20,6 +20,12 @@ hierarchical, swarm, human review, one-line `quick("researcher > writer")`),
 extendable specialist agents, and Tavily/Brave search with a safe page reader
 (design 0019; guide: `website/content/docs/guides/patterns.mdx`).
 
+**MCP servers' tools (Python, TypeScript and Rust):** any MCP server's tools
+for an agent, started as a process (stdio) or at a URL (Streamable HTTP);
+MCP 2026-07-28 with a fallback for older servers; tools only (design 0022;
+guide: `website/content/docs/guides/mcp.mdx`). Not yet on npm or PyPI: in
+the next release.
+
 **In the browser:** the same engine compiled to WebAssembly, behind the same
 TypeScript API (`criogen/web`): agents run in a page or a Web Worker, tested
 in Chromium, Firefox and WebKit (design 0021; guide:

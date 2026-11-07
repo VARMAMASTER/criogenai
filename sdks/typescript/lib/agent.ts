@@ -1,5 +1,6 @@
 // Agents and threads (design 0012 §2) over the Rust engine.
 
+import { McpServer, McpTool } from "./mcp";
 import { type RunFacts, withRunFacts } from "./usage";
 import { native, NativeAgent, NativeStream } from "./native";
 import { translate } from "./errors";
@@ -77,7 +78,8 @@ export class AgentTool {
 export interface AgentOptions {
   model: Model;
   instructions?: string;
-  tools?: (Tool<any> | AgentTool)[];
+  /** Tools: `tool({...})`, `agent.asTool(...)`, an MCP server (all its tools) or one of its tools. */
+  tools?: (Tool<any> | AgentTool | McpServer | McpTool)[];
   /** Tools that need human approval before they run. */
   approve?: string[];
   /** JSON Schema of the final answer (`result.output`). */
@@ -161,12 +163,21 @@ export class Agent<Output = unknown> {
   constructor(options: AgentOptions) {
     const all = options.tools ?? [];
     for (const t of all) {
-      if (!(t instanceof Tool) && !(t instanceof AgentTool)) {
-        throw new TypeError(`${String(t)} is not a tool: define it with tool({...}) or agent.asTool(...)`);
+      if (!(t instanceof Tool) && !(t instanceof AgentTool) && !(t instanceof McpServer) && !(t instanceof McpTool)) {
+        throw new TypeError(`${String(t)} is not a tool: define it with tool({...}), agent.asTool(...), or pass an MCP server`);
       }
     }
     const tools = all.filter((t): t is Tool<any> => t instanceof Tool);
     const agentTools = all.filter((t): t is AgentTool => t instanceof AgentTool);
+    // MCP servers' tools (design 0022): a server means all its tools.
+    const servers = new Map<McpServer, string[] | null>();
+    for (const t of all) {
+      if (t instanceof McpServer) servers.set(t, null);
+      else if (t instanceof McpTool) {
+        const names = servers.has(t.server) ? servers.get(t.server)! : [];
+        if (names !== null) servers.set(t.server, [...names, t.name]);
+      }
+    }
     this.storage = options.storage instanceof Storage ? options.storage : new Storage({ url: options.storage });
     const failOnCrash = options.onToolException === "fail";
     const allHooks = options.redact ? [redactionHook(options.redact), ...(options.hooks ?? [])] : (options.hooks ?? []);
@@ -180,6 +191,7 @@ export class Agent<Output = unknown> {
       limits: options.onToolException ? { ...options.limits, onToolException: options.onToolException } : options.limits,
       memory: options.memory?.spec,
       agentTools: agentTools.map((t) => ({ name: t.name, description: t.description, handle: t.agent.native.handle })),
+      mcp: [...servers].map(([server, names]) => ({ handle: server.handle, names })),
       fallbacks: (options.fallbacks ?? []).map(modelSpec),
       fallbackOn: options.fallbackOn,
       modelRetry: options.modelRetry,

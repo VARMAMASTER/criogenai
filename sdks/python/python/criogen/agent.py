@@ -180,7 +180,7 @@ class Agent:
         model: Any,
         *,
         instructions: Optional[str] = None,
-        tools: Sequence[Union[Tool, AgentTool]] = (),
+        tools: Sequence[Any] = (),
         approve: Sequence[str] = (),
         output: Any = None,
         limits: Optional[Dict[str, Any]] = None,
@@ -202,11 +202,25 @@ class Agent:
         reaches a provider. The redacted transcript is what a thread saves."""
         if redact is not None:
             hooks = [Redaction(redact), *hooks]
+        from .mcp import McpServer, McpTool
+
         for t in tools:
-            if not isinstance(t, (Tool, AgentTool)):
-                raise TypeError(f"{t!r} is not a tool: decorate it with @tool, or use agent.as_tool(...)")
+            if not isinstance(t, (Tool, AgentTool, McpServer, McpTool)):
+                raise TypeError(
+                    f"{t!r} is not a tool: decorate it with @tool, use agent.as_tool(...), or pass an MCP server"
+                )
         functions = [t for t in tools if isinstance(t, Tool)]
         agents = [t for t in tools if isinstance(t, AgentTool)]
+        # MCP servers' tools (design 0022): a server means all its tools.
+        servers: Dict[int, Any] = {}
+        for t in tools:
+            if isinstance(t, McpServer):
+                servers[id(t)] = [t, None]
+            elif isinstance(t, McpTool):
+                entry = servers.setdefault(id(t.server), [t.server, []])
+                if entry[1] is not None:
+                    entry[1].append(t.name)
+        mcp = [(server._native, names) for server, names in servers.values()]
         if isinstance(storage, str):
             storage = Storage(storage)
         self.storage = storage
@@ -235,6 +249,7 @@ class Agent:
             [(t.name, t.description, t.agent._native) for t in agents],
             telemetry._native if telemetry is not None else None,
             [hook_adapter(h) for h in hooks],
+            mcp,
         )
 
     async def run(self, input: str, **state: Any) -> RunResult:

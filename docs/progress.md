@@ -66,7 +66,33 @@ remaining tasks one by one"), same full cycle:
 | 17 | TypeScript tool input with Standard Schema (Zod) | 0017 §6 | Done |
 | 18 | Gateway: `/v1/messages`, rate limits, budgets (relay path: own slice) | 0006 §13 | Done |
 | 19 | Providers: OpenAI Responses, native Gemini | 0006 §11 step 7 | Planned |
-| 20 | Vector indexes (pgvector, sqlite-vec) | 0008 §16 | Planned |
+| 20 | Vector indexes (pgvector, sqlite-vec) | 0008 §16 | Planned (in roadmap three, after 23) |
+
+Third roadmap, started 2026-11-07 at the user's request ("plan all the
+tiers and let's go"): the ideas worth taking from LangChain, LangGraph and
+LangSmith (ideas only, never their code), in this order, each with the same
+full cycle. Sizes are estimates: S days, M 1–3 weeks, L a month or more.
+
+| # | Task | Tier | Size | Spec | Status |
+|---|---|---|---|---|---|
+| 21 | MCP client: tools from any MCP server (stdio, Streamable HTTP), all SDKs | 1 | S–M | 0022 | Done (2026-11-07) |
+| 22 | Trace viewer: a local page with every run's calls, times, tokens, cost | 1 | M | 0023 | Planned |
+| 23 | Evals: datasets, scorers, compare two versions, fail CI on a drop | 1 | M | 0024 | Planned |
+| 20 | Vector indexes (sqlite-vec, pgvector) and a retriever interface | 1 | M | 0008 §16 | Planned |
+| 24 | RAG kit: document loaders, text splitters, a `rag()` pattern | 2 | M | 0025 | Planned |
+| 25 | Prompt templates with names and versions (used by evals) | 2 | S | 0026 | Planned |
+| 26 | Conversation memory: summarise old turns, sliding window, token budget | 2 | S–M | 0027 | Planned |
+| 27 | Subgraphs: a workflow as a node of another | 2 | S | 0005 | Planned |
+| 28 | Graph visualizer: any workflow as a diagram, live during a run | 2 | S | 0028 | Planned |
+| 29 | Background runs: start, come back later, webhooks, a task queue | 2 | M–L | 0029 | Planned |
+| 30 | Agent server: agents as an HTTP API with streaming, one command | 3 | M | 0030 | Planned |
+| 31 | Templates gallery: runnable starters on the website | 3 | S each | — | Planned |
+| 32 | Hosted tracing and evals | 3 | L | — | Needs a business decision |
+| 33 | Visual builder (drag-and-drop graphs) | 3 | L | — | Only if users ask |
+
+Not taken: their integration catalogue one by one (MCP covers it) and their
+layers of abstraction (our smaller API is the point). Output repair (retry on
+invalid typed output) already exists in the agent loop (0004).
 
 ## Open decisions
 

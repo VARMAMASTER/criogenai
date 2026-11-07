@@ -89,4 +89,4 @@ pub use tool::{
     RESERVED_TOOL_NAMES, ToolAnnotations, ToolIssue, ToolKind, ToolSpec, validate_tools,
 };
 #[cfg(feature = "http")]
-pub use transport::{Body, HttpConfig, Transport, WireRequest};
+pub use transport::{Body, Exchange, HttpConfig, Transport, WireRequest};

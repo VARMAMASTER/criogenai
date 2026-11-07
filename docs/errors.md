@@ -92,6 +92,12 @@ Generated from [`schemas/error-codes.json`](../schemas/error-codes.json) (design
 | `invalid_agent` | developer | no | `ValidationError` | - | An SDK agent configuration the engine could not build. |
 | `invalid_workflow` | developer | no | `ValidationError` | - | An SDK workflow that does not validate (`details.issues` lists the problems). |
 | `unsupported` | developer | no | `CriogenError` | - | The feature needs a server, and here the engine runs as WebAssembly in a JavaScript host (the browser, design 0021): databases (SQLite, Postgres), encryption at rest, telemetry export, web tools. |
+| `mcp_connect` | developer | no | `CriogenError` | - | An MCP server could not be started or reached, or refused the credentials (design 0022). |
+| `mcp_protocol` | developer | no | `CriogenError` | - | An MCP server answered something the client cannot use: a malformed message, an error, or a protocol version Criogen does not speak. |
+| `mcp_tool_name` | developer | no | `CriogenError` | - | Two of an MCP server's tools map to the same name, or a name maps to nothing: set a prefix or leave one out with `except`. |
+| `mcp_tool_schema` | developer | no | `CriogenError` | - | An MCP tool's input schema is not an object schema, or is too large or too deep: leave the tool out with `except`. |
+| `mcp_timeout` | transient | yes | `CriogenError` | - | An MCP server was not ready within the connect timeout. |
+| `mcp_closed` | developer | no | `CriogenError` | - | The MCP server stopped (its process exited) or the client was closed. |
 
 ## Gateway errors (`error.code` in the HTTP body)
 

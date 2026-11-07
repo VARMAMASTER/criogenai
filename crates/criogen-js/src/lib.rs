@@ -24,6 +24,7 @@ mod agent;
 mod config;
 mod function_model;
 mod gateway;
+mod mcp;
 mod workflow;
 
 pub use agent::{EventStream, agent_run, agent_stream, agent_thread, build_agent, forget_agent};
@@ -32,6 +33,7 @@ pub use config::{
 };
 pub use function_model::{register_function, release_function};
 pub use gateway::{ChatStream, Gateway};
+pub use mcp::{mcp_call, mcp_close, mcp_connect, mcp_refresh};
 pub use workflow::{build_workflow, workflow_resume, workflow_run, workflow_thread};
 
 // ---------- failures ----------

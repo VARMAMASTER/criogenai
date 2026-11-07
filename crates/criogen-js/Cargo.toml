@@ -16,7 +16,8 @@ publish = false
 criogen-core = { path = "../criogen-core", version = "0.1.0" }
 criogen-providers = { path = "../criogen-providers", version = "0.1.0" }
 criogen-storage = { path = "../criogen-storage", version = "0.1.0" }
-criogen-agent = { path = "../criogen-agent", version = "0.1.0" }
+# `mcp`: tools from MCP servers over HTTP (design 0022), in both engines.
+criogen-agent = { path = "../criogen-agent", version = "0.1.0", features = ["mcp"] }
 serde.workspace = true
 serde_json.workspace = true
 # `sync`: the streams' channels and locks.
@@ -25,6 +26,8 @@ tokio = { workspace = true, features = ["sync"] }
 [features]
 # Encrypted databases (the Node addon; never in the browser).
 encryption = ["criogen-storage/encryption", "criogen-agent/encryption"]
+# MCP servers started as a process (the Node addon; never in the browser).
+mcp-stdio = ["criogen-agent/mcp-stdio"]
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }

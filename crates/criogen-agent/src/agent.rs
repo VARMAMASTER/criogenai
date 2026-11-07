@@ -340,6 +340,13 @@ impl AgentBuilder {
         self
     }
 
+    /// Adds several shared tools, e.g. an MCP server's
+    /// (`McpClient::tools`, feature `mcp`).
+    pub fn tools(mut self, tools: impl IntoIterator<Item = Arc<dyn Tool>>) -> Self {
+        self.tools.extend(tools);
+        self
+    }
+
     /// Sets the limits.
     pub fn limits(mut self, limits: Limits) -> Self {
         self.limits = limits;

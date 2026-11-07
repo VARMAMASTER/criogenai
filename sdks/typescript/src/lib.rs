@@ -361,6 +361,34 @@ impl NativeStream {
     }
 }
 
+// ---------- MCP servers (design 0022) ----------
+
+/// Starts or reaches an MCP server: `{handle, info, tools}`.
+#[napi]
+pub async fn mcp_connect(spec: String) -> napi::Result<String> {
+    criogen_js::mcp_connect(spec).await.map_err(to_napi)
+}
+
+/// Lists a server's tools again.
+#[napi]
+pub async fn mcp_refresh(handle: u32) -> napi::Result<String> {
+    criogen_js::mcp_refresh(handle).await.map_err(to_napi)
+}
+
+/// Calls a server's tool: `{ok, text | value | content | error}`.
+#[napi]
+pub async fn mcp_call(handle: u32, name: String, args: String) -> napi::Result<String> {
+    criogen_js::mcp_call(handle, name, args)
+        .await
+        .map_err(to_napi)
+}
+
+/// Stops a server.
+#[napi]
+pub async fn mcp_close(handle: u32) {
+    criogen_js::mcp_close(handle).await;
+}
+
 // ---------- the gateway (design 0018) ----------
 
 /// Model calls without an agent: the agent's retries and fallbacks

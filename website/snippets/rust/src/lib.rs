@@ -5,6 +5,7 @@ pub mod agents;
 pub mod approvals;
 pub mod compliance;
 pub mod gateway;
+pub mod mcp;
 pub mod memory;
 pub mod models;
 pub mod quickstart;
