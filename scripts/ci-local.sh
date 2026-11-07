@@ -164,6 +164,8 @@ step_typescript() {
   CARGO_TARGET_DIR="$root/target/node" run cargo fmt --manifest-path "$manifest" --check
   CARGO_TARGET_DIR="$root/target/node" run cargo clippy --manifest-path "$manifest" -- -D warnings
   run bash scripts/test-typescript.sh
+  # The trace viewer's page in Chromium (design 0023).
+  run node sdks/typescript/test/browser/trace-page.mjs
 }
 
 step_web() {

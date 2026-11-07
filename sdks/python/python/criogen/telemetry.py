@@ -58,6 +58,13 @@ class Telemetry:
             }
         )
 
+    @staticmethod
+    def local(capture_content: bool = False, url: str = "http://127.0.0.1:4318") -> "Telemetry":
+        """The local trace viewer (``python -m criogen.trace``, design 0023).
+        Content (prompts, outputs) only with ``capture_content=True``; it
+        stays on this computer either way."""
+        return Telemetry.otlp(url.rstrip("/") + "/v1/traces", capture_content=capture_content)
+
     async def flush(self) -> None:
         """Waits until everything sent so far is exported."""
         await self._native.flush(asyncio.get_running_loop())

@@ -11,4 +11,13 @@ const agent = new Agent({ model: "openai:gpt-5-mini", telemetry: langfuse }); //
 await agent.run("Where is order A-1001?", { state: { user_id: "u-42" } });
 await langfuse.flush(); // before the script ends
 // [/show]
-export {};
+
+export async function local() {
+  // [show local]
+  // In a terminal: npx criogen trace   (then open http://127.0.0.1:4318)
+  const traces = Telemetry.local(); // { captureContent: true } to see prompts and outputs too
+  const agent = new Agent({ model: "openai:gpt-5-mini", telemetry: traces });
+  await agent.run("Where is order A-1001?");
+  await traces.flush();
+  // [/show local]
+}

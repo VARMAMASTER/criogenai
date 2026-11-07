@@ -63,6 +63,9 @@ export * as specialists from "./specialists";
 export * as web from "./web";
 // Tools from MCP servers (design 0022).
 export * as mcp from "./mcp";
+// The local trace viewer (design 0023).
+export { serveTraces } from "./trace";
+export type { TraceViewer, TraceViewerOptions } from "./trace";
 export { McpServer, McpTool } from "./mcp";
 export type { HttpOptions, McpInfo, McpOptions, StdioOptions } from "./mcp";
 export { loadEnv, parseEnv, envStatus, keyName } from "./env";

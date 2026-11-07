@@ -42,6 +42,15 @@ export class Telemetry {
     return new Telemetry({ kind: "otlp", endpoint, ...options, headers: options.headers ?? {}, captureContent: options.captureContent ?? false });
   }
 
+  /**
+   * The local trace viewer (`npx criogen trace`, `serveTraces()`, design 0023).
+   * Content only with `captureContent: true`; it stays on this computer either way.
+   */
+  static local(options: TelemetryOptions & { url?: string } = {}): Telemetry {
+    const { url, ...rest } = options;
+    return Telemetry.otlp(`${(url ?? "http://127.0.0.1:4318").replace(/\/+$/, "")}/v1/traces`, rest);
+  }
+
   /** Waits until everything sent so far is exported. */
   flush(): Promise<void> {
     return this.native.flush();

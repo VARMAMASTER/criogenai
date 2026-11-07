@@ -16,6 +16,8 @@ criogen-core = { path = "../../crates/criogen-core" }
 criogen-providers = { path = "../../crates/criogen-providers" }
 criogen-storage = { path = "../../crates/criogen-storage", features = ["sqlite", "postgres", "encryption"] }
 criogen-agent = { path = "../../crates/criogen-agent", features = ["sqlite", "postgres", "encryption"] }
+# The local trace viewer (design 0023); not in the WebAssembly engine.
+criogen-trace = { path = "../../crates/criogen-trace" }
 criogen-telemetry = { path = "../../crates/criogen-telemetry" }
 # The bridge shared with the browser engine (design 0021).
 criogen-js = { path = "../../crates/criogen-js", features = ["encryption", "mcp-stdio"] }

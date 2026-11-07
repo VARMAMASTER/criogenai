@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/criogen-rt", "crates/criogen-core", "crates/criogen-providers", "crates/criogen-agent", "crates/criogen-telemetry", "crates/criogen-storage", "crates/criogen-gateway", "crates/criogen-bench", "crates/criogen-js"]
+members = ["crates/criogen-rt", "crates/criogen-core", "crates/criogen-providers", "crates/criogen-agent", "crates/criogen-telemetry", "crates/criogen-storage", "crates/criogen-gateway", "crates/criogen-bench", "crates/criogen-js", "crates/criogen-trace"]
 
 [workspace.package]
 version = "0.1.0"

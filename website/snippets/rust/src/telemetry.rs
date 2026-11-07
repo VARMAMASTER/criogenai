@@ -21,3 +21,20 @@ pub async fn telemetry(agent: Agent) -> Result<(), Error> {
     // [/show]
     Ok(())
 }
+
+pub async fn local(agent: Agent) -> Result<(), Error> {
+    // [show local]
+    // In a terminal: criogen-trace   (then open http://127.0.0.1:4318)
+    use criogen_telemetry::{OtlpConfig, OtlpExporter};
+
+    let traces = OtlpExporter::start(OtlpConfig::local())?; // .capture_content(true) for prompts
+    agent
+        .run_with(
+            "Where is order A-1001?",
+            agent.run_options().observe(traces.observer()),
+        )
+        .await?;
+    traces.flush().await;
+    // [/show local]
+    Ok(())
+}

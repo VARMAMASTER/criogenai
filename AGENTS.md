@@ -287,6 +287,19 @@ write our own implementation.
   engines). Tests: `criogen-agent/tests/mcp.rs` (harness = false: the test
   binary is also the scripted stdio server), `tests/mcp_http.rs`,
   `sdks/python/tests/test_mcp.py`, `sdks/typescript/test/mcp.test.js`.
+- **Implemented: local trace viewer (0023).** `crates/criogen-trace`
+  (lib + binary `criogen-trace`; axum, sqlx SQLite): OTLP/HTTP JSON
+  receiver (`POST /v1/traces`), `GET /api/runs[/{id}]`, `DELETE
+  /api/runs`, the page (`src/page.html`, embedded, strict CSP, values set
+  as text). `Viewer::builder()`, `start`/`RunningViewer`,
+  `ViewerBuilder::from_spec` (used by both SDK bridges),
+  `OtlpConfig::local()`. Python `criogen.trace` (`serve`, `python -m
+  criogen.trace`, `Telemetry.local`), TypeScript `serveTraces`,
+  `Telemetry.local`, `npx criogen trace` (`lib/cli.ts`, package `bin`).
+  Tests: `crates/criogen-trace/tests/viewer.rs`, `sdks/python/tests/
+  test_trace.py`, `sdks/typescript/test/trace.test.js`, the page in
+  Chromium `sdks/typescript/test/browser/trace-page.mjs` (ci-local step
+  `typescript`). Demo: `cargo run -p criogen-trace --example demo`.
 - **Not started:** vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 

@@ -9,6 +9,15 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+- **Local trace viewer** (design 0023): every run on a page, on your own computer. `python -m
+  criogen.trace`, `npx criogen trace` (the package now has a `criogen` command) or the
+  `criogen-trace` binary, then `Telemetry.local()` / `OtlpConfig::local()`. A waterfall of each
+  run's model calls, tool calls and steps, durations, tokens, cost from your prices, warnings and
+  failures, and where the time went. It is an OTLP/HTTP (JSON) receiver over SQLite
+  (`~/.criogen/traces.db`, or in memory), keeps 10 000 runs for 14 days, listens on 127.0.0.1 only
+  unless given a token, bounds what it receives, and shows every value as text. Also
+  `criogen.trace.serve()` / `serveTraces()` from code.
+
 - **Tools from MCP servers** (design 0022): `mcp.stdio(command, args)` starts a server, `mcp.http(url)`
   reaches one over Streamable HTTP; pass the server (all its tools) or some of its tools to an agent.
   Python `criogen.mcp`, TypeScript `mcp` (in `criogen/web` too, HTTP only), Rust

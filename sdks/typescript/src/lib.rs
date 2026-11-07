@@ -23,7 +23,7 @@ use napi::Status;
 use napi::bindgen_prelude::{Promise, block_on, within_runtime_if_available};
 use napi::threadsafe_function::ThreadsafeFunction;
 use napi_derive::napi;
-use serde_json::json;
+use serde_json::{Value, json};
 
 /// A JavaScript tool: `(request_json) => Promise<envelope_json>`. Weak, so
 /// an idle agent does not keep Node running.
@@ -358,6 +358,42 @@ impl NativeStream {
     #[napi]
     pub fn cancel(&self) {
         self.inner.cancel();
+    }
+}
+
+// ---------- the trace viewer (design 0023) ----------
+
+fn viewers() -> &'static Mutex<HashMap<u32, criogen_trace::RunningViewer>> {
+    static VIEWERS: OnceLock<Mutex<HashMap<u32, criogen_trace::RunningViewer>>> = OnceLock::new();
+    VIEWERS.get_or_init(Mutex::default)
+}
+
+/// Starts the local trace viewer: `{handle, url}`. Spec as
+/// `criogen_trace::ViewerBuilder::from_spec`.
+#[napi]
+pub async fn trace_start(spec: String) -> napi::Result<String> {
+    let spec: Value =
+        serde_json::from_str(&spec).map_err(|e| napi::Error::from_reason(e.to_string()))?;
+    let start = async {
+        let (builder, address) = criogen_trace::ViewerBuilder::from_spec(&spec)?;
+        criogen_trace::start(builder, address).await
+    };
+    let running = start
+        .await
+        .map_err(|e| to_napi(criogen_js::failure("invalid_value", e.to_string(), None)))?;
+    static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
+    let handle = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let url = running.url();
+    lock(viewers()).insert(handle, running);
+    Ok(json!({ "handle": handle, "url": url }).to_string())
+}
+
+/// Stops a trace viewer.
+#[napi]
+pub async fn trace_stop(handle: u32) {
+    let running = lock(viewers()).remove(&handle);
+    if let Some(running) = running {
+        running.stop().await;
     }
 }
 

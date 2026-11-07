@@ -17,6 +17,8 @@ criogen-core = { path = "../../crates/criogen-core" }
 criogen-providers = { path = "../../crates/criogen-providers" }
 criogen-storage = { path = "../../crates/criogen-storage", features = ["sqlite", "postgres", "encryption"] }
 criogen-agent = { path = "../../crates/criogen-agent", features = ["sqlite", "postgres", "encryption", "mcp-stdio"] }
+# The local trace viewer (design 0023).
+criogen-trace = { path = "../../crates/criogen-trace" }
 criogen-telemetry = { path = "../../crates/criogen-telemetry" }
 # The stable ABI: one wheel for every Python from 3.9.
 pyo3 = { version = "0.29", features = ["extension-module", "abi3-py39"] }

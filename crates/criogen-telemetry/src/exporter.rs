@@ -78,6 +78,13 @@ impl OtlpConfig {
         }
     }
 
+    /// Export to the local trace viewer (`criogen-trace`, design 0023) at
+    /// `http://127.0.0.1:4318/v1/traces`. Content stays off unless
+    /// [`capture_content`](Self::capture_content) is set.
+    pub fn local() -> Self {
+        Self::new("http://127.0.0.1:4318/v1/traces")
+    }
+
     /// Adds a header.
     pub fn header(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.headers.push((name.into(), value.into()));

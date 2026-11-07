@@ -2139,6 +2139,59 @@ impl NativeStream {
     }
 }
 
+// ---------- the trace viewer (design 0023) ----------
+
+/// The local trace viewer, serving in the background.
+#[pyclass(frozen)]
+struct NativeTraceViewer {
+    running: Arc<Mutex<Option<criogen_trace::RunningViewer>>>,
+    url: String,
+}
+
+#[pymethods]
+impl NativeTraceViewer {
+    /// Starts serving (blocking briefly, without the GIL): spec as
+    /// `criogen_trace::ViewerBuilder::from_spec`.
+    #[new]
+    fn new(py: Python<'_>, spec: &str) -> PyResult<Self> {
+        let spec: Value =
+            serde_json::from_str(spec).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let running = py
+            .detach(|| {
+                runtime().block_on(async {
+                    let (builder, address) = criogen_trace::ViewerBuilder::from_spec(&spec)?;
+                    criogen_trace::start(builder, address).await
+                })
+            })
+            .map_err(|e| py_failure(bad(e.to_string())))?;
+        Ok(Self {
+            url: running.url(),
+            running: Arc::new(Mutex::new(Some(running))),
+        })
+    }
+
+    /// The page's address.
+    #[getter]
+    fn url(&self) -> String {
+        self.url.clone()
+    }
+
+    /// Stops serving.
+    fn stop<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let running = lock(&self.running).take();
+        spawn(py, event_loop, None, async move {
+            if let Some(running) = running {
+                running.stop().await;
+            }
+            Ok(Value::Null)
+        })
+    }
+}
+
 // ---------- MCP servers (design 0022) ----------
 
 fn from_mcp(error: McpError) -> Failure {
@@ -2276,6 +2329,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NativeTelemetry>()?;
     m.add_class::<NativeStream>()?;
     m.add_class::<NativeMcp>()?;
+    m.add_class::<NativeTraceViewer>()?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("PRESETS", presets_json())?;
     Ok(())

@@ -11,6 +11,31 @@ Langfuse or any OpenTelemetry collector.
 
 <Sample name="telemetry" />
 
+## See runs on your own computer
+
+The **local trace viewer** shows every run on a page, with no account and
+nothing leaving the computer: model calls, tool calls and steps on a time
+axis, durations, tokens, cost (from your prices), failures, and where the
+time went (model, tools, Criogen and your code).
+
+<Sample name="telemetry" region="local" />
+
+- Start it with `python -m criogen.trace`, `npx criogen trace` or the
+  `criogen-trace` binary, and open `http://127.0.0.1:4318`. Runs are kept in
+  `~/.criogen/traces.db` (`--memory` for none): the newest 10 000, for 14
+  days.
+- Prompts and outputs appear only with content capture on; otherwise you see
+  structure, timing, tokens and error codes.
+- **Cost**: pass `--prices prices.json` (USD per million tokens by
+  `provider:model` or model name, e.g. `{"gpt-5-mini": {"input": 0.25,
+  "output": 2}}`). Criogen ships no price list: a stale price is worse than
+  none.
+- It listens on `127.0.0.1` only. To share one on a network, pass
+  `--allow-remote --token-env NAME`; clients then send that token.
+- It is an ordinary OTLP/HTTP (JSON) receiver, so the same runs can also go
+  to Langfuse: give an agent one exporter, or run the viewer while you
+  develop and Langfuse in production.
+
 - **Never slows or breaks a run**: the observer only queues events; a
   background task batches and sends them, and retries on transient errors.
 - **Sensitive data**: in every language, prompts, answers, tool data,

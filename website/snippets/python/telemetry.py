@@ -15,3 +15,15 @@ async def main() -> None:
     await agent.run("Where is order A-1001?", user_id="u-42")
     await langfuse.flush()  # before the script ends
     # [/show]
+
+
+async def local() -> None:
+    # [show local]
+    # In a terminal: python -m criogen.trace   (then open http://127.0.0.1:4318)
+    from criogen import Agent, Telemetry
+
+    traces = Telemetry.local()  # capture_content=True to see prompts and outputs too
+    agent = Agent("openai:gpt-5-mini", telemetry=traces)
+    await agent.run("Where is order A-1001?")
+    await traces.flush()
+    # [/show local]

@@ -26,6 +26,11 @@ MCP 2026-07-28 with a fallback for older servers; tools only (design 0022;
 guide: `website/content/docs/guides/mcp.mdx`). Not yet on npm or PyPI: in
 the next release.
 
+**Local trace viewer:** every run on a page, on your own computer
+(`python -m criogen.trace`, `npx criogen trace`, `criogen-trace`): each
+run's steps on a time axis with durations, tokens, cost and failures (design
+0023; crate `crates/criogen-trace`). In the next release.
+
 **In the browser:** the same engine compiled to WebAssembly, behind the same
 TypeScript API (`criogen/web`): agents run in a page or a Web Worker, tested
 in Chromium, Firefox and WebKit (design 0021; guide:
