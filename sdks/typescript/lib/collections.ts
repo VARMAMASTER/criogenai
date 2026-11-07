@@ -11,7 +11,7 @@
 // both engines (in the browser, over in-memory storage).
 
 import { translate } from "./errors";
-import type { Embedder } from "./models";
+import { type Embedder, requireEngine015 } from "./models";
 import { Storage } from "./storage";
 
 /** A text to search, with an id and metadata. */
@@ -67,6 +67,7 @@ export class Collection {
 
   /** Opens collection `name`, building its index from the stored vectors. */
   static async open(name: string, options: CollectionOptions): Promise<Collection> {
+    requireEngine015("Collections");
     const storage = options.storage instanceof Storage ? options.storage : new Storage({ url: options.storage });
     const spec = { name, embedder: options.embedder.spec, index: options.index ?? "flat", efSearch: options.efSearch };
     let opened: { handle: number };

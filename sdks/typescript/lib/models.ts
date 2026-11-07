@@ -263,6 +263,21 @@ export function requireFunctions(what: string): void {
   }
 }
 
+/**
+ * Throws `unsupported` when the installed engine predates 0.1.5 (collections,
+ * evals' schema scorer): `validateJson` arrived with it. Linux and macOS
+ * engine packages stay older until they can be built again.
+ */
+export function requireEngine015(what: string): void {
+  if (typeof (native as { validateJson?: unknown }).validateJson !== "function") {
+    throw errorFor(
+      "unsupported",
+      `${what} needs criogen's engine 0.1.5 or newer, and the engine package installed for this system is older: ` +
+        "it comes with the next release for this platform (Windows and the browser, criogen/web, have it now)",
+    );
+  }
+}
+
 /** Releases a function model's engine handle once the object is gone. */
 const releaseHandle =
   typeof FinalizationRegistry === "function"

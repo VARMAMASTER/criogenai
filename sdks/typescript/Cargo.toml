@@ -2,7 +2,7 @@
 # building it needs Node. Built with @napi-rs/cli (see package.json).
 [package]
 name = "criogen-node"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"

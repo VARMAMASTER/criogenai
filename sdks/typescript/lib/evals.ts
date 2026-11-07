@@ -14,7 +14,7 @@
 import { Agent, type RunResult } from "./agent";
 import { CriogenError } from "./errors";
 import { Gateway } from "./gateway";
-import type { Model } from "./models";
+import { type Model, requireEngine015 } from "./models";
 import { native } from "./native";
 
 export const FORMAT = "criogen-eval/1";
@@ -216,6 +216,7 @@ export function jsonValid(): Scorer {
 
 /** The output (JSON) matches `schema`, checked by the engine's validator. */
 export function jsonSchema(schema: Record<string, unknown>): Scorer {
+  requireEngine015("The jsonSchema scorer");
   const schemaText = JSON.stringify(schema);
   return scorer("json_schema", (_c, output) => {
     let value: unknown;

@@ -9,6 +9,14 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-11-07
+
+- **Packages:** npm only. `criogen@0.1.5` and the Windows engine `criogen-windows-x64@0.1.5`, built on
+  Windows (GitHub Actions cannot run until billing is fixed). Linux and macOS keep their 0.1.3 engine
+  until the next release; there, MCP, the trace viewer, collections and the `jsonSchema` scorer say so
+  (`unsupported`) instead of failing obscurely. `criogen/web` (the browser engine) has everything.
+  PyPI stays at 0.1.3: the Python side of the features below arrives with the next PyPI release.
+
 - **Collections and retrieval** (design 0025): `Collection.open(name, embedder=…, storage=…)`,
   `add`, `search(query, k, where=…)`, `remove`, `reload`, `as_tool` in Python, TypeScript (both
   engines) and Rust (`criogen_agent::retrieval`), plus a `Retriever` trait and `retriever_tool` for

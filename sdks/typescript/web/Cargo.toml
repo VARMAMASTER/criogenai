@@ -4,7 +4,7 @@
 # (scripts/build-web.mjs runs cargo, wasm-bindgen and the bundler).
 [package]
 name = "criogen-web"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
