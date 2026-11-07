@@ -202,10 +202,11 @@ class Agent:
         reaches a provider. The redacted transcript is what a thread saves."""
         if redact is not None:
             hooks = [Redaction(redact), *hooks]
+        from .collections import CollectionTool
         from .mcp import McpServer, McpTool
 
         for t in tools:
-            if not isinstance(t, (Tool, AgentTool, McpServer, McpTool)):
+            if not isinstance(t, (Tool, AgentTool, McpServer, McpTool, CollectionTool)):
                 raise TypeError(
                     f"{t!r} is not a tool: decorate it with @tool, use agent.as_tool(...), or pass an MCP server"
                 )
@@ -221,6 +222,7 @@ class Agent:
                 if entry[1] is not None:
                     entry[1].append(t.name)
         mcp = [(server._native, names) for server, names in servers.values()]
+        searches = [(t.collection._native, t.name, t.description) for t in tools if isinstance(t, CollectionTool)]
         if isinstance(storage, str):
             storage = Storage(storage)
         self.storage = storage
@@ -250,6 +252,7 @@ class Agent:
             telemetry._native if telemetry is not None else None,
             [hook_adapter(h) for h in hooks],
             mcp,
+            searches,
         )
 
     async def run(self, input: str, **state: Any) -> RunResult:

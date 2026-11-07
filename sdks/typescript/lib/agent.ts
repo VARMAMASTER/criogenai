@@ -1,5 +1,6 @@
 // Agents and threads (design 0012 §2) over the Rust engine.
 
+import { CollectionTool } from "./collections";
 import { McpServer, McpTool } from "./mcp";
 import { type RunFacts, withRunFacts } from "./usage";
 import { native, NativeAgent, NativeStream } from "./native";
@@ -79,7 +80,7 @@ export interface AgentOptions {
   model: Model;
   instructions?: string;
   /** Tools: `tool({...})`, `agent.asTool(...)`, an MCP server (all its tools) or one of its tools. */
-  tools?: (Tool<any> | AgentTool | McpServer | McpTool)[];
+  tools?: (Tool<any> | AgentTool | McpServer | McpTool | CollectionTool)[];
   /** Tools that need human approval before they run. */
   approve?: string[];
   /** JSON Schema of the final answer (`result.output`). */
@@ -163,7 +164,7 @@ export class Agent<Output = unknown> {
   constructor(options: AgentOptions) {
     const all = options.tools ?? [];
     for (const t of all) {
-      if (!(t instanceof Tool) && !(t instanceof AgentTool) && !(t instanceof McpServer) && !(t instanceof McpTool)) {
+      if (!(t instanceof Tool) && !(t instanceof AgentTool) && !(t instanceof McpServer) && !(t instanceof McpTool) && !(t instanceof CollectionTool)) {
         throw new TypeError(`${String(t)} is not a tool: define it with tool({...}), agent.asTool(...), or pass an MCP server`);
       }
     }
@@ -192,6 +193,9 @@ export class Agent<Output = unknown> {
       memory: options.memory?.spec,
       agentTools: agentTools.map((t) => ({ name: t.name, description: t.description, handle: t.agent.native.handle })),
       mcp: [...servers].map(([server, names]) => ({ handle: server.handle, names })),
+      collections: all
+        .filter((t): t is CollectionTool => t instanceof CollectionTool)
+        .map((t) => ({ handle: t.collection.handle, name: t.name, description: t.description })),
       fallbacks: (options.fallbacks ?? []).map(modelSpec),
       fallbackOn: options.fallbackOn,
       modelRetry: options.modelRetry,

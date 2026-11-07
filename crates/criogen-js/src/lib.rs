@@ -21,6 +21,7 @@ use criogen_providers::BoxFuture;
 use serde_json::{Value, json};
 
 mod agent;
+mod collections;
 mod config;
 mod function_model;
 mod gateway;

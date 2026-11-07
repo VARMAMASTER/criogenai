@@ -26,6 +26,11 @@ MCP 2026-07-28 with a fallback for older servers; tools only (design 0022;
 guide: `website/content/docs/guides/mcp.mdx`). Not yet on npm or PyPI: in
 the next release.
 
+**Collections (Python, TypeScript and Rust):** documents searched by
+meaning, stored (encrypted when the storage is) and indexed in memory, exact
+or HNSW, usable as an agent tool (design 0025; numbers in
+`docs/benchmarks.md`). In the next release.
+
 **Evals (Python, TypeScript and Rust):** run an agent over a set of cases,
 score each answer (text, JSON, tool use, budgets, a model as judge), compare
 with the last good run and fail CI on a drop (design 0024; guide:

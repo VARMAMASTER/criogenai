@@ -304,6 +304,14 @@ pub trait MemoryStore: Send + Sync + 'static {
 
     /// Removes expired items. Returns how many.
     fn prune_expired(&self) -> BoxFuture<'_, Result<u64, StorageError>>;
+
+    /// Every live item in `prefix` (and the namespaces inside it) that has
+    /// a vector, with the vector, decrypted as any read is. What a
+    /// collection builds its index from (design 0025).
+    fn embedded<'a>(
+        &'a self,
+        prefix: &'a Namespace,
+    ) -> BoxFuture<'a, Result<Vec<(MemoryItem, Embedding)>, StorageError>>;
 }
 
 /// A memory store limited to one namespace: what an agent's tools see.
@@ -718,6 +726,20 @@ impl MemoryStore for InMemoryStore {
             }
         };
         drop(items);
+        Box::pin(async move { Ok(found) })
+    }
+
+    fn embedded<'a>(
+        &'a self,
+        prefix: &'a Namespace,
+    ) -> BoxFuture<'a, Result<Vec<(MemoryItem, Embedding)>, StorageError>> {
+        let now = now_ms();
+        let found: Vec<(MemoryItem, Embedding)> = self
+            .items()
+            .values()
+            .filter(|s| prefix.contains(&s.item.namespace) && is_live(s.item.expires_at_ms, now))
+            .filter_map(|s| Some((s.item.clone(), s.embedding.clone()?)))
+            .collect();
         Box::pin(async move { Ok(found) })
     }
 

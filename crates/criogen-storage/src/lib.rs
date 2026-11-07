@@ -60,6 +60,7 @@ mod sql;
 mod sqlite;
 mod storage;
 mod store;
+pub mod vector;
 mod workflow_thread;
 mod writer;
 

@@ -9,6 +9,9 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 publish = false
+# `cargo run -p criogen-bench` runs the main benchmarks; `--bin vectors` the
+# vector search ones (design 0025).
+default-run = "criogen-bench"
 
 [dependencies]
 criogen-core = { path = "../criogen-core" }

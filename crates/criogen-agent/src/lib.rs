@@ -88,6 +88,7 @@ mod nested;
 mod output;
 pub mod patterns;
 mod resilience;
+pub mod retrieval;
 mod schema;
 pub mod specialists;
 mod stream;

@@ -75,6 +75,38 @@ or memory use. Once a model takes a second to answer, the difference
 between 20 µs and 250 µs per step is negligible. It matters for
 workflows with many steps, wide fan-outs, or many concurrent runs.
 
+## Vector search (design 0025)
+
+`cargo run -p criogen-bench --release --bin vectors` (same machine,
+2026-11-07). 768-dimension vectors, median of the queries.
+
+Memory search without an index (top 5), as the memory store does it:
+
+| Items | In memory | SQLite file |
+|---|---|---|
+| 1 000 | 2.8 ms | 18.0 ms |
+| 10 000 | 28.6 ms | 210 ms |
+| 50 000 | 155.9 ms | 1 278 ms |
+
+Collection indexes (`-- --indexes --clustered`, top 10; vectors gathered
+around 500 centres, as real embeddings gather around topics):
+
+| Items | Flat build | Flat query | HNSW build | HNSW query | HNSW recall@10 |
+|---|---|---|---|---|---|
+| 10 000 | 0.04 s | 2.3 ms | 7.4 s | 0.78 ms | 1.000 |
+| 50 000 | 0.17 s | 15.5 ms | 34.2 s | 0.24 ms | 0.980 |
+| 100 000 | 0.35 s | 16.6 ms | 54.4 s | 0.18 ms | 0.880 |
+
+Uniform random vectors (`-- --indexes`), the worst case for HNSW:
+
+| Items | Flat query | HNSW query | HNSW recall@10 |
+|---|---|---|---|
+| 10 000 | 1.8 ms | 0.80 ms | 0.342 |
+| 50 000 | 9.8 ms | 1.04 ms | 0.098 |
+
+Recall is the share of the exact top 10 that HNSW returns. The flat index is
+exact (recall 1 by definition) and is the default.
+
 ## Reproducing
 
 ```sh

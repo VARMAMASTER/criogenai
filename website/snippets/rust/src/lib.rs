@@ -10,6 +10,7 @@ pub mod mcp;
 pub mod memory;
 pub mod models;
 pub mod quickstart;
+pub mod retrieval;
 pub mod storage;
 pub mod streaming;
 pub mod telemetry;

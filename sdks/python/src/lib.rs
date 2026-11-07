@@ -1522,7 +1522,7 @@ impl NativeAgent {
     /// the configuration's order; without `storage` it keeps threads in
     /// memory.
     #[new]
-    #[pyo3(signature = (config, tools, storage=None, agent_tools=Vec::new(), telemetry=None, hooks=Vec::new(), mcp=Vec::new()))]
+    #[pyo3(signature = (config, tools, storage=None, agent_tools=Vec::new(), telemetry=None, hooks=Vec::new(), mcp=Vec::new(), collections=Vec::new()))]
     #[allow(clippy::too_many_arguments)]
     fn new(
         config: &str,
@@ -1532,6 +1532,7 @@ impl NativeAgent {
         telemetry: Option<&NativeTelemetry>,
         hooks: Vec<(String, Py<PyAny>, Vec<String>)>,
         mcp: Vec<(Py<NativeMcp>, Option<Vec<String>>)>,
+        collections: Vec<(Py<NativeCollection>, String, String)>,
     ) -> PyResult<Self> {
         let config: Value =
             serde_json::from_str(config).map_err(|e| PyValueError::new_err(e.to_string()))?;
@@ -1585,6 +1586,11 @@ impl NativeAgent {
                     builder = builder.shared_tool(tool);
                 }
             }
+        }
+        // Collections as search tools (design 0025).
+        for (collection, name, description) in collections {
+            let collection = collection.get().get().map_err(py_failure)?;
+            builder = builder.tool(collection.as_tool(name, description));
         }
         // Agents as tools of this one (design 0017 §1).
         for (name, description, agent) in agent_tools {
@@ -2139,6 +2145,154 @@ impl NativeStream {
     }
 }
 
+// ---------- collections (design 0025) ----------
+
+fn from_retrieval(error: criogen_agent::retrieval::RetrievalError) -> Failure {
+    Failure::new(error.code(), error.to_string())
+}
+
+fn hit_json(hit: &criogen_agent::retrieval::Hit) -> Value {
+    json!({ "id": hit.id, "text": hit.text, "metadata": hit.metadata, "score": hit.score })
+}
+
+/// Documents searched by meaning. Made empty, filled by `open`.
+#[pyclass(frozen)]
+struct NativeCollection {
+    collection: Arc<Mutex<Option<criogen_agent::retrieval::Collection>>>,
+}
+
+impl NativeCollection {
+    fn get(&self) -> Result<criogen_agent::retrieval::Collection, Failure> {
+        lock(&self.collection)
+            .clone()
+            .ok_or_else(|| bad("the collection is not open"))
+    }
+}
+
+#[pymethods]
+impl NativeCollection {
+    #[new]
+    fn new() -> Self {
+        Self {
+            collection: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Opens `name` in `storage` (in memory without one): spec `{name,
+    /// embedder, index: "flat" | "hnsw", ef_search?}`. Returns the count.
+    fn open<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+        storage: Option<&NativeStorage>,
+        spec: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let spec: Value =
+            serde_json::from_str(spec).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let store = storage.map_or_else(Storage::in_memory, |s| s.storage.clone());
+        let embedder = embedder(&spec["embedder"]).map_err(py_failure)?;
+        let kind = match text(&spec, "index") {
+            Some("hnsw") => {
+                let mut config = criogen_storage::vector::HnswConfig::default();
+                if let Some(ef) = spec["ef_search"].as_u64() {
+                    config = config.ef_search(usize::try_from(ef).unwrap_or(usize::MAX));
+                }
+                criogen_agent::retrieval::IndexKind::Hnsw(config)
+            }
+            _ => criogen_agent::retrieval::IndexKind::Flat,
+        };
+        let name = text(&spec, "name").unwrap_or_default().to_string();
+        let slot = self.collection.clone();
+        spawn(py, event_loop, None, async move {
+            let collection = criogen_agent::retrieval::Collection::open_with(
+                store.memory().clone(),
+                &name,
+                embedder,
+                kind,
+            )
+            .await
+            .map_err(from_retrieval)?;
+            let count = collection.len().await;
+            *lock(&slot) = Some(collection);
+            Ok(json!(count))
+        })
+    }
+
+    /// Adds `[{id, text, metadata}]`.
+    fn add<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+        documents: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let raw: Vec<Value> =
+            serde_json::from_str(documents).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let mut docs = Vec::with_capacity(raw.len());
+        for d in raw {
+            let mut doc = criogen_agent::retrieval::Document::new(
+                text(&d, "id").unwrap_or_default(),
+                text(&d, "text").unwrap_or_default(),
+            );
+            for (k, v) in d["metadata"].as_object().cloned().unwrap_or_default() {
+                doc = doc.meta(k, v);
+            }
+            docs.push(doc);
+        }
+        let collection = self.get().map_err(py_failure)?;
+        spawn(py, event_loop, None, async move {
+            collection.add(docs).await.map_err(from_retrieval)?;
+            Ok(json!(collection.len().await))
+        })
+    }
+
+    /// The hits for `query`: `[{id, text, metadata, score}]`.
+    fn search<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+        query: String,
+        k: usize,
+        filter: &str,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let filter: Map<String, Value> =
+            serde_json::from_str(filter).map_err(|e| PyValueError::new_err(e.to_string()))?;
+        let collection = self.get().map_err(py_failure)?;
+        spawn(py, event_loop, None, async move {
+            let hits = collection
+                .search_where(&query, k, &filter)
+                .await
+                .map_err(from_retrieval)?;
+            Ok(Value::Array(hits.iter().map(hit_json).collect()))
+        })
+    }
+
+    /// `remove` (`true` if it was there), `reload` or `count`.
+    fn op<'py>(
+        &self,
+        py: Python<'py>,
+        event_loop: &Bound<'py, PyAny>,
+        op: String,
+        id: Option<String>,
+    ) -> PyResult<Bound<'py, PyAny>> {
+        let collection = self.get().map_err(py_failure)?;
+        spawn(py, event_loop, None, async move {
+            match op.as_str() {
+                "remove" => Ok(json!(
+                    collection
+                        .remove(&id.unwrap_or_default())
+                        .await
+                        .map_err(from_retrieval)?
+                )),
+                "reload" => {
+                    collection.reload().await.map_err(from_retrieval)?;
+                    Ok(json!(collection.len().await))
+                }
+                _ => Ok(json!(collection.len().await)),
+            }
+        })
+    }
+}
+
 // ---------- the trace viewer (design 0023) ----------
 
 /// The local trace viewer, serving in the background.
@@ -2342,6 +2496,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NativeStream>()?;
     m.add_class::<NativeMcp>()?;
     m.add_class::<NativeTraceViewer>()?;
+    m.add_class::<NativeCollection>()?;
     m.add_function(wrap_pyfunction!(validate_json, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("PRESETS", presets_json())?;

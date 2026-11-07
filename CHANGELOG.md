@@ -9,6 +9,16 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+- **Collections and retrieval** (design 0025): `Collection.open(name, embedder=…, storage=…)`,
+  `add`, `search(query, k, where=…)`, `remove`, `reload`, `as_tool` in Python, TypeScript (both
+  engines) and Rust (`criogen_agent::retrieval`), plus a `Retriever` trait and `retriever_tool` for
+  any search of your own. Documents are stored in the memory store (encrypted when it is) and
+  indexed in process memory: an exact flat index by default (17 ms a query at 100 000 documents),
+  or HNSW, opt-in (about 100 times faster on large clustered collections, approximate, slower to
+  open). `sqlite-vec` and `pgvector` were not taken: both would store vectors unencrypted. New
+  `criogen_storage::vector` (`FlatIndex`, `HnswIndex`) and `MemoryStore::embedded`; numbers in
+  `docs/benchmarks.md` (`--bin vectors`).
+
 - **Evals** (design 0024): run an agent (or any function) over a dataset (JSONL / JSON), score
   each answer, compare with the last good run, and fail CI when quality drops. Scorers:
   `exact_match`, `contains`, `regex`, `one_of`, `json_valid`, `json_schema` (the engine's

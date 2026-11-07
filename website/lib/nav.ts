@@ -43,6 +43,7 @@ export const SIDEBAR: NavGroup[] = [
       { label: "Conversations (threads)", slug: "guides/threads" },
       { label: "Streaming", slug: "guides/streaming" },
       { label: "Long-term memory", slug: "guides/memory" },
+      { label: "Collections and retrieval", slug: "guides/retrieval" },
       { label: "Workflows", slug: "guides/workflows" },
       { label: "Patterns and specialists", slug: "guides/patterns" },
       { label: "Storage: SQLite and Postgres", slug: "guides/storage" },

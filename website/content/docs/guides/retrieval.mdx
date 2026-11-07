@@ -1,0 +1,53 @@
+---
+title: Collections and retrieval
+description: Store documents, find them by meaning, and give an agent a search tool, in Python, TypeScript and Rust, with vectors encrypted at rest.
+---
+
+A **collection** holds documents and finds the ones closest in meaning to a
+question: "How many vacation days?" finds "Annual leave is 25 days" without
+sharing a word. Give it to an agent as a tool and the agent can look things
+up before it answers.
+
+<Sample name="retrieval" />
+
+## How it works
+
+- Each document is embedded (turned into a vector by your embedding model)
+  and stored in your storage with its text and metadata: SQLite, Postgres or
+  memory, **encrypted when the storage is**, kept and deleted like any
+  memory.
+- When the collection opens, its vectors are read once and indexed in your
+  process's memory; `add` and `remove` keep the index up to date. If another
+  process adds documents, `reload()` picks them up.
+- `search(query, k)` embeds the question and returns the best `k` hits
+  (`id`, `text`, `metadata`, `score`); `where` keeps only documents whose
+  metadata matches.
+- `as_tool(name, description)` gives an agent a read-only search tool: the
+  model sends a `query` (and optionally `k`, up to 20) and gets the hits,
+  each text cut to 2 000 characters.
+- In Rust, anything can be a `Retriever` (a web search, your database) and
+  become a tool with `retriever_tool`.
+
+## Which index
+
+| | Flat (default) | HNSW (`index="hnsw"`) |
+|---|---|---|
+| Results | exact | approximate |
+| Query at 100 000 documents | 17 ms | 0.2 ms |
+| Recall (share of the exact top 10) | 1.0 | 0.88 to 1.0 on clustered data |
+| Opening the collection | under a second | about 54 s at 100 000 documents |
+
+Numbers from one machine, 768-dimension vectors (`docs/benchmarks.md`).
+Keep the default unless a large collection is queried very often; raise
+`ef_search` if HNSW misses results.
+
+## Limits
+
+Up to 100 000 characters of text per document (split longer ones), 8 KB of
+metadata, ids up to 256 bytes, and 2 000 000 vectors per index. Documents are
+embedded 64 at a time. Vectors from another embedding model are ignored, so
+changing models means re-adding the documents.
+
+Why not `pgvector` or `sqlite-vec`? Both keep vectors unencrypted in the
+database, and an embedding can be turned back into text. Criogen keeps them
+encrypted and searches in memory instead.

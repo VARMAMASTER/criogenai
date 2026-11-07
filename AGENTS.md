@@ -309,8 +309,20 @@ write our own implementation.
   `compare`, `check` (`eval_failed`). `validate_json` in both SDK bridges
   (the engine's validator). Tests: `crates/criogen-agent/tests/evals.rs`,
   `sdks/python/tests/test_evals.py`, `sdks/typescript/test/evals.test.js`.
-- **Not started:** vector indexes
-  (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
+- **Implemented: collections and retrieval (0025).** `criogen_storage::vector`
+  (`VectorIndex`, `FlatIndex` exact, `HnswIndex` approximate, our own code),
+  `MemoryStore::embedded` (all backends); `criogen_agent::retrieval`
+  (`Collection` over a memory-store namespace `criogen/collections/<name>`,
+  `Document`, `Hit`, `IndexKind`, `Retriever`, `retriever_tool`). Python
+  `criogen.Collection` (`NativeCollection`), TypeScript `Collection`
+  (`NativeStorage.op` `collection_*` in criogen-js, both engines). Tests:
+  `crates/criogen-storage/src/vector.rs`, `crates/criogen-agent/tests/
+  retrieval.rs`, `sdks/python/tests/test_collections.py`,
+  `sdks/typescript/test/collections.test.js`. Benchmark: `cargo run -p
+  criogen-bench --release --bin vectors [-- --indexes --clustered]`.
+- **Not started:** `pgvector` / `sqlite-vec` indexes (not taken: they would
+  store vectors unencrypted; see 0025). Do not describe these as existing
+  anywhere.
 
 ## Commands
 

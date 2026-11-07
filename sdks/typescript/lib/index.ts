@@ -49,6 +49,8 @@ export type { ChatInput, ChatOptions, ChatReply, Chunk, GatewayOptions } from ".
 export { ToolResult } from "./hooks";
 export type { Hook, HookAction, HookContext, ToolCall } from "./hooks";
 export { Memory, Storage } from "./storage";
+export { Collection, CollectionTool } from "./collections";
+export type { CollectionOptions, Document, Hit } from "./collections";
 export { Telemetry } from "./telemetry";
 export type { TelemetryOptions } from "./telemetry";
 export type { MemoryOptions, RetentionOptions, StorageOptions } from "./storage";

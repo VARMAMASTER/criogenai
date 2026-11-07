@@ -234,6 +234,20 @@ impl PostgresMemoryStore {
         query: &SearchQuery,
         vector: &Embedding,
     ) -> Result<Vec<MemoryItem>, StorageError> {
+        let candidates = self.embedded_items(prefix).await?;
+        Ok(rank_similar(
+            candidates,
+            vector,
+            query.min_score,
+            query.limit,
+        ))
+    }
+
+    /// The live items of the prefix that have a vector, with it.
+    async fn embedded_items(
+        &self,
+        prefix: &Namespace,
+    ) -> Result<Vec<(MemoryItem, Embedding)>, StorageError> {
         let path = prefix.path();
         let rows = sqlx::query(&format!(
             "SELECT {COLUMNS} FROM criogen_memory
@@ -253,12 +267,7 @@ impl PostgresMemoryStore {
                 candidates.push((self.read_item(row)?.0, embedding));
             }
         }
-        Ok(rank_similar(
-            candidates,
-            vector,
-            query.min_score,
-            query.limit,
-        ))
+        Ok(candidates)
     }
 
     async fn delete_item(&self, namespace: &Namespace, key: &str) -> Result<bool, StorageError> {
@@ -445,6 +454,13 @@ impl MemoryStore for PostgresMemoryStore {
         query: &'a SearchQuery,
     ) -> BoxFuture<'a, Result<Vec<MemoryItem>, StorageError>> {
         Box::pin(self.search_items(prefix, query))
+    }
+
+    fn embedded<'a>(
+        &'a self,
+        prefix: &'a Namespace,
+    ) -> BoxFuture<'a, Result<Vec<(MemoryItem, Embedding)>, StorageError>> {
+        Box::pin(self.embedded_items(prefix))
     }
 
     fn delete<'a>(

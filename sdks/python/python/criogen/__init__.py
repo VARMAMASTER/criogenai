@@ -13,6 +13,7 @@ memory, and workflows, on a Rust engine (designs 0011, 0015).
 """
 
 from ._native import __version__
+from .collections import Collection, Document, Hit
 from .agent import Agent, AgentTool, ApprovalRequest, Decision, Event, Reply, Retry, RunResult, Stream, Thread
 from .errors import (
     CriogenError,
@@ -71,7 +72,7 @@ from .workflow import (
 )
 
 __all__ = [
-    "END", "Agent", "CriogenError", "AgentTool", "Anthropic", "ApprovalRequest", "CancelledError",
+    "END", "Agent", "Collection", "Document", "Hit", "CriogenError", "AgentTool", "Anthropic", "ApprovalRequest", "CancelledError",
     "ChatReply", "ChatStream", "Chunk", "CompiledWorkflow", "Decision", "Embedder", "Event", "FakeModel",
     "FakeReply", "Gateway", "Gemini", "HookAction", "HookContext", "Interrupt", "Kaggle",
     "LimitExceededError", "Memory", "ModelError", "NodeContext", "Ollama", "OpenAI",

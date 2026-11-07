@@ -290,6 +290,9 @@ pub async fn storage_operation(storage: Storage, op: &str, payload: Value) -> Re
             .cloned()
             .ok_or_else(|| bad("the audit trail is off: new Storage({ audit: true })"))
     };
+    if op.starts_with("collection_") {
+        return crate::collections::operation(storage, op, payload).await;
+    }
     match op {
         "memory_put" => {
             let ttl = payload["ttlSecs"].as_f64().map(Duration::from_secs_f64);
