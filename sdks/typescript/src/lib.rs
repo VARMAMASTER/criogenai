@@ -361,6 +361,12 @@ impl NativeStream {
     }
 }
 
+/// Problems with a value against a JSON Schema (evals, design 0024).
+#[napi]
+pub fn validate_json(schema: String, value: String) -> napi::Result<String> {
+    criogen_js::validate_json(&schema, &value).map_err(to_napi)
+}
+
 // ---------- the trace viewer (design 0023) ----------
 
 fn viewers() -> &'static Mutex<HashMap<u32, criogen_trace::RunningViewer>> {

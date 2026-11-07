@@ -52,6 +52,7 @@ export const SIDEBAR: NavGroup[] = [
       { label: "The LLM gateway", slug: "guides/gateway" },
       { label: "In the browser (WebAssembly)", slug: "guides/browser" },
       { label: "Tracing (Langfuse, OpenTelemetry)", slug: "guides/telemetry" },
+      { label: "Evals and quality gates", slug: "guides/evals" },
     ],
   },
   {

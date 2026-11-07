@@ -300,6 +300,15 @@ write our own implementation.
   test_trace.py`, `sdks/typescript/test/trace.test.js`, the page in
   Chromium `sdks/typescript/test/browser/trace-page.mjs` (ci-local step
   `typescript`). Demo: `cargo run -p criogen-trace --example demo`.
+- **Implemented: evals (0024).** Same shapes in three languages: Python
+  `criogen.evals` (`python -m criogen.evals compare`), TypeScript `evals`
+  (`npx criogen eval compare`), Rust `criogen_agent::evals`. Datasets,
+  built-in scorers, `judge`, `evaluate` (concurrency, timeouts, repeats),
+  `EvalResult` (`criogen-eval/1`, `schemas/eval-result.schema.json`,
+  fixture `schemas/fixtures/eval-baseline.json` read by every language),
+  `compare`, `check` (`eval_failed`). `validate_json` in both SDK bridges
+  (the engine's validator). Tests: `crates/criogen-agent/tests/evals.rs`,
+  `sdks/python/tests/test_evals.py`, `sdks/typescript/test/evals.test.js`.
 - **Not started:** vector indexes
   (`sqlite-vec`, `pgvector`). Do not describe these as existing anywhere.
 

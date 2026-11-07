@@ -26,6 +26,11 @@ MCP 2026-07-28 with a fallback for older servers; tools only (design 0022;
 guide: `website/content/docs/guides/mcp.mdx`). Not yet on npm or PyPI: in
 the next release.
 
+**Evals (Python, TypeScript and Rust):** run an agent over a set of cases,
+score each answer (text, JSON, tool use, budgets, a model as judge), compare
+with the last good run and fail CI on a drop (design 0024; guide:
+`website/content/docs/guides/evals.mdx`). In the next release.
+
 **Local trace viewer:** every run on a page, on your own computer
 (`python -m criogen.trace`, `npx criogen trace`, `criogen-trace`): each
 run's steps on a time axis with durations, tokens, cost and failures (design

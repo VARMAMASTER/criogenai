@@ -4,6 +4,7 @@
 pub mod agents;
 pub mod approvals;
 pub mod compliance;
+pub mod evals;
 pub mod gateway;
 pub mod mcp;
 pub mod memory;

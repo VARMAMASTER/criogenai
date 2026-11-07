@@ -3,6 +3,7 @@
 // the local trace viewer (design 0023).
 
 import { readFileSync } from "node:fs";
+import { EvalResult, compare, comparisonReport } from "./evals";
 import { serveTraces, type TraceViewerOptions } from "./trace";
 
 const USAGE = `usage: criogen trace [--port N] [--host ADDR] [--db FILE | --memory] [--keep-runs N] [--keep-days N]
@@ -45,10 +46,28 @@ async function trace(args: string[]): Promise<number> {
   return 0;
 }
 
+// `criogen eval compare base.json new.json [--fail-on-regression]` (design 0024).
+async function evalCommand(args: string[]): Promise<number> {
+  const files = args.filter((a) => !a.startsWith("--"));
+  if (files[0] !== "compare" || files.length !== 3) {
+    console.log("usage: criogen eval compare <baseline.json> <current.json> [--fail-on-regression]");
+    return 2;
+  }
+  const [base, current] = await Promise.all([EvalResult.load(files[1]), EvalResult.load(files[2])]);
+  const diff = compare(base, current);
+  console.log(current.report());
+  console.log();
+  console.log(comparisonReport(diff));
+  const fell = diff.regressed.length > 0 || Object.values(diff.scores).some((d) => d !== null && d < -0.02);
+  return args.includes("--fail-on-regression") && fell ? 1 : 0;
+}
+
 async function main(): Promise<number> {
   const [command, ...rest] = process.argv.slice(2);
   if (command === "trace") return trace(rest);
-  console.log("usage: criogen trace [options]   (the local trace viewer; --help for options)");
+  if (command === "eval") return evalCommand(rest);
+  console.log("usage: criogen trace [options]                 the local trace viewer (--help for options)");
+  console.log("       criogen eval compare <base> <current>   compare two eval results");
   return command ? 2 : 0;
 }
 

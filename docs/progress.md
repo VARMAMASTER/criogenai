@@ -77,7 +77,7 @@ full cycle. Sizes are estimates: S days, M 1–3 weeks, L a month or more.
 |---|---|---|---|---|---|
 | 21 | MCP client: tools from any MCP server (stdio, Streamable HTTP), all SDKs | 1 | S–M | 0022 | Done (2026-11-07) |
 | 22 | Trace viewer: a local page with every run's calls, times, tokens, cost | 1 | M | 0023 | Done (2026-11-07) |
-| 23 | Evals: datasets, scorers, compare two versions, fail CI on a drop | 1 | M | 0024 | Planned |
+| 23 | Evals: datasets, scorers, compare two versions, fail CI on a drop | 1 | M | 0024 | Done (2026-11-07) |
 | 20 | Vector indexes (sqlite-vec, pgvector) and a retriever interface | 1 | M | 0008 §16 | Planned |
 | 24 | RAG kit: document loaders, text splitters, a `rag()` pattern | 2 | M | 0025 | Planned |
 | 25 | Prompt templates with names and versions (used by evals) | 2 | S | 0026 | Planned |

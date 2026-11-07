@@ -79,6 +79,7 @@ struct GettingStartedDoctests;
 
 mod agent;
 mod approval;
+pub mod evals;
 mod hooks;
 #[cfg(feature = "mcp")]
 pub mod mcp;

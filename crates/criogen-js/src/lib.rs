@@ -36,6 +36,15 @@ pub use gateway::{ChatStream, Gateway};
 pub use mcp::{mcp_call, mcp_close, mcp_connect, mcp_refresh};
 pub use workflow::{build_workflow, workflow_resume, workflow_run, workflow_thread};
 
+/// The problems with `value` against JSON Schema `schema` (both JSON), as a
+/// JSON list; empty when it matches. The engine's validator (0002), for
+/// evals' `json_schema` scorer (0024).
+pub fn validate_json(schema: &str, value: &str) -> Result<String> {
+    let schema: Value = serde_json::from_str(schema).map_err(|e| bad(e.to_string()))?;
+    let value: Value = serde_json::from_str(value).map_err(|e| bad(e.to_string()))?;
+    Ok(json!(criogen_agent::validate_arguments(&schema, &value)).to_string())
+}
+
 // ---------- failures ----------
 
 /// A failure on its way to JavaScript. The bindings reject with an `Error`

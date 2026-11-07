@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://criogen.vercel.app/schemas/eval-result.schema.json",
+  "title": "Criogen eval result (criogen-eval/1, design 0024)",
+  "description": "What evaluate() returns and save() writes, the same in Python, TypeScript and Rust.",
+  "type": "object",
+  "required": ["format", "name", "started_at", "duration_ms", "target", "scorers", "summary", "cases"],
+  "properties": {
+    "format": {"const": "criogen-eval/1"},
+    "name": {"type": "string"},
+    "started_at": {"type": "string"},
+    "duration_ms": {"type": "number", "minimum": 0},
+    "target": {"enum": ["agent", "function"]},
+    "scorers": {"type": "array", "items": {"type": "string"}},
+    "summary": {
+      "type": "object",
+      "required": ["cases", "passed", "pass_rate", "scores", "tokens", "errors"],
+      "properties": {
+        "cases": {"type": "integer", "minimum": 0},
+        "passed": {"type": "integer", "minimum": 0},
+        "pass_rate": {"type": "number", "minimum": 0, "maximum": 1},
+        "scores": {"type": "object", "additionalProperties": {"type": "number", "minimum": 0, "maximum": 1}},
+        "tokens": {"$ref": "#/$defs/tokens"},
+        "errors": {"type": "integer", "minimum": 0}
+      }
+    },
+    "cases": {"type": "array", "items": {"$ref": "#/$defs/case"}}
+  },
+  "$defs": {
+    "tokens": {
+      "type": "object",
+      "required": ["input", "output"],
+      "properties": {"input": {"type": "integer", "minimum": 0}, "output": {"type": "integer", "minimum": 0}}
+    },
+    "score": {
+      "type": "object",
+      "required": ["value", "pass", "reason"],
+      "properties": {
+        "value": {"type": "number", "minimum": 0, "maximum": 1},
+        "pass": {"type": "boolean"},
+        "reason": {"type": ["string", "null"]}
+      }
+    },
+    "case": {
+      "type": "object",
+      "required": ["id", "input", "expected", "output", "scores", "pass", "error", "duration_ms", "tool_calls", "model_calls", "tokens"],
+      "properties": {
+        "id": {"type": "string"},
+        "input": {"type": ["string", "null"]},
+        "expected": {},
+        "output": {},
+        "scores": {"type": "object", "additionalProperties": {"$ref": "#/$defs/score"}},
+        "pass": {"type": "boolean"},
+        "error": {"type": ["string", "null"]},
+        "duration_ms": {"type": "number", "minimum": 0},
+        "tool_calls": {"type": "array", "items": {"type": "string"}},
+        "model_calls": {"type": "integer", "minimum": 0},
+        "tokens": {"$ref": "#/$defs/tokens"},
+        "judge_tokens": {"$ref": "#/$defs/tokens"},
+        "metadata": {"type": "object"}
+      }
+    }
+  }
+}

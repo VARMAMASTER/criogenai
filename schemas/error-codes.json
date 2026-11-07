@@ -66,6 +66,7 @@
     {"code": "mcp_tool_schema", "layers": ["build"], "category": "developer", "retryable": false, "family": "other", "description": "An MCP tool's input schema is not an object schema, or is too large or too deep: leave the tool out with `except`."},
     {"code": "mcp_timeout", "layers": ["build"], "category": "transient", "retryable": true, "family": "other", "description": "An MCP server was not ready within the connect timeout."},
     {"code": "mcp_closed", "layers": ["build"], "category": "developer", "retryable": false, "family": "other", "description": "The MCP server stopped (its process exited) or the client was closed."},
+    {"code": "eval_failed", "layers": ["build"], "category": "developer", "retryable": false, "family": "other", "description": "An eval missed a bar set by `check` (design 0024): a pass rate, a scorer's mean, or a regression against the baseline; `details.failures` lists them."},
     {"code": "invalid_api_key", "layers": ["gateway"], "category": "developer", "retryable": false, "family": null, "http_status": 401, "description": "The gateway needs a valid virtual key."},
     {"code": "model_not_found", "layers": ["gateway"], "category": "developer", "retryable": false, "family": null, "http_status": 404, "description": "No route by that name, or the key may not use it."},
     {"code": "key_rate_limited", "layers": ["gateway"], "category": "transient", "retryable": true, "family": null, "http_status": 429, "description": "The key's requests or tokens per minute are used up; Retry-After says when to try again."},

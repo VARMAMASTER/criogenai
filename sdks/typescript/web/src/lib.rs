@@ -133,6 +133,12 @@ pub fn presets() -> String {
 
 /// Registers a JavaScript model function (design 0021 §7); the handle
 /// names it in model specs.
+/// Problems with a value against a JSON Schema (evals, design 0024).
+#[wasm_bindgen(js_name = validateJson)]
+pub fn validate_json(schema: String, value: String) -> Result<String, JsValue> {
+    criogen_js::validate_json(&schema, &value).map_err(to_js)
+}
+
 /// Reaches an MCP server over HTTP (design 0022): `{handle, info, tools}`.
 #[wasm_bindgen(js_name = mcpConnect)]
 pub fn mcp_connect(spec: String) -> Promise {

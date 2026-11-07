@@ -98,6 +98,7 @@ Generated from [`schemas/error-codes.json`](../schemas/error-codes.json) (design
 | `mcp_tool_schema` | developer | no | `CriogenError` | - | An MCP tool's input schema is not an object schema, or is too large or too deep: leave the tool out with `except`. |
 | `mcp_timeout` | transient | yes | `CriogenError` | - | An MCP server was not ready within the connect timeout. |
 | `mcp_closed` | developer | no | `CriogenError` | - | The MCP server stopped (its process exited) or the client was closed. |
+| `eval_failed` | developer | no | `CriogenError` | - | An eval missed a bar set by `check` (design 0024): a pass rate, a scorer's mean, or a regression against the baseline; `details.failures` lists them. |
 
 ## Gateway errors (`error.code` in the HTTP body)
 

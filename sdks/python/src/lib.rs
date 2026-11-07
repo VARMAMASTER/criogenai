@@ -2318,6 +2318,18 @@ fn presets_json() -> String {
     Value::Array(all).to_string()
 }
 
+/// The problems with `value` against JSON Schema `schema` (both JSON), as a
+/// JSON list; empty when it matches. The engine's validator (0002), for
+/// evals' `json_schema` scorer (0024).
+#[pyfunction]
+fn validate_json(schema: &str, value: &str) -> PyResult<String> {
+    let schema: Value =
+        serde_json::from_str(schema).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    let value: Value =
+        serde_json::from_str(value).map_err(|e| PyValueError::new_err(e.to_string()))?;
+    Ok(json!(validate_arguments(&schema, &value)).to_string())
+}
+
 /// The module.
 #[pymodule]
 fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
@@ -2330,6 +2342,7 @@ fn _native(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<NativeStream>()?;
     m.add_class::<NativeMcp>()?;
     m.add_class::<NativeTraceViewer>()?;
+    m.add_function(wrap_pyfunction!(validate_json, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     m.add("PRESETS", presets_json())?;
     Ok(())

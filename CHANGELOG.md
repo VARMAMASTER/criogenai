@@ -9,6 +9,16 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+- **Evals** (design 0024): run an agent (or any function) over a dataset (JSONL / JSON), score
+  each answer, compare with the last good run, and fail CI when quality drops. Scorers:
+  `exact_match`, `contains`, `regex`, `one_of`, `json_valid`, `json_schema` (the engine's
+  validator), `json_equals`, `tool_called`, `tool_not_called`, `max_tool_calls`, `max_model_calls`,
+  `max_latency`, `max_tokens`, `max_cost`, `judge` (a model grades against a rubric, with the
+  answer fenced as data), and your own. Concurrency, per-case timeouts, repeats; one result format
+  for all three languages (`criogen-eval/1`, `schemas/eval-result.schema.json`); `compare`,
+  `check` (new error code `eval_failed`), `python -m criogen.evals compare` and `npx criogen eval
+  compare`. Python `criogen.evals`, TypeScript `evals`, Rust `criogen_agent::evals`.
+
 - **Local trace viewer** (design 0023): every run on a page, on your own computer. `python -m
   criogen.trace`, `npx criogen trace` (the package now has a `criogen` command) or the
   `criogen-trace` binary, then `Telemetry.local()` / `OtlpConfig::local()`. A waterfall of each

@@ -63,6 +63,8 @@ export * as specialists from "./specialists";
 export * as web from "./web";
 // Tools from MCP servers (design 0022).
 export * as mcp from "./mcp";
+// Evals (design 0024).
+export * as evals from "./evals";
 // The local trace viewer (design 0023).
 export { serveTraces } from "./trace";
 export type { TraceViewer, TraceViewerOptions } from "./trace";

@@ -1,0 +1,68 @@
+---
+title: Evals and quality gates
+description: Measure an agent over a set of cases, compare with the last good run, and fail CI when quality drops, in Python, TypeScript and Rust.
+---
+
+A change to a prompt, a model or a tool can make an agent worse without any
+test failing. An **eval** runs the agent over a set of cases, scores each
+answer, and compares with the last good run, so the build fails when quality
+drops, the way a unit test fails when behaviour breaks.
+
+<Sample name="evals" />
+
+## Cases
+
+A case is `{"id", "input", "expected", "state", "metadata"}`; only `input` is
+required. Load them from a `.jsonl` file (one case per line) or a `.json`
+list, or build them in code. `state` sets run state (a `user_id`, say). Ids
+default to the position and must be unique: comparisons match cases by id.
+
+The target is an agent, or any function from a case to an output (a
+workflow, a pipeline, your own code). For an agent, Criogen keeps what the
+run did: its tool calls, model calls, tokens and time.
+
+## Scorers
+
+| Scorer | Passes when |
+|---|---|
+| `exact_match` | the output equals `expected` (trimmed; optionally ignoring case) |
+| `contains` | the output contains every expected string (score = share found) |
+| `regex`, `one_of` | it matches a pattern, or is one of a list |
+| `json_valid`, `json_schema`, `json_equals` | it is JSON, matches a schema (Criogen's validator), or a field equals `expected` |
+| `tool_called`, `tool_not_called` | the agent did (or never did) call a tool |
+| `max_tool_calls`, `max_model_calls`, `max_latency`, `max_tokens`, `max_cost` | it stayed within a budget |
+| `judge` | a model grades it against your rubric (0 to 1, with a reason) |
+| your own | a function returning a number, a bool or a `Score` |
+
+TypeScript uses camelCase (`exactMatch`, `toolCalled`); result files use the
+same names everywhere.
+
+**The judge** sees the question, the answer and the reference as data
+between markers it cannot close, and is told to ignore instructions inside
+them, so an answer cannot talk its way to a better grade. Its tokens are
+kept per case, apart from the agent's.
+
+## Running
+
+`evaluate` runs cases concurrently (`concurrency`, default 4), gives each a
+time limit (`timeout`, 120 s), and can run each case several times
+(`repeats`) for an agent that is not deterministic: the score is the mean,
+and a case passes only if every run passed. A case that throws or times out
+scores 0 with its error kept; the eval goes on.
+
+## Results, comparisons and CI
+
+- `result.report()` / `markdown()` for a terminal or a pull request;
+  `result.save("eval.json")` writes the `criogen-eval/1` format, which every
+  language reads (a baseline saved by Python is compared by TypeScript). Use
+  `save(path, content=False)` to leave inputs and outputs out.
+- `compare(baseline, current)` gives each scorer's change, the pass-rate
+  change, and the cases that **regressed** or were **fixed**.
+- `result.check(...)` fails (`eval_failed`) when a pass rate or a scorer's
+  mean is below your bar, when a mean fell more than `tolerance` (0.02)
+  against the baseline, or when cases regressed.
+- From a shell: `python -m criogen.evals compare base.json new.json
+  --fail-on-regression` or `npx criogen eval compare …` exits 1 on a drop.
+
+Evals call real models when your agent does: run them where your keys are,
+and keep the result files with your tests.

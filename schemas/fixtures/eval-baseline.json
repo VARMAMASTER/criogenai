@@ -1,0 +1,28 @@
+{
+  "format": "criogen-eval/1",
+  "name": "support-bot",
+  "started_at": "2026-11-07T09:00:00+00:00",
+  "duration_ms": 1200,
+  "target": "agent",
+  "scorers": ["contains", "tool_called:lookup_order"],
+  "summary": {"cases": 3, "passed": 2, "pass_rate": 0.6666666666666666,
+              "scores": {"contains": 0.8333333333333334, "tool_called:lookup_order": 1.0},
+              "tokens": {"input": 300, "output": 90}, "errors": 0},
+  "cases": [
+    {"id": "1", "input": "Where is order A-1001?", "expected": "shipped", "output": "It has shipped.",
+     "scores": {"contains": {"value": 1, "pass": true, "reason": null},
+                "tool_called:lookup_order": {"value": 1, "pass": true, "reason": null}},
+     "pass": true, "error": null, "duration_ms": 400, "tool_calls": ["lookup_order"], "model_calls": 2,
+     "tokens": {"input": 100, "output": 30}},
+    {"id": "2", "input": "Where is order B-7?", "expected": "delayed", "output": "It is delayed.",
+     "scores": {"contains": {"value": 1, "pass": true, "reason": null},
+                "tool_called:lookup_order": {"value": 1, "pass": true, "reason": null}},
+     "pass": true, "error": null, "duration_ms": 400, "tool_calls": ["lookup_order"], "model_calls": 2,
+     "tokens": {"input": 100, "output": 30}},
+    {"id": "3", "input": "Cancel order C-3", "expected": ["cancelled", "refund"], "output": "It is cancelled.",
+     "scores": {"contains": {"value": 0.5, "pass": false, "reason": "missing: refund"},
+                "tool_called:lookup_order": {"value": 1, "pass": true, "reason": null}},
+     "pass": false, "error": null, "duration_ms": 400, "tool_calls": ["lookup_order"], "model_calls": 2,
+     "tokens": {"input": 100, "output": 30}}
+  ]
+}

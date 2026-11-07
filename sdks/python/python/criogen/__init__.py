@@ -49,7 +49,7 @@ from .models import (
     Qwen,
     Together,
 )
-from . import env, mcp, patterns, specialists, trace, web
+from . import env, evals, mcp, patterns, specialists, trace, web
 from .env import load_env
 from .ready import ready, ready_sync
 from .usage import estimate_cost
@@ -80,5 +80,5 @@ __all__ = [
     "ToolExecutionError", "ToolResult", "ValidationError", "Workflow", "WorkflowResult", "WorkflowThread",
     "AnthropicCompatible", "Cerebras", "DeepSeek", "Fireworks", "Groq", "LMStudio", "Mistral", "Moonshot",
     "Qwen", "Together", "XAI", "ZAI",
-    "__version__", "env", "estimate_cost", "goto", "load_env", "mcp", "ready", "ready_sync", "patterns", "specialists", "suspend", "tool", "trace", "web",
+    "__version__", "env", "evals", "estimate_cost", "goto", "load_env", "mcp", "ready", "ready_sync", "patterns", "specialists", "suspend", "tool", "trace", "web",
 ]
