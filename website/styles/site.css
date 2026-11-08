@@ -111,39 +111,172 @@ html:has(.site) {
   color: var(--ab-fine);
 }
 
+/* Footer: one glass sheet. The brand (what Criogen is, the install
+   commands, what the colours mean), three columns of links, then the
+   licence line. */
 .bottom {
+  max-width: 76rem;
+  margin: 4rem auto 2rem;
+  padding: 2.4rem 2.4rem 1.2rem;
+  border-radius: 18px;
+  color: var(--ab-muted);
+  font-size: 0.92rem;
+}
+.bottom-main {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1.5fr) repeat(3, minmax(9rem, 1fr));
+  gap: 2rem 2.5rem;
+}
+.bottom-brand p {
+  margin: 0.8rem 0 1.1rem;
+  max-width: 30ch;
+  line-height: 1.55;
+}
+.bottom-install,
+.bottom-states,
+.bottom-column ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.bottom-install li {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 0.5rem 1rem;
-  max-width: 76rem;
-  margin: 1rem auto 2rem;
-  padding: 0.6rem 1.5rem;
-  border-radius: 999px;
-  color: var(--ab-fine);
-  font-size: 0.9rem;
+  gap: 0.6rem;
+  max-width: 17rem;
+  margin-bottom: 0.45rem;
+  padding: 0.2rem 0.3rem 0.2rem 0.8rem;
+  border: 1px solid var(--glass-border);
+  border-radius: 8px;
+  background: var(--glass-bg-soft);
 }
-.bottom nav {
-  display: flex;
-  flex-wrap: wrap;
-  column-gap: 1.3rem;
+.bottom-install code {
+  font-family: var(--ab-mono);
+  font-size: 0.85rem;
+  color: var(--ab-text);
 }
-.bottom nav a {
+.bottom-install .copy {
   display: inline-flex;
   align-items: center;
-  min-height: 2.5rem;
+  justify-content: center;
+  flex: none;
+  width: 2.1rem;
+  height: 2.1rem;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ab-fine);
+  cursor: pointer;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+.bottom-install .copy:hover {
+  color: var(--ab-text);
+  background: var(--glass-bg-soft);
+}
+.bottom-install .copy svg {
+  width: 1rem;
+  height: 1rem;
+}
+.bottom .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.bottom-states {
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  gap: 0.35rem 1.2rem;
+  margin-top: 1.1rem;
+  font-size: 0.82rem;
+  color: var(--ab-fine);
+}
+.bottom-states li {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.bottom .state {
+  display: inline-block;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+}
+.bottom .state-running {
+  background: var(--ab-running);
+}
+.bottom .state-waiting {
+  background: var(--ab-waiting);
+}
+.bottom .state-done {
+  background: var(--ab-done);
+}
+.bottom .state-failed {
+  background: var(--ab-failed);
+}
+.bottom-column h2 {
+  margin: 0.35rem 0 0.9rem;
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--ab-text);
+}
+.bottom-column li + li {
+  margin-top: 0.15rem;
+}
+.bottom a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2rem;
   color: var(--ab-muted);
   text-decoration: none;
+  border-radius: 4px;
+  transition: color 0.15s ease;
 }
-.bottom nav a:hover {
+.bottom a:hover {
   color: var(--ab-text);
+}
+.bottom .brand {
+  color: var(--ab-text);
+}
+.bottom-fine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1.5rem;
+  margin-top: 2.2rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--glass-border);
+  color: var(--ab-fine);
+  font-size: 0.85rem;
+}
+.bottom-fine p {
+  margin: 0;
+}
+.bottom-fine nav {
+  display: flex;
+  gap: 1.2rem;
 }
 
 @media (max-width: 900px) {
   .bottom {
-    border-radius: 12px;
     margin-inline: 0.75rem;
+    padding: 1.8rem 1.4rem 1rem;
+  }
+  .bottom-main {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .bottom-brand {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 480px) {
+  .bottom-main {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 1260px) {
