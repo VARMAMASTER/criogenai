@@ -81,6 +81,34 @@ const lifecycle = [
   },
 ];
 
+// Around the runtime: tools from anywhere, search, quality, visibility (0.1.5).
+const toolkit = [
+  {
+    title: "Tools from any MCP server",
+    text: "GitHub, file systems, databases, browsers, your own services: connect any MCP server, started locally or at a URL, and its tools become the agent's. Criogen speaks the current protocol and falls back for older servers.",
+    href: "/docs/guides/mcp/",
+    link: "MCP servers' tools",
+  },
+  {
+    title: "Search your documents by meaning",
+    text: "Collections store documents, encrypted when your storage is, and find the ones closest in meaning to a question. Give one to an agent as a search tool.",
+    href: "/docs/guides/retrieval/",
+    link: "Collections and retrieval",
+  },
+  {
+    title: "Evals that fail the build when quality drops",
+    text: "Run an agent over your test cases, score the answers (text, JSON, tool use, budgets, a model as judge) and compare with the last good run, in CI.",
+    href: "/docs/guides/evals/",
+    link: "Evals and quality gates",
+  },
+  {
+    title: "Every run on a page, on your own computer",
+    text: "A local trace viewer shows each run's model and tool calls on a time axis, with tokens and failures, without an account. Langfuse and any OpenTelemetry backend work too.",
+    href: "/docs/guides/telemetry/",
+    link: "Tracing",
+  },
+];
+
 // The animated runs, each with what it shows and where to read more.
 const scenes = [
   {
@@ -113,7 +141,7 @@ const faq = [
   },
   {
     q: "Is Criogen a LangChain or LangGraph alternative?",
-    a: `Yes. It covers what most teams use LangChain and LangGraph for: agents with tool calling, workflow graphs with branches, joins and loops, human approval, saved conversations and memory, from Python or TypeScript. It installs as one package (${f.footprint.criogen.packages} against ${f.footprint.langgraph.packages} for LangGraph) and passed ${f.reliability.criogen} of ${f.reliability.tests} reliability tests by default, against ${f.reliability.langgraph} for LangGraph. It does not have LangChain's catalogue of document loaders and integrations.`,
+    a: `Yes. It covers what most teams use LangChain and LangGraph for: agents with tool calling, workflow graphs with branches, joins and loops, human approval, saved conversations and memory, from Python or TypeScript. It installs as one package (${f.footprint.criogen.packages} against ${f.footprint.langgraph.packages} for LangGraph) and passed ${f.reliability.criogen} of ${f.reliability.tests} reliability tests by default, against ${f.reliability.langgraph} for LangGraph. It has no catalogue of integrations of its own: any MCP server's tools work instead, and document collections search by meaning. Document loaders and text splitters are next.`,
   },
   {
     q: "Is it ready for production?",
@@ -218,6 +246,24 @@ export default async function Home() {
               <Reveal className="row" key={item.title} delay={Math.min(i * 0.06, 0.3)} y={12}>
                 <dt>
                   <span className={`state state-${item.state}`} aria-hidden="true" />
+                  {item.title}
+                </dt>
+                <dd>
+                  <p>{item.text}</p>
+                  <a href={item.href}>{item.link}</a>
+                </dd>
+              </Reveal>
+            ))}
+          </dl>
+        </section>
+
+        <section className="lifecycle" aria-labelledby="toolkit-title">
+          <h2 id="toolkit-title">Connect, search and measure</h2>
+          <dl className="glass">
+            {toolkit.map((item, i) => (
+              <Reveal className="row" key={item.title} delay={Math.min(i * 0.06, 0.3)} y={12}>
+                <dt>
+                  <span className="state state-done" aria-hidden="true" />
                   {item.title}
                 </dt>
                 <dd>

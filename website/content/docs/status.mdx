@@ -20,23 +20,29 @@ change before 1.0. This page is kept accurate: if something is not marked
 | Encryption at rest, audit trail, retention | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
 | Long-term memory (keyword search) | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
 | Long-term memory by meaning (embeddings) | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
-| Collections: documents searched by meaning, exact or HNSW index, as an agent tool | <span class="status-built">built</span> (next release) | <span class="status-built">built</span> (next release) | <span class="status-built">built</span> |
+| Collections: documents searched by meaning, exact or HNSW index, as an agent tool | <span class="status-built">built</span> (0.1.5) | <span class="status-built">built</span> (0.1.5) | <span class="status-built">built</span> |
 | Workflows (graphs of steps) | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
 | Durable workflows that pause for a person | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
 | Hooks around model and tool calls | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
 | Agents as tools of other agents, agents as workflow steps | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
 | Fallback models, retry policies | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
-| Local trace viewer (every run on a page, on your computer) | <span class="status-built">built</span> (next release) | <span class="status-built">built</span> (next release; Node only) | <span class="status-built">built</span> |
-| Evals: datasets, scorers, an LLM judge, comparisons, a CI gate | <span class="status-built">built</span> (next release) | <span class="status-built">built</span> (next release) | <span class="status-built">built</span> |
+| Local trace viewer (every run on a page, on your computer) | <span class="status-built">built</span> (0.1.5) | <span class="status-built">built</span> (0.1.5; Node only) | <span class="status-built">built</span> |
+| Evals: datasets, scorers, an LLM judge, comparisons, a CI gate | <span class="status-built">built</span> (0.1.5) | <span class="status-built">built</span> (0.1.5) | <span class="status-built">built</span> |
 | Tracing to Langfuse / OpenTelemetry | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
 | Tool input from Zod / Standard Schema | – | <span class="status-built">built</span> | – |
 | Calling a model directly (`Gateway`: chat, stream, embed) | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
 | Patterns: sequential, parallel, loop, review and critique, coordinator, hierarchy, swarm, human review | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
 | Specialist agents you can extend and register | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
-| Tools from MCP servers (stdio, Streamable HTTP; MCP 2026-07-28 and older) | <span class="status-built">built</span> (next release) | <span class="status-built">built</span> (next release; `criogen/web`: HTTP only) | <span class="status-built">built</span> |
+| Tools from MCP servers (stdio, Streamable HTTP; MCP 2026-07-28 and older) | <span class="status-built">built</span> (0.1.5) | <span class="status-built">built</span> (0.1.5; `criogen/web`: HTTP only) | <span class="status-built">built</span> |
 | Web search (Tavily, Brave) and page reading | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
 | In the browser and Web Workers: the engine as WebAssembly (`criogen/web`) | – | <span class="status-built">built</span> (0.1.4) | – |
 | Models written in your own code (`FunctionModel`; in Rust, the `Model` trait) | – | <span class="status-built">built</span> (0.1.4; on Linux and macOS with the next engine release) | <span class="status-built">built</span> |
+
+**About 0.1.5:** it was built on Windows. On npm and PyPI, Windows and the
+browser engine (`criogen/web`) have everything marked 0.1.5. On Linux and
+macOS, pip installs 0.1.3 and npm runs the 0.1.3 engine (the new features
+then say they need engine 0.1.5) until their builds run again, after
+15 November.
 
 ## The gateway
 
