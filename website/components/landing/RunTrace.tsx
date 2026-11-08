@@ -1,7 +1,8 @@
 "use client";
 // The landing page's hero: one agent run, step by step, in the run-state
 // colours. It plays once (Replay plays it again); without JavaScript or with
-// reduced motion the finished run shows.
+// reduced motion the finished run shows. `data-phase` (running, waiting,
+// done) colours the light behind the glass (styles/landing.css).
 import { useEffect, useRef, type CSSProperties } from "react";
 
 export default function RunTrace() {
@@ -18,17 +19,27 @@ export default function RunTrace() {
       trace.querySelectorAll<HTMLElement>("[data-at], .saved[data-after]").forEach((el) => el.classList.remove("on"));
       trace.querySelectorAll(".step-wait").forEach((el) => el.classList.remove("waiting"));
       trace.classList.add("playing");
+      trace.dataset.phase = "running";
       for (const el of trace.querySelectorAll<HTMLElement>("[data-at]")) {
         const at = Number(el.dataset.at);
         later(at, () => el.classList.add("on"));
         const wait = Number(el.dataset.wait ?? 0);
         if (wait) {
-          later(at, () => el.classList.add("waiting"));
-          later(at + wait, () => el.classList.remove("waiting"));
+          later(at, () => {
+            el.classList.add("waiting");
+            trace.dataset.phase = "waiting";
+          });
+          later(at + wait, () => {
+            el.classList.remove("waiting");
+            trace.dataset.phase = "running";
+          });
         }
         const saved = el.querySelector<HTMLElement>(".saved[data-after]");
         if (saved) later(at + Number(saved.dataset.after), () => saved.classList.add("on"));
       }
+      later(7000, () => {
+        trace.dataset.phase = "done";
+      });
       later(7200, () => trace.classList.remove("playing"));
     };
     const button = trace.querySelector(".replay");
@@ -45,6 +56,7 @@ export default function RunTrace() {
   return (
     <figure
       className="trace"
+      data-phase="done"
       ref={ref}
       aria-label="An agent run: the model calls three tools at once, a refund waits for a person's approval, then the run finishes. Every step is saved."
     >

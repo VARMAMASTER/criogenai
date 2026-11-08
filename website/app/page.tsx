@@ -4,6 +4,7 @@ import "@/styles/landing.css";
 import "@/styles/trace.css";
 import "@/styles/scene.css";
 import BenchBars from "@/components/landing/BenchBars";
+import GlassLight from "@/components/landing/GlassLight";
 import Reveal from "@/components/motion/Reveal";
 import InstallCommand from "@/components/landing/InstallCommand";
 import InstallCounter from "@/components/landing/InstallCounter";
@@ -171,6 +172,7 @@ export default async function Home() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLd() }} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: faqJsonLd(faq) }} />
       <SiteHeader />
+      <GlassLight />
 
       <main id="main">
         <section className="hero">

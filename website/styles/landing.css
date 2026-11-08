@@ -740,3 +740,187 @@ html[data-lang="rust"] .landing .ab-synced[data-has-rust]:not([data-hydrated]) b
     display: none;
   }
 }
+
+/* ------------------------------------------------------------------------
+   Glass, light and motion (the home page only; the docs stay flat).
+   Frosted panels over soft fields of the run-state colours. The hero
+   trace's light follows its run: green while it works, amber while it waits
+   for a person, blue when it is done. Pointer light catches the glass.
+   Reduced motion: everything still, the trace shown finished (blue).
+   ------------------------------------------------------------------------ */
+.site.landing {
+  --glass-bg: rgba(20, 24, 31, 0.5);
+  --glass-bg-strong: rgba(24, 29, 37, 0.66);
+  --glass-bg-soft: rgba(255, 255, 255, 0.035);
+  --glass-border: rgba(255, 255, 255, 0.085);
+  --glass-border-strong: rgba(255, 255, 255, 0.14);
+  --glass-blur: blur(18px) saturate(150%);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  --glass-shadow: 0 24px 60px -32px rgba(0, 0, 0, 0.85);
+  --glass-light: rgba(255, 255, 255, 0.07);
+  isolation: isolate;
+}
+:root[data-theme="light"] .site.landing {
+  --glass-bg: rgba(255, 255, 255, 0.58);
+  --glass-bg-strong: rgba(255, 255, 255, 0.74);
+  --glass-bg-soft: rgba(255, 255, 255, 0.45);
+  --glass-border: rgba(20, 30, 40, 0.1);
+  --glass-border-strong: rgba(20, 30, 40, 0.16);
+  --glass-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  --glass-shadow: 0 24px 50px -34px rgba(15, 27, 45, 0.35);
+  --glass-light: rgba(255, 255, 255, 0.55);
+}
+
+/* The fields of light behind everything: three state colours, very soft,
+   drifting slowly. Gradients only (no blur filter), so it stays cheap. */
+.site.landing::before {
+  content: "";
+  position: fixed;
+  inset: -25vmax;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(38vmax 30vmax at 18% 22%, color-mix(in srgb, var(--ab-running) 16%, transparent), transparent 70%),
+    radial-gradient(42vmax 34vmax at 82% 30%, color-mix(in srgb, var(--ab-done) 14%, transparent), transparent 70%),
+    radial-gradient(34vmax 28vmax at 55% 88%, color-mix(in srgb, var(--ab-waiting) 8%, transparent), transparent 70%);
+  animation: landing-drift 48s ease-in-out infinite alternate;
+}
+:root[data-theme="light"] .site.landing::before {
+  opacity: 0.8;
+}
+@keyframes landing-drift {
+  from {
+    transform: translate3d(-2%, -1%, 0) rotate(0deg) scale(1);
+  }
+  to {
+    transform: translate3d(2%, 2%, 0) rotate(6deg) scale(1.06);
+  }
+}
+
+/* Every home page panel is frosted glass with a lit top edge. */
+.landing .glass,
+.landing .scene,
+.landing .trace,
+.landing .logo-tile,
+.landing .bars-group,
+.landing .marquee-pill {
+  background-color: var(--glass-bg);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-color: var(--glass-border);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+.landing .top {
+  background: var(--glass-bg-strong);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-highlight), var(--glass-shadow);
+}
+
+/* Light catching the glass: follows the pointer (GlassLight.tsx). */
+.landing .glass,
+.landing .scene,
+.landing .trace {
+  position: relative;
+}
+.landing .glass::after,
+.landing .scene::after,
+.landing .trace::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: radial-gradient(26rem circle at var(--mx, 50%) var(--my, -30%), var(--glass-light), transparent 45%);
+  opacity: 0;
+  transition: opacity 0.35s ease;
+}
+.landing .glass:hover::after,
+.landing .scene:hover::after,
+.landing .trace:hover::after {
+  opacity: 1;
+}
+
+/* The hero trace: the light behind its glass follows the run. `--phase` is
+   a registered colour, so the glow and the tint glide between states. */
+@property --phase {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #6aa8ff;
+}
+.landing .hero .trace {
+  --phase: var(--ab-done);
+  background:
+    radial-gradient(70% 55% at 50% 0%, color-mix(in srgb, var(--phase) 13%, transparent), transparent 75%),
+    linear-gradient(160deg, rgba(255, 255, 255, 0.06) 0%, rgba(255, 255, 255, 0) 40%),
+    var(--glass-bg);
+  border-color: color-mix(in srgb, var(--phase) 30%, var(--glass-border));
+  box-shadow:
+    var(--glass-highlight),
+    0 0 50px -12px color-mix(in srgb, var(--phase) 45%, transparent),
+    0 40px 160px -20px color-mix(in srgb, var(--phase) 60%, transparent),
+    var(--glass-shadow);
+  transition: --phase 1.1s ease;
+}
+.landing .hero .trace[data-phase="running"] {
+  --phase: var(--ab-running);
+}
+.landing .hero .trace[data-phase="waiting"] {
+  --phase: var(--ab-waiting);
+}
+/* A slow sheen across the glass, once, as the run starts. */
+.landing .hero .trace::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(105deg, transparent 35%, rgba(255, 255, 255, 0.09) 50%, transparent 65%);
+  background-size: 250% 100%;
+  background-position: 120% 0;
+  opacity: 0;
+}
+.landing .hero .trace.playing::before {
+  animation: landing-sheen 1.8s ease-out 0.15s 1;
+}
+@keyframes landing-sheen {
+  0% {
+    opacity: 1;
+    background-position: 120% 0;
+  }
+  100% {
+    opacity: 0;
+    background-position: -40% 0;
+  }
+}
+
+/* The line above the headline: sentence case, as written. */
+.landing .hero-eyebrow {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.95rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site.landing::before,
+  .landing .hero .trace.playing::before {
+    animation: none;
+  }
+  .landing .hero .trace,
+  .landing .hero .trace::after,
+  .landing .glass::after,
+  .landing .scene::after,
+  .landing .trace::after {
+    transition: none;
+  }
+}
+/* Without backdrop blur (old browsers), panels stay readable. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .site.landing {
+    --glass-bg: rgba(20, 24, 31, 0.92);
+  }
+  :root[data-theme="light"] .site.landing {
+    --glass-bg: rgba(255, 255, 255, 0.94);
+  }
+}
