@@ -5,6 +5,7 @@ import type { ReactNode } from "react";
 import "@/styles/site.css";
 import "@/styles/docs.css";
 import "@/styles/lab.css";
+import "@/styles/scene.css";
 import "@/styles/patterns.css";
 import SiteHeader, { SiteFooter } from "@/components/SiteHeader";
 import { KeyProvider } from "@/components/playground/KeyProvider";

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { pageMeta } from "@/lib/seo";
+import Diagram from "@/components/playground/Diagram";
 import { GROUPS, PATTERNS } from "@/lib/patterns";
 
 export const metadata: Metadata = pageMeta({
@@ -40,6 +41,9 @@ export default function PlaygroundIndex() {
             {PATTERNS.filter((p) => p.group === g.name).map((p) => (
               <li key={p.id}>
                 <Link href={`/playground/${p.id}/`} className="sb-tile">
+                  <span className="sb-tile-graph" aria-hidden="true">
+                    <Diagram graph={p.graph} nodes={{}} edges={{}} title={p.title} uid={`t-${p.id}`} />
+                  </span>
                   <b>{p.title}</b>
                   <span>{p.short}</span>
                   <em>{p.usesModel ? (p.criogen.kind === "helper" ? "ready-made in Criogen" : "built from Criogen primitives") : "no model needed"}</em>
