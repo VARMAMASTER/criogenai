@@ -723,7 +723,7 @@
 }
 
 /* The bar on the stage: where the run is, and its controls. */
-.pg-bar {
+.pg-stagebar {
   position: absolute;
   top: 0.75rem;
   left: 0.9rem;
@@ -735,12 +735,12 @@
   justify-content: space-between;
   gap: 0.5rem;
 }
-.pg-bar-actions {
+.pg-stagebar-actions {
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
-.pg-bar .sb-speed {
+.pg-stagebar .sb-speed {
   display: flex;
   gap: 0.25rem;
 }
@@ -880,7 +880,7 @@
   align-items: baseline;
   gap: 0.5rem;
 }
-.pg-line {
+.pg-logline {
   flex: 1;
   min-width: 0;
   padding: 0;
@@ -897,10 +897,10 @@
   overflow: hidden;
   border-radius: 4px;
 }
-.pg-open .pg-line {
+.pg-open .pg-logline {
   display: block;
 }
-.pg-line b {
+.pg-logline b {
   font-weight: 700;
 }
 .pg-log .sb-ms {

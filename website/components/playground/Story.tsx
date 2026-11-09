@@ -223,11 +223,11 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
         </div>
         <figure className="scene pg-stage">
           <div className="scene-stage">
-            <div className="pg-bar">
+            <div className="pg-stagebar">
               <span className={`pg-status pg-status-${status.tone}`} aria-live="polite">
                 {status.text}
               </span>
-              <div className="pg-bar-actions">
+              <div className="pg-stagebar-actions">
                 {!live && (
                   <div className="sb-speed" role="group" aria-label="Speed">
                     {[1, 2, 4].map((sp) => (
@@ -299,7 +299,7 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
                 const expanded = open.has(l.id);
                 return (
                   <li key={l.id} data-tone={TONE[l.kind]} className={expanded ? "pg-open" : undefined}>
-                    <button type="button" className="pg-line" aria-expanded={expanded} onClick={() => toggle(l.id)}>
+                    <button type="button" className="pg-logline" aria-expanded={expanded} onClick={() => toggle(l.id)}>
                       <b>{l.who}</b> {l.text}
                     </button>
                     {l.ms != null && <small className="sb-ms">{seconds(l.ms)}</small>}
