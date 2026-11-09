@@ -88,8 +88,18 @@ export const KEYWORDS = [
  * A page's metadata: title, description, its own canonical URL, and the same
  * text on link cards (Open Graph, X). `title` absolute when `absolute` is set.
  */
+/** Bumped when the mark changes: browsers and link previewers (LinkedIn, X,
+ * Slack) cache icons and cards by address, so a new address shows the new logo. */
+export const ICON_VERSION = 2;
+
 /** The card image (app/og.png/route.tsx), on every page. */
-export const OG_IMAGE = { url: "/og.png", width: 1200, height: 630, alt: "Criogen: the fast AI agent framework, a LangChain alternative", type: "image/png" };
+export const OG_IMAGE = {
+  url: `/og.png?v=${ICON_VERSION}`,
+  width: 1200,
+  height: 630,
+  alt: "Criogen: the fast AI agent framework, a LangChain alternative",
+  type: "image/png",
+};
 
 export function pageMeta(options: { title: string; description: string; path: string; absolute?: boolean; type?: "website" | "article" }): Metadata {
   const shown = options.absolute ? options.title : `${options.title} | Criogen`;
@@ -116,6 +126,7 @@ export function jsonLd(): string {
       softwareVersion: packageVersion(),
       programmingLanguage: ["Python", "TypeScript", "Rust"],
       url: `${SITE.url}/`,
+      image: `${SITE.url}/icon-512.png`,
       downloadUrl: "https://www.npmjs.com/package/criogen",
       installUrl: `${SITE.url}/docs/install/`,
       softwareHelp: `${SITE.url}/docs/`,
@@ -131,7 +142,16 @@ export function jsonLd(): string {
         "LLM gateway with OpenAI and Anthropic wire formats",
       ],
     },
-    { "@type": "WebSite", "@id": `${SITE.url}/#website`, name: "Criogen", url: `${SITE.url}/`, about: { "@id": `${SITE.url}/#software` } },
+    { "@type": "WebSite", "@id": `${SITE.url}/#website`, name: "Criogen", url: `${SITE.url}/`, about: { "@id": `${SITE.url}/#software` }, publisher: { "@id": `${SITE.url}/#org` } },
+    // The logo search engines show with results (at least 112 px, raster).
+    {
+      "@type": "Organization",
+      "@id": `${SITE.url}/#org`,
+      name: "Criogen",
+      url: `${SITE.url}/`,
+      logo: { "@type": "ImageObject", url: `${SITE.url}/icon-512.png`, width: 512, height: 512 },
+      sameAs: ["https://www.npmjs.com/package/criogen", "https://pypi.org/project/criogen/"],
+    },
   ];
   // `<` escaped so the JSON cannot close the script tag.
   return JSON.stringify({ "@context": "https://schema.org", "@graph": graph }).replace(/</g, "\\u003c");

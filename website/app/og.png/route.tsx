@@ -22,6 +22,7 @@ export function GET() {
         <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
           <svg width="72" height="72" viewBox="0 0 32 32" fill="none">
             <path d={MARK.flame} fill={MARK.amber} fillOpacity={0.4} stroke={MARK.amber} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d={MARK.flameCore} fill="#fbd38a" />
             <path d={MARK.body} fill={MARK.green} fillOpacity={0.2} stroke={MARK.green} strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
             <path d={MARK.fins} stroke={MARK.green} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             <circle cx={MARK.core.cx} cy={MARK.core.cy} r={MARK.core.r} fill={MARK.amber} />
