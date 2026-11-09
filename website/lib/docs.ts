@@ -40,7 +40,7 @@ export function allSlugs(): string[] {
   return ALL_PAGES.map((p) => p.slug);
 }
 
-function frontmatter(source: string): { data: Record<string, string>; body: string } {
+export function frontmatter(source: string): { data: Record<string, string>; body: string } {
   const text = source.replace(/\r\n/g, "\n");
   const match = /^---\n([\s\S]*?)\n---\n?/.exec(text);
   if (!match) return { data: {}, body: text };
@@ -117,7 +117,7 @@ export function slugger() {
   };
 }
 
-function rehypeHeadings(toc: TocEntry[]) {
+export function rehypeHeadings(toc: TocEntry[]) {
   return () => (tree: HastNode) => {
     const slug = slugger();
     const walk = (node: HastNode) => {

@@ -1,0 +1,124 @@
+---
+title: "Criogen 0.1.5: MCP tools, a local trace viewer, evals and collections"
+description: Four features in one release. Agents can use tools from any MCP server. Every run can be watched on a page on your own computer. Quality checks can fail CI. Documents can be searched by meaning. All of it works in Python, TypeScript and Rust.
+date: 2026-11-09
+author: The Criogen team
+tags: release, mcp, tracing, evals, retrieval
+---
+
+Criogen 0.1.5 is on npm and PyPI. It adds four things that real agent apps
+need sooner or later:
+
+- **tools from MCP servers**;
+- **a local trace viewer**;
+- **evals** that can fail CI;
+- **collections** for retrieval.
+
+As always, the logic lives once in the Rust engine. Python, TypeScript and
+the browser build all get the same behaviour.
+
+```sh
+pip install -U criogen
+npm install criogen@latest
+```
+
+## Tools from MCP servers
+
+The Model Context Protocol is how tool servers are shared. Criogen can now:
+
+- start a server as a process (**stdio**);
+- reach a server at a URL (**Streamable HTTP**).
+
+Give an agent the whole server, or only the tools you pick:
+
+<Sample name="mcp" />
+
+MCP tools are ordinary tools. Approvals, timeouts, hooks, streaming and the
+audit trail all apply to them.
+
+The client only uses tools. A server cannot sample your model or read your
+files through Criogen. Every message is bounded in size and time, and tokens
+in headers never show up in an error or a log.
+
+Criogen speaks MCP 2026-07-28 and falls back to the older handshake, so
+current and older servers both work. Details are in the
+[MCP guide](/docs/guides/mcp/).
+
+## See every run, locally
+
+Langfuse and any OpenTelemetry backend still work. For day-to-day
+development there is now a viewer that runs on your own machine:
+
+```sh
+python -m criogen.trace     # or: npx criogen trace
+```
+
+<Sample name="telemetry" region="local" />
+
+Each run shows as a waterfall:
+
+- model calls, tool calls and steps;
+- durations and tokens;
+- cost, from the prices you set;
+- warnings and failures.
+
+The viewer listens on `127.0.0.1` only, keeps runs in SQLite, and shows
+every value as text. See [Tracing](/docs/guides/telemetry/).
+
+## Evals that can fail CI
+
+An eval runs your agent over a dataset and scores each answer. It then
+compares the result with your last good run, and fails the build if quality
+drops.
+
+<Sample name="evals" />
+
+There are built-in scorers for:
+
+- exact and fuzzy matches;
+- JSON shape;
+- which tools were called;
+- latency, tokens and cost;
+- grading by a judge model against a rubric.
+
+You can also write your own scorer. All three languages write the same
+result file, so a baseline recorded in Python can be compared in
+TypeScript. See [Evals](/docs/guides/evals/).
+
+## Collections: search documents by meaning
+
+A collection stores documents with their embeddings and finds the ones
+closest to a question. It can also hand an agent a search tool:
+
+<Sample name="retrieval" />
+
+Documents live in your Criogen storage, so they are encrypted when your
+database is. The default index is exact: 17 ms a query at 100,000
+documents on our test machine (see the [benchmarks](/benchmarks/)). An HNSW
+index is available as an option for large collections.
+
+We did not use `sqlite-vec` or `pgvector`, because both would store the
+vectors unencrypted. See
+[Collections and retrieval](/docs/guides/retrieval/).
+
+## One caveat for this release
+
+GitHub Actions cannot build for us until the middle of November, so 0.1.5
+was built on Windows:
+
+- **npm:** the Windows engine is 0.1.5. Linux and macOS keep the 0.1.3
+  engine for now. There, the new features raise a clear `unsupported`
+  error.
+- **PyPI:** there is a 0.1.5 wheel for Windows. On Linux and macOS, pip
+  installs 0.1.3.
+- **Browser:** the build for the browser (`criogen/web`) has everything.
+
+The other platforms will catch up as soon as the release workflow can run
+again.
+
+## What is next
+
+Next up are a retrieval kit built on collections, prompt templates,
+conversation memory, subgraphs, a graph visualizer and background runs.
+[Status: built and planned](/docs/status/) always shows what exists today
+and what does not yet.

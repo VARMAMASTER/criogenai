@@ -1,5 +1,6 @@
 // /llms.txt (llmstxt.org): what Criogen is and where each topic lives, in
 // Markdown, for AI assistants and agents that read sites on a user's behalf.
+import { allPosts } from "@/lib/blog";
 import { docSources } from "@/lib/docs";
 import { SITE } from "@/lib/nav";
 import { facts, ms, speedLine } from "@/lib/seo";
@@ -27,6 +28,10 @@ export function GET() {
     "## Docs",
     "",
     ...docs.map((d) => link(d.slug, d.title, d.description)),
+    "",
+    "## Blog",
+    "",
+    ...allPosts().map((p) => `- [${p.title}](${SITE.url}/blog/${p.slug}/) (${p.date})${p.description ? `: ${p.description}` : ""}`),
     "",
     "## Optional",
     "",

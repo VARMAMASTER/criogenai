@@ -4,7 +4,7 @@ import CopyButton from "./CopyButton";
 import LogoMark from "./LogoMark";
 import ThemeToggle from "./ThemeToggle";
 
-export default function SiteHeader({ current }: { current?: "benchmarks" | "playground" | "demo" }) {
+export default function SiteHeader({ current }: { current?: "benchmarks" | "playground" | "demo" | "blog" }) {
   return (
     <header className="top glass">
       <Link className="brand" href="/">
@@ -26,6 +26,9 @@ export default function SiteHeader({ current }: { current?: "benchmarks" | "play
           <Link href="/demo/" aria-current={current === "demo" ? "page" : undefined}>
             Demo
           </Link>
+          <Link href="/blog/" aria-current={current === "blog" ? "page" : undefined}>
+            Blog
+          </Link>
         </nav>
         <ThemeToggle compact />
       </div>
@@ -43,6 +46,7 @@ const footerColumns = [
       { label: "Playground", href: "/playground/" },
       { label: "Demo", href: "/demo/" },
       { label: "Benchmarks", href: "/benchmarks/" },
+      { label: "Blog", href: "/blog/" },
     ],
   },
   {
