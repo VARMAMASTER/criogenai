@@ -38,7 +38,8 @@ write our own implementation.
   `Capabilities`), `ModelError` with `classify_http` (0003 §4), transcript
   check/repair (0002 §6), the `Model` trait, `FakeModel`, the SSE parser,
   the stream assembler, the HTTP `Transport` (feature `http`, on by
-  default), the `openai_chat` and `anthropic_messages` protocols,
+  default), the `openai_chat`, `openai_responses` (0006 §16; the `openai`
+  preset since 0.1.6) and `anthropic_messages` protocols,
   `Endpoint` presets and `ProviderModel` (OpenAI, OpenRouter, Ollama,
   LM Studio, vLLM, Anthropic, any OpenAI- or Anthropic-compatible server).
 - **Implemented in `criogen-agent` (slice 1):** the agent loop (0004):

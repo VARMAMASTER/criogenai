@@ -146,6 +146,10 @@ async fn run_all(p: &Provider) -> usize {
             Box::pin(parallel_tools(p)),
         ),
         (
+            "tools: with a reasoning effort [tools]",
+            Box::pin(reasoning_with_tools(p)),
+        ),
+        (
             "tools: error result, model tries again [tools]",
             Box::pin(tool_error_recovery(p)),
         ),
@@ -370,6 +374,66 @@ async fn one_tool(p: &Provider) -> Outcome {
     Ok(format!(
         "{} model / {} tool calls: {text}",
         result.model_calls, result.tool_calls
+    ))
+}
+
+/// A model with a reasoning effort on every call. OpenAI's Chat Completions
+/// refuses tools with an effort on newer models; the Responses API (design
+/// 0006 §16) takes both, and keeps the reasoning across tool calls.
+struct WithEffort(ProviderModel);
+
+impl Model for WithEffort {
+    fn provider(&self) -> &str {
+        self.0.provider()
+    }
+
+    fn model(&self) -> &str {
+        self.0.model()
+    }
+
+    fn capabilities(&self) -> criogen_providers::Capabilities {
+        self.0.capabilities()
+    }
+
+    fn invoke<'a>(
+        &'a self,
+        request: &'a ModelRequest,
+    ) -> criogen_providers::BoxFuture<
+        'a,
+        Result<criogen_providers::ModelResponse, criogen_providers::ModelError>,
+    > {
+        Box::pin(async move {
+            let mut request = request.clone();
+            request.settings.reasoning = Some(criogen_providers::Reasoning::Effort {
+                effort: criogen_providers::ReasoningEffort::Medium,
+            });
+            self.0.invoke(&request).await
+        })
+    }
+}
+
+async fn reasoning_with_tools(p: &Provider) -> Outcome {
+    let calls = Arc::default();
+    let agent = Agent::builder(WithEffort(p.llm()))
+        .tool(weather(&calls))
+        .build()
+        .map_err(err)?;
+    let result = agent
+        .run("What's the temperature in Paris right now? Use the tool, then say whether to take a coat.")
+        .await
+        .map_err(err)?;
+    let text = answer(&result);
+    ensure(result.tool_calls >= 1, "no tool call")?;
+    ensure(text.contains("17"), format!("answer: {text}"))?;
+    let reasoning = result
+        .messages
+        .iter()
+        .flat_map(|m| &m.content)
+        .filter(|b| matches!(b, criogen_providers::ContentBlock::Reasoning { .. }))
+        .count();
+    Ok(format!(
+        "{} model / {} tool calls, {reasoning} reasoning block(s), {} reasoning tokens",
+        result.model_calls, result.tool_calls, result.usage.reasoning_tokens
     ))
 }
 

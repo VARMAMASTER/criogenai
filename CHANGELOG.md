@@ -9,6 +9,25 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+- **Security note:** RUSTSEC-2026-0459 (SQLite before 3.54 can return stale
+  memory when it opens a database with a `-wal` file written by someone less
+  trusted) is listed as an exception in `deny.toml`: Criogen opens only its own
+  database files, and no sqlx release allows the fixed `libsqlite3-sys` yet. The
+  exception goes when one does.
+
+- **OpenAI over the Responses API** (design 0006 §16): `openai:` models (Rust
+  `Endpoint::openai`, both SDKs, the gateway) now use `POST /responses`.
+  Newer OpenAI models can reason and call tools in the same turn (Chat
+  Completions refuses that from GPT-5.4 on), reasoning is kept across tool
+  calls as encrypted items, and `store: false` is always sent, so OpenAI keeps
+  nothing. Hosted tool calls come back as `provider` blocks and go back to the
+  same endpoint. Not sent on this API: stop sequences (warning `stop_dropped`).
+  `Endpoint::openai_chat` keeps Chat Completions;
+  `Endpoint::openai_responses_compatible` reaches other servers with
+  `/responses`; `ResponsesOptions` sets `store`, encrypted reasoning and
+  reasoning summaries. Checked live (`tests/live`, new check "tools: with a
+  reasoning effort").
+
 ## [0.1.5] - 2026-11-07
 
 - **Packages:** built on Windows (GitHub Actions cannot run until billing is fixed). npm:

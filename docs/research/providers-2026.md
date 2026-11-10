@@ -69,8 +69,8 @@ small, and OpenRouter or `OpenAICompatible` already reach most of them.
 1. **Presets (gap 2) + `AnthropicCompatible` (gap 6):** **done 2026-11-04** (design
    0006 §4.1): DeepSeek, Mistral, xAI, Groq, Cerebras, Together, Fireworks, Qwen, Kimi,
    GLM and LM Studio by name, in both SDKs and the gateway.
-2. **OpenAI Responses API (gap 1):** protects the second-largest vendor as its models
-   move on.
+2. **OpenAI Responses API (gap 1):** **done 2026-11-10** (design 0006 §16): the
+   `openai` preset speaks it; reasoning with tools checked live.
 3. **Azure with API keys (gap 3), then Bedrock with API keys (gap 4):** the two
    enterprise routes that need no new crypto.
 4. **Vertex (gap 5), Entra ID, SigV4:** the credential-heavy routes, when a user such as

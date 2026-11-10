@@ -7,6 +7,7 @@ use crate::anthropic_messages::{self, AnthropicOptions, EventDecoder};
 use crate::error::{Dispatch, ModelError, ModelErrorKind};
 use crate::model::{BoxFuture, DeltaSink, Model};
 use crate::openai_chat::{self, ChunkDecoder, OpenAiQuirks};
+use crate::openai_responses::{self, ResponsesOptions};
 use crate::request::{Capabilities, ModelRequest, ModelResponse};
 use crate::sse::{SseEvent, SseParser};
 use crate::stream::{Assembler, StreamItem, Warning};
@@ -20,6 +21,8 @@ pub enum Protocol {
     OpenAiChat(OpenAiQuirks),
     /// Anthropic Messages (`POST {base_url}/messages`).
     AnthropicMessages(AnthropicOptions),
+    /// OpenAI Responses (`POST {base_url}/responses`, design 0006 §16).
+    OpenAiResponses(ResponsesOptions),
 }
 
 /// Where and how to reach a provider. Plain data; presets cover common
@@ -33,8 +36,8 @@ pub struct Endpoint {
     pub protocol: Protocol,
     /// Base URL without a trailing slash, e.g. `https://api.openai.com/v1`.
     pub base_url: String,
-    /// Sent as `Authorization: Bearer …` (OpenAI chat) or `x-api-key`
-    /// (Anthropic) when set. Redacted from errors.
+    /// Sent as `Authorization: Bearer …` (OpenAI chat and Responses) or
+    /// `x-api-key` (Anthropic) when set. Redacted from errors.
     pub api_key: Option<String>,
     /// Extra headers.
     pub headers: Vec<(String, String)>,
@@ -156,14 +159,55 @@ impl Endpoint {
         }
     }
 
-    /// OpenAI's API.
+    /// OpenAI's API, over the Responses API (design 0006 §16): reasoning
+    /// works together with tools, and nothing is stored at OpenAI. For Chat
+    /// Completions, see [`Endpoint::openai_chat`].
     pub fn openai(api_key: impl Into<String>) -> Self {
+        let mut endpoint = Self::openai_responses_compatible(
+            "openai",
+            "https://api.openai.com/v1",
+            Some(api_key.into()),
+        );
+        let caps = &mut endpoint.capabilities;
+        caps.tools = Some(true);
+        caps.parallel_tool_calls = Some(true);
+        caps.native_structured_output = Some(true);
+        caps.vision = Some(true);
+        caps.reasoning = Some(true);
+        caps.tool_result_images = Some(true);
+        endpoint
+    }
+
+    /// OpenAI's API over Chat Completions (`/chat/completions`), the
+    /// protocol `openai` used before 0.1.6. Newer reasoning models cannot
+    /// combine tools and a reasoning effort here.
+    pub fn openai_chat(api_key: impl Into<String>) -> Self {
         let mut endpoint =
             Self::openai_compatible("openai", "https://api.openai.com/v1", Some(api_key.into()));
         endpoint.protocol = Protocol::OpenAiChat(OpenAiQuirks::openai());
         endpoint.capabilities.tools = Some(true);
         endpoint.capabilities.parallel_tool_calls = Some(true);
         endpoint
+    }
+
+    /// Any server that speaks the OpenAI Responses API (`/responses`):
+    /// vLLM, Ollama, OpenRouter, Azure OpenAI's v1 API.
+    pub fn openai_responses_compatible(
+        name: impl Into<String>,
+        base_url: impl Into<String>,
+        api_key: Option<String>,
+    ) -> Self {
+        let mut endpoint = Self::openai_compatible(name, base_url, api_key);
+        endpoint.protocol = Protocol::OpenAiResponses(ResponsesOptions::default());
+        endpoint
+    }
+
+    /// Replaces the Responses options (no effect on other protocols).
+    pub fn with_responses_options(mut self, options: ResponsesOptions) -> Self {
+        if let Protocol::OpenAiResponses(current) = &mut self.protocol {
+            *current = options;
+        }
+        self
     }
 
     /// OpenRouter.
@@ -338,6 +382,17 @@ impl ProviderModel {
                 )?;
                 ("messages", wire.body, wire.betas)
             }
+            Protocol::OpenAiResponses(options) => {
+                let body = openai_responses::encode(
+                    request,
+                    &self.model,
+                    &endpoint.name,
+                    options,
+                    stream,
+                    warnings,
+                )?;
+                ("responses", body, Vec::new())
+            }
         };
         let mut wire = WireRequest::post(
             format!("{}/{path}", endpoint.base_url),
@@ -348,7 +403,7 @@ impl ProviderModel {
             wire = wire.header("accept", "text/event-stream");
         }
         match &endpoint.protocol {
-            Protocol::OpenAiChat(_) => {
+            Protocol::OpenAiChat(_) | Protocol::OpenAiResponses(_) => {
                 if let Some(key) = &endpoint.api_key {
                     wire = wire.header("authorization", format!("Bearer {key}"));
                 }
@@ -400,6 +455,7 @@ impl ProviderModel {
             Protocol::AnthropicMessages(_) => {
                 anthropic_messages::decode(&body, &self.endpoint.name)?
             }
+            Protocol::OpenAiResponses(_) => openai_responses::decode(&body, &self.endpoint.name)?,
         };
         warnings.append(&mut response.warnings);
         response.warnings = warnings;
@@ -420,6 +476,9 @@ impl ProviderModel {
                 Decoder::OpenAi(ChunkDecoder::new(quirks.think_tags, &self.endpoint.name))
             }
             Protocol::AnthropicMessages(_) => Decoder::Anthropic(EventDecoder::default()),
+            Protocol::OpenAiResponses(_) => {
+                Decoder::Responses(openai_responses::EventDecoder::new(&self.endpoint.name))
+            }
         };
         let mut assembler = Assembler::new();
         let streaming = |error: ModelError, emitted: bool| {
@@ -467,6 +526,7 @@ impl ProviderModel {
 enum Decoder {
     OpenAi(ChunkDecoder),
     Anthropic(EventDecoder),
+    Responses(openai_responses::EventDecoder),
 }
 
 impl Decoder {
@@ -474,6 +534,7 @@ impl Decoder {
         match self {
             Self::OpenAi(decoder) => decoder.on_event(event),
             Self::Anthropic(decoder) => decoder.on_event(event),
+            Self::Responses(decoder) => decoder.on_event(event),
         }
     }
 
@@ -481,6 +542,7 @@ impl Decoder {
         match self {
             Self::OpenAi(decoder) => decoder.is_done(),
             Self::Anthropic(decoder) => decoder.is_done(),
+            Self::Responses(decoder) => decoder.is_done(),
         }
     }
 
@@ -488,12 +550,13 @@ impl Decoder {
         match self {
             Self::OpenAi(decoder) => decoder.model(),
             Self::Anthropic(decoder) => decoder.model(),
+            Self::Responses(decoder) => decoder.model(),
         }
     }
 
     fn stop_sequence(&self) -> Option<&str> {
         match self {
-            Self::OpenAi(_) => None,
+            Self::OpenAi(_) | Self::Responses(_) => None,
             Self::Anthropic(decoder) => decoder.stop_sequence(),
         }
     }
@@ -562,6 +625,14 @@ pub fn preview_request(
             )?
             .body
         }
+        Protocol::OpenAiResponses(options) => openai_responses::encode(
+            request,
+            model,
+            &endpoint.name,
+            options,
+            stream,
+            &mut warnings,
+        )?,
     };
     Ok((body, warnings))
 }

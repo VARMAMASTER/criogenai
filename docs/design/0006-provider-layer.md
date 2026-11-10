@@ -190,7 +190,7 @@ have been billed.
 |---|---|---|
 | 1 | `openai_chat` | OpenAI, OpenRouter, Groq, Together, Fireworks, vLLM, LM Studio, Ollama (`/v1`), LiteLLM proxy, llmgateway, Vercel AI Gateway, any OpenAI-compatible server |
 | 2 | `anthropic_messages` | Anthropic, natively: ordered blocks, thinking signatures, `cache_control`, hosted tools as `provider` blocks |
-| later | `openai_responses` | OpenAI features that only exist there (§9 Q5) |
+| 3 | `openai_responses` | OpenAI (the `openai` preset since 0.1.6), and servers that implement `/responses`: §16 |
 | later | `gemini`, Bedrock/Vertex hosts for Anthropic | behind features, driven by demand |
 
 **Model strings.** `"<endpoint>:<model>"`, where the endpoint is a preset
@@ -226,7 +226,7 @@ Python module, `presets()` in the Node addon).
 
 | Name | Provider | Base URL | Key |
 |---|---|---|---|
-| `openai` | OpenAI | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
+| `openai` | OpenAI (Responses API, §16) | `https://api.openai.com/v1` | `OPENAI_API_KEY` |
 | `anthropic` | Anthropic (Messages) | `https://api.anthropic.com/v1` | `ANTHROPIC_API_KEY` |
 | `gemini` | Google Gemini | `https://generativelanguage.googleapis.com/v1beta/openai` | `GEMINI_API_KEY` |
 | `openrouter` | OpenRouter | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
@@ -261,7 +261,8 @@ passed through unchanged; Criogen keeps no list of models.
 Checked against scripted local servers (`tests/presets.rs`, both SDKs'
 provider tests); not yet live against each provider (manual, like
 `tests/live`). Not covered here, each with its own design note when built:
-the OpenAI Responses API, Azure OpenAI, Amazon Bedrock, Google Vertex AI.
+Azure OpenAI, Amazon Bedrock, Google Vertex AI. The OpenAI Responses API is
+§16.
 
 ## 5. Streaming
 
@@ -664,3 +665,127 @@ sent only with `expose_model_header`.
 **Telemetry** (design 0009): with content capture off (now the default in
 Rust too), error text, run metadata identities and free fields are not
 exported either, only error codes.
+
+## 16. The OpenAI Responses protocol (`openai_responses`, 2026-11-10)
+
+Why: from GPT-5.4 on, OpenAI's Chat Completions refuses tool calls together
+with a reasoning effort (research providers-2026 §1.4), so an agent on
+`openai:` got newer models without reasoning. OpenAI's new features
+(reasoning items, hosted tools) land in the Responses API only.
+
+**Where.** `Protocol::OpenAiResponses(ResponsesOptions)`,
+`POST {base_url}/responses`, `Authorization: Bearer …`.
+`Endpoint::openai(key)` (the `openai` preset, in every SDK and the gateway)
+now speaks it; `Endpoint::openai_chat(key)` keeps Chat Completions for
+anyone who needs the old wire. `Endpoint::openai_responses_compatible(name,
+base_url, key)` is for other servers that implement `/responses` (vLLM,
+Ollama, OpenRouter, Azure's v1 API). Compatible servers in general keep
+`openai_chat`: most of them implement only that.
+
+**Privacy (rule 10).** `store: false` is always sent unless
+`ResponsesOptions::store` is set: OpenAI keeps nothing of the conversation,
+and `previous_response_id` is never used. The transcript is ours and is sent
+in full each turn, as with the other protocols. Because nothing is stored,
+reasoning has to travel with the transcript: the request asks for
+`include: ["reasoning.encrypted_content"]` (`ResponsesOptions::
+encrypted_reasoning`, default on) and the reasoning items come back opaque.
+
+**Request mapping (0002 → Responses).**
+
+| 0002 | Responses |
+|---|---|
+| system message | `instructions` when it is the first message; later system messages become `{"role": "developer"}` input items |
+| user text / image (URL, base64) / file (id, base64) / audio | `input_text` / `input_image` (`image_url`, data URL) / `input_file` (`file_id`, `file_data`) / dropped with a warning |
+| assistant text | `{"role": "assistant", "content": [{"type": "output_text", "text"}]}`; text and calls keep their order (no `block_order_lost`) |
+| tool call | `{"type": "function_call", "call_id", "name", "arguments"}`; an invalid call is sent with its raw arguments, so its error result still matches |
+| reasoning block from this endpoint | `{"type": "reasoning", "id", "summary": [summary_text…], "encrypted_content"}` from the block's extras (`extras[<endpoint>].reasoning`); reasoning from another provider is dropped (`reasoning_dropped`) |
+| `provider` block from this endpoint | the item as it came (hosted tool calls such as `web_search_call`) |
+| tool result | `{"type": "function_call_output", "call_id", "output"}`: a string, or `input_text` / `input_image` parts when the result has images (no `tool_result_images_moved`) |
+| tools | `{"type": "function", "name", "description", "parameters"}`; hosted tools are dropped with a warning, as before |
+| tool choice | `auto` (omitted) / `none` / `required` / `{"type": "function", "name"}` |
+| `max_tokens`, `temperature`, `parallel_tool_calls` | `max_output_tokens`, `temperature`, `parallel_tool_calls` |
+| `stop` | not supported by the API: dropped, warning `stop_dropped` |
+| reasoning effort | `reasoning: {"effort", "summary": "auto"}`; a token budget is not supported: warning `reasoning_setting_dropped` |
+| structured output (native) | `text: {"format": {"type": "json_schema", "name": "final_output", "schema", "strict": true}}` |
+| `extras.openai` / `extras.<endpoint>` | merged last; `model`, `stream`, `input` cannot be set (`extras_ignored`) |
+
+**Response mapping.** Output items in order: `reasoning` → a reasoning block
+(text = the summaries joined, extras keep `id` and `encrypted_content`);
+`message` → a text block per `output_text` part, a refusal as text with
+`extras.openai.refusal` and finish `content_filter`; `function_call` → a
+tool call (`call_id` is the id); any other item (hosted tool calls) → a
+`provider` block. Finish: `completed` → `tool_calls` when there is a call,
+else `stop`; `incomplete` with `max_output_tokens` → `length`, with
+`content_filter` → `content_filter`; `failed` → the error classified as
+usual. Usage: `input_tokens`, `output_tokens`,
+`input_tokens_details.cached_tokens`, `output_tokens_details.
+reasoning_tokens`.
+
+**Streaming.** Semantic events (`response.created`, `…output_item.added`,
+`…output_text.delta`, `…refusal.delta`, `…function_call_arguments.delta`,
+`…reasoning_summary_text.delta`, `…reasoning_text.delta`,
+`…output_item.done`, `response.completed` / `incomplete` / `failed`,
+`error`). Blocks are keyed by `output_index` (and `content_index` inside a
+message). A reasoning item's opaque fields arrive at `output_item.done` as
+extras. The stream is done at `completed`, `incomplete` or `failed`; a
+`failed` response or an `error` event is a classified `ModelError`.
+
+**Tests.** Golden request bodies and decoding (`tests/openai_responses.rs`),
+streamed and whole answers against the scripted local server, a reasoning
+round trip, and the preset switch. Checked live once by hand
+(`tests/live`), never in CI (rule 7).
+
+## 17. Azure OpenAI and Microsoft Foundry (2026-11-10)
+
+Why: one of the three enterprise routes (research providers-2026 §3, gap 3).
+Hospitals often have Azure contracts, data residency in their region, and
+policies that forbid long-lived keys.
+
+**The API.** Azure's v1 API needs no `api-version`:
+`https://<resource>.openai.azure.com/openai/v1/` (or
+`https://<resource>.services.ai.azure.com/openai/v1/` for Foundry). It speaks
+the Responses API and Chat Completions; the model name is the **deployment
+name**. Foundry's non-OpenAI models (DeepSeek, Llama, Mistral, Grok) answer on
+Chat Completions only.
+
+**Endpoints (Rust).** `Endpoint::azure(resource_or_url, api_key)` speaks
+Responses (§16); `Endpoint::azure_chat(…)` speaks Chat Completions. The first
+argument is a resource name (`my-res` → `https://my-res.openai.azure.com/
+openai/v1`) or a URL; `/openai/v1` is added when missing. The key goes in the
+`api-key` header, not `Authorization` (`Endpoint::key_header`, a new field:
+`None` means `Authorization: Bearer`). The name in messages and errors is
+`azure`.
+
+**Entra ID (no key).** `AzureModel` holds a credential and renews a bearer
+token five minutes before it expires, as `KaggleModel` does (0020):
+
+| Credential | How the token is obtained |
+|---|---|
+| `AzureCredential::client_secret(tenant, client_id, secret)` | `POST https://login.microsoftonline.com/<tenant>/oauth2/v2.0/token`, form body, `grant_type=client_credentials` |
+| `AzureCredential::managed_identity(client_id?)` | the instance metadata service, `GET http://169.254.169.254/metadata/identity/oauth2/token?api-version=2018-02-01&resource=…` with `Metadata: true` (no credential is sent; the address is link-local) |
+| `AzureCredential::token(bearer)` | a token obtained elsewhere (the Azure CLI, a sidecar); used as is, not renewed |
+
+The scope is `https://cognitiveservices.azure.com/.default`
+(`AzureModel::scope` changes it, e.g. to `https://ai.azure.com/.default`).
+Token answers are bounded like every response (rule 11); `expires_in` is
+capped at 24 hours and a token is never kept past it. The secret and the
+token never appear in `Debug`, errors or logs (rule 10); the token endpoint
+is https only, except on this machine (tests).
+
+**From the environment.** `AzureModel::from_env(deployment)`:
+`AZURE_OPENAI_ENDPOINT` (resource name or URL) is required; then
+`AZURE_OPENAI_API_KEY`, else `AZURE_TENANT_ID` + `AZURE_CLIENT_ID` +
+`AZURE_CLIENT_SECRET`. Managed identity is chosen explicitly only
+(`AZURE_USE_MANAGED_IDENTITY=1`, or the SDK option), because probing the
+metadata address from a laptop would hang until a timeout.
+
+**SDKs and gateway.** Model string `"azure:<deployment>"` and `Azure(...)` /
+`azure(...)` with `endpoint`, `api_key`, `tenant_id`, `client_id`,
+`client_secret`, `managed_identity`, `api` (`"responses"` default, or
+`"chat"`). Gateway: `provider = "azure"` with `base_url` and `api_key_env`,
+or the tenant variables.
+
+**Tests.** Against scripted local servers: the `api-key` header and path,
+token minting and renewal, the managed-identity request shape, secrets kept
+out of `Debug` and errors, URL forms. Not checked live (no Azure account in
+the project); the status page says so until it is.

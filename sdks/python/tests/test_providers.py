@@ -23,6 +23,16 @@ OPENAI_STREAM = [
     (None, {"choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
             "usage": {"prompt_tokens": 3, "completion_tokens": 2}}),
 ]
+# The OpenAI Responses API (design 0006 §16): what `openai` speaks.
+RESPONSES_STREAM = [
+    ("response.created", {"type": "response.created", "response": {"id": "resp_1", "model": "m"}}),
+    ("response.output_item.added", {"type": "response.output_item.added", "output_index": 0,
+                                    "item": {"type": "message", "content": []}}),
+    ("response.output_text.delta", {"type": "response.output_text.delta", "output_index": 0,
+                                    "content_index": 0, "delta": TEXT}),
+    ("response.completed", {"type": "response.completed", "response": {
+        "status": "completed", "usage": {"input_tokens": 3, "output_tokens": 2}}}),
+]
 ANTHROPIC_STREAM = [
     ("message_start", {"type": "message_start", "message": {
         "id": "msg_1", "type": "message", "role": "assistant", "model": "m", "content": [],
@@ -47,13 +57,15 @@ class Server(http.server.BaseHTTPRequestHandler):
         Server.seen.append({"path": self.path, "auth": self.headers.get("authorization"),
                             "x-api-key": self.headers.get("x-api-key"), "body": body})
         anthropic = self.path.endswith("/messages")
+        responses = self.path.endswith("/responses")
         self.send_response(200)
         self.send_header("content-type", "text/event-stream")
         self.end_headers()
-        for event, data in ANTHROPIC_STREAM if anthropic else OPENAI_STREAM:
+        script = ANTHROPIC_STREAM if anthropic else RESPONSES_STREAM if responses else OPENAI_STREAM
+        for event, data in script:
             head = f"event: {event}\n" if event else ""
             self.wfile.write(f"{head}data: {json.dumps(data)}\n\n".encode())
-        if not anthropic:
+        if not anthropic and not responses:
             self.wfile.write(b"data: [DONE]\n\n")
         self.close_connection = True
 
@@ -101,7 +113,9 @@ def test_every_named_provider_answers_through_its_class(base):
         if p["anthropic"]:
             assert request["path"] == "/v1/messages" and request["x-api-key"] == "sk-test-key"
         else:
-            assert request["path"] == "/v1/chat/completions", p["name"]
+            # `openai` speaks the Responses API; the others Chat Completions.
+            path = "/v1/responses" if p["name"] == "openai" else "/v1/chat/completions"
+            assert request["path"] == path, p["name"]
             assert request["auth"] == "Bearer sk-test-key", p["name"]
 
 

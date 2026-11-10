@@ -7,8 +7,9 @@
 //! tests.
 //!
 //! **Status:** data types, error classification, transcript repair, the SSE
-//! parser, the stream assembler, the fake model, the HTTP transport, two
-//! wire protocols (OpenAI chat completions and Anthropic Messages) and
+//! parser, the stream assembler, the fake model, the HTTP transport, three
+//! wire protocols (OpenAI chat completions, OpenAI Responses and Anthropic
+//! Messages) and
 //! embedding models ([`Embedder`], [`FakeEmbedder`]) exist.
 //! The gateway is planned (0006 §11).
 //!
@@ -45,6 +46,8 @@ mod model;
 #[cfg(feature = "http")]
 mod openai_chat;
 #[cfg(feature = "http")]
+mod openai_responses;
+#[cfg(feature = "http")]
 mod presets;
 #[cfg(feature = "http")]
 mod provider;
@@ -75,6 +78,8 @@ pub use message::{
 pub use model::{BoxFuture, DeltaSink, Model};
 #[cfg(feature = "http")]
 pub use openai_chat::OpenAiQuirks;
+#[cfg(feature = "http")]
+pub use openai_responses::ResponsesOptions;
 #[cfg(feature = "http")]
 pub use presets::{PRESETS, Preset, preset};
 #[cfg(feature = "http")]

@@ -34,9 +34,10 @@ const REPLY: &str = r#"{"choices": [{"message": {"role": "assistant", "content":
 
 #[tokio::test]
 async fn every_openai_style_preset_calls_chat_completions_with_its_key() {
+    // `openai` speaks the Responses API: tests/openai_responses.rs.
     for p in PRESETS
         .iter()
-        .filter(|p| !p.anthropic && p.key_env.is_some())
+        .filter(|p| !p.anthropic && p.key_env.is_some() && p.name != "openai")
     {
         let (base, server) = serve(vec![json_response(200, REPLY)]).await;
         let response = model(p.name, &base)

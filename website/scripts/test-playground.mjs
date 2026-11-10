@@ -88,16 +88,27 @@ try {
       const body = JSON.parse(request.postData() ?? "{}");
       const headers = request.headers();
       const tools = (body.tools ?? []).map((t) => t.function?.name ?? t.name);
-      const answered = provider === "openai" ? body.messages.some((m) => m.role === "tool") : body.messages.some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === "tool_result"));
+      // OpenAI: the Responses API (design 0006 §16), `input` items.
+      const answered = provider === "openai" ? (body.input ?? []).some((i) => i.type === "function_call_output") : body.messages.some((m) => Array.isArray(m.content) && m.content.some((b) => b.type === "tool_result"));
       seen.push({ tools, key: provider === "openai" ? headers.authorization === `Bearer ${KEY}` : headers["x-api-key"] === KEY, browser: headers["anthropic-dangerous-direct-browser-access"] });
       const call = !answered && tools.includes("weather");
       const text = "A real model's answer: sunny in Lisbon, go on Saturday.";
       let sse;
       if (provider === "openai") {
-        const delta = call ? { role: "assistant", tool_calls: [{ index: 0, id: "call_w", type: "function", function: { name: "weather", arguments: '{"city":"Lisbon"}' } }] } : { role: "assistant", content: text };
-        sse = [{ choices: [{ index: 0, delta, finish_reason: null }] }, { choices: [{ index: 0, delta: {}, finish_reason: call ? "tool_calls" : "stop" }], usage: { prompt_tokens: 5, completion_tokens: 5, total_tokens: 10 } }]
-          .map((c) => `data: ${JSON.stringify({ id: "x", object: "chat.completion.chunk", model: body.model, ...c })}\n\n`)
-          .join("") + "data: [DONE]\n\n";
+        const item = call
+          ? { type: "function_call", id: "fc_1", call_id: "call_w", name: "weather", arguments: '{"city":"Lisbon"}' }
+          : { type: "message", id: "msg_1", role: "assistant", content: [{ type: "output_text", text }] };
+        sse = [
+          { type: "response.created", response: { id: "resp_1", model: body.model } },
+          { type: "response.output_item.added", output_index: 0, item: call ? { ...item, arguments: "" } : { ...item, content: [] } },
+          call
+            ? { type: "response.function_call_arguments.delta", output_index: 0, delta: item.arguments }
+            : { type: "response.output_text.delta", output_index: 0, content_index: 0, delta: text },
+          { type: "response.output_item.done", output_index: 0, item },
+          { type: "response.completed", response: { id: "resp_1", model: body.model, status: "completed", usage: { input_tokens: 5, output_tokens: 5 } } },
+        ]
+          .map((e) => `event: ${e.type}\ndata: ${JSON.stringify(e)}\n\n`)
+          .join("");
       } else {
         const block = call ? { type: "tool_use", id: "toolu_1", name: "weather", input: {} } : { type: "text", text: "" };
         const delta = call ? { type: "input_json_delta", partial_json: '{"city":"Lisbon"}' } : { type: "text_delta", text };

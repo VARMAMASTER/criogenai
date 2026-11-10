@@ -233,8 +233,13 @@ pub(crate) fn encode(
     // Provider-specific fields go last, so the caller wins, except for the
     // fields that make the request what it is: a changed `stream` would
     // desynchronise the decoder from the response.
-    for key in ["openai", provider] {
-        if let Some(Value::Object(extra)) = request.extras.get(key) {
+    let keys: &[&str] = if provider == "openai" {
+        &["openai"]
+    } else {
+        &["openai", provider]
+    };
+    for key in keys {
+        if let Some(Value::Object(extra)) = request.extras.get(*key) {
             for (name, value) in extra {
                 if matches!(name.as_str(), "model" | "stream" | "messages") {
                     warnings.push(Warning::new(

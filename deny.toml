@@ -11,6 +11,16 @@ all-features = true
 # yanked crates are reported for the workspace's own dependency tree.
 version = 2
 yanked = "deny"
+# Each exception says why it is safe and when it goes away.
+ignore = [
+    # SQLite < 3.54 can return stale page-cache bytes when a process opens a
+    # database together with a `-wal` file of another page size that a less
+    # trusted party wrote. Criogen only opens its own database files (the
+    # application's storage, ~/.criogen/traces.db). The fix is in
+    # libsqlite3-sys 0.39, which sqlx does not allow yet (0.8.6: ^0.30.1;
+    # 0.9.0: <0.38, and Rust 1.94). Remove when sqlx allows >= 0.39.
+    { id = "RUSTSEC-2026-0459", reason = "only our own database files are opened; no sqlx release allows the fixed libsqlite3-sys yet (checked 2026-11-10)" },
+]
 
 [licenses]
 version = 2

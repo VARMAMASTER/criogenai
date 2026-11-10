@@ -20,6 +20,13 @@ const OPENAI_STREAM = [
   [null, { choices: [{ index: 0, delta: { role: "assistant", content: TEXT } }] }],
   [null, { choices: [{ index: 0, delta: {}, finish_reason: "stop" }], usage: { prompt_tokens: 3, completion_tokens: 2 } }],
 ];
+// The OpenAI Responses API (design 0006 §16): what `openai` speaks.
+const RESPONSES_STREAM = [
+  ["response.created", { type: "response.created", response: { id: "resp_1", model: "m" } }],
+  ["response.output_item.added", { type: "response.output_item.added", output_index: 0, item: { type: "message", content: [] } }],
+  ["response.output_text.delta", { type: "response.output_text.delta", output_index: 0, content_index: 0, delta: TEXT }],
+  ["response.completed", { type: "response.completed", response: { status: "completed", usage: { input_tokens: 3, output_tokens: 2 } } }],
+];
 const ANTHROPIC_STREAM = [
   ["message_start", { type: "message_start", message: { id: "msg_1", type: "message", role: "assistant", model: "m", content: [], usage: { input_tokens: 3, output_tokens: 0 } } }],
   ["content_block_start", { type: "content_block_start", index: 0, content_block: { type: "text", text: "" } }],
@@ -36,11 +43,13 @@ const server = http.createServer((req, res) => {
   req.on("end", () => {
     seen.push({ path: req.url, auth: req.headers.authorization, xApiKey: req.headers["x-api-key"], body: JSON.parse(raw) });
     const anthropic = req.url.endsWith("/messages");
+    const responses = req.url.endsWith("/responses");
     res.writeHead(200, { "content-type": "text/event-stream" });
-    for (const [event, data] of anthropic ? ANTHROPIC_STREAM : OPENAI_STREAM) {
+    const script = anthropic ? ANTHROPIC_STREAM : responses ? RESPONSES_STREAM : OPENAI_STREAM;
+    for (const [event, data] of script) {
       res.write(`${event ? `event: ${event}\n` : ""}data: ${JSON.stringify(data)}\n\n`);
     }
-    res.end(anthropic ? "" : "data: [DONE]\n\n");
+    res.end(anthropic || responses ? "" : "data: [DONE]\n\n");
   });
 });
 let base;
@@ -86,7 +95,8 @@ test("every named provider answers through its factory", async () => {
       assert.equal(seen[0].path, "/v1/messages");
       assert.equal(seen[0].xApiKey, "sk-test-key");
     } else {
-      assert.equal(seen[0].path, "/v1/chat/completions", p.name);
+      // `openai` speaks the Responses API; the others Chat Completions.
+      assert.equal(seen[0].path, p.name === "openai" ? "/v1/responses" : "/v1/chat/completions", p.name);
       assert.equal(seen[0].auth, "Bearer sk-test-key", p.name);
     }
   }

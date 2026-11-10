@@ -94,6 +94,30 @@ Not taken: their integration catalogue one by one (MCP covers it) and their
 layers of abstraction (our smaller API is the point). Output repair (retry on
 invalid typed output) already exists in the agent loop (0004).
 
+Fourth roadmap, started 2026-11-10 at the user's request ("lets go fix all
+the gaps"): what stands between Criogen and a world market (review of
+2026-11-10: enterprise model routes, the first ten minutes, production
+pieces). Same full cycle. Tasks 29 and 30 move here, ahead of the rest of
+roadmap three.
+
+| # | Task | Spec | Status |
+|---|---|---|---|
+| 34 | OpenAI Responses API; the `openai` preset uses it | 0006 §16 | Done (2026-11-10) |
+| 35 | Azure OpenAI / Foundry: API key, then Entra ID tokens | 0006 §17 | Planned |
+| 36 | Amazon Bedrock: API keys (Bearer), then SigV4 | 0006 §18 | Planned |
+| 37 | Google Vertex AI: service-account tokens; Gemini and Claude | 0006 §19 | Planned |
+| 38 | `create-criogen` starters (Python, TypeScript) and a templates gallery | — | Planned |
+| 39 | "Coming from LangGraph" guide; rules file for AI coding assistants | — | Planned |
+| 30 | Agent server: agents as an HTTP API with streaming, one command | 0030 | Planned |
+| 29 | Background runs: start, come back later, webhooks | 0029 | Planned |
+| 40 | A2A (agent-to-agent protocol): serve and call agents | — | Planned |
+| 41 | Stability policy: what will not break before 1.0, deprecations | — | Planned |
+
+Needs the user, not code: Linux and macOS builds of 0.1.5 (after 15
+November), whether to open the source before 10,000 installs and the
+licence review, the one-line positioning ("agents for regulated work"),
+the domain, a public issue tracker and community.
+
 ## Open decisions
 
 | # | Decision | Status |

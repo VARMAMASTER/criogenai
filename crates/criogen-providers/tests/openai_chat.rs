@@ -235,7 +235,7 @@ fn settings_choice_and_quirks() {
     });
     request.settings = settings;
 
-    let (openai, warnings) = body_for(&Endpoint::openai("k"), &request);
+    let (openai, warnings) = body_for(&Endpoint::openai_chat("k"), &request);
     assert!(warnings.is_empty());
     assert_eq!(openai["max_completion_tokens"], 256);
     assert_eq!(openai["parallel_tool_calls"], false);
@@ -583,7 +583,10 @@ async fn presets_point_at_the_right_servers() {
     assert_eq!(gemini.api_key.as_deref(), Some("key"));
     assert_eq!(Endpoint::ollama().api_key, None);
     assert_eq!(Endpoint::lmstudio().base_url, "http://localhost:1234/v1");
-    assert_eq!(Endpoint::openai("k").base_url, "https://api.openai.com/v1");
+    assert_eq!(
+        Endpoint::openai_chat("k").base_url,
+        "https://api.openai.com/v1"
+    );
     assert_eq!(
         Endpoint::openrouter("k").base_url,
         "https://openrouter.ai/api/v1"

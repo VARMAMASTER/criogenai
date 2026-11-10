@@ -8,7 +8,7 @@ description: OpenAI, Anthropic, Gemini, DeepSeek, Mistral, Groq, xAI, Qwen, Kimi
 
 | Provider | How it is reached | Key |
 |---|---|---|
-| OpenAI | Chat Completions API | `OPENAI_API_KEY` |
+| OpenAI | Responses API (reasoning works with tools; `store: false`, so OpenAI keeps nothing) | `OPENAI_API_KEY` |
 | Anthropic (Claude) | Messages API, natively (reasoning, caching) | `ANTHROPIC_API_KEY` |
 | Google Gemini | Its OpenAI-compatible endpoint | `GEMINI_API_KEY` |
 | OpenRouter (hundreds of models) | OpenAI-compatible | `OPENROUTER_API_KEY` |
@@ -29,10 +29,9 @@ description: OpenAI, Anthropic, Gemini, DeepSeek, Mistral, Groq, xAI, Qwen, Kimi
 
 Each name works as a string (`"groq:llama-3.3-70b-versatile"`) or as a class
 (`Groq(...)` in Python, `groq(...)` in TypeScript). Model names go to the
-provider unchanged, so a new model works the day it ships. Not yet built: the
-OpenAI Responses API, Azure OpenAI, Amazon Bedrock and Google Vertex AI (reach
-Azure's v1 API today with `OpenAICompatible` and your resource's
-`/openai/v1` URL).
+provider unchanged, so a new model works the day it ships. Not yet built:
+Azure OpenAI, Amazon Bedrock and Google Vertex AI (reach Azure's v1 API today
+with `OpenAICompatible` and your resource's `/openai/v1` URL).
 
 ## Keep your keys in the environment
 

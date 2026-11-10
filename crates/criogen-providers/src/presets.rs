@@ -21,8 +21,9 @@ pub struct Preset {
     pub base_url: &'static str,
     /// Where its key usually lives; `None` for local servers that need none.
     pub key_env: Option<&'static str>,
-    /// `true` for the Anthropic Messages protocol, `false` for OpenAI chat
-    /// completions.
+    /// `true` for the Anthropic Messages protocol, `false` for the OpenAI
+    /// protocols (Chat Completions; `openai` itself speaks the Responses API,
+    /// design 0006 §16).
     pub anthropic: bool,
 }
 
