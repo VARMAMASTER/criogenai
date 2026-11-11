@@ -103,7 +103,7 @@ roadmap three.
 | # | Task | Spec | Status |
 |---|---|---|---|
 | 34 | OpenAI Responses API; the `openai` preset uses it | 0006 §16 | Done (2026-11-10) |
-| 35 | Azure OpenAI / Foundry: API key, then Entra ID tokens | 0006 §17 | Planned |
+| 35 | Azure OpenAI / Foundry: API key, service principal, managed identity | 0006 §17 | Done (2026-11-10; local servers only, no live Azure check) |
 | 36 | Amazon Bedrock: API keys (Bearer), then SigV4 | 0006 §18 | Planned |
 | 37 | Google Vertex AI: service-account tokens; Gemini and Claude | 0006 §19 | Planned |
 | 38 | `create-criogen` starters (Python, TypeScript) and a templates gallery | — | Planned |

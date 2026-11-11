@@ -4,7 +4,9 @@
 
 use std::sync::Arc;
 
-use criogen_providers::{Endpoint, KaggleModel, Model, ProviderModel, preset};
+use criogen_providers::{
+    AzureApi, AzureCredential, AzureModel, Endpoint, KaggleModel, Model, ProviderModel, preset,
+};
 use serde::Deserialize;
 
 use crate::{BudgetPeriod, Gateway, GatewayBuilder, GatewayError, KeyLimits};
@@ -164,6 +166,25 @@ impl Config {
                         ))
                     })
                 };
+                if m.provider == "azure" || m.provider == "azure_chat" {
+                    // Design 0006 §17: `base_url` (resource name or URL, else
+                    // AZURE_OPENAI_ENDPOINT); the key from `api_key_env`, else
+                    // the AZURE_* variables (key, service principal, managed
+                    // identity).
+                    let mut model = AzureModel::from_parts(
+                        m.base_url.as_deref(),
+                        &m.model,
+                        key.clone().map(AzureCredential::api_key),
+                    )
+                    .map_err(|err| {
+                        GatewayError::Config(format!("route `{}`: {}", route.name, err.message))
+                    })?;
+                    if m.provider == "azure_chat" {
+                        model = model.with_api(AzureApi::Chat);
+                    }
+                    models.push(Arc::new(model));
+                    continue;
+                }
                 if m.provider == "kaggle" {
                     // Design 0020: a Kaggle API token (`api_key_env`, else
                     // KAGGLE_API_TOKEN); the proxy token is minted and renewed.
@@ -283,6 +304,13 @@ mod tests {
         name = "prototype"
         models = [{ provider = "kaggle", model = "google/gemini-3.6-flash" }]
 
+        [[routes]]
+        name = "enterprise"
+        models = [
+          { provider = "azure", model = "gpt-5-mini", base_url = "my-resource", api_key_env = "TEST_AZURE_KEY" },
+          { provider = "azure_chat", model = "DeepSeek-V4", base_url = "my-resource", api_key_env = "TEST_AZURE_KEY" },
+        ]
+
         [[keys]]
         name = "team-a"
         key_env = "TEST_KEY_A"
@@ -297,6 +325,7 @@ mod tests {
             "TEST_OPENAI_KEY" => Some("sk-test-not-real".into()),
             "TEST_KEY_A" => Some("a-long-enough-test-key".into()),
             "KAGGLE_API_TOKEN" => Some("KGAT_not_real".into()),
+            "TEST_AZURE_KEY" => Some("azure-not-real".into()),
             _ => None,
         }
     }
@@ -310,6 +339,9 @@ mod tests {
         assert!(gateway.has_keys());
         assert_eq!(gateway.inner.routes["support"].len(), 2);
         assert_eq!(gateway.inner.routes["prototype"][0].provider(), "kaggle");
+        let enterprise = &gateway.inner.routes["enterprise"];
+        assert_eq!(enterprise[0].provider(), "azure");
+        assert_eq!(enterprise[1].model(), "DeepSeek-V4");
         assert_eq!(gateway.spent("team-a"), Some(0));
         // The Debug output names routes, never keys.
         let shown = format!("{gateway:?}");

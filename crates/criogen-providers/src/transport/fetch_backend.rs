@@ -37,30 +37,34 @@ impl Client {
     }
 
     pub(super) async fn post(&self, request: &WireRequest) -> Result<Response, Error> {
-        let (url, headers, body) = (
+        let (method, url, headers, body) = (
+            request.method,
             request.url.clone(),
             request.headers.clone(),
             request.body.clone(),
         );
         // JavaScript values are not `Send`; WebAssembly runs on one thread.
-        SendWrapper::new(fetch(url, headers, body)).await
+        SendWrapper::new(fetch(method, url, headers, body)).await
     }
 }
 
 async fn fetch(
+    method: &'static str,
     url: String,
     headers: Vec<(String, String)>,
     body: Vec<u8>,
 ) -> Result<Response, Error> {
     let init = RequestInit::new();
-    init.set_method("POST");
+    init.set_method(method);
     init.set_redirect(RequestRedirect::Manual);
     let js_headers = Headers::new().map_err(Error::setup)?;
     for (name, value) in &headers {
         js_headers.set(name, value).map_err(Error::setup)?;
     }
     init.set_headers(&js_headers);
-    init.set_body(&Uint8Array::from(body.as_slice()));
+    if method != "GET" {
+        init.set_body(&Uint8Array::from(body.as_slice()));
+    }
     let controller = AbortController::new().map_err(Error::setup)?;
     init.set_signal(Some(&controller.signal()));
     // Aborts the request if this future is dropped before it answers.

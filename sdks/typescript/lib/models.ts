@@ -227,6 +227,59 @@ export class KaggleModel {
 /** A model on Kaggle's Model Proxy, e.g. kaggle("google/gemini-3.6-flash"). */
 export const kaggle = (model: string, options?: KaggleOptions) => new KaggleModel(model, options);
 
+/**
+ * Azure OpenAI or Microsoft Foundry (design 0006 §17). `endpoint` is the
+ * resource name or URL (else AZURE_OPENAI_ENDPOINT). Credentials, in order:
+ * `apiKey`; `token` (a bearer token from elsewhere); `clientSecret` with
+ * `tenantId` and `clientId` (a service principal); `managedIdentity` (with
+ * `clientId` for a user-assigned identity); else AZURE_OPENAI_API_KEY, or
+ * AZURE_TENANT_ID + AZURE_CLIENT_ID + AZURE_CLIENT_SECRET, or
+ * AZURE_USE_MANAGED_IDENTITY=1. The engine obtains and renews Entra ID
+ * tokens. `api: "chat"` for Foundry's models from other makers.
+ */
+export interface AzureOptions {
+  endpoint?: string;
+  apiKey?: string;
+  token?: string;
+  tenantId?: string;
+  clientId?: string;
+  clientSecret?: string;
+  managedIdentity?: boolean;
+  api?: "responses" | "chat";
+  scope?: string;
+  /** Where Entra ID tokens are issued (sovereign clouds; tests). */
+  authority?: string;
+  /** Another managed-identity endpoint (tests). */
+  identityEndpoint?: string;
+}
+
+export class AzureModel {
+  readonly kind = "azure";
+  /** The deployment name. */
+  readonly model: string;
+  readonly #options: AzureOptions;
+
+  constructor(model: string, options: AzureOptions = {}) {
+    if (options.api !== undefined && options.api !== "responses" && options.api !== "chat") {
+      throw new TypeError('api must be "responses" or "chat"');
+    }
+    this.model = model;
+    this.#options = options;
+  }
+
+  /** The JSON spec (with any secret; never logged). */
+  spec(): Record<string, unknown> {
+    return { kind: this.kind, model: this.model, ...this.#options };
+  }
+
+  toJSON(): Record<string, unknown> {
+    return { kind: this.kind, model: this.model };
+  }
+}
+
+/** A deployment on Azure OpenAI or Foundry, e.g. azure("gpt-5-mini", { endpoint: "my-resource" }). */
+export const azure = (model: string, options?: AzureOptions) => new AzureModel(model, options);
+
 
 /**
  * What a model function receives: the request as the engine sends it to a
@@ -334,18 +387,19 @@ export class FunctionModel {
   }
 }
 
-export type Model = string | ProviderModel | KaggleModel | FakeModel | FunctionModel;
+export type Model = string | ProviderModel | KaggleModel | AzureModel | FakeModel | FunctionModel;
 
 /** The JSON spec of a model object or "provider:model" string. */
 export function modelSpec(model: Model): Record<string, unknown> {
   if (typeof model === "string") {
     const at = model.indexOf(":");
     const provider = at > 0 ? model.slice(0, at) : "";
-    const known = [...Object.keys(KEYS), ...LOCAL, "kaggle"];
+    const known = [...Object.keys(KEYS), ...LOCAL, "kaggle", "azure"];
     if (!known.includes(provider)) {
       throw new TypeError(`model "${model}": use "provider:model" with provider one of ${known.join(", ")}`);
     }
     if (provider === "kaggle") return new KaggleModel(model.slice(at + 1)).spec();
+    if (provider === "azure") return new AzureModel(model.slice(at + 1)).spec();
     return new ProviderModel(provider, model.slice(at + 1)).spec();
   }
   if (model && typeof (model as { spec?: unknown }).spec === "function") return model.spec();

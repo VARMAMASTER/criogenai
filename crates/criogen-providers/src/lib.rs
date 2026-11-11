@@ -36,6 +36,8 @@ struct ReadmeDoctests;
 
 #[cfg(feature = "http")]
 mod anthropic_messages;
+#[cfg(feature = "http")]
+mod azure;
 mod embed;
 mod error;
 mod fake;
@@ -63,6 +65,8 @@ mod transport;
 
 #[cfg(feature = "http")]
 pub use anthropic_messages::AnthropicOptions;
+#[cfg(feature = "http")]
+pub use azure::{AzureApi, AzureCredential, AzureModel};
 pub use embed::{Embedder, FAKE_DIMENSIONS, FakeEmbedder};
 pub use error::{
     Dispatch, HttpFailure, MAX_MESSAGE_BYTES, ModelError, ModelErrorKind, classify_http,
@@ -83,7 +87,9 @@ pub use openai_responses::ResponsesOptions;
 #[cfg(feature = "http")]
 pub use presets::{PRESETS, Preset, preset};
 #[cfg(feature = "http")]
-pub use provider::{Endpoint, Protocol, ProviderEmbedder, ProviderModel, preview_request};
+pub use provider::{
+    Endpoint, Protocol, ProviderEmbedder, ProviderModel, azure_base_url, preview_request,
+};
 pub use request::{
     Capabilities, ModelRequest, ModelResponse, OutputSpec, OutputStrategy, Reasoning,
     ReasoningEffort, Settings, ToolChoice,

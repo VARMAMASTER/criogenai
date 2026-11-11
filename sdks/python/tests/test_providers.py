@@ -124,7 +124,7 @@ def test_a_missing_key_names_the_variable(monkeypatch):
     with pytest.raises(ValueError, match="DEEPSEEK_API_KEY"):
         Agent("deepseek:deepseek-chat")
     with pytest.raises(ValueError, match="provider one of"):
-        Agent("azure:gpt-5")
+        Agent("nosuch:gpt-5")
 
 
 def test_status_and_key_names_cover_the_new_providers(monkeypatch):

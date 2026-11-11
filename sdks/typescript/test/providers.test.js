@@ -105,7 +105,7 @@ test("every named provider answers through its factory", async () => {
 test("a missing key names the variable; an unknown provider lists the known ones", () => {
   delete process.env.DEEPSEEK_API_KEY;
   assert.throws(() => new Agent({ model: "deepseek:deepseek-chat" }), /DEEPSEEK_API_KEY/);
-  assert.throws(() => new Agent({ model: "azure:gpt-5" }), /provider one of/);
+  assert.throws(() => new Agent({ model: "nosuch:gpt-5" }), /provider one of/);
 });
 
 test("status and key names cover the new providers", () => {

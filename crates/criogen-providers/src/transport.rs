@@ -91,6 +91,9 @@ impl HttpConfig {
 #[derive(Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct WireRequest {
+    /// `POST` (every model call) or `GET` (token services such as Azure's
+    /// managed identity).
+    pub method: &'static str,
     /// Full URL.
     pub url: String,
     /// Headers, including authentication.
@@ -104,6 +107,7 @@ impl std::fmt::Debug for WireRequest {
     /// the prompt.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("WireRequest")
+            .field("method", &self.method)
             .field("url", &self.url)
             .field(
                 "headers",
@@ -118,9 +122,20 @@ impl WireRequest {
     /// A POST of `body` to `url`.
     pub fn post(url: impl Into<String>, body: Vec<u8>) -> Self {
         Self {
+            method: "POST",
             url: url.into(),
             headers: Vec::new(),
             body,
+        }
+    }
+
+    /// A GET of `url`, without a body.
+    pub fn get(url: impl Into<String>) -> Self {
+        Self {
+            method: "GET",
+            url: url.into(),
+            headers: Vec::new(),
+            body: Vec::new(),
         }
     }
 

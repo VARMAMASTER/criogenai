@@ -261,8 +261,8 @@ passed through unchanged; Criogen keeps no list of models.
 Checked against scripted local servers (`tests/presets.rs`, both SDKs'
 provider tests); not yet live against each provider (manual, like
 `tests/live`). Not covered here, each with its own design note when built:
-Azure OpenAI, Amazon Bedrock, Google Vertex AI. The OpenAI Responses API is
-§16.
+Amazon Bedrock, Google Vertex AI. The OpenAI Responses API is §16, Azure
+§17.
 
 ## 5. Streaming
 

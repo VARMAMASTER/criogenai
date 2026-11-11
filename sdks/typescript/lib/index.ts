@@ -17,6 +17,7 @@ export {
   isCriogenError,
 } from "./errors";
 export {
+  AzureModel,
   Embedder,
   FakeModel,
   FakeReply,
@@ -25,6 +26,7 @@ export {
   ProviderModel,
   anthropic,
   anthropicCompatible,
+  azure,
   cerebras,
   deepseek,
   fireworks,
@@ -43,7 +45,7 @@ export {
   xai,
   zai,
 } from "./models";
-export type { KaggleOptions, Model, ModelAnswer, ModelCall, ModelOptions } from "./models";
+export type { AzureOptions, KaggleOptions, Model, ModelAnswer, ModelCall, ModelOptions } from "./models";
 export { ChatStream, Gateway } from "./gateway";
 export type { ChatInput, ChatOptions, ChatReply, Chunk, GatewayOptions } from "./gateway";
 export { ToolResult } from "./hooks";

@@ -193,6 +193,58 @@ class Kaggle:
         return f"Kaggle({self.model!r})"
 
 
+class Azure:
+    """Azure OpenAI or Microsoft Foundry (design 0006 §17): a deployment,
+    e.g. ``Azure("gpt-5-mini", endpoint="my-resource")`` or
+    ``"azure:gpt-5-mini"``. The model name is the deployment name.
+
+    ``endpoint`` is the resource name or URL (else ``AZURE_OPENAI_ENDPOINT``).
+    Credentials, in order: ``api_key``; ``token`` (a bearer token from
+    elsewhere); ``client_secret`` with ``tenant_id`` and ``client_id`` (a
+    service principal); ``managed_identity=True`` (with ``client_id`` for a
+    user-assigned identity); else the environment: ``AZURE_OPENAI_API_KEY``,
+    or ``AZURE_TENANT_ID`` + ``AZURE_CLIENT_ID`` + ``AZURE_CLIENT_SECRET``, or
+    ``AZURE_USE_MANAGED_IDENTITY=1``. Entra ID tokens are obtained and renewed
+    by the engine. ``api="chat"`` for Foundry's models from other makers."""
+
+    kind = "azure"
+
+    def __init__(
+        self,
+        model: str,
+        endpoint: Optional[str] = None,
+        api_key: Optional[str] = None,
+        token: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        managed_identity: bool = False,
+        api: str = "responses",
+        scope: Optional[str] = None,
+        authority: Optional[str] = None,
+        identity_endpoint: Optional[str] = None,
+    ):
+        if api not in ("responses", "chat"):
+            raise ValueError("api must be 'responses' or 'chat'")
+        self.model = model
+        self._fields = {
+            "endpoint": endpoint, "api_key": api_key, "token": token, "tenant_id": tenant_id,
+            "client_id": client_id, "client_secret": client_secret, "api": api, "scope": scope,
+            "authority": authority, "identity_endpoint": identity_endpoint,
+        }
+        self.managed_identity = managed_identity
+
+    def spec(self) -> Dict[str, Any]:
+        spec: Dict[str, Any] = {"kind": self.kind, "model": self.model}
+        spec.update({k: v for k, v in self._fields.items() if v})
+        if self.managed_identity:
+            spec["managed_identity"] = True
+        return spec
+
+    def __repr__(self) -> str:  # never shows a key, token or secret
+        return f"Azure({self.model!r})"
+
+
 class Ollama(_Model):
     """Ollama on this machine (or ``base_url``), no key."""
 
@@ -323,6 +375,7 @@ def model_spec(model: Any) -> Dict[str, Any]:
             "ollama": Ollama,
             "lmstudio": LMStudio,
             "kaggle": Kaggle,
+            "azure": Azure,
         }
         if not sep or provider not in classes:
             raise ValueError(

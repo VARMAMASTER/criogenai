@@ -41,6 +41,9 @@ pub struct Endpoint {
     pub api_key: Option<String>,
     /// Extra headers.
     pub headers: Vec<(String, String)>,
+    /// The header the key goes in on the OpenAI protocols, when it is not
+    /// `Authorization: Bearer` (Azure: `api-key`). `None`: Bearer.
+    pub key_header: Option<String>,
     /// What models behind this endpoint support (unknown = `None`).
     pub capabilities: Capabilities,
     /// Allow sending credentials over plain `http://` to a host that is not
@@ -60,6 +63,7 @@ impl std::fmt::Debug for Endpoint {
                 "headers",
                 &self.headers.iter().map(|(n, _)| n).collect::<Vec<_>>(),
             )
+            .field("key_header", &self.key_header)
             .field("capabilities", &self.capabilities)
             .field("insecure_http", &self.insecure_http)
             .finish()
@@ -151,6 +155,7 @@ impl Endpoint {
             base_url: base_url.into().trim_end_matches('/').to_string(),
             api_key: api_key.filter(|k| !k.is_empty()),
             headers: Vec::new(),
+            key_header: None,
             capabilities: Capabilities {
                 streaming: Some(true),
                 ..Capabilities::default()
@@ -199,6 +204,43 @@ impl Endpoint {
     ) -> Self {
         let mut endpoint = Self::openai_compatible(name, base_url, api_key);
         endpoint.protocol = Protocol::OpenAiResponses(ResponsesOptions::default());
+        endpoint
+    }
+
+    /// Azure OpenAI or Microsoft Foundry over the Responses API (design 0006
+    /// §17), with an API key (sent as `api-key`). `resource_or_url` is a
+    /// resource name (`my-res` → `https://my-res.openai.azure.com/openai/v1`)
+    /// or the resource's URL; `/openai/v1` is added when missing. The model
+    /// name is the deployment name. For Entra ID, see `AzureModel`.
+    pub fn azure(resource_or_url: &str, api_key: impl Into<String>) -> Self {
+        let mut endpoint = Self::openai_responses_compatible(
+            "azure",
+            azure_base_url(resource_or_url),
+            Some(api_key.into()),
+        );
+        endpoint.key_header = Some("api-key".into());
+        let caps = &mut endpoint.capabilities;
+        caps.tools = Some(true);
+        caps.parallel_tool_calls = Some(true);
+        caps.native_structured_output = Some(true);
+        caps.vision = Some(true);
+        caps.reasoning = Some(true);
+        caps.tool_result_images = Some(true);
+        endpoint
+    }
+
+    /// Azure over Chat Completions: Foundry's models from other makers
+    /// (DeepSeek, Llama, Mistral, Grok) answer only there.
+    pub fn azure_chat(resource_or_url: &str, api_key: impl Into<String>) -> Self {
+        let mut endpoint = Self::openai_compatible(
+            "azure",
+            azure_base_url(resource_or_url),
+            Some(api_key.into()),
+        );
+        endpoint.protocol = Protocol::OpenAiChat(OpenAiQuirks::openai());
+        endpoint.key_header = Some("api-key".into());
+        endpoint.capabilities.tools = Some(true);
+        endpoint.capabilities.parallel_tool_calls = Some(true);
         endpoint
     }
 
@@ -263,6 +305,7 @@ impl Endpoint {
             base_url: base_url.into().trim_end_matches('/').to_string(),
             api_key: api_key.filter(|k| !k.is_empty()),
             headers: Vec::new(),
+            key_header: None,
             capabilities: Capabilities {
                 streaming: Some(true),
                 ..Capabilities::default()
@@ -306,6 +349,23 @@ impl Endpoint {
     pub fn with_base_url(mut self, base_url: impl Into<String>) -> Self {
         self.base_url = base_url.into().trim_end_matches('/').to_string();
         self
+    }
+}
+
+/// The v1 base URL of an Azure resource: a bare resource name becomes
+/// `https://<name>.openai.azure.com/openai/v1`; a URL gets `/openai/v1`
+/// when it lacks it (design 0006 §17).
+pub fn azure_base_url(resource_or_url: &str) -> String {
+    let text = resource_or_url.trim().trim_end_matches('/');
+    if !text.contains("://") {
+        return format!("https://{text}.openai.azure.com/openai/v1");
+    }
+    if text.ends_with("/openai/v1") {
+        text.to_string()
+    } else if let Some(base) = text.strip_suffix("/openai") {
+        format!("{base}/openai/v1")
+    } else {
+        format!("{text}/openai/v1")
     }
 }
 
@@ -405,7 +465,10 @@ impl ProviderModel {
         match &endpoint.protocol {
             Protocol::OpenAiChat(_) | Protocol::OpenAiResponses(_) => {
                 if let Some(key) = &endpoint.api_key {
-                    wire = wire.header("authorization", format!("Bearer {key}"));
+                    wire = match &endpoint.key_header {
+                        Some(name) => wire.header(name.clone(), key.clone()),
+                        None => wire.header("authorization", format!("Bearer {key}")),
+                    };
                 }
             }
             Protocol::AnthropicMessages(options) => {
@@ -716,7 +779,10 @@ impl ProviderEmbedder {
         )
         .header("content-type", "application/json");
         if let Some(key) = &self.endpoint.api_key {
-            wire = wire.header("authorization", format!("Bearer {key}"));
+            wire = match &self.endpoint.key_header {
+                Some(name) => wire.header(name.clone(), key.clone()),
+                None => wire.header("authorization", format!("Bearer {key}")),
+            };
         }
         for (name, value) in &self.endpoint.headers {
             wire = wire.header(name.clone(), value.clone());

@@ -7,8 +7,8 @@ use std::time::Duration;
 use criogen_agent::{Limits, Memory, OnToolException};
 use criogen_core::RetryPolicy;
 use criogen_providers::{
-    Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply, KaggleModel, Model, ProviderEmbedder,
-    ProviderModel, preset,
+    AzureApi, AzureCredential, AzureModel, Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply,
+    KaggleModel, Model, ProviderEmbedder, ProviderModel, preset,
 };
 use criogen_storage::{AuditQuery, Namespace, OnBusy, Retention, SearchQuery, Storage};
 use serde_json::{Value, json};
@@ -45,9 +45,60 @@ pub fn model(spec: &Value) -> Result<Arc<dyn Model>> {
     if text(spec, "kind") == Some("kaggle") {
         return kaggle_model(spec, name);
     }
+    if text(spec, "kind") == Some("azure") {
+        return azure_model(spec, name);
+    }
     ProviderModel::new(endpoint(spec)?, name)
         .map(|m| Arc::new(m) as Arc<dyn Model>)
         .map_err(|err| failure("model_failed", err.to_string(), None))
+}
+
+/// Azure OpenAI and Foundry (design 0006 §17): `endpoint` (resource name or
+/// URL, else AZURE_OPENAI_ENDPOINT); `apiKey`, `token`, `tenantId` +
+/// `clientId` + `clientSecret`, or `managedIdentity`, else the environment;
+/// `api` (`"responses"` or `"chat"`), `scope`; `authority` and
+/// `identityEndpoint` point token requests elsewhere (tests).
+fn azure_model(spec: &Value, name: &str) -> Result<Arc<dyn Model>> {
+    let env = |var: &str| std::env::var(var).ok().filter(|v| !v.trim().is_empty());
+    let credential = if let Some(key) = text(spec, "apiKey") {
+        Some(AzureCredential::api_key(key))
+    } else if let Some(token) = text(spec, "token") {
+        Some(AzureCredential::token(token))
+    } else if let Some(secret) = text(spec, "clientSecret") {
+        let tenant = text(spec, "tenantId")
+            .map(str::to_string)
+            .or_else(|| env("AZURE_TENANT_ID"));
+        let client = text(spec, "clientId")
+            .map(str::to_string)
+            .or_else(|| env("AZURE_CLIENT_ID"));
+        let (Some(tenant), Some(client)) = (tenant, client) else {
+            return Err(bad(
+                "an Azure client secret needs `tenantId` and `clientId`",
+            ));
+        };
+        Some(AzureCredential::client_secret(tenant, client, secret))
+    } else if spec["managedIdentity"].as_bool() == Some(true) {
+        Some(AzureCredential::managed_identity(
+            text(spec, "clientId").map(str::to_string),
+        ))
+    } else {
+        None
+    };
+    let mut model = AzureModel::from_parts(text(spec, "endpoint"), name, credential)
+        .map_err(|err| failure("model_failed", err.to_string(), None))?;
+    if text(spec, "api") == Some("chat") {
+        model = model.with_api(AzureApi::Chat);
+    }
+    if let Some(scope) = text(spec, "scope") {
+        model = model.with_scope(scope);
+    }
+    if let Some(authority) = text(spec, "authority") {
+        model = model.with_authority(authority);
+    }
+    if let Some(url) = text(spec, "identityEndpoint") {
+        model = model.with_identity_endpoint(url, text(spec, "identityHeader").map(str::to_string));
+    }
+    Ok(Arc::new(model))
 }
 
 /// Kaggle's Model Proxy (design 0020): `apiKey` (a Kaggle API token), or

@@ -22,6 +22,7 @@ description: OpenAI, Anthropic, Gemini, DeepSeek, Mistral, Groq, xAI, Qwen, Kimi
 | Qwen (Alibaba Cloud Model Studio) | `qwen:` (international endpoint; pass `base_url` for China) | `DASHSCOPE_API_KEY` |
 | Moonshot AI (Kimi) | `moonshot:` (pass `base_url` for China keys) | `MOONSHOT_API_KEY` |
 | Z.ai (GLM) | `zai:` (pass `base_url` for China keys) | `ZAI_API_KEY` |
+| Azure OpenAI and Microsoft Foundry | `azure:<deployment>` / `Azure(...)` / `azure(...)`: the resource's v1 API, Responses (or `api="chat"` for Foundry's other models); an API key, or Entra ID (service principal, managed identity) with tokens renewed by the engine | `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_API_KEY`, or `AZURE_TENANT_ID` + `AZURE_CLIENT_ID` + `AZURE_CLIENT_SECRET` |
 | Kaggle Model Proxy (prototypes) | OpenAI-compatible; Criogen mints and renews the hourly proxy token | `KAGGLE_API_TOKEN` or `~/.kaggle/access_token` |
 | Ollama, LM Studio | `ollama:`, `lmstudio:`; local, OpenAI-compatible | none |
 | vLLM and any OpenAI-compatible server | Your URL (a key is never sent over plain `http://` to another machine unless you pass `allow_insecure_http` / `allowInsecureHttp`) | optional |
@@ -30,8 +31,36 @@ description: OpenAI, Anthropic, Gemini, DeepSeek, Mistral, Groq, xAI, Qwen, Kimi
 Each name works as a string (`"groq:llama-3.3-70b-versatile"`) or as a class
 (`Groq(...)` in Python, `groq(...)` in TypeScript). Model names go to the
 provider unchanged, so a new model works the day it ships. Not yet built:
-Azure OpenAI, Amazon Bedrock and Google Vertex AI (reach Azure's v1 API today
-with `OpenAICompatible` and your resource's `/openai/v1` URL).
+Amazon Bedrock and Google Vertex AI.
+
+### Azure OpenAI and Foundry
+
+The model name is your **deployment** name, and `endpoint` is the resource
+name (`my-resource`) or its URL; `/openai/v1` is added for you.
+
+```python
+from criogen import Agent, Azure
+
+# An API key (or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY and "azure:gpt-5-mini")
+agent = Agent(Azure("gpt-5-mini", endpoint="my-resource", api_key=key))
+
+# No keys at all: the identity of the Azure VM or App Service this runs on
+agent = Agent(Azure("gpt-5-mini", endpoint="my-resource", managed_identity=True))
+
+# A service principal (Entra ID); tokens are obtained and renewed for you
+agent = Agent(Azure("gpt-5-mini", endpoint="my-resource",
+                    tenant_id=tenant, client_id=app_id, client_secret=secret))
+```
+
+```ts
+import { Agent, azure } from "criogen";
+
+const agent = new Agent({ model: azure("gpt-5-mini", { endpoint: "my-resource", managedIdentity: true }) });
+```
+
+Foundry's models from other makers (DeepSeek, Llama, Mistral, Grok) answer
+only on Chat Completions: pass `api="chat"` / `api: "chat"`. Checked against
+local test servers; not yet against a live Azure resource.
 
 ## Keep your keys in the environment
 

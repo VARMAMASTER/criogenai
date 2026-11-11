@@ -9,6 +9,18 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+- **Azure OpenAI and Microsoft Foundry** (design 0006 §17): `azure:<deployment>`
+  in both SDKs (`Azure(...)` / `azure(...)`), `provider = "azure"` /
+  `"azure_chat"` in the gateway, and Rust `Endpoint::azure` / `azure_chat` and
+  `AzureModel`. The resource's v1 API (no `api-version`), Responses by default,
+  Chat Completions for Foundry's models from other makers. Credentials: an API
+  key (sent as `api-key`), a bearer token, a service principal (client
+  secret), or a managed identity (VM metadata service or App Service); Entra
+  ID tokens are obtained and renewed five minutes before they expire, and
+  renewed once more after a 401. Secrets stay out of `Debug`, errors and
+  logs, and are never sent over plain http to another machine. Checked
+  against local servers only. New: `Endpoint::key_header`,
+  `WireRequest::get`.
 - **Security note:** RUSTSEC-2026-0459 (SQLite before 3.54 can return stale
   memory when it opens a database with a `-wal` file written by someone less
   trusted) is listed as an exception in `deny.toml`: Criogen opens only its own

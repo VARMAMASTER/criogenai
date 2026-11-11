@@ -18,7 +18,11 @@ impl Client {
     }
 
     pub(super) async fn post(&self, request: &WireRequest) -> Result<Response, Error> {
-        let mut builder = self.0.post(&request.url).body(request.body.clone());
+        let mut builder = if request.method == "GET" {
+            self.0.get(&request.url)
+        } else {
+            self.0.post(&request.url).body(request.body.clone())
+        };
         for (name, value) in &request.headers {
             builder = builder.header(name, value);
         }
