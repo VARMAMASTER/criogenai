@@ -23,9 +23,11 @@ import { ToolError } from "./tools";
 
 /** What a hook sees. */
 export interface HookContext {
+  /** The id of the run (`result.runId`). */
   runId: string;
   /** The transcript so far (as in `result.messages`). */
   messages: Record<string, unknown>[];
+  /** Model calls made so far in this run. */
   modelCalls: number;
   /** What this hook saved with `{ state }`, if anything. */
   hookState: unknown;
@@ -39,35 +41,92 @@ export interface HookContext {
  * run, with `output`.
  */
 export interface HookAction {
+  /** A value to keep for this hook; later calls see it as `ctx.hookState`. */
   state?: unknown;
+  /** `beforeModel` only: the transcript to send instead (and to keep). */
   messages?: Record<string, unknown>[];
+  /** `afterModel` only: the assistant message to use instead of the model's reply. */
   message?: Record<string, unknown>;
+  /** `true` ends the run now, with stop reason "hook_end". */
   end?: boolean;
+  /** With `end`: the run's output. */
   output?: unknown;
 }
 
 /** A tool call going through `beforeTool` (change `name` or `args` and return it). */
 export interface ToolCall {
+  /** The call's id, as in the transcript. */
   callId: string;
+  /** The tool the model called. Return a call with another name to run that tool instead. */
   name: string;
+  /** The arguments the model wrote. */
   args: Record<string, unknown>;
 }
 
-/** Returned by `beforeTool`: use `value` as the result and skip the tool (e.g. a cached answer). */
+/**
+ * Returned by `beforeTool`: use `value` as the result and skip the tool (e.g. a cached answer).
+ *
+ * @example
+ * import { ToolResult, type Hook } from "criogen";
+ *
+ * const cache = new Map<string, unknown>([["get_weather:Paris", { forecast: "sunny" }]]);
+ * const cached: Hook = {
+ *   beforeTool(call) {
+ *     const hit = cache.get(`${call.name}:${call.args.city}`);
+ *     if (hit !== undefined) return new ToolResult(hit);
+ *   },
+ * };
+ */
 export class ToolResult {
+  /** @param value The tool result the model sees, as JSON. */
   constructor(readonly value: unknown) {}
 }
 
 type Maybe<T> = T | undefined | void | Promise<T | undefined | void>;
 
+/**
+ * Code that runs around the agent loop: an object (or class instance) with
+ * any of the methods below, each of which may be async. Pass hooks in the
+ * agent's `hooks` option.
+ *
+ * `onStart`, `beforeModel` and `beforeTool` run in list order, the others in
+ * reverse. A throw in `onStart`, `beforeModel` or `afterModel` fails the run
+ * (code `hook_failed`; what was thrown is the error's `cause`); a throw in
+ * `beforeTool` or `afterTool` counts as the tool's (see the agent's
+ * `onToolException`).
+ *
+ * @example
+ * import { Agent, type Hook } from "criogen";
+ *
+ * const logTools: Hook = {
+ *   name: "log-tools",
+ *   beforeTool(call) {
+ *     console.log("calling", call.name);
+ *   },
+ *   onEnd(ctx, outcome) {
+ *     console.log(`run ${ctx.runId}: ${outcome} after ${ctx.modelCalls} model calls`);
+ *   },
+ * };
+ * const agent = new Agent({ model: "openai:gpt-5-mini", hooks: [logTools] });
+ */
 export interface Hook {
   /** Shown in errors and audit records; defaults to the class name. */
   name?: string;
+  /** Once per run segment (a run, or its continuation after approval or retry), before anything else; may return `{ state }`. */
   onStart?(ctx: HookContext): Maybe<HookAction>;
+  /** Before each model call; may replace the transcript (`{ messages }`) or end the run (`{ end: true, output }`). */
   beforeModel?(ctx: HookContext): Maybe<HookAction>;
+  /** After each model reply (`ctx.messages` ends with it); may replace it (`{ message }`) or end the run. */
   afterModel?(ctx: HookContext): Maybe<HookAction>;
+  /**
+   * Before each tool call: return a changed `ToolCall` to run that instead,
+   * a `ToolResult` to skip the tool, or nothing to go on. Throwing
+   * `ToolError` gives the model that error instead of running the tool.
+   */
   beforeTool?(call: ToolCall): Maybe<ToolCall | ToolResult>;
+  /** After each tool call; a value other than `undefined` replaces the result the model sees. */
   afterTool?(call: ToolCall, result: unknown): unknown;
+  /** Always, once per run segment, with how it ended: "completed", "suspended" (waiting for approval) or "failed". Cannot change the outcome. */
   onEnd?(ctx: HookContext, outcome: "completed" | "suspended" | "failed"): void | Promise<void>;
 }
 

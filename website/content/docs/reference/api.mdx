@@ -8,23 +8,40 @@ it matches the code: Python from its docstrings and type hints, TypeScript
 from its declarations and doc comments, Rust from rustdoc.
 
 <CardGrid>
-  <LinkCard title="Python" description="The criogen package: Agent, tool, Thread, Storage, Memory, models, workflows, errors." href="/docs/reference/api/python/agents/" />
-  <LinkCard title="TypeScript" description="criogen: Agent, tool, Thread, Storage, Memory, models, workflows, errors." href="/docs/reference/api/typescript/agents/" />
+  <LinkCard title="Python" description="The criogen package: Agent, tool, Thread, Storage, Memory, models, workflows, errors." href="/docs/reference/api/python/" />
+  <LinkCard title="TypeScript" description="criogen: Agent, tool, Thread, Storage, Memory, models, workflows, errors." href="/docs/reference/api/typescript/" />
   <LinkCard title="Rust" description="The crates: core, providers, agent, storage, telemetry, gateway, trace." href="/docs/reference/api/rust/" />
 </CardGrid>
 
 ## Pages
 
-Python and TypeScript have the same pages, one per topic. Use the search box to find a name.
+Python and TypeScript have one page per module, with a contents table, every
+parameter and field, return values, errors and examples. Each language has an
+overview: [Python API](/docs/reference/api/python/),
+[TypeScript API](/docs/reference/api/typescript/). Use the search box to find a name.
 
-| Topic | Python | TypeScript |
-|---|---|---|
-| Agents, tools, hooks and errors | [Python](/docs/reference/api/python/agents/) | [TypeScript](/docs/reference/api/typescript/agents/) |
-| Models and the gateway | [Python](/docs/reference/api/python/models/) | [TypeScript](/docs/reference/api/typescript/models/) |
-| Storage, memory and collections | [Python](/docs/reference/api/python/storage/) | [TypeScript](/docs/reference/api/typescript/storage/) |
-| Workflows | [Python](/docs/reference/api/python/workflows/) | [TypeScript](/docs/reference/api/typescript/workflows/) |
-| Patterns, specialists, web and MCP | [Python](/docs/reference/api/python/patterns/) | [TypeScript](/docs/reference/api/typescript/patterns/) |
-| Tracing, evals and checks | [Python](/docs/reference/api/python/observability/) | [TypeScript](/docs/reference/api/typescript/observability/) |
+| Group | Module | Python | TypeScript |
+|---|---|---|---|
+| Agents | Agents: Agent, threads, streams, approvals | [Python](/docs/reference/api/python/agent/) | [TypeScript](/docs/reference/api/typescript/agent/) |
+|  | Tools | [Python](/docs/reference/api/python/tools/) | [TypeScript](/docs/reference/api/typescript/tools/) |
+|  | Hooks | [Python](/docs/reference/api/python/hooks/) | [TypeScript](/docs/reference/api/typescript/hooks/) |
+|  | Errors | [Python](/docs/reference/api/python/errors/) | [TypeScript](/docs/reference/api/typescript/errors/) |
+|  | Usage and cost | [Python](/docs/reference/api/python/usage/) | [TypeScript](/docs/reference/api/typescript/usage/) |
+| Models | Models and providers | [Python](/docs/reference/api/python/models/) | [TypeScript](/docs/reference/api/typescript/models/) |
+|  | Gateway | [Python](/docs/reference/api/python/gateway/) | [TypeScript](/docs/reference/api/typescript/gateway/) |
+|  | Keys and environment | [Python](/docs/reference/api/python/env/) | [TypeScript](/docs/reference/api/typescript/env/) |
+|  | Redaction | n/a | [TypeScript](/docs/reference/api/typescript/redact/) |
+| Data | Storage and memory | [Python](/docs/reference/api/python/storage/) | [TypeScript](/docs/reference/api/typescript/storage/) |
+|  | Collections | [Python](/docs/reference/api/python/collections/) | [TypeScript](/docs/reference/api/typescript/collections/) |
+| Orchestration | Workflows | [Python](/docs/reference/api/python/workflow/) | [TypeScript](/docs/reference/api/typescript/workflow/) |
+|  | Patterns | [Python](/docs/reference/api/python/patterns/) | [TypeScript](/docs/reference/api/typescript/patterns/) |
+|  | Specialist agents | [Python](/docs/reference/api/python/specialists/) | [TypeScript](/docs/reference/api/typescript/specialists/) |
+| Integrations | MCP servers | [Python](/docs/reference/api/python/mcp/) | [TypeScript](/docs/reference/api/typescript/mcp/) |
+|  | Web search and page reading | [Python](/docs/reference/api/python/web/) | [TypeScript](/docs/reference/api/typescript/web/) |
+| Quality and operations | Telemetry | [Python](/docs/reference/api/python/telemetry/) | [TypeScript](/docs/reference/api/typescript/telemetry/) |
+|  | Trace viewer | [Python](/docs/reference/api/python/trace/) | [TypeScript](/docs/reference/api/typescript/trace/) |
+|  | Evals | [Python](/docs/reference/api/python/evals/) | [TypeScript](/docs/reference/api/typescript/evals/) |
+|  | Readiness check | [Python](/docs/reference/api/python/ready/) | [TypeScript](/docs/reference/api/typescript/ready/) |
 
 The Rust reference is rustdoc's own, one page per crate: see [Rust API](/docs/reference/api/rust/).
 

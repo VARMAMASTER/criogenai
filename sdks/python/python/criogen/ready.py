@@ -1,7 +1,9 @@
-"""``ready()``: one call that says whether Criogen can work here, for start-up
-checks and health endpoints. It never raises; it reports. (In Python the
-engine is part of the wheel, which pip only installs on systems it runs on,
-so if ``import criogen`` worked the engine loads.)"""
+"""``ready()``: one call that says whether Criogen can work here, for start-up checks and health endpoints.
+
+It never raises; it reports. (In Python the engine is part of the wheel,
+which pip only installs on systems it runs on, so if ``import criogen``
+worked the engine loads.)
+"""
 
 import asyncio
 import platform
@@ -24,8 +26,31 @@ def _describe(error: BaseException) -> Dict[str, Any]:
 
 
 async def ready(model: Any = None, timeout: float = 30.0) -> Dict[str, Any]:
-    """Checks the engine and, with ``model``, that the model answers (one tiny
-    call, a few tokens). ``{"ok", "engine": {...}, "model": {...}}``."""
+    """Checks the engine and, with ``model``, that the model answers.
+
+    The model check is one small call (the agent is asked to reply ``OK``,
+    with a limit of one model call). Failures are reported, never raised.
+
+    Args:
+        model: A model string (e.g. ``"openai:gpt-5-mini"``) or model object
+            to check. Default: check only the engine.
+        timeout: The longest the model check may take, in seconds. Default
+            30.
+
+    Returns:
+        ``{"ok", "engine", "model"}``. ``ok`` is ``True`` when everything
+        checked works. ``engine`` holds ``ok``, ``platform``, ``arch`` and
+        ``libc``. ``model`` (only when a model was given) holds ``ok``,
+        ``model`` (its name), ``latency_ms`` and, on failure, ``error`` and
+        ``code``.
+
+    Example:
+        from criogen import ready
+
+        report = await ready("openai:gpt-5-mini", timeout=10)
+        if not report["ok"]:
+            print(report["model"].get("code"), report["model"].get("error"))
+    """
     report: Dict[str, Any] = {"ok": True, "engine": _engine()}
     if model is None:
         return report
@@ -53,5 +78,22 @@ async def ready(model: Any = None, timeout: float = 30.0) -> Dict[str, Any]:
 
 
 def ready_sync(model: Any = None, timeout: float = 30.0) -> Dict[str, Any]:
-    """:func:`ready` for scripts (not inside an event loop)."""
+    """:func:`ready` for scripts (not inside an event loop).
+
+    Args:
+        model: As for :func:`ready`.
+        timeout: As for :func:`ready`, in seconds. Default 30.
+
+    Returns:
+        ``{"ok", "engine", "model"}``. ``ok`` is ``True`` when everything
+        checked works. ``engine`` holds ``ok``, ``platform``, ``arch`` and
+        ``libc``. ``model`` (only when a model was given) holds ``ok``,
+        ``model`` (its name), ``latency_ms`` and, on failure, ``error`` and
+        ``code``.
+
+    Example:
+        from criogen import ready_sync
+
+        print(ready_sync()["engine"])   # {"ok": True, "platform": ..., "arch": ..., "libc": ...}
+    """
     return asyncio.run(ready(model, timeout))

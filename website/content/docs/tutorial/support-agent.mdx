@@ -1,0 +1,282 @@
+---
+title: "Tutorial: build a support agent"
+description: From an empty folder to a running support agent with tools, a staff approval for refunds, a conversation saved in SQLite, memory per customer, streaming and tests.
+---
+
+In this tutorial you build a small but complete support agent for an online
+shop. It runs in your terminal, and every part of it is what you would use in a
+real app:
+
+- **Tools**: the agent looks orders up and issues refunds.
+- **Approval**: a refund waits until a staff member says yes.
+- **A durable thread**: the conversation is saved in a SQLite file, so you can
+  stop the program and continue later.
+- **Memory**: facts about a customer are kept across conversations.
+- **Streaming**: the answer appears as the model writes it.
+- **Tests**: the whole flow is tested without a model, a key or the network.
+
+It takes about 30 minutes. Pick Python or TypeScript in any code tab: the
+whole page follows.
+
+<Aside type="note" title="What you need">
+Python 3.9+ or Node.js 18+, and an OpenAI API key. Any other provider works
+too (see step 4); Ollama on your own computer needs no key. The tests in
+step 9 need no key at all.
+</Aside>
+
+## 1. Create the project
+
+<Tabs syncKey="lang">
+<TabItem label="Python">
+
+```sh
+mkdir support-desk && cd support-desk
+python -m venv .venv
+source .venv/bin/activate        # Windows: .venv\Scripts\activate
+pip install criogen pytest
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```sh
+mkdir support-desk && cd support-desk
+npm init -y
+npm pkg set type=module
+npm install criogen
+npm install --save-dev tsx typescript @types/node
+```
+
+`tsx` runs TypeScript files directly; `type=module` lets the files use
+`await` at the top level.
+
+</TabItem>
+</Tabs>
+
+Put your key in a file named `.env` in the folder, and keep that file out of
+version control:
+
+```sh
+# .env
+OPENAI_API_KEY=sk-...
+```
+
+```sh
+echo ".env" >> .gitignore
+```
+
+Criogen reads keys only from the environment. `load_env()` / `loadEnv()`
+(used in step 5) copies the `.env` file into the environment; it never
+prints a value and never replaces a variable that is already set.
+
+## 2. Write the tools
+
+A **tool** is a function the model may call. Create `support_agent.py` (or
+`support_agent.ts`) and start with two tools:
+
+<Sample name="support_agent" region="tools" />
+
+What matters here:
+
+- **The schema.** In Python, the type hints (`order_id: str`,
+  `amount: float`) become the JSON Schema the model sees, and the docstring
+  becomes the description. In TypeScript you write the schema in `input`.
+  The engine checks the model's arguments against it **before your function
+  runs**: a missing `amount` or a string where a number belongs goes back to
+  the model, never to your code.
+- **`ToolError`** is a failure the model should see. "No order Z-9" goes back
+  as the tool's result, and the model can ask the customer again. Any other
+  exception counts as a crash (see [Tools](/docs/guides/tools/)).
+- **`read_only` / `destructive`** describe the tool. `read_only` tools may be
+  retried after a transient failure; `destructive` ones never are.
+
+Write tool descriptions for the model: say what the tool does and what the
+arguments look like ("an id like A-1001"). Models choose tools by their
+descriptions.
+
+## 3. Build the agent
+
+Add the agent to the same file. It is a function so the tests in step 9 can
+build the same agent with a fake model:
+
+<Sample name="support_agent" region="agent" />
+
+Each option, in order:
+
+| Option | What it does |
+|---|---|
+| `instructions` | The system prompt: who the agent is and the rules it follows |
+| `tools` | What the model may call |
+| `approve` | Tools that wait for a person. When the model calls `issue_refund`, the run **pauses before any tool of that turn runs** |
+| `storage` | Where threads, memory and approvals are saved. A SQLite file here; Postgres when several processes share it |
+| `memory` | Long-term memory, one namespace per customer: `customers/<customer_id>` |
+| `limits` | Stops a run that loops: at most 12 model calls and 20 tool calls (the defaults are 25 and 200) |
+
+## 4. Choose the model
+
+The model is a string `"provider:model"`. Step 5 uses
+`"openai:gpt-5-mini"`, which reads `OPENAI_API_KEY`. Others work the same
+way, each with its own key variable:
+
+| Model string | Key |
+|---|---|
+| `"anthropic:claude-haiku-5-5"` | `ANTHROPIC_API_KEY` |
+| `"gemini:gemini-2.5-flash"` | `GEMINI_API_KEY` |
+| `"openrouter:meta-llama/llama-3.3-70b-instruct"` | `OPENROUTER_API_KEY` |
+| `"ollama:llama3.2"` | none: Ollama on this computer |
+
+Building an agent with a hosted model and no key fails at once with a message
+naming the variable to set. The full list is in
+[Models and providers](/docs/guides/models/).
+
+## 5. Talk to it in the terminal
+
+Create `support_chat.py` (or `support_chat.ts`):
+
+<Sample name="support_chat" />
+
+Run it:
+
+<Tabs syncKey="lang">
+<TabItem label="Python">
+
+```sh
+python support_chat.py c-7 ticket-1
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```sh
+npx tsx support_chat.ts c-7 ticket-1
+```
+
+</TabItem>
+</Tabs>
+
+```text
+you > Where is my order A-1002?
+agent > Your order A-1002 is in transit.
+you > A-1001 arrived broken. Can I get 20 back?
+  [staff] issue_refund {'order_id': 'A-1001', 'amount': 20, 'reason': 'arrived broken'}
+  [staff] approve? y/n > y
+agent > Done: I refunded 20 for order A-1001.
+```
+
+(The model's words will differ.) What happened:
+
+1. `agent.thread("ticket-1")` is a **thread**: one conversation, stored in
+   `support.db`. Each `send` runs one turn on top of everything said before.
+2. The model called `issue_refund`. The run **paused** and `send` returned a
+   reply with `needs_approval` (`needsApproval`) and the waiting calls in
+   `approvals`. The pause is saved in the database.
+3. `desk.approve()` continued the same thread. `desk` is a second handle on
+   the same thread with another `actor`, so the
+   [audit trail](/docs/guides/compliance/) (if you turn it on) records that
+   `staff:sam` approved, not the customer.
+4. `reject(reason)` would skip the refund; the model sees the reason and tells
+   the customer.
+
+While an approval waits, `send` refuses with `thread_suspended`: answer the
+approval first.
+
+## 6. Stop it and come back
+
+Type `quit`, then start the program again with the same ticket id and ask
+"What did we just do?". The agent remembers: the conversation was saved after
+every step. Use a new ticket id for a new conversation.
+
+The same holds after a crash. If the process dies in the middle of a turn, the
+thread keeps the unfinished run; `send` then fails with
+`thread_interrupted`, and `retry()` continues the run where it stopped. Tool
+calls that had finished are not run again, so a refund is never issued twice.
+See [Conversations (threads)](/docs/guides/threads/).
+
+## 7. Memory per customer
+
+`Memory.by_state("customer_id", "customers")` gives each customer a
+namespace, `customers/c-7`, chosen by the `customer_id` you pass with each
+message. Before every model call, the facts that best match the question are
+added to the request. The model also gets three tools: `remember`, `forget`
+and `search_memory`.
+
+Try it: in ticket-1, say "Please always contact me by email". Then start a new
+ticket for the same customer:
+
+```sh
+python support_chat.py c-7 ticket-2     # or: npx tsx support_chat.ts c-7 ticket-2
+```
+
+and ask "How do I prefer to be contacted?". The model decides what to
+save (the instructions ask it to); when it called `remember`, the fact was
+saved under `customers/c-7`, not under the ticket, so every ticket of that
+customer sees it. A run without `customer_id` fails
+(`invalid_state`) instead of reading another customer's facts. Your own code
+can read, write and delete memory too; see
+[Long-term memory](/docs/guides/memory/).
+
+## 8. Stream the answer
+
+`send` returns when the turn is over. To print the answer while the model
+writes it, use `stream`, which yields events and then gives the same saved
+reply:
+
+<Sample name="support_chat" region="stream" />
+
+In the loop of step 5, replace the `send` call with
+`send_streaming(chat, text, customer_id)`
+(`sendStreaming(chat, text, customerId)`). The text after an approval comes from `approve()`; use
+`stream_approve()` (`streamApprove()`) to stream that too. Leaving the loop
+early cancels the run; it is still saved, and `retry()` continues it. See
+[Streaming](/docs/guides/streaming/).
+
+## 9. Test it without a model
+
+`FakeModel` plays a script: each entry is the next model reply, either text
+or a tool call. Nothing goes over the network, so tests are fast, free and the
+same every time. Create `support_test.py` (or `support_test.ts`):
+
+<Sample name="support_test" />
+
+Run the tests:
+
+<Tabs syncKey="lang">
+<TabItem label="Python">
+
+```sh
+pytest support_test.py
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```sh
+npx tsx --test support_test.ts
+```
+
+</TabItem>
+</Tabs>
+
+The first test checks the approval flow end to end; the second checks that a
+`ToolError` reaches the model as an error result. The engine, the tools, the
+storage and the memory are all real; only the model is scripted. More in
+[Testing without a model](/docs/guides/testing/).
+
+## What you built
+
+| Piece | Where it lives |
+|---|---|
+| Tools with checked arguments | `support_agent`: `get_order`, `issue_refund` |
+| An agent with approval, storage, memory and limits | `support_agent`: `build_agent` / `buildAgent` |
+| A durable conversation per ticket | `support.db` (SQLite) |
+| A staff decision that waits in the database | `approve()` / `reject()` on any handle of the thread |
+| Tests with a scripted model | `support_test` |
+
+## Next
+
+<CardGrid>
+  <LinkCard title="Deploy it" description="The same agent behind FastAPI or a Next.js route, with Postgres for several processes." href="/docs/guides/deploying/" />
+  <LinkCard title="Human approval in depth" description="Edit the arguments, answer in place of the tool, decide per call." href="/docs/guides/approvals/" />
+  <LinkCard title="Encryption, audit, retention" description="Encrypt conversations at rest and record who approved what." href="/docs/guides/compliance/" />
+  <LinkCard title="Workflows" description="When the steps are known in advance: a graph instead of a loop." href="/docs/guides/workflows/" />
+</CardGrid>

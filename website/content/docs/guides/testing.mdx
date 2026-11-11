@@ -1,0 +1,93 @@
+---
+title: Testing without a model
+description: Test agents, tools, approvals, threads, retries and fallbacks with a scripted FakeModel - no key, no network, the same result every time.
+---
+
+Tests that call a real model are slow, cost money, and give a different answer
+each time. `FakeModel` replaces the model and nothing else: the engine, your
+tools, the schema checks, approvals, storage and memory all run for real. Use
+it for unit tests and CI; keep real models for a few manual checks and for
+[evals](/docs/guides/evals/).
+
+## Script the replies
+
+Each entry of the script is the next model reply: a string is a text answer,
+`FakeReply.tool_call(name, args)` (`FakeReply.toolCall`) is a tool call,
+`FakeReply.tool_calls([...])` (`toolCalls`) is several at once. After the
+script runs out, the model echoes the last user message.
+
+<Sample name="testing" region="script" />
+
+What to assert:
+
+- `result.text`, `result.output`, `result.stop_reason`;
+- `result.model_calls`, `result.tool_calls`;
+- the transcript, `result.messages`: each tool message has `tool`, `status`
+  (`success`, `error`, `rejected`) and `content`; an error has
+  `error["code"]` (`invalid_arguments`, `tool_error`, `tool_failed`, ...).
+
+The arguments in a scripted tool call go through the same schema check as a
+real model's, so a test can also show that a bad call reaches the model as
+`invalid_arguments` and never your function.
+
+## Many runs at once
+
+By default the script is used up in order, across every run of the model.
+With `by_turn=True` (`byTurn: true`), each run starts from the top of the
+script: the first reply for a run's first model call, the second for its
+second, and so on. One fake model then serves many runs, also concurrently:
+
+<Sample name="testing" region="by_turn" />
+
+## Failures, retries and fallbacks
+
+`fail_first=n` (`failFirst`) makes the first `n` calls fail with
+`rate_limited`, a transient error, so you can test retries and fallbacks.
+`name` sets the model name in results, to tell fake models apart:
+
+<Sample name="testing" region="failures" />
+
+Keep retry backoffs small in tests (`initial_backoff=0.01`), or the test waits
+for real. `delay` (`delayMs`) makes each reply take time, to test
+cancellation, timeouts and busy threads.
+
+## Approvals, threads and memory
+
+Use a fresh in-memory `Storage()` per test; nothing is left behind. The
+[tutorial](/docs/tutorial/support-agent/#9-test-it-without-a-model) has a
+complete test of an approval: send, check `needs_approval`, approve, check
+the answer. Long-term memory works with a fake model too; for memory by
+meaning, `Embedder.fake()` gives vectors without a network call (texts that
+share words are close; `synonyms` adds more), and `Embedder.fake(failing=True)`
+tests the fall back to keywords.
+
+## Workflows
+
+Workflow nodes are your own functions: call them directly in unit tests, and
+run the compiled workflow for the wiring. Agent nodes take a `FakeModel` like
+any agent.
+
+## Errors in tests
+
+Test the failure paths as well as the happy path:
+
+| To test | Do |
+|---|---|
+| A tool's `ToolError` | Script a call with arguments that make the tool raise; assert the tool message's `status` is `error` |
+| A crashing tool and `on_tool_exception="fail"` | Expect `ToolExecutionError`, with your exception as `__cause__` / `cause` |
+| A limit | Set `limits={"model_calls": 2}` and script more tool calls; expect `LimitExceededError` |
+| A model outage | `fail_first` larger than the retries; expect `ModelError` |
+| A busy thread | `Storage(on_busy="reject")`, a `delay`, two concurrent `send`s; expect `ThreadBusyError` |
+
+## In Rust
+
+Rust's `FakeModel` also fails on purpose per call (`failing_on`,
+`flaky_first`):
+
+<Sample name="agents" region="testing" only={["rust"]} />
+
+## Next
+
+- [Evals and quality gates](/docs/guides/evals/): measure real models on your cases.
+- [Tracing](/docs/guides/telemetry/): look at a run step by step.
+- API: [Python models (`FakeModel`)](/docs/reference/api/python/models/), [TypeScript models](/docs/reference/api/typescript/models/).

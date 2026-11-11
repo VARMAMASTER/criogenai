@@ -1,0 +1,190 @@
+---
+title: "Python API: Tools"
+description: "Python API reference, tools: tool, Tool, ToolError, ToolContext."
+---
+
+Functions the model can call: definitions, input schemas, errors and the tool context. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/tools/).
+
+Tools: Python functions the model can call.
+
+Decorate a function with `@tool`. Its docstring is the description the
+model reads, and its type hints become the JSON Schema of its arguments.
+The Rust engine checks the model's arguments against that schema before
+the function runs, so a tool only sees arguments of the right shape.
+
+Supported hints: `str`, `int`, `float`, `bool`, `list[...]`,
+`dict`, `Optional[...]`, `Union[...]`, `Literal[...]` and Pydantic
+models (passed to the function as instances). A parameter without a
+default is required. Sync tools run on a worker thread, async tools on
+your event loop. The return value is sent to the model as JSON (Pydantic
+models are dumped; other values that JSON cannot hold become strings).
+
+```python
+from criogen import tool, Tool, ToolError, ToolContext
+```
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`tool`](#tool) | function | Makes a function a tool: `@tool` or `@tool(read_only=True)`. |
+| [`Tool`](#tool-1) | class | A function the model can call; made by `@tool`. |
+| [`ToolError`](#toolerror) | class | A failure the model should see, and may recover from. |
+| [`ToolContext`](#toolcontext) | class | What a tool can know about its call. |
+
+## tool
+
+```python
+def tool(
+    func: Optional[Callable[..., Any]] = None,
+    *,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    read_only: bool = False,
+    destructive: bool = False,
+    idempotent: bool = False,
+) -> Any
+```
+
+Makes a function a tool: `@tool` or `@tool(read_only=True)`.
+
+The docstring is the description the model reads; the type hints are
+the schema of the arguments.
+
+**Parameters**
+
+- `func` (`Optional[Callable[..., Any]]`, default `None`): The function, when used as `@tool` without parentheses.
+- `name` (`Optional[str]`, default `None`): The tool name the model sees. Default: the function's name.
+- `description` (`Optional[str]`, default `None`): What the tool does, for the model. Default: the function's docstring.
+- `read_only` (`bool`, default `False`): The tool has no side effects. Such tools are retried after a retryable error or a timeout.
+- `destructive` (`bool`, default `False`): The tool may destroy data. A hint only; it does not ask for approval by itself (use `Agent(approve=[...])`).
+- `idempotent` (`bool`, default `False`): Calling the tool twice with the same arguments has the same effect as once. Such tools are retried after a retryable error or a timeout.
+
+**Returns:** A `Tool`, or (with arguments only) a decorator that makes one.
+
+**Raises**
+
+- `TypeError`: A parameter's type hint has no JSON Schema.
+
+**Example**
+
+```python
+from typing import Literal
+from criogen import tool
+
+@tool(read_only=True)
+def weather(city: str, unit: Literal["C", "F"] = "C") -> str:
+    "Current weather for a city."
+    return f"21 {unit} and sunny in {city}"
+
+print(weather.schema["required"])  # ['city']
+```
+
+## Tool
+
+```python
+class Tool:
+    def __init__(
+        self,
+        func: Callable[..., Any],
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        read_only: bool = False,
+        destructive: bool = False,
+        idempotent: bool = False,
+    )
+```
+
+A function the model can call; made by `@tool`.
+
+Calling the `Tool` object calls the function directly, so tools stay
+easy to test. `tool.schema` is the JSON Schema of its arguments.
+
+**Parameters**
+
+- `func` (`Callable[..., Any]`): The function, sync or async.
+- `name` (`Optional[str]`, default `None`): The tool name the model sees. Default: the function's name.
+- `description` (`Optional[str]`, default `None`): What the tool does, for the model. Default: the function's docstring.
+- `read_only` (`bool`, default `False`): The tool has no side effects. Such tools may be retried.
+- `destructive` (`bool`, default `False`): The tool may destroy data. A hint kept with the tool; it does not ask for approval by itself (list the tool in `Agent(approve=[...])` for that).
+- `idempotent` (`bool`, default `False`): Calling the tool twice with the same arguments has the same effect as calling it once. Such tools may be retried.
+
+**Raises**
+
+- `TypeError`: A parameter's type hint has no JSON Schema.
+
+### Tool.spec
+
+```python
+def spec() -> Dict[str, Any]
+```
+
+The tool as the engine reads it: name, description, schema and
+hints (internal).
+
+### Tool.adapter
+
+```python
+def adapter() -> Tuple[Callable[[str, str], Any], bool]
+```
+
+What the engine calls: `(args_json, ctx_json)` → a JSON
+envelope (or, for async tools, a coroutine that gives one).
+
+## ToolError
+
+```python
+class ToolError(Exception):
+    def __init__(self, message: str, retryable: bool = False)
+```
+
+A failure the model should see, and may recover from.
+
+Raise it from a tool: the model gets `message` as the call's error
+result and the run goes on. Any other exception counts as the tool
+crashing; `Agent(on_tool_exception=...)` decides what happens then.
+
+**Parameters**
+
+- `message` (`str`): What went wrong, written for the model.
+- `retryable` (`bool`, default `False`): The call may succeed if tried again. Calls to tools marked `read_only` or `idempotent` are then retried, as the agent's `tool_retry` says; other tools are not retried.
+
+**Example**
+
+```python
+@tool
+def lookup_order(order_id: str) -> str:
+    "Looks up an order by its id."
+    if not order_id.startswith("A-"):
+        raise ToolError(f"unknown order id {order_id}; ids start with A-")
+    return "shipped"
+```
+
+## ToolContext
+
+```python
+@dataclass(frozen=True)
+class ToolContext:
+    call_id: str
+    run_id: str
+```
+
+What a tool can know about its call.
+
+Ask for it with a parameter annotated `ToolContext`; that parameter is
+filled by the engine and left out of the schema the model sees.
+
+**Attributes**
+
+- `call_id` (`str`): The id of this tool call (as in the transcript and events).
+- `run_id` (`str`): The id of the run that made the call.
+
+**Example**
+
+```python
+@tool
+def save_note(text: str, ctx: ToolContext) -> str:
+    "Saves a note."
+    print(f"run {ctx.run_id}, call {ctx.call_id}")
+    return "saved"
+```

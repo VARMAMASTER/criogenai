@@ -1,0 +1,129 @@
+---
+title: Agents and the loop
+description: What an agent is, what happens in each turn of its loop, how it ends, and which limits keep it from running away.
+---
+
+An **agent** is a model, a set of tools and some instructions, run as a loop:
+the model either answers or asks for tool calls; the tools run; their results
+go back to the model; and so on until the model answers without calling a
+tool. Read this page to know what the engine does on your behalf, so that
+results, pauses and errors make sense.
+
+## The loop, step by step
+
+Inside, every agent is a small [workflow](/docs/guides/workflows/) with
+three nodes, run by the same engine as your own workflows:
+
+```
+            ┌───────────────── tool results ─────────────────┐
+            ▼                                                 │
+ input ─► model ──(tool calls)──► review ──(approved)──► tools
+            │                     (only if a called tool
+            │                      needs approval)
+            └──(answer, no tool calls)──► end
+```
+
+One turn of the loop:
+
+1. **Before the model call.** Long-term [memory](/docs/guides/memory/) is
+   recalled, [redaction](/docs/guides/production/#redaction-before-anything-leaves)
+   and the `before_model` [hooks](/docs/guides/hooks/) run, and the limits
+   are checked.
+2. **The model call.** The transcript, the instructions and the tool
+   schemas go to the provider. Transient errors (rate limits, overload, 5xx,
+   timeouts) are retried with backoff, then fallback models are tried
+   ([Errors and retries](/docs/concepts/errors-and-retries/)).
+3. **The reply.** If it has no tool calls, the run ends: `result.text` is
+   the answer. If it has tool calls, the loop goes on.
+4. **Review.** If any called tool is in `approve`, the run **pauses
+   before any tool of this turn runs**, and returns the waiting calls
+   (`needs_approval`). It continues when someone decides
+   ([Human approval](/docs/guides/approvals/)).
+5. **The tools.** The engine checks each call's arguments against the
+   tool's schema, then runs the calls **concurrently** (up to 8 at a time),
+   each with a time limit (60 s by default). Results go back to the model in
+   the order the model asked for them, whatever order they finished in.
+6. Back to step 1.
+
+Every step is a [step of the engine](/docs/concepts/runs/): with storage, the
+state is saved after each one and after each tool call, so a crash loses at
+most the call in progress.
+
+## What a tool call can come back as
+
+The model always gets a result for every call it made, so the transcript
+stays valid for every provider:
+
+| What happened | What the model sees | Status |
+|---|---|---|
+| The tool returned a value | The value (JSON or text) | `success` |
+| Arguments did not match the schema | The problems, e.g. `amount: required` | `error` (`invalid_arguments`) |
+| The model named a tool that does not exist | The names of the tools it has | `error` (`unknown_tool`) |
+| The tool raised `ToolError` | Your message | `error` (`tool_error`) |
+| The tool raised anything else | The exception's type and message (configurable) | `error` (`tool_failed`) |
+| The tool took too long | A timeout | `error` |
+| A reviewer rejected the call | The reviewer's reason | `rejected` |
+
+The model then decides what to do: correct its arguments, try another tool,
+ask the user, or explain. A failing tool does not stop the run unless you ask
+for that (`on_tool_exception="fail"`); see [Tools](/docs/guides/tools/).
+
+## How a run ends
+
+| Ending | `stop_reason` / `stopReason` | You get |
+|---|---|---|
+| The model answered without calling a tool | `final_answer` | `result.text` |
+| Structured output was accepted | `output` | `result.output` (checked against your schema) |
+| A hook ended the run | `hook_end` | the hook's `output` |
+| The provider's safety filter refused | `content_filter` | no answer text |
+| A tool needs approval | (the run is paused) | `needs_approval` and `approvals` |
+| A limit was reached | (an error) | `LimitExceededError`, `code = "limit_exceeded"` |
+| Anything failed for good | (an error) | an error with a stable [code](/docs/reference/errors/) |
+
+## Limits
+
+Every agent has limits; there is no way to run without them. When one is
+reached the run fails with `limit_exceeded`, and `details["limit"]` names it.
+
+| Limit | Default | Set with (Python / TypeScript) |
+|---|---|---|
+| Model calls per run (retries of one call do not count) | 25 | `limits={"model_calls": n}` / `limits: { modelCalls: n }` |
+| Tool calls per run | 200 | `"tool_calls"` / `toolCalls` |
+| Tokens (input plus output) per run, checked before each model call | none | `"tokens"` / `tokens` |
+| Time per tool call | 60 s | `"tool_timeout_secs"` / `toolTimeoutSecs` |
+| Tool calls taken from one reply (the rest are skipped) | 32 | fixed in the SDKs |
+| Tool calls running at once | 8 | fixed in the SDKs |
+| Invalid structured answers before `output_invalid` | 2 | fixed in the SDKs |
+| Depth of agents calling agents (`as_tool`) | 8 | fixed in the SDKs |
+| Characters of one tool result (longer ones are cut) | 100,000 | fixed in the SDKs |
+
+"Per run" means per message: `run` and `send` start the counts at zero;
+`approve`, `reject`, `decide` and `retry` continue the same run, and its
+counts. The next message of a thread starts again at zero.
+
+## Runs and threads
+
+- `agent.run(input)` is one run with no history. Use it for one-off tasks.
+- `agent.thread(id).send(input)` adds a turn to a stored conversation. The
+  model sees everything said before on that thread. Use it for chats,
+  tickets, cases, anything a person comes back to.
+
+Both use the same loop. A thread adds saving, one-run-at-a-time, pauses that
+wait in the database, `retry`, history and rewind; see
+[State, storage and threads](/docs/concepts/state-and-threads/).
+
+## What the agent remembers, and where
+
+| What | Kept for | Where |
+|---|---|---|
+| The transcript of one run | The run | `result.messages` |
+| The transcript of a conversation | Until you delete the thread or retention removes it | The thread, in storage |
+| Facts about a person | Until you forget them or they expire | Long-term memory, in storage |
+| Your documents | Until you remove them | A [collection](/docs/guides/retrieval/), in storage |
+
+## Next
+
+- [Agents](/docs/guides/agents/): every option, the result, typed output, sub-agents.
+- [Tools](/docs/guides/tools/): schemas, errors, retries, timeouts.
+- [How a run works](/docs/concepts/runs/): steps, state and snapshots, for agents and workflows.
+- API: [Python `Agent`](/docs/reference/api/python/agent/), [TypeScript `Agent`](/docs/reference/api/typescript/agent/).

@@ -1,0 +1,58 @@
+---
+title: "TypeScript API"
+description: "The TypeScript API reference of Criogen, one page per module: agents, tools, models, storage, workflows, patterns, MCP, telemetry and evals."
+---
+
+Every public class, function and type of the `criogen` TypeScript package (0.1.6), one page per module, generated from its declarations and doc comments every time the site is built. Install it with `npm install criogen`. The same API in [Python](/docs/reference/api/python/) and [Rust](/docs/reference/api/rust/).
+
+New to Criogen? Start with the [quickstart](/docs/quickstart/) and the [agents guide](/docs/guides/agents/); come here for the exact names, parameters and defaults.
+
+## Agents
+
+| Page | What it covers | Main names |
+|---|---|---|
+| [Agents](/docs/reference/api/typescript/agent/) | The agent: a model, tools and instructions; runs, threads, streams and approvals. | [`Agent`](/docs/reference/api/typescript/agent/#agent), [`AgentOptions`](/docs/reference/api/typescript/agent/#agentoptions), [`Thread`](/docs/reference/api/typescript/agent/#thread), [`Stream`](/docs/reference/api/typescript/agent/#stream) |
+| [Tools](/docs/reference/api/typescript/tools/) | Functions the model can call: definitions, input schemas, errors and the tool context. | [`tool`](/docs/reference/api/typescript/tools/#tool), [`Tool`](/docs/reference/api/typescript/tools/#tool), [`ToolDefinition`](/docs/reference/api/typescript/tools/#tooldefinition), [`ToolError`](/docs/reference/api/typescript/tools/#toolerror) |
+| [Hooks](/docs/reference/api/typescript/hooks/) | Your code around the agent loop: before and after model and tool calls. | [`HookContext`](/docs/reference/api/typescript/hooks/#hookcontext), [`HookAction`](/docs/reference/api/typescript/hooks/#hookaction), [`ToolCall`](/docs/reference/api/typescript/hooks/#toolcall), [`ToolResult`](/docs/reference/api/typescript/hooks/#toolresult) |
+| [Errors](/docs/reference/api/typescript/errors/) | Every error class, one per stable error code. | [`CriogenError`](/docs/reference/api/typescript/errors/#criogenerror), [`NativeUnavailableError`](/docs/reference/api/typescript/errors/#nativeunavailableerror), [`ModelError`](/docs/reference/api/typescript/errors/#modelerror), [`ToolExecutionError`](/docs/reference/api/typescript/errors/#toolexecutionerror) |
+| [Usage and cost](/docs/reference/api/typescript/usage/) | Tokens and an estimated price for a run. | [`ModelUse`](/docs/reference/api/typescript/usage/#modeluse), [`RunFacts`](/docs/reference/api/typescript/usage/#runfacts), [`Price`](/docs/reference/api/typescript/usage/#price), [`estimateCost`](/docs/reference/api/typescript/usage/#estimatecost) |
+
+## Models
+
+| Page | What it covers | Main names |
+|---|---|---|
+| [Models](/docs/reference/api/typescript/models/) | Providers and models: OpenAI, Anthropic, Gemini, Azure, Bedrock, Vertex AI, local servers and more. | [`openai`](/docs/reference/api/typescript/models/#openai), [`anthropic`](/docs/reference/api/typescript/models/#anthropic), [`gemini`](/docs/reference/api/typescript/models/#gemini), [`FakeModel`](/docs/reference/api/typescript/models/#fakemodel) |
+| [Gateway](/docs/reference/api/typescript/gateway/) | Chat, stream and embed without an agent, with retries and fallbacks. | [`Gateway`](/docs/reference/api/typescript/gateway/#gateway), [`ChatInput`](/docs/reference/api/typescript/gateway/#chatinput), [`ChatOptions`](/docs/reference/api/typescript/gateway/#chatoptions), [`ChatReply`](/docs/reference/api/typescript/gateway/#chatreply) |
+| [Keys and environment](/docs/reference/api/typescript/env/) | Loading API keys from a file or the environment. | [`parseEnv`](/docs/reference/api/typescript/env/#parseenv), [`LoadEnvOptions`](/docs/reference/api/typescript/env/#loadenvoptions), [`loadEnv`](/docs/reference/api/typescript/env/#loadenv), [`envStatus`](/docs/reference/api/typescript/env/#envstatus) |
+| [Redaction](/docs/reference/api/typescript/redact/) | Removing personal data before anything reaches a provider. | [`Redactor`](/docs/reference/api/typescript/redact/#redactor) |
+
+## Data
+
+| Page | What it covers | Main names |
+|---|---|---|
+| [Storage and memory](/docs/reference/api/typescript/storage/) | Durable threads (SQLite, Postgres, in memory), encryption, audit, retention and long-term memory. | [`Storage`](/docs/reference/api/typescript/storage/#storage), [`Memory`](/docs/reference/api/typescript/storage/#memory), [`StorageOptions`](/docs/reference/api/typescript/storage/#storageoptions), [`MemoryOptions`](/docs/reference/api/typescript/storage/#memoryoptions) |
+| [Collections](/docs/reference/api/typescript/collections/) | Documents to search by meaning, and a retrieval tool for agents. | [`Collection`](/docs/reference/api/typescript/collections/#collection), [`CollectionOptions`](/docs/reference/api/typescript/collections/#collectionoptions), [`Document`](/docs/reference/api/typescript/collections/#document), [`Hit`](/docs/reference/api/typescript/collections/#hit) |
+
+## Orchestration
+
+| Page | What it covers | Main names |
+|---|---|---|
+| [Workflows](/docs/reference/api/typescript/workflow/) | Graphs of steps and agents: routes, joins, loops, pauses for people, and threads. | [`Workflow`](/docs/reference/api/typescript/workflow/#workflow), [`CompiledWorkflow`](/docs/reference/api/typescript/workflow/#compiledworkflow), [`WorkflowThread`](/docs/reference/api/typescript/workflow/#workflowthread), [`END`](/docs/reference/api/typescript/workflow/#end) |
+| [Patterns](/docs/reference/api/typescript/patterns/) | Ready-made multi-agent designs: sequential, parallel, loops, routers, debates and more. | [`sequential`](/docs/reference/api/typescript/patterns/#sequential), [`parallel`](/docs/reference/api/typescript/patterns/#parallel), [`loop`](/docs/reference/api/typescript/patterns/#loop), [`custom`](/docs/reference/api/typescript/patterns/#custom) |
+| [Specialist agents](/docs/reference/api/typescript/specialists/) | Default agent recipes (researcher, writer, critic, ...) and a registry for your own. | [`SpecialistSettings`](/docs/reference/api/typescript/specialists/#specialistsettings), [`ExtendOptions`](/docs/reference/api/typescript/specialists/#extendoptions), [`Specialist`](/docs/reference/api/typescript/specialists/#specialist), [`register`](/docs/reference/api/typescript/specialists/#register) |
+
+## Integrations
+
+| Page | What it covers | Main names |
+|---|---|---|
+| [MCP servers](/docs/reference/api/typescript/mcp/) | Tools from Model Context Protocol servers, over HTTP or a local process. | [`McpServer`](/docs/reference/api/typescript/mcp/#mcpserver), [`McpOptions`](/docs/reference/api/typescript/mcp/#mcpoptions), [`stdio`](/docs/reference/api/typescript/mcp/#stdio), [`http`](/docs/reference/api/typescript/mcp/#http) |
+| [Web search and page reading](/docs/reference/api/typescript/web/) | Web search (Tavily, Brave) and safe page reading tools. | [`TAVILY_URL`](/docs/reference/api/typescript/web/#tavily_url), [`BRAVE_URL`](/docs/reference/api/typescript/web/#brave_url), [`tavilySearch`](/docs/reference/api/typescript/web/#tavilysearch), [`braveSearch`](/docs/reference/api/typescript/web/#bravesearch) |
+
+## Quality and operations
+
+| Page | What it covers | Main names |
+|---|---|---|
+| [Telemetry](/docs/reference/api/typescript/telemetry/) | Exporting runs to Langfuse or any OpenTelemetry backend. | [`Telemetry`](/docs/reference/api/typescript/telemetry/#telemetry), [`TelemetryOptions`](/docs/reference/api/typescript/telemetry/#telemetryoptions) |
+| [Trace viewer](/docs/reference/api/typescript/trace/) | A local page that shows your runs, with no account. | [`serveTraces`](/docs/reference/api/typescript/trace/#servetraces), [`TraceViewer`](/docs/reference/api/typescript/trace/#traceviewer), [`TraceViewerOptions`](/docs/reference/api/typescript/trace/#tracevieweroptions) |
+| [Evals](/docs/reference/api/typescript/evals/) | Datasets, scorers, judges, comparisons and quality gates. | [`evaluate`](/docs/reference/api/typescript/evals/#evaluate), [`Dataset`](/docs/reference/api/typescript/evals/#dataset), [`EvalResult`](/docs/reference/api/typescript/evals/#evalresult), [`compare`](/docs/reference/api/typescript/evals/#compare) |
+| [Readiness check](/docs/reference/api/typescript/ready/) | Checks that the engine, keys and providers work before you ship. | [`ready`](/docs/reference/api/typescript/ready/#ready), [`ReadyReport`](/docs/reference/api/typescript/ready/#readyreport), [`ReadyOptions`](/docs/reference/api/typescript/ready/#readyoptions) |

@@ -1,11 +1,39 @@
 // Errors (design 0012 §3): one class per family, each with the stable `code`
 // the Rust engine uses (design 0003).
 
-/** Any Criogen failure. `code` is stable across languages. */
+/**
+ * Any Criogen failure. `code` is stable across languages.
+ *
+ * Every error the engine raises is a `CriogenError` or one of its
+ * subclasses, chosen by `code`. The message starts with the code
+ * (`"limit_exceeded: ..."`). Branch on the class or on `code`, never on the
+ * message text.
+ *
+ * @example
+ * import { Agent, FakeModel, FakeReply, LimitExceededError, tool } from "criogen";
+ *
+ * const ping = tool({ name: "ping", description: "Ping.", input: { type: "object" }, run: () => "pong" });
+ * const agent = new Agent({ model: new FakeModel([FakeReply.toolCall("ping")]), tools: [ping], limits: { modelCalls: 1 } });
+ * try {
+ *   await agent.run("Keep pinging.");
+ * } catch (error) {
+ *   if (error instanceof LimitExceededError) console.log(error.code, error.details); // limit_exceeded { limit: "model_calls", value: 1 }
+ *   else throw error;
+ * }
+ */
 export class CriogenError extends Error {
+  /** The stable snake_case error code, e.g. "model_failed" (listed in the errors reference). */
   readonly code: string;
+  /** Structured facts about the failure (which limit, which call, ...); `{}` when there are none. */
   readonly details: Record<string, unknown>;
 
+  /**
+   * Errors are made by the SDK; you rarely construct one yourself.
+   * @param code The stable error code.
+   * @param message What went wrong; the error's `message` is `"<code>: <message>"`.
+   * @param details Structured facts about the failure.
+   * @param cause What caused it, e.g. the value a crashing tool threw; becomes the error's `cause`.
+   */
   constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown) {
     super(`${code}: ${message}`, cause === undefined ? undefined : { cause });
     this.name = new.target.name;
@@ -66,7 +94,21 @@ export function errorFor(code: string, message: string, details?: Record<string,
   return new cls(code, message, details, cause);
 }
 
-/** `true` if `error` is an Criogen error, with `code` if given. */
+/**
+ * `true` if `error` is a Criogen error, with `code` if given.
+ *
+ * @param error Any caught value.
+ * @param code Also require this error code, e.g. "thread_busy".
+ * @example
+ * import { isCriogenError } from "criogen";
+ *
+ * try {
+ *   await thread.send("Hello");
+ * } catch (error) {
+ *   if (isCriogenError(error, "thread_busy")) console.log("Try again in a moment.");
+ *   else throw error;
+ * }
+ */
 export function isCriogenError(error: unknown, code?: string): error is CriogenError {
   return error instanceof CriogenError && (code === undefined || error.code === code);
 }

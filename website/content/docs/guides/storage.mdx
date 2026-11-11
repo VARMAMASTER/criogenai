@@ -1,39 +1,123 @@
 ---
 title: "Storage: SQLite and Postgres"
-description: Where threads and memory live, and how runs on one thread take turns.
+description: Where threads, memory and the audit trail live; choosing a backend; how runs on one thread take turns; and running Postgres in production.
 ---
 
-
-Storage keeps threads (every checkpoint), long-term memory and the audit
-trail. Pass it to an agent; agents sharing one storage share its threads and
-memory.
+A `Storage` is the database behind everything that lasts: every thread's
+checkpoints, long-term memory, collections and the audit trail. Give one to
+an agent (or a workflow) and its threads survive restarts, approvals can be
+answered from another process, and a crashed run can be continued. Agents and
+workflows built with the **same** `Storage` share its threads and memory.
 
 <Sample name="storage" />
 
-| Backend | For | Notes |
-|---|---|---|
-| In memory | Tests, scripts | Gone when the process ends |
-| SQLite | One process | A file; tables created on first use; deleted rows are overwritten |
-| Postgres | Several processes or machines | Tables created on first use; one run per thread across all processes (advisory locks); interrupts reach the process running the thread |
+## Choose a backend
+
+| Backend | URL | For | Notes |
+|---|---|---|---|
+| In memory | none (`Storage()`) | Tests, scripts | Gone when the process ends |
+| SQLite | `sqlite://path/to/file.db` | One process on one machine | A file; created with its tables on first use; deleted rows are overwritten on disk |
+| Postgres | `postgres://user:password@host:5432/db` | Several processes or machines | Tables created on first use; one run per thread across all processes; interrupts reach the process running the thread |
+
+An agent without `storage` gets an in-memory one of its own. A URL string
+also works where a `Storage` is expected (`storage="sqlite://app.db"`), but
+then each agent opens its own connection: build one `Storage` and share it.
+
+Rules of thumb:
+
+- **One process** (a script, a single server process, a desktop app): SQLite.
+- **Several processes** (several web workers, several machines, a separate
+  process that answers approvals, serverless functions): Postgres. SQLite's
+  one-run-per-thread rule holds only inside one process.
+- **Tests**: in memory, a fresh `Storage()` per test.
+
+Tables are created on first use and upgraded by later versions. A database
+written by a newer Criogen is refused by an older one
+(`storage_incompatible`), never misread.
+
+## Options
+
+| Python | TypeScript | Default | What it does |
+|---|---|---|---|
+| `url` (first argument) | `url` (or a string) | in memory | The database |
+| `on_busy` | `onBusy` | `"wait"` | What a second call on a busy thread does (below) |
+| `busy_timeout` | `busyTimeoutSecs` | 60 s | How long `wait` and `interrupt` wait |
+| `encryption_keys` | `encryptionKeys` | none | Encrypt content at rest ([details](/docs/guides/compliance/#encryption-at-rest)) |
+| `audit` | `audit` | off | Record who did what ([details](/docs/guides/compliance/#audit-trail)) |
+| `retention` | `retention` | none | Delete old threads and checkpoints with `prune()` ([details](/docs/guides/compliance/#retention)) |
+
+`close()` closes the connections (SQLite releases the file). Call it at
+shutdown; calls after it fail with `storage_unavailable`.
 
 ## A thread that is busy
 
-Only one run uses a thread at a time. What a second call does:
+Only one run uses a thread at a time. A second call on the same thread (a
+user who sends twice, two browser tabs, a retry while the first call still
+runs) does what `on_busy` says:
 
 | `on_busy` | Second call |
 |---|---|
-| `wait` (default) | Waits its turn (up to a timeout) |
-| `reject` | Fails at once with `thread_busy` |
-| `interrupt` | Cancels the running one (it is saved for `retry`) and goes next |
+| `"wait"` (default) | Waits its turn, up to `busy_timeout`, then fails with `thread_busy` |
+| `"reject"` | Fails at once with `thread_busy` |
+| `"interrupt"` | Cancels the running call (it is saved as `cancelled`, for `retry`) and runs next |
+
+Pick `reject` for APIs where the client should show "still working", and
+`interrupt` for chats where a new message replaces the one in flight.
+Different threads never wait for each other.
 
 ## Durability
 
-By default every step and every tool call is saved as it happens, so a
-crash loses at most the call in progress. Rust can trade that for speed
-(`Durability::Exit`: save only when the call ends).
+Every message, every step and every finished tool call is written as it
+happens. A crash loses at most the call that was in progress, and `retry()`
+continues from there. In Rust you can trade this for speed
+(`Durability::Exit`: write only when the call ends); the Python and
+TypeScript SDKs always write every step.
+
+## Your own reads and writes
+
+Storage has methods for what your app needs directly:
+
+| Python | TypeScript | What it does |
+|---|---|---|
+| `remember(ns, key, value, ttl=None)` | `remember(ns, key, value, { ttlSecs })` | Save a fact ([Memory](/docs/guides/memory/)) |
+| `recall(ns, key)`, `search(ns, text, limit)` | same | Read facts |
+| `forget_all(ns)` | `forgetAll(ns)` | Delete every fact under a namespace |
+| `prune()` | `prune()` | Apply the retention rules once |
+| `audit_records(...)`, `verify_audit()` | `auditRecords(...)`, `verifyAudit()` | Read and check the audit trail |
+| `close()` | `close()` | Close the connections |
+
+Threads are read through an agent: `agent.thread(id).messages()`,
+`history()`, `delete()`.
 
 ## Postgres in production
 
-Use a direct connection or PgBouncer in **session** mode (thread locks need
-the same connection), TLS (`sslmode=verify-full`), and regular backups:
-threads, memory and the audit trail are all in this database.
+- **One database per environment.** Threads, memory and the audit trail all
+  live in it: back it up like any other primary data.
+- **Connections.** Connect directly or through PgBouncer in **session**
+  mode. Thread locks are session advisory locks, which do not work in
+  PgBouncer's transaction mode.
+- **TLS.** Add `?sslmode=verify-full` (or `require`) to the URL for a
+  database on another machine.
+- **Secrets.** Keep the URL (it holds the password) in an environment
+  variable, never in code: `Storage(os.environ["DATABASE_URL"])`.
+- **Locks across processes.** With Postgres, `on_busy` holds across every
+  process and machine using the database, and `interrupt` reaches the process
+  that runs the thread.
+
+## Errors
+
+| Code | When |
+|---|---|
+| `storage_unavailable` | The database cannot be reached, timed out, or the storage was closed (retryable) |
+| `storage_conflict` | Another writer changed the thread first (retryable) |
+| `storage_corrupt` | Stored data could not be read |
+| `storage_incompatible` | The database was written by a newer schema version |
+| `encryption_key_missing`, `encryption_key_invalid` | An encrypted database without the right keys |
+| `thread_busy` | See above |
+
+## Next
+
+- [Conversations (threads)](/docs/guides/threads/): what is stored per conversation.
+- [Encryption, audit, retention](/docs/guides/compliance/).
+- [Deploying](/docs/guides/deploying/): one storage per process, Postgres for several.
+- API: [Python `Storage`](/docs/reference/api/python/storage/), [TypeScript `Storage`](/docs/reference/api/typescript/storage/).

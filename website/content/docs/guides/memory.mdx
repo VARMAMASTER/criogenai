@@ -1,40 +1,123 @@
 ---
 title: Long-term memory
-description: Facts about a user or a patient that every conversation can recall.
+description: Facts about a user, a customer or a patient that every conversation can recall - namespaces, recall, the memory tools, search by meaning, expiry and deletion.
 ---
 
-
-Threads remember one conversation. **Long-term memory** keeps facts about a
-person (a user, a patient, a customer) across all their conversations, in
-the same storage.
+A [thread](/docs/guides/threads/) remembers one conversation. **Long-term
+memory** keeps facts about a person (a user, a customer, a patient) across
+all their conversations, in the same [storage](/docs/guides/storage/). Use it
+for preferences, standing instructions and lasting facts ("vegetarian",
+"prefers email", "allergic to penicillin"). For searching your own documents,
+use [collections](/docs/guides/retrieval/) instead.
 
 <Sample name="memory" />
 
-## How it works
+## Namespaces: whose facts these are
 
-- **Namespaces.** Memory is organised like paths: `users/42`. With
-  `by_state("user_id", "users")`, each run works in `users/<user_id>`; a run
-  without `user_id` fails instead of seeing someone else's facts.
-- **Recall.** Before each model call, the best-matching facts (then the
-  newest) are added to the model's request, marked as information, not
-  instructions. They are not stored in the transcript.
-- **Tools.** The model gets `remember`, `forget` and `search_memory`. Turn
-  either half off with `recall=0` / `tools=False` (`recall: 0`,
-  `tools: false`).
-- **Expiry.** A time to live per memory, or per fact.
-- **Deleting a person.** `forget_all("users/42")` / `forgetAll` /
-  `delete_namespace` removes every fact under the namespace.
+Memory is organised like paths: `users/42`, `customers/c-7`,
+`clinics/north/patients/p-19`. Every fact lives under one namespace, and a
+run reads and writes exactly one:
+
+| Python | TypeScript | Namespace |
+|---|---|---|
+| `Memory.by_state("user_id", "users")` | `Memory.byState("user_id", "users")` | `users/<user_id>`, from the value you pass with each message |
+| `Memory.shared("team/support")` | `Memory.shared("team/support")` | One namespace for every run |
+
+With `by_state`, pass the key with the message:
+`send(text, user_id="42")` (`send(text, { state: { user_id: "42" } })`).
+
+- A run without it fails with `invalid_state` rather than reading someone
+  else's facts. Pass it with every `agent.run`.
+- On a thread, the value of the first message is kept for the thread's
+  life: later messages may leave it out, and a **different** value fails with
+  `invalid_input`.
+- Take the value from your authentication, never from what the user typed.
+
+## Recall: what the model sees
+
+Before each model call, up to `recall` facts (5 by default) are added to the
+request: first those matching the words of the latest user message (or its
+meaning, with an embedder), then the newest. They are marked as information,
+not instructions, and they are **not** stored in the transcript, so the
+thread stays the conversation and nothing else.
+
+## The memory tools
+
+The model also gets three tools:
+
+| Tool | What the model can do |
+|---|---|
+| `remember` | Save a fact under a key (a new value replaces the old one) |
+| `forget` | Delete a fact by key |
+| `search_memory` | Search the namespace when recall did not bring what it needs |
+
+The model decides what to save. Say what is worth keeping in the agent's
+instructions ("save lasting preferences and allergies with remember; never
+save card numbers"). With the [audit trail](/docs/guides/compliance/#audit-trail)
+on, each memory write is recorded (with the key hashed, not in clear).
+
+Options, as keyword arguments (Python) or an options object (TypeScript):
+
+| Option | Default | What it does |
+|---|---|---|
+| `recall` | 5 | Facts added before each model call; `0` turns recall off |
+| `tools` | on | `False` / `false` removes the three tools (recall only) |
+| `ttl` / `ttlSecs` | none | Facts the agent saves expire after this many seconds |
+
+## Your app's own reads and writes
+
+The same facts are open to your code through `Storage`:
+
+| Python | TypeScript | What it does |
+|---|---|---|
+| `remember(ns, key, value, ttl=None)` | `remember(ns, key, value, { ttlSecs })` | Save (or replace) a fact; the value is any JSON |
+| `recall(ns, key)` | `recall(ns, key)` | One fact, or `None` / `null` |
+| `search(ns, text, limit=10)` | `search(ns, text, limit)` | Facts in the namespace **and below**, by keywords |
+| `forget_all(ns)` | `forgetAll(ns)` | Delete everything in the namespace and below; returns how many |
+
+Use them to load facts from your own systems (an allergy list from the
+patient record), to show a person what is remembered about them, and to
+delete it on request.
 
 ## By meaning
 
 With an embedding model, a question such as "Which antibiotics should I
 avoid?" finds a fact saying "Severe penicillin reaction", with no word in
 common. Vectors are stored (and encrypted) with the facts. If the embedding
-model fails, recall falls back to keywords. Without an embedder, search is
-by keywords.
+model fails, recall falls back to keywords. Without an embedder, search is by
+keywords.
 
 <Sample name="memory" region="semantic" />
 
-Facts the agent saves (`remember`) get their vector automatically. In
-Python and TypeScript, facts your app saves itself (`storage.remember`)
-are found by keywords only for now; Rust has `put_embedded` for them.
+Facts the agent saves (`remember`) get their vector automatically. In Python
+and TypeScript, facts your app saves itself (`storage.remember`) are found by
+keywords only for now; Rust has `put_embedded` for them.
+
+`Embedder.ollama(...)` keeps the text on your own machines; hosted embedders
+(`Embedder.openai`, `Embedder.gemini`) send each fact and question to the
+provider.
+
+## Deleting a person
+
+`forget_all("users/42")` (`forgetAll`) removes every fact under the
+namespace. A person's conversations are threads: delete those too
+(`thread.delete()`) to erase everything. With
+[retention](/docs/guides/compliance/#retention), old threads can be deleted
+on a schedule; memory facts expire with a `ttl`.
+
+## Pitfalls
+
+- **Namespaces are not a security boundary by themselves.** They separate
+  facts as long as the state key comes from your authentication. If a user can
+  choose their `user_id`, they can read someone else's memory.
+- **Do not store what you must not keep.** Anything the model saves is
+  stored. Tell it what not to save, and use `redact` or a hook for
+  identifiers that must never reach storage or a provider.
+- **Recall costs tokens** on every model call. Keep facts short, and lower
+  `recall` if they are long.
+
+## Next
+
+- [Collections and retrieval](/docs/guides/retrieval/): search your documents.
+- [Encryption, audit, retention](/docs/guides/compliance/): memory at rest and on a schedule.
+- API: [Python `Memory`](/docs/reference/api/python/storage/), [TypeScript `Memory`](/docs/reference/api/typescript/storage/).

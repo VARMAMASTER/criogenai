@@ -1,0 +1,782 @@
+---
+title: "Python API: Evals"
+description: "Python API reference, evals: evaluate, Dataset, EvalResult, compare, EvalFailed, Case, Score, Scorer, and more."
+---
+
+Datasets, scorers, judges, comparisons and quality gates. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/evals/).
+
+Evals: run an agent over a set of cases, score each answer, compare with the last good run, and fail CI when quality drops.
+
+```python
+from criogen import evals
+
+data = evals.Dataset.load("cases.jsonl")         # {"input": ..., "expected": ...} per line
+result = await evals.evaluate(agent, data, [evals.contains(), evals.tool_called("lookup_order")])
+print(result.report())
+result.save("eval.json")
+result.check(min_pass_rate=0.9, baseline=evals.EvalResult.load("baseline.json"))
+```
+
+The result file has the same format in Python, TypeScript and Rust
+(`criogen-eval/1`), so a baseline saved by one is read by the others.
+
+From the command line, `python -m criogen.evals compare baseline.json current.json [--fail-on-regression]` prints both reports (see `main`).
+
+Scorers get three things: the `Case`, the output, and *facts* about
+the run, a dict with `tool_calls` (the names of the tools called, in
+order), `model_calls`, `tokens` (`{"input", "output"}`),
+`duration_ms` and `models` (each model used, with its `usage`). For a
+function target, the facts are empty apart from `duration_ms`.
+
+```python
+from criogen import evals
+
+evals.evaluate(...)
+```
+
+These are used as `evals.<name>`.
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`evaluate`](#evaluate) | function | Runs a target on every case and scores each output. |
+| [`Dataset`](#dataset) | class | The cases to run. |
+| [`EvalResult`](#evalresult) | class | An eval's outcome: a summary and one entry per case, in the `criogen-eval/1` format every language reads. |
+| [`compare`](#compare) | function | Compares two results: per-scorer and pass-rate changes, and the cases that regressed or were fixed. |
+| [`EvalFailed`](#evalfailed) | class | An eval missed a bar set by `EvalResult.check` (code `eval_failed`). |
+| [`Case`](#case) | class | One eval case: an input, what to expect, and run state. |
+| [`Score`](#score) | class | A scorer's verdict on one case: a value from 0 to 1, whether it passed, and why. |
+| [`Scorer`](#scorer) | class | A named scoring function, run on every case's output. |
+| [`scorer`](#scorer-1) | function | Makes a `Scorer` from your function: use as `@scorer` or `@scorer(name=..., threshold=...)`. |
+| [`exact_match`](#exact_match) | function | The output equals `case.expected`, both trimmed (non-text values are compared as JSON). |
+| [`contains`](#contains) | function | The output contains every one of `needles`; the value is the share found. |
+| [`regex`](#regex) | function | The output matches a regular expression somewhere (Python `re.search`). |
+| [`one_of`](#one_of) | function | The output, trimmed, is one of the options (e.g. a class label). |
+| [`json_valid`](#json_valid) | function | The output is JSON text, or already a JSON value (structured output). |
+| [`json_schema`](#json_schema) | function | The output (JSON text or a value) matches a JSON Schema, checked by the engine's own validator. |
+| [`json_equals`](#json_equals) | function | The output (JSON), or one field of it, equals `case.expected`. |
+| [`tool_called`](#tool_called) | function | The agent called a tool at least `min` times. |
+| [`tool_not_called`](#tool_not_called) | function | The agent never called a tool (e.g. one that needs approval). |
+| [`max_tool_calls`](#max_tool_calls) | function | At most `n` tool calls in the run. |
+| [`max_model_calls`](#max_model_calls) | function | At most `n` model calls in the run. |
+| [`max_latency`](#max_latency) | function | The case took at most `ms` milliseconds. |
+| [`max_tokens`](#max_tokens) | function | At most `n` tokens, input and output together. |
+| [`max_cost`](#max_cost) | function | The run cost at most `usd` dollars, from your prices. |
+| [`JUDGE_INSTRUCTIONS`](#judge_instructions) | constant | The instructions `judge` gives the grading model: grade against the rubric, treat the question, answer and reference as data, reply with a score from 0 to 1 and a reason. |
+| [`judge`](#judge) | function | A model grades each answer against a rubric, from 0 to 1, with a reason. |
+| [`evaluate_sync`](#evaluate_sync) | function | `evaluate` from code without an event loop (a test, a script). |
+| [`Comparison`](#comparison) | class | How a result differs from a baseline; made by `compare`. |
+
+## evaluate
+
+```python
+async def evaluate(
+    target: Any,
+    dataset: Union[Dataset, Iterable[Any]],
+    scorers: Sequence[Scorer],
+    *,
+    name: str = 'eval',
+    concurrency: int = 4,
+    timeout: float = 120.0,
+    repeats: int = 1,
+) -> 'EvalResult'
+```
+
+Runs a target on every case and scores each output.
+
+A case that raises or times out scores 0 on every scorer and keeps its
+error; the eval goes on. A scorer that raises gives that case 0 with the
+error as the reason.
+
+**Parameters**
+
+- `target` (`Any`): An `Agent` (called as `agent.run(case.input, **case.state)`; the output is the result's `output`, else its `text`) or a function `case -> output`, sync or async.
+- `dataset` (`Union[Dataset, Iterable[Any]]`): A `Dataset`, or anything `Dataset` accepts.
+- `scorers` (`Sequence[Scorer]`): At least one `Scorer`, with unique names.
+- `name` (`str`, default `'eval'`): The eval's name, shown in reports and saved in the result. Default `"eval"`.
+- `concurrency` (`int`, default `4`): Cases run at the same time, 1 to 64. Default 4.
+- `timeout` (`float`, default `120.0`): The longest one run of a case may take, in seconds. Default 120.
+- `repeats` (`int`, default `1`): Runs per case (for answers that vary). Each scorer's value is the mean over the runs, and the case passes only if every run passes. Default 1.
+
+**Returns:** The `EvalResult`.
+
+**Raises**
+
+- `ValueError`: No scorers, or two with the same name.
+
+**Example**
+
+```python
+from criogen import Agent, FakeModel, FakeReply, evals, tool
+
+@tool
+def lookup_order(order_id: str) -> str:
+    "Looks up an order's status."
+    return "shipped"
+
+agent = Agent(
+    FakeModel([FakeReply.tool_call("lookup_order", {"order_id": "A1"}), "Order A1 has shipped."], by_turn=True),
+    tools=[lookup_order],
+)
+data = evals.Dataset([{"input": "Where is order A1?", "expected": "shipped"}])
+result = await evals.evaluate(agent, data, [evals.contains(), evals.tool_called("lookup_order")])
+print(result.report())
+```
+
+## Dataset
+
+```python
+class Dataset:
+    def __init__(self, cases: Iterable[Union[Case, Mapping[str, Any], str]])
+```
+
+The cases to run. Build one from a list, or `load` a JSONL or JSON file.
+
+**Parameters**
+
+- `cases` (`Iterable[Union[Case, Mapping[str, Any], str]]`): `Case` objects, dicts with `input` (a string) and optionally `expected`, `id`, `state` and `metadata`, or plain strings (an input with nothing expected). At most 100,000.
+
+**Raises**
+
+- `ValueError`: A case without a text `input`, duplicate ids, or too many cases.
+
+**Example**
+
+```python
+from criogen import evals
+
+data = evals.Dataset([
+    {"input": "Where is order A1?", "expected": "shipped"},
+    {"id": "refund", "input": "Can I get a refund?", "expected": ["refund", "30 days"]},
+    "Hello",
+])
+len(data)   # 3
+```
+
+### Dataset.load
+
+```python
+@staticmethod
+def load(path: str) -> 'Dataset'
+```
+
+Reads cases from a file.
+
+**Parameters**
+
+- `path` (`str`): A `.jsonl` file (one case object per line, blank lines skipped, each line at most 1 MB) or a `.json` file (a list of cases, or `{"cases": [...]}`).
+
+**Returns:** The dataset.
+
+**Raises**
+
+- `ValueError`: A line or case that is not valid (the message names the file and line).
+
+## EvalResult
+
+```python
+class EvalResult:
+    def __init__(self, data: Dict[str, Any])
+```
+
+An eval's outcome: a summary and one entry per case, in the `criogen-eval/1` format every language reads.
+
+Each case entry holds `id`, `input`, `expected`, `output` (text
+cut to 100,000 characters), `scores` (`{name: {"value", "pass", "reason"}}`), `pass`, `error`, `duration_ms`, `tool_calls`,
+`model_calls`, `tokens` and, when set, `judge_tokens` and
+`metadata`.
+
+**Parameters**
+
+- `data` (`Dict[str, Any]`): The result as a dict (from `evaluate`, or a saved file via `load`).
+
+**Raises**
+
+- `ValueError`: `data` is not in the `criogen-eval/1` format.
+
+**Example**
+
+```python
+result.save("eval.json")
+baseline = evals.EvalResult.load("baseline.json")
+result.check(min_pass_rate=0.9, baseline=baseline)
+```
+
+### EvalResult.name
+
+```python
+name: str
+```
+
+The eval's name.
+
+### EvalResult.summary
+
+```python
+summary: Dict[str, Any]
+```
+
+`cases`, `passed`, `pass_rate`, `scores` (each scorer's mean value), `tokens` (`{"input", "output"}`, judges not included) and `errors`.
+
+### EvalResult.cases
+
+```python
+cases: List[Dict[str, Any]]
+```
+
+One entry per case (see the class description).
+
+### EvalResult.pass_rate
+
+```python
+pass_rate: float
+```
+
+The share of cases that passed every scorer, from 0 to 1.
+
+### EvalResult.to_dict
+
+```python
+def to_dict(content: bool = True) -> Dict[str, Any]
+```
+
+The result as JSON-ready data (a copy).
+
+**Parameters**
+
+- `content` (`bool`, default `True`): `False` leaves out each case's `input`, `expected` and `output` (set to `None`), e.g. before sharing a result built from sensitive data. Default `True`.
+
+### EvalResult.save
+
+```python
+def save(path: str, content: bool = True) -> None
+```
+
+Writes the result as JSON (UTF-8), e.g. as the next baseline.
+
+**Parameters**
+
+- `path` (`str`): The file to write.
+- `content` (`bool`, default `True`): `False` leaves out inputs, expected values and outputs, as in `to_dict`. Default `True`.
+
+### EvalResult.load
+
+```python
+@staticmethod
+def load(path: str) -> 'EvalResult'
+```
+
+Reads a result saved by `save` (or by the TypeScript or Rust SDK).
+
+**Parameters**
+
+- `path` (`str`): The JSON file.
+
+**Raises**
+
+- `ValueError`: The file is not a `criogen-eval/1` result.
+
+### EvalResult.report
+
+```python
+def report() -> str
+```
+
+A plain-text summary: pass rate, each scorer's mean, and up to 20 failing cases with why they failed.
+
+### EvalResult.markdown
+
+```python
+def markdown() -> str
+```
+
+A Markdown summary and a table of each scorer's mean, for a pull request comment.
+
+### EvalResult.check
+
+```python
+def check(
+    min_pass_rate: Optional[float] = None,
+    min_scores: Optional[Mapping[str, float]] = None,
+    baseline: Optional['EvalResult'] = None,
+    max_regressions: int = 0,
+    tolerance: float = 0.02,
+) -> None
+```
+
+Raises `EvalFailed` when a bar is missed; use it to fail CI.
+
+Every bar is checked and all misses are reported together.
+
+**Parameters**
+
+- `min_pass_rate` (`Optional[float]`, default `None`): The lowest pass rate allowed, from 0 to 1.
+- `min_scores` (`Optional[Mapping[str, float]]`, default `None`): The lowest mean per scorer, e.g. `{"judge": 0.8}`. A name that is not a scorer of this eval fails too.
+- `baseline` (`Optional['EvalResult']`, default `None`): An earlier result to compare with (cases matched by id).
+- `max_regressions` (`int`, default `0`): With `baseline`: how many cases may pass there and fail now. Default 0.
+- `tolerance` (`float`, default `0.02`): With `baseline`: how far a scorer's mean may fall. Default 0.02.
+
+**Raises**
+
+- `EvalFailed`: A bar was missed; `failures` lists each one.
+
+**Example**
+
+```python
+result.check(
+    min_pass_rate=0.9,
+    min_scores={"contains": 0.95},
+    baseline=evals.EvalResult.load("baseline.json"),
+)
+```
+
+## compare
+
+```python
+def compare(baseline: EvalResult, current: EvalResult) -> Comparison
+```
+
+Compares two results: per-scorer and pass-rate changes, and the cases that regressed or were fixed.
+
+Cases are matched by id.
+
+**Parameters**
+
+- `baseline` (`EvalResult`): The earlier result (the last good run).
+- `current` (`EvalResult`): The new result.
+
+**Returns:** The `Comparison`.
+
+## EvalFailed
+
+```python
+class EvalFailed(CriogenError):
+    def __init__(self, message: str, failures: List[str])
+```
+
+An eval missed a bar set by `EvalResult.check` (code `eval_failed`).
+
+**Parameters**
+
+- `message` (`str`): The eval's name and every failure, joined.
+- `failures` (`List[str]`): Each missed bar as a sentence, also in `failures` and `details["failures"]`.
+
+## Case
+
+```python
+@dataclass
+class Case:
+    input: str
+    expected: Any = None
+    id: Optional[str] = None
+    state: Optional[Dict[str, Any]] = None
+    metadata: Optional[Dict[str, Any]] = None
+```
+
+One eval case: an input, what to expect, and run state.
+
+**Attributes**
+
+- `input` (`str`): The text given to the target (`agent.run(input)`).
+- `expected` (`Any`, default `None`): What a correct answer looks like (any JSON value); scorers such as `exact_match` and `contains` compare with it when given nothing else.
+- `id` (`Optional[str]`, default `None`): A unique id, used to match cases across runs in `compare`. Default: the case's position, from `"1"`.
+- `state` (`Optional[Dict[str, Any]]`, default `None`): Run state for an agent target, passed as keyword arguments (e.g. `{"user_id": "42"}` for memory).
+- `metadata` (`Optional[Dict[str, Any]]`, default `None`): Anything you want to keep with the case's result (tags, a source); copied into the result file.
+
+**Example**
+
+```python
+from criogen.evals import Case
+
+case = Case("Where is order A1?", expected="shipped", id="order-a1", state={"user_id": "42"})
+```
+
+## Score
+
+```python
+@dataclass
+class Score:
+    value: float
+    passed: bool
+    reason: Optional[str] = None
+```
+
+A scorer's verdict on one case: a value from 0 to 1, whether it passed, and why.
+
+Return one from your own scorer to give a reason; a number or a bool also
+works.
+
+**Attributes**
+
+- `value` (`float`): How good the output is, from 0 (worst) to 1 (best).
+- `passed` (`bool`): Whether the case passes this scorer.
+- `reason` (`Optional[str]`, default `None`): Why it failed (or any note), shown in reports; `None` when there is nothing to say.
+
+### Score.to_dict
+
+```python
+def to_dict() -> Dict[str, Any]
+```
+
+The score as JSON-ready data: `{"value", "pass", "reason"}`.
+
+## Scorer
+
+```python
+class Scorer:
+    def __init__(self, name: str, fn: ScoreFn, threshold: float = 1.0)
+```
+
+A named scoring function, run on every case's output.
+
+Make one with the `scorer` decorator, or use the built-in ones
+(`exact_match`, `contains`, `judge`, ...).
+
+**Parameters**
+
+- `name` (`str`): The scorer's name: a column in reports, a key in the result file and in `check(min_scores=...)`. Unique within one eval.
+- `fn` (`ScoreFn`): `fn(case, output, facts)`, sync or async, returning a `Score`, a number (clamped to 0..1) or a bool.
+- `threshold` (`float`, default `1.0`): A number result passes when it is at least this. Default 1.0.
+
+### Scorer.score
+
+```python
+async def score(case: Case, output: Any, facts: Facts) -> Score
+```
+
+Scores one output.
+
+**Parameters**
+
+- `case` (`Case`): The `Case`.
+- `output` (`Any`): What the target returned.
+- `facts` (`Facts`): Facts about the run (see the module description).
+
+**Returns:** The `Score`. A bool becomes 1 or 0; a number is clamped to 0..1 and passes at `threshold`.
+
+**Raises**
+
+- `TypeError`: `fn` returned something else.
+
+## scorer
+
+```python
+def scorer(
+    fn: Optional[ScoreFn] = None,
+    *,
+    name: Optional[str] = None,
+    threshold: float = 1.0,
+) -> Any
+```
+
+Makes a `Scorer` from your function: use as `@scorer` or `@scorer(name=..., threshold=...)`.
+
+**Parameters**
+
+- `fn` (`Optional[ScoreFn]`, default `None`): `fn(case, output, facts)`, sync or async, returning a `Score`, a number from 0 to 1, or a bool.
+- `name` (`Optional[str]`, default `None`): The scorer's name. Default: the function's name.
+- `threshold` (`float`, default `1.0`): A number result passes when it is at least this. Default 1.0.
+
+**Returns:** The scorer (or, with keyword arguments only, a decorator).
+
+**Example**
+
+```python
+from criogen import evals
+
+@evals.scorer(threshold=0.5)
+def short(case, output, facts):
+    return 1.0 if len(str(output)) < 200 else 0.0
+```
+
+## exact_match
+
+```python
+def exact_match(ignore_case: bool = False) -> Scorer
+```
+
+The output equals `case.expected`, both trimmed (non-text values are compared as JSON).
+
+**Parameters**
+
+- `ignore_case` (`bool`, default `False`): Compare without case. Default `False`.
+
+## contains
+
+```python
+def contains(*needles: str, ignore_case: bool = True) -> Scorer
+```
+
+The output contains every one of `needles`; the value is the share found.
+
+**Parameters**
+
+- `*needles` (`str`): The texts to look for. Default: `case.expected` (a string, or a list of strings).
+- `ignore_case` (`bool`, default `True`): Compare without case. Default `True`.
+
+## regex
+
+```python
+def regex(pattern: Optional[str] = None) -> Scorer
+```
+
+The output matches a regular expression somewhere (Python `re.search`).
+
+**Parameters**
+
+- `pattern` (`Optional[str]`, default `None`): The expression. Default: `case.expected`.
+
+## one_of
+
+```python
+def one_of(options: Optional[Sequence[str]] = None, ignore_case: bool = True) -> Scorer
+```
+
+The output, trimmed, is one of the options (e.g. a class label).
+
+**Parameters**
+
+- `options` (`Optional[Sequence[str]]`, default `None`): The allowed answers. Default: `case.expected` (a list).
+- `ignore_case` (`bool`, default `True`): Compare without case. Default `True`.
+
+## json_valid
+
+```python
+def json_valid() -> Scorer
+```
+
+The output is JSON text, or already a JSON value (structured output).
+
+## json_schema
+
+```python
+def json_schema(schema: Mapping[str, Any]) -> Scorer
+```
+
+The output (JSON text or a value) matches a JSON Schema, checked by the engine's own validator.
+
+**Parameters**
+
+- `schema` (`Mapping[str, Any]`): The JSON Schema.
+
+## json_equals
+
+```python
+def json_equals(path: Optional[str] = None) -> Scorer
+```
+
+The output (JSON), or one field of it, equals `case.expected`.
+
+**Parameters**
+
+- `path` (`Optional[str]`, default `None`): A dotted path into the output, with list indexes as numbers, e.g. `"order.items.0"`. Default: the whole output.
+
+## tool_called
+
+```python
+def tool_called(name: str, min: int = 1) -> Scorer
+```
+
+The agent called a tool at least `min` times. Named `tool_called:<name>`.
+
+**Parameters**
+
+- `name` (`str`): The tool's name.
+- `min` (`int`, default `1`): The fewest calls that pass. Default 1.
+
+## tool_not_called
+
+```python
+def tool_not_called(name: str) -> Scorer
+```
+
+The agent never called a tool (e.g. one that needs approval). Named `tool_not_called:<name>`.
+
+**Parameters**
+
+- `name` (`str`): The tool's name.
+
+## max_tool_calls
+
+```python
+def max_tool_calls(n: int) -> Scorer
+```
+
+At most `n` tool calls in the run.
+
+**Parameters**
+
+- `n` (`int`): The most tool calls that pass.
+
+## max_model_calls
+
+```python
+def max_model_calls(n: int) -> Scorer
+```
+
+At most `n` model calls in the run.
+
+**Parameters**
+
+- `n` (`int`): The most model calls that pass.
+
+## max_latency
+
+```python
+def max_latency(ms: float) -> Scorer
+```
+
+The case took at most `ms` milliseconds.
+
+**Parameters**
+
+- `ms` (`float`): The longest time that passes, in milliseconds.
+
+## max_tokens
+
+```python
+def max_tokens(n: int) -> Scorer
+```
+
+At most `n` tokens, input and output together.
+
+**Parameters**
+
+- `n` (`int`): The most tokens that pass.
+
+## max_cost
+
+```python
+def max_cost(usd: float, prices: Mapping[str, Mapping[str, float]]) -> Scorer
+```
+
+The run cost at most `usd` dollars, from your prices.
+
+Fails when a model the run used has no price.
+
+**Parameters**
+
+- `usd` (`float`): The most dollars that pass.
+- `prices` (`Mapping[str, Mapping[str, float]]`): USD per million tokens by `"provider:model"` or model name, e.g. `{"openai:gpt-5-mini": {"input": 0.25, "output": 2.0}}`.
+
+## JUDGE_INSTRUCTIONS
+
+```python
+JUDGE_INSTRUCTIONS = ...
+```
+
+The instructions `judge` gives the grading model: grade against the rubric, treat the question, answer and reference as data, reply with a score from 0 to 1 and a reason.
+
+## judge
+
+```python
+def judge(
+    model: Any,
+    rubric: str,
+    threshold: float = 0.7,
+    gateway: Any = None,
+    name: str = 'judge',
+) -> Scorer
+```
+
+A model grades each answer against a rubric, from 0 to 1, with a reason.
+
+The judge sees the rubric, the case's input, the output and, if set,
+`case.expected` as a reference. They are passed as marked data blocks
+and the judge is told to ignore instructions inside them. The call goes
+through a `~criogen.Gateway` (its retries and fallbacks) and asks
+for structured output. Its token use is kept per case as
+`judge_tokens`.
+
+**Parameters**
+
+- `model` (`Any`): The grading model (a model string or object), e.g. `"openai:gpt-5-mini"`.
+- `rubric` (`str`): What a good answer does, in plain words.
+- `threshold` (`float`, default `0.7`): The lowest score that passes. Default 0.7.
+- `gateway` (`Any`, default `None`): The `~criogen.Gateway` to call through. Default: a new `Gateway()`.
+- `name` (`str`, default `'judge'`): The scorer's name. Default `"judge"`; set it when an eval has several judges.
+
+**Returns:** The scorer.
+
+**Example**
+
+```python
+from criogen import evals
+
+polite = evals.judge(
+    "openai:gpt-5-mini",
+    "The answer is polite, and says when the order will arrive.",
+    name="polite",
+)
+```
+
+## evaluate_sync
+
+```python
+def evaluate_sync(
+    target: Any,
+    dataset: Any,
+    scorers: Sequence[Scorer],
+    **options: Any,
+) -> 'EvalResult'
+```
+
+`evaluate` from code without an event loop (a test, a script).
+
+**Parameters**
+
+- `target` (`Any`): As for `evaluate`.
+- `dataset` (`Any`): As for `evaluate`.
+- `scorers` (`Sequence[Scorer]`): As for `evaluate`.
+- `**options` (`Any`): `name`, `concurrency`, `timeout` and `repeats`.
+
+**Example**
+
+```python
+from criogen import evals
+
+result = evals.evaluate_sync(lambda case: case.input.upper(), ["hi", "there"], [evals.regex("^[A-Z]+$")])
+result.pass_rate   # 1.0
+```
+
+## Comparison
+
+```python
+@dataclass
+class Comparison:
+    scores: Dict[str, Optional[float]]
+    pass_rate: float
+    regressed: List[str] = field(default_factory=list)
+    fixed: List[str] = field(default_factory=list)
+    added: List[str] = field(default_factory=list)
+    removed: List[str] = field(default_factory=list)
+```
+
+How a result differs from a baseline; made by `compare`.
+
+**Attributes**
+
+- `scores` (`Dict[str, Optional[float]]`): The change in each scorer's mean (current minus baseline); `None` when one side lacks the scorer.
+- `pass_rate` (`float`): The change in pass rate (current minus baseline).
+- `regressed` (`List[str]`, default `field(default_factory=list)`): Ids of cases that passed in the baseline and fail now.
+- `fixed` (`List[str]`, default `field(default_factory=list)`): Ids of cases that failed in the baseline and pass now.
+- `added` (`List[str]`, default `field(default_factory=list)`): Ids of cases only in the current result.
+- `removed` (`List[str]`, default `field(default_factory=list)`): Ids of cases only in the baseline.
+
+**Example**
+
+```python
+diff = evals.compare(evals.EvalResult.load("baseline.json"), result)
+print(diff.report())
+if diff.regressed:
+    print("now failing:", diff.regressed)
+```
+
+### Comparison.report
+
+```python
+def report() -> str
+```
+
+The changes as plain text: pass rate, each scorer, regressed and fixed cases (up to 20 each), and how many were added or removed.

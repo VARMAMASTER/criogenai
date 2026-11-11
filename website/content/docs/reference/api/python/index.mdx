@@ -1,0 +1,57 @@
+---
+title: "Python API"
+description: "The Python API reference of Criogen, one page per module: agents, tools, models, storage, workflows, patterns, MCP, telemetry and evals."
+---
+
+Every public class, function and type of the `criogen` Python package (0.1.6), one page per module, generated from its docstrings and type hints every time the site is built. Install it with `pip install criogen`. The same API in [TypeScript](/docs/reference/api/typescript/) and [Rust](/docs/reference/api/rust/).
+
+New to Criogen? Start with the [quickstart](/docs/quickstart/) and the [agents guide](/docs/guides/agents/); come here for the exact names, parameters and defaults.
+
+## Agents
+
+| Page | What it covers | Main names |
+|---|---|---|
+| [Agents](/docs/reference/api/python/agent/) | The agent: a model, tools and instructions; runs, threads, streams and approvals. | [`Agent`](/docs/reference/api/python/agent/#agent), [`Thread`](/docs/reference/api/python/agent/#thread), [`Stream`](/docs/reference/api/python/agent/#stream), [`Reply`](/docs/reference/api/python/agent/#reply) |
+| [Tools](/docs/reference/api/python/tools/) | Functions the model can call: definitions, input schemas, errors and the tool context. | [`tool`](/docs/reference/api/python/tools/#tool), [`Tool`](/docs/reference/api/python/tools/#tool), [`ToolError`](/docs/reference/api/python/tools/#toolerror), [`ToolContext`](/docs/reference/api/python/tools/#toolcontext) |
+| [Hooks](/docs/reference/api/python/hooks/) | Your code around the agent loop: before and after model and tool calls. | [`HookContext`](/docs/reference/api/python/hooks/#hookcontext), [`HookAction`](/docs/reference/api/python/hooks/#hookaction), [`ToolCall`](/docs/reference/api/python/hooks/#toolcall), [`ToolResult`](/docs/reference/api/python/hooks/#toolresult) |
+| [Errors](/docs/reference/api/python/errors/) | Every error class, one per stable error code. | [`CriogenError`](/docs/reference/api/python/errors/#criogenerror), [`ModelError`](/docs/reference/api/python/errors/#modelerror), [`ToolExecutionError`](/docs/reference/api/python/errors/#toolexecutionerror), [`LimitExceededError`](/docs/reference/api/python/errors/#limitexceedederror) |
+| [Usage and cost](/docs/reference/api/python/usage/) | Tokens and an estimated price for a run. | [`estimate_cost`](/docs/reference/api/python/usage/#estimate_cost) |
+
+## Models
+
+| Page | What it covers | Main names |
+|---|---|---|
+| [Models](/docs/reference/api/python/models/) | Providers and models: OpenAI, Anthropic, Gemini, Azure, Bedrock, Vertex AI, local servers and more. | [`OpenAI`](/docs/reference/api/python/models/#openai), [`Anthropic`](/docs/reference/api/python/models/#anthropic), [`Gemini`](/docs/reference/api/python/models/#gemini), [`FakeModel`](/docs/reference/api/python/models/#fakemodel) |
+| [Gateway](/docs/reference/api/python/gateway/) | Chat, stream and embed without an agent, with retries and fallbacks. | [`Gateway`](/docs/reference/api/python/gateway/#gateway), [`ChatReply`](/docs/reference/api/python/gateway/#chatreply), [`Chunk`](/docs/reference/api/python/gateway/#chunk), [`ChatStream`](/docs/reference/api/python/gateway/#chatstream) |
+| [Keys and environment](/docs/reference/api/python/env/) | Loading API keys from a file or the environment. | [`parse_env`](/docs/reference/api/python/env/#parse_env), [`load_env`](/docs/reference/api/python/env/#load_env), [`status`](/docs/reference/api/python/env/#status), [`key_name`](/docs/reference/api/python/env/#key_name) |
+
+## Data
+
+| Page | What it covers | Main names |
+|---|---|---|
+| [Storage and memory](/docs/reference/api/python/storage/) | Durable threads (SQLite, Postgres, in memory), encryption, audit, retention and long-term memory. | [`Storage`](/docs/reference/api/python/storage/#storage), [`Memory`](/docs/reference/api/python/storage/#memory) |
+| [Collections](/docs/reference/api/python/collections/) | Documents to search by meaning, and a retrieval tool for agents. | [`Collection`](/docs/reference/api/python/collections/#collection), [`Document`](/docs/reference/api/python/collections/#document), [`Hit`](/docs/reference/api/python/collections/#hit) |
+
+## Orchestration
+
+| Page | What it covers | Main names |
+|---|---|---|
+| [Workflows](/docs/reference/api/python/workflow/) | Graphs of steps and agents: routes, joins, loops, pauses for people, and threads. | [`Workflow`](/docs/reference/api/python/workflow/#workflow), [`CompiledWorkflow`](/docs/reference/api/python/workflow/#compiledworkflow), [`WorkflowThread`](/docs/reference/api/python/workflow/#workflowthread), [`END`](/docs/reference/api/python/workflow/#end) |
+| [Patterns](/docs/reference/api/python/patterns/) | Ready-made multi-agent designs: sequential, parallel, loops, routers, debates and more. | [`sequential`](/docs/reference/api/python/patterns/#sequential), [`parallel`](/docs/reference/api/python/patterns/#parallel), [`loop`](/docs/reference/api/python/patterns/#loop), [`custom`](/docs/reference/api/python/patterns/#custom) |
+| [Specialist agents](/docs/reference/api/python/specialists/) | Default agent recipes (researcher, writer, critic, ...) and a registry for your own. | [`Specialist`](/docs/reference/api/python/specialists/#specialist), [`register`](/docs/reference/api/python/specialists/#register), [`unregister`](/docs/reference/api/python/specialists/#unregister), [`get`](/docs/reference/api/python/specialists/#get) |
+
+## Integrations
+
+| Page | What it covers | Main names |
+|---|---|---|
+| [MCP servers](/docs/reference/api/python/mcp/) | Tools from Model Context Protocol servers, over HTTP or a local process. | [`McpServer`](/docs/reference/api/python/mcp/#mcpserver), [`stdio`](/docs/reference/api/python/mcp/#stdio), [`http`](/docs/reference/api/python/mcp/#http), [`McpTool`](/docs/reference/api/python/mcp/#mcptool) |
+| [Web search and page reading](/docs/reference/api/python/web/) | Web search (Tavily, Brave) and safe page reading tools. | [`tavily_search`](/docs/reference/api/python/web/#tavily_search), [`brave_search`](/docs/reference/api/python/web/#brave_search), [`search`](/docs/reference/api/python/web/#search), [`default_tools`](/docs/reference/api/python/web/#default_tools) |
+
+## Quality and operations
+
+| Page | What it covers | Main names |
+|---|---|---|
+| [Telemetry](/docs/reference/api/python/telemetry/) | Exporting runs to Langfuse or any OpenTelemetry backend. | [`Telemetry`](/docs/reference/api/python/telemetry/#telemetry) |
+| [Trace viewer](/docs/reference/api/python/trace/) | A local page that shows your runs, with no account. | [`serve`](/docs/reference/api/python/trace/#serve), [`TraceViewer`](/docs/reference/api/python/trace/#traceviewer), [`main`](/docs/reference/api/python/trace/#main) |
+| [Evals](/docs/reference/api/python/evals/) | Datasets, scorers, judges, comparisons and quality gates. | [`evaluate`](/docs/reference/api/python/evals/#evaluate), [`Dataset`](/docs/reference/api/python/evals/#dataset), [`EvalResult`](/docs/reference/api/python/evals/#evalresult), [`compare`](/docs/reference/api/python/evals/#compare) |
+| [Readiness check](/docs/reference/api/python/ready/) | Checks that the engine, keys and providers work before you ship. | [`ready`](/docs/reference/api/python/ready/#ready), [`ready_sync`](/docs/reference/api/python/ready/#ready_sync) |

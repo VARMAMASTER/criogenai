@@ -1,14 +1,16 @@
-"""Design patterns for agentic systems, ready to use (design 0019).
+"""Ready-made designs for agentic systems: chains, fan-outs, loops, reviews, hand-offs and human review.
 
     from criogen import patterns
 
     flow = patterns.sequential(["researcher", "writer"], model="openai:gpt-5-mini")
     print((await flow.run("Write about solar panels")).output)
 
-Steps can be an ``Agent``, a ``Specialist`` or its registered name (a string),
-a plain function ``text -> text`` (sync or async), or ``(name, step)``. The
-model for specialists comes from ``model=`` or the ``CRIOGEN_MODEL``
-environment variable. Every loop has a cap, so nothing runs forever.
+Steps can be an ``Agent``, a :class:`~criogen.specialists.Specialist` or
+the name it is registered under (a string), a plain function ``text -> text``
+(sync or async), or a ``(name, step)`` tuple to name the step yourself.
+The model for specialists comes from ``model=`` or the ``CRIOGEN_MODEL``
+environment variable. Every loop has a cap (at most 50 rounds), so nothing
+runs forever.
 
 Workflow patterns return a :class:`Pattern`: ``run`` / ``run_sync`` for the
 answer, ``compile(storage)`` for durable threads, approvals and an audit trail,
@@ -33,8 +35,8 @@ __all__ = [
     "iterative_refinement", "react", "coordinator", "hierarchical", "swarm", "human_review", "custom", "quick",
 ]
 
-#: No loop runs more often than this, whatever the caller asks for.
 CEILING = 50
+"""The most rounds any loop runs (``max_iterations``, ``max_rounds``, ``max_handoffs``, ``max_steps``), whatever is asked for."""
 DEFAULT_MODEL_ENV = "CRIOGEN_MODEL"
 
 Step = Union[Agent, "_specialists.Specialist", str, Callable[[str], Any], Tuple[str, Any]]
@@ -45,25 +47,40 @@ Step = Union[Agent, "_specialists.Specialist", str, Callable[[str], Any], Tuple[
 
 @dataclass
 class PatternResult:
-    """What a pattern produced. ``print(result)`` shows the output;
-    ``result.explain()`` shows each step."""
+    """What a pattern run produced.
+
+    ``print(result)`` shows the output; ``result.explain()`` shows each step.
+
+    Example:
+        result = flow.run_sync("Write about solar panels")
+        print(result.output)
+        print(result.explain())
+    """
 
     output: Optional[str]
+    """The final answer (the last step's text), or ``None`` while ``suspended``."""
     trace: List[Dict[str, Any]]
+    """Each step in order: ``{"step": name, "output": text}``."""
     state: Dict[str, Any]
-    #: Why it ended: "done", "condition", "approved", "max_iterations", "max_rounds", "final",
-    #: "max_handoffs", "unknown_handoff", "rejected", or "suspended".
+    """The workflow's final state (``input``, ``output``, ``trace`` and the pattern's own keys)."""
     stop_reason: str
+    """Why it ended: ``"done"``, ``"condition"``, ``"approved"``, ``"max_iterations"``, ``"max_rounds"``, ``"final"``, ``"max_handoffs"``, ``"unknown_handoff"``, ``"rejected"`` or ``"suspended"``."""
     suspended: bool = False
-    #: What a person is asked, when ``suspended``.
+    """``True`` while a :func:`human_review` run waits for a person; continue with :meth:`Pattern.resume`."""
     waiting_for: Any = None
+    """What the person is asked when ``suspended`` (for :func:`human_review`: ``{"draft", "question"}``), else ``None``."""
     raw: Optional[WorkflowResult] = field(default=None, repr=False)
+    """The underlying :class:`~criogen.WorkflowResult` (snapshot, interrupts, run id)."""
 
     def __str__(self) -> str:
         return self.output or ""
 
     def explain(self) -> str:
-        """Each step on its own line: which step, what it returned (shortened)."""
+        """Each step on its own line: which step, and what it returned (cut to 140 characters).
+
+        Returns:
+            The text, starting with ``ended: <stop_reason>``.
+        """
         lines = [f"ended: {self.stop_reason}"]
         for i, entry in enumerate(self.trace, 1):
             text = " ".join(str(entry.get("output", "")).split())
@@ -145,10 +162,26 @@ def _entry(step: str, output: str) -> List[Dict[str, Any]]:
 
 
 class Pattern:
-    """A workflow pattern: run it, compile it for durability, or extend it.
+    """A workflow pattern: run it, compile it for durable threads, or extend it.
 
-    ``workflow`` is the plain :class:`~criogen.Workflow` (add nodes and
-    edges to extend it before the first run)."""
+    Made by the pattern functions (:func:`sequential`, :func:`parallel`,
+    :func:`loop`, ...). Every run starts with the state ``{"input": text}``
+    and the answer is ``state["output"]``.
+
+    Args:
+        name: The pattern's name, e.g. ``"sequential"``.
+        workflow: The :class:`~criogen.Workflow` it runs. Available as
+            ``pattern.workflow``: add nodes and edges to extend it before the
+            first run.
+        budget: The step limit :meth:`run` uses unless given ``max_steps``.
+
+    Example:
+        from criogen import patterns
+
+        flow = patterns.sequential([lambda t: f"Outline: {t}", lambda t: t + " (expanded)"])
+        result = flow.run_sync("solar panels")
+        result.output   # "Outline: solar panels (expanded)"
+    """
 
     def __init__(self, name: str, workflow: Workflow, budget: int):
         self.name = name
@@ -157,13 +190,43 @@ class Pattern:
         self._compiled: Optional[CompiledWorkflow] = None
 
     def compile(self, storage: Union[None, str, Storage] = None) -> CompiledWorkflow:
-        """The checked, durable form: ``compile(storage).thread(id).run({"input": text})``,
-        with approvals, resume and an audit trail."""
+        """The pattern as a compiled workflow, for durable threads, resume from another process and an audit trail.
+
+        Start a thread run with ``{"input": text}``; the answer is
+        ``state["output"]``. Pass ``max_steps`` if the pattern needs more than the
+        default 64 steps. A :func:`human_review` pause is answered with
+        ``thread.resume({"review": decision})``.
+
+        Args:
+            storage: A :class:`~criogen.Storage` or a storage URL. Default:
+                process memory.
+
+        Returns:
+            A :class:`~criogen.CompiledWorkflow`.
+
+        Example:
+            app = flow.compile("sqlite://reviews.db")
+            paused = await app.thread("request-1").run({"input": "Can I change my booking?"})
+            done = await app.thread("request-1").resume({"review": "approve"})
+            done.state["output"]
+        """
         return self.workflow.compile(storage)
 
     async def run(self, text: str, **options: Any) -> PatternResult:
-        """Runs once and returns the result. A ``human_review`` pattern returns
-        ``suspended=True``; continue with :meth:`resume`."""
+        """Runs the pattern once on ``text`` and returns the result.
+
+        A :func:`human_review` pattern returns ``suspended=True``; continue it
+        with :meth:`resume`.
+
+        Args:
+            text: The input, given to the first step.
+            **options: ``max_steps`` (default: the pattern's own budget, sized
+                from its steps and caps) and ``deadline`` (seconds), as for
+                :meth:`CompiledWorkflow.run <criogen.CompiledWorkflow.run>`.
+
+        Returns:
+            The output, each step's trace and why the run ended.
+        """
         if self._compiled is None:
             self._compiled = self.compile()
         options.setdefault("max_steps", self._budget)
@@ -171,12 +234,29 @@ class Pattern:
         return self._result(raw)
 
     def run_sync(self, text: str, **options: Any) -> PatternResult:
-        """:meth:`run` for scripts (not inside an event loop)."""
+        """:meth:`run` for scripts (not inside an event loop).
+
+        Args:
+            text: The input.
+            **options: As for :meth:`run`.
+        """
         return _run_sync(self.run(text, **options))
 
     async def resume(self, paused: PatternResult, decision: Any) -> PatternResult:
-        """Continues a ``human_review`` run: ``"approve"``, ``{"decision": "edit", "text": ...}``
-        or ``{"decision": "reject"}``."""
+        """Continues a :func:`human_review` run that is waiting for a person.
+
+        Args:
+            paused: The result of the :meth:`run` that paused (``suspended=True``).
+            decision: ``"approve"`` (keep the draft), ``{"decision": "edit",
+                "text": "..."}`` (use this text instead) or ``{"decision":
+                "reject"}`` (empty output, ``stop_reason="rejected"``).
+
+        Returns:
+            The finished result.
+
+        Raises:
+            ValueError: ``paused`` is not a paused run of this pattern.
+        """
         if self._compiled is None or paused.raw is None or not paused.suspended:
             raise ValueError("resume needs the result of a run that is waiting for a person")
         snapshot = paused.raw.snapshot
@@ -204,8 +284,27 @@ class Pattern:
 
 
 def custom(workflow: Workflow, *, name: str = "custom", max_steps: int = 64) -> Pattern:
-    """Custom logic: any ``Workflow``, with the same ``run`` / ``compile`` as the ready-made patterns.
-    Its start state is ``{"input": text}``; the answer is ``state["output"]``."""
+    """Wraps any :class:`~criogen.Workflow` as a :class:`Pattern`, with the same ``run`` and ``compile`` as the ready-made ones.
+
+    The workflow starts with the state ``{"input": text}`` and should write
+    its answer to ``state["output"]`` (and a ``stop_reason`` if you like).
+
+    Args:
+        workflow: The workflow to run.
+        name: The pattern's name. Default ``"custom"``.
+        max_steps: The step limit for :meth:`Pattern.run`. Default 64.
+
+    Returns:
+        The pattern.
+
+    Example:
+        from criogen import END, Workflow, patterns
+
+        wf = Workflow()
+        wf.add_node("shout", lambda state: {"output": state["input"].upper()})
+        wf.start("shout").edge("shout", END)
+        patterns.custom(wf, name="shout").run_sync("hello").output   # "HELLO"
+    """
     return Pattern(name, workflow, max_steps)
 
 
@@ -232,9 +331,31 @@ def _step_node(name: str, run: Callable[[str], Awaitable[str]]):
 
 
 def sequential(steps: Sequence[Step], *, model: Any = None) -> Pattern:
-    """Runs the steps in a fixed order; each one's output is the next one's input.
+    """Runs the steps in a fixed order; each step's output is the next step's input.
 
-        flow = patterns.sequential(["researcher", "writer"], model="openai:gpt-5-mini")
+    Steps can be an ``Agent``, a :class:`~criogen.specialists.Specialist` or
+    the name it is registered under (a string), a plain function ``text -> text``
+    (sync or async), or a ``(name, step)`` tuple to name the step yourself.
+
+    Args:
+        steps: The steps, in order (at least one).
+        model: The model for steps given as specialists (a model string or
+            object). Default: the ``CRIOGEN_MODEL`` environment variable.
+
+    Returns:
+        A :class:`Pattern`; its output is the last step's text.
+
+    Raises:
+        ValueError: No steps, or a specialist step and no model.
+
+    Example:
+        from criogen import patterns
+
+        def outline(text):
+            return f"Outline: {text}"
+
+        flow = patterns.sequential([outline, "writer"], model="openai:gpt-5-mini")
+        result = await flow.run("Write about solar panels")
     """
     if not steps:
         raise ValueError("sequential needs at least one step")
@@ -258,11 +379,32 @@ def parallel(
     *,
     model: Any = None,
 ) -> Pattern:
-    """Runs the branches at the same time on the same input, then combines them:
-    with a ``synthesizer`` step (it receives the input and every branch's answer),
-    or as a titled list.
+    """Runs the branches at the same time on the same input, then combines their answers.
 
-        flow = patterns.parallel({"sentiment": s, "keywords": k}, synthesizer="summarizer", model=m)
+    With a ``synthesizer`` step, it receives the original request and every
+    branch's answer and writes the output. Without one, the output is the
+    answers as a list with a ``## <name>`` heading each, in branch order.
+
+    Args:
+        branches: The steps, as a list or as ``{name: step}`` (at least one).
+        synthesizer: A step that combines the answers. Default: none.
+        model: The model for steps given as specialists. Default: the
+            ``CRIOGEN_MODEL`` environment variable.
+
+    Returns:
+        A :class:`Pattern`.
+
+    Raises:
+        ValueError: No branches, or a specialist step and no model.
+
+    Example:
+        from criogen import patterns
+
+        flow = patterns.parallel({
+            "upper": str.upper,
+            "length": lambda text: f"{len(text)} characters",
+        })
+        print(flow.run_sync("hello").output)   # "## upper", "HELLO", "## length", "5 characters"
     """
     items = list(branches.items()) if isinstance(branches, Mapping) else list(branches)
     if not items:
@@ -306,11 +448,34 @@ def loop(
     max_iterations: int = 5,
     model: Any = None,
 ) -> Pattern:
-    """Repeats the steps (a chain, each output feeding the next) until
-    ``until(text, round)`` is true or ``max_iterations`` is reached (at most 50).
-    The result's ``stop_reason`` says which.
+    """Repeats the steps until a condition holds or the round limit is reached.
 
-        flow = patterns.loop([improve], until=lambda text, n: "DONE" in text, max_iterations=4)
+    Each round runs the steps as a chain (each output feeds the next); the
+    first step of the next round gets the last step's output.
+
+    Args:
+        steps: The steps of one round (at least one).
+        until: ``until(text, round)`` is called after each round with the
+            round's output and its number (from 1); ``True`` ends the loop
+            (``stop_reason="condition"``).
+        max_iterations: The most rounds (at most 50). Default 5; reaching it
+            ends with ``stop_reason="max_iterations"``.
+        model: The model for steps given as specialists. Default: the
+            ``CRIOGEN_MODEL`` environment variable.
+
+    Returns:
+        A :class:`Pattern`.
+
+    Raises:
+        ValueError: No steps, ``max_iterations`` below 1, or a specialist step
+            and no model.
+
+    Example:
+        from criogen import patterns
+
+        flow = patterns.loop([lambda t: t + "!"], until=lambda text, n: text.count("!") >= 3)
+        result = flow.run_sync("Go")
+        result.output, result.stop_reason   # ("Go!!!", "condition")
     """
     if not steps:
         raise ValueError("loop needs at least one step")
@@ -349,8 +514,33 @@ def iterative_refinement(
     max_iterations: int = 5,
     model: Any = None,
 ) -> Pattern:
-    """Improves a result step by step: ``refine`` gets the current text and returns a better one;
-    stops when ``score(text) >= threshold`` or after ``max_iterations``."""
+    """Improves a text round by round until a score is high enough.
+
+    ``refine`` gets the current text and returns a better one; after each
+    round, ``score(text)`` decides whether to stop. A :func:`loop` with one
+    step: ``stop_reason`` is ``"condition"`` or ``"max_iterations"``.
+
+    Args:
+        refine: The step that improves the text.
+        score: A function ``text -> float``.
+        threshold: Stop when ``score(text) >= threshold``. Default 0.8.
+        max_iterations: The most rounds (at most 50). Default 5.
+        model: The model if ``refine`` is a specialist. Default: the
+            ``CRIOGEN_MODEL`` environment variable.
+
+    Returns:
+        A :class:`Pattern`.
+
+    Example:
+        from criogen import patterns
+
+        flow = patterns.iterative_refinement(
+            "writer",
+            score=lambda text: min(len(text) / 500, 1.0),
+            threshold=1.0,
+            model="openai:gpt-5-mini",
+        )
+    """
     return loop([refine], lambda text, _round: score(text) >= threshold, max_iterations=max_iterations, model=model)
 
 
@@ -362,12 +552,32 @@ def review_and_critique(
     approved: Optional[Callable[[str], bool]] = None,
     model: Any = None,
 ) -> Pattern:
-    """A generator writes, a critic reviews. The critic approves (its reply starts with
-    ``APPROVED``, or ``approved(reply)`` is true) or returns feedback; the generator revises.
-    Ends on approval or after ``max_rounds`` (at most 50) with the last draft.
-    ``stop_reason`` is ``"approved"`` or ``"max_rounds"``.
+    """A generator writes, a critic reviews, and the generator revises until the critic approves.
 
-        flow = patterns.review_and_critique("writer", "critic", model=m)
+    The critic approves when its reply starts with ``APPROVED`` (or when
+    ``approved(reply)`` is true); otherwise its reply is passed back to the
+    generator as feedback with the previous draft. The output is the last
+    draft.
+
+    Args:
+        generator: The step that writes and revises.
+        critic: The step that reviews (the ``"critic"`` specialist replies
+            ``APPROVED`` or ``REVISE: ...``).
+        max_rounds: The most reviews (at most 50). Default 3.
+        approved: A function ``reply -> bool`` that decides approval instead
+            of the ``APPROVED`` prefix.
+        model: The model for steps given as specialists. Default: the
+            ``CRIOGEN_MODEL`` environment variable.
+
+    Returns:
+        A :class:`Pattern`; ``stop_reason`` is ``"approved"`` or
+        ``"max_rounds"``.
+
+    Example:
+        from criogen import patterns
+
+        flow = patterns.review_and_critique("writer", "critic", max_rounds=3, model="openai:gpt-5-mini")
+        result = await flow.run("A two-line product description for a desk lamp")
     """
     cap = _cap(max_rounds, "max_rounds")
     gen_name, gen = _resolve(generator, model, 0)
@@ -412,11 +622,39 @@ def swarm(
     max_handoffs: int = 6,
     model: Any = None,
 ) -> Pattern:
-    """Agents hand the work to each other with no central coordinator. Each agent is told who it can
-    hand off to and ends its reply with ``HANDOFF: <name>`` to pass the work on or ``FINAL`` when
-    the answer is ready. ``start`` names the first agent (or is a dispatcher step that replies with a
-    name); it defaults to the first agent. Ends on ``FINAL`` or after ``max_handoffs`` (at most 50);
-    a hand-off to an unknown name ends the run with ``stop_reason="unknown_handoff"``.
+    r"""Agents hand the work to each other, with no central coordinator.
+
+    Each agent is told who it can hand off to, and ends its reply with a line
+    ``HANDOFF: <name>`` to pass the work on or ``FINAL`` when the answer is
+    ready (a reply with neither counts as ``FINAL``). Each agent sees the
+    request and the work so far.
+
+    Args:
+        agents: ``{name: step}``, at least two.
+        start: The first agent's name, or a dispatcher step that replies with
+            a name (an unknown name falls back to the first agent). Default:
+            the first agent.
+        max_handoffs: The most hand-offs (at most 50). Default 6.
+        model: The model for steps given as specialists. Default: the
+            ``CRIOGEN_MODEL`` environment variable.
+
+    Returns:
+        A :class:`Pattern`; ``stop_reason`` is ``"final"``,
+        ``"max_handoffs"`` or ``"unknown_handoff"`` (a hand-off to a name not
+        in ``agents``).
+
+    Raises:
+        ValueError: Fewer than two agents, or ``max_handoffs`` below 1.
+
+    Example:
+        from criogen import patterns
+
+        flow = patterns.swarm({
+            "triage": lambda text: "Looks like billing.\nHANDOFF: billing",
+            "billing": lambda text: "Your invoice was sent again.\nFINAL",
+        })
+        result = flow.run_sync("I did not get my invoice")
+        result.stop_reason   # "final"
     """
     if len(agents) < 2:
         raise ValueError("a swarm needs at least two agents")
@@ -479,12 +717,29 @@ def swarm(
 
 
 def human_review(step: Step, *, model: Any = None) -> Pattern:
-    """Runs a step, then pauses for a person to look at its draft. Resume with
-    ``"approve"``, ``{"decision": "edit", "text": "..."}`` or ``{"decision": "reject"}``.
-    With ``compile(storage)`` the pause is durable: another process can resume it days later.
+    """Runs a step, then pauses so a person can approve, edit or reject its draft.
 
-        paused = await flow.run("Release the dataset?")   # paused.suspended, paused.waiting_for
-        done = await flow.resume(paused, "approve")
+    The run returns ``suspended=True`` with ``waiting_for`` set to
+    ``{"draft", "question"}``. Continue it with :meth:`Pattern.resume`. With
+    ``compile(storage)`` the pause is durable: another process can answer it
+    days later with ``thread.resume({"review": decision})``.
+
+    Args:
+        step: The step that writes the draft.
+        model: The model if ``step`` is a specialist. Default: the
+            ``CRIOGEN_MODEL`` environment variable.
+
+    Returns:
+        A :class:`Pattern`; ``stop_reason`` is ``"approved"`` (also after an
+        edit) or ``"rejected"``.
+
+    Example:
+        from criogen import patterns
+
+        flow = patterns.human_review(lambda text: f"Draft reply to: {text}")
+        paused = await flow.run("Can I change my booking?")
+        paused.waiting_for["draft"]
+        done = await flow.resume(paused, {"decision": "edit", "text": "Yes, from your account page."})
     """
     name, run = _resolve(step, model, 0)
     wf = Workflow(reducers={"trace": "append"})
@@ -511,15 +766,33 @@ def human_review(step: Step, *, model: Any = None) -> Pattern:
 
 
 def quick(spec: str, *, model: Any = None) -> Pattern:
-    """A pattern from one line of registered specialist names (plug and play):
+    """A pattern from one line of registered specialist names.
 
-        patterns.quick("researcher > writer")        # one after the other
-        patterns.quick("sentiment | keywords")       # at the same time
-        patterns.quick("writer <-> critic")          # write, review, revise until approved
-        patterns.quick("summarizer")                 # a single specialist
+    ``"a > b"`` runs them one after the other (:func:`sequential`), ``"a |
+    b"`` at the same time (:func:`parallel`), ``"writer <-> critic"`` writes,
+    reviews and revises until approved (:func:`review_and_critique`), and a
+    single name runs one specialist. Use one kind of connector per line;
+    combine patterns with the functions above.
 
-    One kind of connector per line (combine patterns with the functions above). The model
-    comes from ``model=`` or the ``CRIOGEN_MODEL`` environment variable."""
+    Args:
+        spec: The line, e.g. ``"researcher > writer"``.
+        model: The specialists' model. Default: the ``CRIOGEN_MODEL``
+            environment variable.
+
+    Returns:
+        A :class:`Pattern`.
+
+    Raises:
+        ValueError: An empty line or name, mixed connectors, or ``<->``
+            between more than two names.
+        KeyError: A name is not registered.
+
+    Example:
+        from criogen import patterns
+
+        flow = patterns.quick("researcher > writer", model="openai:gpt-5-mini")
+        result = await flow.run("Write about solar panels")
+    """
     if not isinstance(spec, str) or not spec.strip():
         raise ValueError("quick needs a line like 'researcher > writer'")
     pieces = re.split(r"(<->|>|\|)", spec)
@@ -548,8 +821,33 @@ _REACT = (
 
 
 def react(model: Any, tools: Sequence[Any], *, max_steps: int = 8, instructions: Optional[str] = None, **agent_options: Any) -> Agent:
-    """A single agent in a reason-act loop with a hard cap on model calls (default 8, at most 50).
-    The agent loop already thinks, acts and observes; this sets the prompt and the limit."""
+    """A single agent in a reason-act loop (think, call a tool, read the result, repeat), with a hard cap on model calls.
+
+    The agent loop already works this way; this adds instructions for it and
+    the limit.
+
+    Args:
+        model: The agent's model.
+        tools: Its tools.
+        max_steps: The most model calls (at most 50). Default 8.
+        instructions: Your instructions, put before the reason-act ones.
+        **agent_options: Other ``Agent`` keyword arguments (``storage``,
+            ``approve``, ``limits``, ...).
+
+    Returns:
+        An ``Agent``.
+
+    Example:
+        from criogen import patterns, tool
+
+        @tool
+        def lookup_order(order_id: str) -> str:
+            "Looks up an order's status."
+            return "shipped"
+
+        agent = patterns.react("openai:gpt-5-mini", [lookup_order], max_steps=5)
+        result = await agent.run("Where is order A1?")
+    """
     limits = {**agent_options.pop("limits", {}), "model_calls": _cap(max_steps, "max_steps")}
     text = f"{instructions.rstrip()}\n\n{_REACT}" if instructions else _REACT
     return Agent(model, instructions=text, tools=list(tools), limits=limits, **agent_options)
@@ -563,10 +861,36 @@ def coordinator(
     **agent_options: Any,
 ) -> Agent:
     """An agent that reads each request and hands it to the right specialist, which it calls as a tool.
-    ``specialists``: ``{name: Agent | Specialist | "registered-name" | (Agent, "when to use it")}``.
-    A model decides the routing (more flexible than a fixed workflow, and more model calls).
 
-        triage = patterns.coordinator(m, {"orders": (orders_agent, "order status"), "refunds": refunds_agent})
+    A model decides the routing: more flexible than a fixed workflow, and it
+    costs more model calls.
+
+    Args:
+        model: The coordinator's model; also used to build specialists given
+            as recipes or names.
+        specialists: ``{name: specialist}``, where each value is an
+            ``Agent``, a ``Specialist``, a registered name, or ``(agent,
+            "when to use it")``. The description is what the coordinator reads
+            to choose (a ``Specialist`` brings its own).
+        instructions: The coordinator's instructions. Default: a short
+            routing prompt.
+        **agent_options: Other ``Agent`` keyword arguments.
+
+    Returns:
+        An ``Agent``.
+
+    Raises:
+        ValueError: No specialists.
+        TypeError: A value is not an agent, a specialist or a name.
+
+    Example:
+        from criogen import Agent, patterns
+
+        orders = Agent("openai:gpt-5-mini", instructions="You answer order questions.")
+        triage = patterns.coordinator(
+            "openai:gpt-5-mini",
+            {"orders": (orders, "Order status questions"), "summaries": "summarizer"},
+        )
     """
     if not specialists:
         raise ValueError("a coordinator needs at least one specialist")
@@ -594,12 +918,28 @@ def coordinator(
 
 
 def hierarchical(model: Any, tree: Mapping[str, Any], *, instructions: Optional[str] = None, **agent_options: Any) -> Agent:
-    """A coordinator of coordinators: the root splits the work, each level hands it further down, workers do it.
-    ``tree`` maps names to a worker (as for :func:`coordinator`) or to a nested mapping, which becomes a
-    sub-coordinator (describe it with a ``"_description"`` key). Depth is bounded by the SDK's agent nesting limit.
+    """A coordinator of coordinators: the root splits the work, each level hands it further down, and workers do it.
 
-        patterns.hierarchical(m, {"research": {"_description": "gathers facts", "web": web_agent, "docs": docs_agent},
-                                  "writing": writer_agent})
+    Args:
+        model: The model of every coordinator (and of workers given as
+            recipes or names).
+        tree: ``{name: worker or subtree}``. A worker is anything
+            :func:`coordinator` accepts; a nested mapping becomes a
+            sub-coordinator, described by its ``"_description"`` key. Depth is
+            bounded by the agents' nesting limit.
+        instructions: The root coordinator's instructions.
+        **agent_options: Other ``Agent`` keyword arguments for the root.
+
+    Returns:
+        The root ``Agent``.
+
+    Example:
+        from criogen import patterns
+
+        lead = patterns.hierarchical("openai:gpt-5-mini", {
+            "research": {"_description": "Gathers facts", "web": "researcher", "check": "fact_checker"},
+            "writing": "writer",
+        })
     """
 
     def build(level: Mapping[str, Any]) -> Dict[str, Any]:

@@ -57,3 +57,9 @@ tokens, steps or a deadline. Cancelling a run (a cancel token in Rust,
 cancelling the asyncio task in Python, an `AbortSignal` in TypeScript)
 stops the model call at once; the run fails with `cancelled` and, on a
 thread, is saved so it can be retried.
+
+## Next
+
+- [Agents and the loop](/docs/concepts/agent-loop/): the graph inside every agent.
+- [State, storage and threads](/docs/concepts/state-and-threads/): checkpoints and what each thread status means.
+- [Errors and retries](/docs/concepts/errors-and-retries/): what the engine retries and what reaches your code.

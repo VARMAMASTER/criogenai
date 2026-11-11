@@ -1,7 +1,16 @@
-"""Tools (design 0011 §2): Python functions the engine calls.
+"""Tools: Python functions the model can call.
 
-The schema comes from the type hints; the Rust engine validates the
-model's arguments against it before the function runs.
+Decorate a function with ``@tool``. Its docstring is the description the
+model reads, and its type hints become the JSON Schema of its arguments.
+The Rust engine checks the model's arguments against that schema before
+the function runs, so a tool only sees arguments of the right shape.
+
+Supported hints: ``str``, ``int``, ``float``, ``bool``, ``list[...]``,
+``dict``, ``Optional[...]``, ``Union[...]``, ``Literal[...]`` and Pydantic
+models (passed to the function as instances). A parameter without a
+default is required. Sync tools run on a worker thread, async tools on
+your event loop. The return value is sent to the model as JSON (Pydantic
+models are dumped; other values that JSON cannot hold become strings).
 """
 
 import inspect
@@ -12,8 +21,26 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 
 class ToolError(Exception):
-    """A failure the model should see (and may recover from). Any other
-    exception counts as the tool crashing: see ``Agent(on_tool_exception=…)``."""
+    """A failure the model should see, and may recover from.
+
+    Raise it from a tool: the model gets ``message`` as the call's error
+    result and the run goes on. Any other exception counts as the tool
+    crashing; ``Agent(on_tool_exception=...)`` decides what happens then.
+
+    Args:
+        message: What went wrong, written for the model.
+        retryable: The call may succeed if tried again. Calls to tools
+            marked ``read_only`` or ``idempotent`` are then retried, as the
+            agent's ``tool_retry`` says; other tools are not retried.
+
+    Example:
+        @tool
+        def lookup_order(order_id: str) -> str:
+            "Looks up an order by its id."
+            if not order_id.startswith("A-"):
+                raise ToolError(f"unknown order id {order_id}; ids start with A-")
+            return "shipped"
+    """
 
     def __init__(self, message: str, retryable: bool = False):
         super().__init__(message)
@@ -23,8 +50,22 @@ class ToolError(Exception):
 
 @dataclass(frozen=True)
 class ToolContext:
-    """What a tool can know about its call. Ask for it with a parameter
-    annotated ``ToolContext``."""
+    """What a tool can know about its call.
+
+    Ask for it with a parameter annotated ``ToolContext``; that parameter is
+    filled by the engine and left out of the schema the model sees.
+
+    Fields:
+        call_id: The id of this tool call (as in the transcript and events).
+        run_id: The id of the run that made the call.
+
+    Example:
+        @tool
+        def save_note(text: str, ctx: ToolContext) -> str:
+            "Saves a note."
+            print(f"run {ctx.run_id}, call {ctx.call_id}")
+            return "saved"
+    """
 
     call_id: str
     run_id: str
@@ -71,7 +112,26 @@ def _jsonable(value: Any) -> Any:
 
 
 class Tool:
-    """A function the model can call. Made by ``@tool``."""
+    """A function the model can call; made by ``@tool``.
+
+    Calling the ``Tool`` object calls the function directly, so tools stay
+    easy to test. ``tool.schema`` is the JSON Schema of its arguments.
+
+    Args:
+        func: The function, sync or async.
+        name: The tool name the model sees. Default: the function's name.
+        description: What the tool does, for the model. Default: the
+            function's docstring.
+        read_only: The tool has no side effects. Such tools may be retried.
+        destructive: The tool may destroy data. A hint kept with the tool; it
+            does not ask for approval by itself (list the tool in
+            ``Agent(approve=[...])`` for that).
+        idempotent: Calling the tool twice with the same arguments has the
+            same effect as calling it once. Such tools may be retried.
+
+    Raises:
+        TypeError: A parameter's type hint has no JSON Schema.
+    """
 
     def __init__(
         self,
@@ -122,6 +182,8 @@ class Tool:
             self.schema["$defs"] = defs
 
     def spec(self) -> Dict[str, Any]:
+        """The tool as the engine reads it: name, description, schema and
+        hints (internal)."""
         return {
             "name": self.name,
             "description": self.description,
@@ -177,8 +239,41 @@ def tool(
     destructive: bool = False,
     idempotent: bool = False,
 ) -> Any:
-    """Makes a function a tool: ``@tool`` or ``@tool(destructive=True)``.
-    The docstring is the description; type hints are the schema."""
+    """Makes a function a tool: ``@tool`` or ``@tool(read_only=True)``.
+
+    The docstring is the description the model reads; the type hints are
+    the schema of the arguments.
+
+    Args:
+        func: The function, when used as ``@tool`` without parentheses.
+        name: The tool name the model sees. Default: the function's name.
+        description: What the tool does, for the model. Default: the
+            function's docstring.
+        read_only: The tool has no side effects. Such tools are retried after
+            a retryable error or a timeout.
+        destructive: The tool may destroy data. A hint only; it does not ask
+            for approval by itself (use ``Agent(approve=[...])``).
+        idempotent: Calling the tool twice with the same arguments has the
+            same effect as once. Such tools are retried after a retryable
+            error or a timeout.
+
+    Returns:
+        A ``Tool``, or (with arguments only) a decorator that makes one.
+
+    Raises:
+        TypeError: A parameter's type hint has no JSON Schema.
+
+    Example:
+        from typing import Literal
+        from criogen import tool
+
+        @tool(read_only=True)
+        def weather(city: str, unit: Literal["C", "F"] = "C") -> str:
+            "Current weather for a city."
+            return f"21 {unit} and sunny in {city}"
+
+        print(weather.schema["required"])  # ['city']
+    """
 
     def wrap(f: Callable[..., Any]) -> Tool:
         return Tool(f, name, description, read_only, destructive, idempotent)

@@ -1,34 +1,168 @@
 ---
 title: Workflows
-description: Graphs of steps with branches, parallel work, joins, loops and pauses for a person.
+description: Graphs of steps over a shared state - branches, parallel steps and joins, loops, reducers, agents as steps, pauses for a person, limits, and durable runs.
 ---
 
-
-A **workflow** is a graph of steps (nodes) over a shared state. Each node
-reads the state and returns the keys it changes. The engine runs ready
-nodes [in steps](/docs/concepts/runs/), concurrently, and checks the graph
-before the first run.
+A **workflow** is a graph of steps (nodes) over a shared state. Each node is a
+function (or an agent) that reads the state and returns the keys it changes;
+edges say what runs next. Use a workflow when you know the steps in advance:
+intake, then checks in parallel, then a summary, then a person signs off. Use
+an [agent](/docs/guides/agents/) when the model should choose the steps. The
+two mix: agents can be nodes, and a pattern of agents is a workflow.
 
 <Sample name="workflows" />
 
-## Building blocks
+## How a run proceeds
 
-| Piece | Use |
+The engine runs a workflow [in steps](/docs/concepts/runs/):
+
+1. The start node runs with the input as the state.
+2. After a step, every node whose edges are satisfied is ready. All ready
+   nodes run **at the same time** in the next step.
+3. When all nodes of a step have finished, their updates are merged into the
+   state, and the step is saved (with storage). If any node of the step
+   failed, **none** of that step's updates are kept.
+4. The run ends when no node is ready (every path reached `END`).
+
+`compile()` checks the graph before any run: unknown nodes, nodes that can
+never run, nodes with no way out. All problems are reported at once, as a
+`ValidationError` (`invalid_workflow`) whose `details["issues"]` lists them:
+
+```text
+edge `a` -> `c` refers to unknown node `c`
+node `b` has no outgoing edges; add an edge to END if it should finish the run
+node `b` is not reachable from the entry node
+```
+
+## Nodes
+
+A node receives the state (a dict / object) and, if it takes a second
+argument, a `NodeContext`. It returns one of:
+
+| Return | Meaning |
 |---|---|
-| **Edge** | After A, run B (or `END`) |
-| **Router** | After A, a function of the state picks the next node by label |
-| **Parallel nodes** | Several edges from one node: they run at the same time |
-| **Join** | Run a node once all of its sources have finished |
-| **Goto** | A node chooses its next nodes itself (declared ahead) |
-| **Reducer** | How parallel writes to one key combine: replace, append, update by id |
-| **Suspend** | A node pauses the run for a person; `resume` gives it the answer |
-| **Policies** | A deadline and a step limit per run; per-node timeouts and retries with backoff (Rust) |
-| **Agents as nodes** | An agent can be one node of a workflow: `wf.add_node(name, agent)`, `.addNode(name, agent)`, `agent.as_node()` |
+| a dict / object | The keys to change (the rest of the state is kept) |
+| `None` / `undefined` | No change |
+| `suspend(payload)` | Pause the run for a person ([below](#pause-for-a-person)) |
+| `goto(targets, update)` | Choose the next nodes ([below](#loops-and-choices)) |
+
+Nodes may be sync or async. The context has `run_id`, `step`, `node`,
+`attempt`, and `resume` (the answer after a pause). In Python, `@wf.node`
+adds a function under its own name; `wf.add_node(name, fn)` names it
+yourself. In TypeScript, `.node(name, fn)`.
+
+An exception in a node fails the run with `node_failed`; the exception is
+the error's cause. A router that throws fails it with `router_failed`.
+
+## Edges, routes and joins
+
+| Method | Meaning |
+|---|---|
+| `start(node)` | The node a run begins with |
+| `edge(a, b)` | After `a`, run `b` (`b` may be `END`) |
+| `route(a, router, {label: node})` | After `a`, `router(state)` returns a label; run the node for it. A label with no entry fails with `unknown_route` |
+| `join([a, b], c)` | Run `c` once **all** of `a` and `b` have finished |
+| `goto(a, [targets])` | `a` chooses among these targets itself, by returning `goto(...)` |
+
+Several edges from one node start the targets in parallel. A router is a
+plain function of the state (not async in Python); keep it quick and without
+side effects.
+
+## Parallel steps and reducers
+
+<Sample name="workflows" region="parallel" only={["python", "typescript"]} />
+
+When two nodes of the same step write the same key, the key's **reducer**
+decides how the writes combine:
+
+| Reducer | Python | TypeScript | Result |
+|---|---|---|---|
+| replace (default) | `"replace"` | `"replace"` | The new value; **two** writes in one step fail with `update_conflict` |
+| append | `"append"` | `"append"` | Lists are concatenated |
+| update by id | `"upsert_by_id"` | `"upsertById"` | Items with an `id` replace the item with the same id; others are added |
+
+A conflict is an error on purpose: without a reducer, which of two parallel
+writes wins would depend on timing.
+
+## Loops and choices
+
+A node can pick what runs next by returning `goto(...)`, among targets
+declared with `wf.goto(...)`. That makes loops (draft, review, draft again)
+explicit:
+
+<Sample name="workflows" region="loop" only={["python", "typescript"]} />
+
+Every loop needs a way out, and every run has bounds:
+
+| Option (Python / TypeScript) | Fails with |
+|---|---|
+| `max_steps` / `maxSteps` | `step_limit_exceeded` |
+| `deadline` (seconds) / `deadlineMs` | `deadline_exceeded` |
+
+TypeScript runs also take a `signal` (an `AbortSignal`).
+
+## Agents as nodes
+
+An agent can be one node. It reads the conversation from the `messages`
+key (a list of messages, or a string taken as one user message), runs its
+loop, and writes the **whole** transcript back to `messages`:
+
+<Sample name="workflows" region="agents" only={["python", "typescript"]} />
+
+Keep the default reducer for `messages`: the agent returns the full list,
+so `append` or `upsert_by_id` would add the earlier messages twice. If an
+agent node needs approval, the workflow pauses; see
+[Human approval](/docs/guides/approvals/#approval-in-workflows).
+
+## Pause for a person
+
+A node returns `suspend(payload)` to pause the run: `payload` says what is
+asked (any JSON). The run stops with the pause recorded in
+`result.interrupts` (`node`, `payload`). Continuing it gives each paused node
+its answer: the node runs **again**, now with `ctx.resume` set to the answer.
+So write paused nodes as "if there is no answer yet, ask; otherwise use it",
+as in the first example. Other nodes that had finished are not run again.
+
+Without storage, keep `result.snapshot` and call
+`app.resume(snapshot, {node: answer})`. With storage, use a thread (below).
 
 ## Durable workflows
 
-A workflow compiled with storage gives threads (`app.thread(id)` in
-Python and TypeScript, `storage.workflow_thread(&workflow, id)` in Rust)
-the same guarantees as agents: progress saved every step, a pause that waits in the
-database and is answered from any process, `retry()` after a failure
-without re-running finished nodes, history, rewind and the audit trail.
+A workflow compiled with storage gives threads the same guarantees as agent
+threads: progress saved every step, a pause that waits in the database and is
+answered from any process, `retry()` after a failure without re-running
+finished nodes, history, rewind and the audit trail.
+
+| Python | TypeScript | What it does |
+|---|---|---|
+| `app.thread(id, actor=None)` | `app.thread(id, { actor })` | A handle on a durable run history |
+| `run(input)` | `run(input, options)` | Runs from the start node on the stored state plus `input` |
+| `resume({node: value})` | `resume({ node: value })` | Answers the paused nodes |
+| `interrupts()` | `interrupts()` | What the paused nodes asked for |
+| `state()` | `state()` | The stored state |
+| `retry()` | `retry()` | Continues a failed or interrupted run |
+| `history()`, `rewind(id)`, `delete()` | same | As for [agent threads](/docs/guides/threads/#history-and-rewind) |
+
+Each `run` on a thread starts from the start node, with the state the last run
+left plus the new input. A `run` while the thread is paused fails with
+`thread_suspended`; `resume` must answer every paused node, or it fails with
+`resume_invalid`. In Rust, the same is `storage.workflow_thread(&workflow, id)`.
+
+## Errors
+
+| Code | When |
+|---|---|
+| `invalid_workflow` | The graph does not validate (`details["issues"]`) |
+| `node_failed` | A node raised (the exception is the cause) |
+| `router_failed`, `unknown_route` | A router raised, or returned a label with no route |
+| `missing_goto` | A node declared with `goto` did not return one |
+| `update_conflict` | Two nodes wrote one key in one step, without a reducer |
+| `step_limit_exceeded`, `deadline_exceeded` | A run bound was reached |
+| `resume_invalid` | `resume` with a missing or unknown node |
+| `workflow_mismatch` | A snapshot made by a different workflow |
+
+## Next
+
+- [Patterns and specialists](/docs/guides/patterns/): ready-made workflows of agents.
+- [How a run works](/docs/concepts/runs/): steps, merging and snapshots.
+- API: [Python workflows](/docs/reference/api/python/workflow/), [TypeScript workflows](/docs/reference/api/typescript/workflow/).

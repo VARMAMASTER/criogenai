@@ -1,0 +1,176 @@
+---
+title: "Python API: Telemetry"
+description: "Python API reference, telemetry: Telemetry."
+---
+
+Exporting runs to Langfuse or any OpenTelemetry backend. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/telemetry/).
+
+Tracing: every run of an agent exported as an OpenTelemetry trace, to Langfuse, any OTLP/HTTP collector, or the local trace viewer.
+
+Each run becomes a trace with its model calls, tool calls and steps.
+Message content is left out unless `capture_content=True`.
+
+```python
+from criogen import Telemetry
+```
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`Telemetry`](#telemetry) | class | An exporter of run traces, shared by any number of agents: `Agent(..., telemetry=t)`. |
+
+## Telemetry
+
+```python
+class Telemetry:
+    def __init__(self, spec: Dict[str, Any])
+```
+
+An exporter of run traces, shared by any number of agents: `Agent(..., telemetry=t)`.
+
+Create it with `langfuse`, `otlp` or `local`. It
+exports in the background and never blocks a run: when its queue (10,000
+events) is full, events are dropped and counted in `stats`. Call
+`flush` before a script ends, and `shutdown` when done.
+
+**Parameters**
+
+- `spec` (`Dict[str, Any]`): The exporter's settings. Internal: use `langfuse`, `otlp` or `local` instead.
+
+**Raises**
+
+- `ValidationError`: Missing keys or an endpoint that cannot be used (`invalid_value`).
+
+**Example**
+
+```python
+from criogen import Agent, FakeModel, Telemetry
+
+telemetry = Telemetry.otlp("http://localhost:4318/v1/traces")
+agent = Agent(FakeModel(["Hi!"]), telemetry=telemetry)
+await agent.run("Hello")
+await telemetry.flush()
+print(telemetry.stats())
+```
+
+### Telemetry.langfuse
+
+```python
+@staticmethod
+def langfuse(
+    public_key: Optional[str] = None,
+    secret_key: Optional[str] = None,
+    base_url: Optional[str] = None,
+    capture_content: bool = False,
+    service_name: Optional[str] = None,
+) -> 'Telemetry'
+```
+
+Exports to Langfuse (cloud, any region, or self-hosted).
+
+Pass both keys, or neither: then the keys come from the
+`LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY` environment variables
+and the address from `LANGFUSE_BASE_URL` (or `LANGFUSE_HOST`).
+
+**Parameters**
+
+- `public_key` (`Optional[str]`, default `None`): The project's public key (`pk-lf-...`).
+- `secret_key` (`Optional[str]`, default `None`): The project's secret key (`sk-lf-...`).
+- `base_url` (`Optional[str]`, default `None`): Langfuse's address, used with explicit keys, e.g. `"https://us.cloud.langfuse.com"` or `"http://localhost:3000"`. Default `"https://cloud.langfuse.com"`.
+- `capture_content` (`bool`, default `False`): `True` also exports messages, tool arguments and results, error messages, and the run's user id, session id and metadata. Default `False`: names, timings, token usage, status and error codes are still exported.
+- `service_name` (`Optional[str]`, default `None`): The `service.name` of the exported traces. Default `"criogen"`.
+
+**Returns:** The exporter.
+
+**Raises**
+
+- `ValidationError`: No keys given and a variable is missing (`invalid_value`).
+
+**Example**
+
+```python
+from criogen import Agent, Telemetry
+
+telemetry = Telemetry.langfuse()   # keys from LANGFUSE_* variables
+agent = Agent("openai:gpt-5-mini", telemetry=telemetry)
+```
+
+### Telemetry.otlp
+
+```python
+@staticmethod
+def otlp(
+    endpoint: str,
+    headers: Optional[Dict[str, str]] = None,
+    capture_content: bool = False,
+    service_name: Optional[str] = None,
+) -> 'Telemetry'
+```
+
+Exports to any OpenTelemetry collector that accepts OTLP over HTTP with JSON.
+
+**Parameters**
+
+- `endpoint` (`str`): The full traces URL, e.g. `"http://localhost:4318/v1/traces"`.
+- `headers` (`Optional[Dict[str, str]]`, default `None`): Headers sent with every export, e.g. an API key.
+- `capture_content` (`bool`, default `False`): `True` also exports messages, tool arguments and results, error messages, and the run's user id, session id and metadata. Default `False`: names, timings, token usage, status and error codes are still exported.
+- `service_name` (`Optional[str]`, default `None`): The `service.name` of the exported traces. Default `"criogen"`.
+
+**Returns:** The exporter.
+
+### Telemetry.local
+
+```python
+@staticmethod
+def local(
+    capture_content: bool = False,
+    url: str = 'http://127.0.0.1:4318',
+) -> 'Telemetry'
+```
+
+Exports to the local trace viewer (`python -m criogen.trace`).
+
+Prompts and outputs are shown only with `capture_content=True`; they
+stay on this computer either way.
+
+**Parameters**
+
+- `capture_content` (`bool`, default `False`): `True` also exports messages, tool arguments and results, error messages, and the run's user id, session id and metadata. Default `False`: names, timings, token usage, status and error codes are still exported.
+- `url` (`str`, default `'http://127.0.0.1:4318'`): The viewer's address. Default `"http://127.0.0.1:4318"`; `/v1/traces` is added.
+
+**Returns:** The exporter.
+
+**Example**
+
+```python
+from criogen import Agent, Telemetry
+
+agent = Agent("openai:gpt-5-mini", telemetry=Telemetry.local(capture_content=True))
+```
+
+### Telemetry.flush
+
+```python
+async def flush() -> None
+```
+
+Waits until everything sent so far is exported (or has failed).
+
+### Telemetry.shutdown
+
+```python
+async def shutdown() -> None
+```
+
+Exports what is left and stops the exporter.
+
+### Telemetry.stats
+
+```python
+def stats() -> Dict[str, Any]
+```
+
+Export counters, to check that traces arrive.
+
+**Returns:** `{"exported", "failed", "dropped", "last_error"}`: spans the backend accepted, spans lost after failed exports, events dropped because the queue was full, and the last export error (or `None`).

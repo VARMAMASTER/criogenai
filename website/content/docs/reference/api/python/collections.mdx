@@ -1,0 +1,258 @@
+---
+title: "Python API: Collections"
+description: "Python API reference, collections: Collection, Document, Hit."
+---
+
+Documents to search by meaning, and a retrieval tool for agents. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/collections/).
+
+Collections: documents searched by meaning, for retrieval and as agent tools.
+
+```python
+from criogen import Agent, Collection, Embedder
+
+docs = await Collection.open("handbook", embedder=Embedder.openai(), storage=storage)
+await docs.add([{"id": "leave", "text": "Annual leave is 25 days.", "metadata": {"section": "hr"}}])
+hits = await docs.search("How many vacation days?", k=5)
+agent = Agent("openai:gpt-5-mini", tools=[docs.as_tool("search_handbook", "Search the staff handbook.")])
+```
+
+Documents are kept in the storage (encrypted when it is) and indexed in
+memory when the collection opens. The index is exact by default; pass
+`index="hnsw"` for very large collections (faster queries, approximate,
+slower to open).
+
+```python
+from criogen import Collection, Document, Hit
+```
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`Collection`](#collection) | class | Documents searched by meaning. |
+| [`Document`](#document) | class | A text to search, with an id and metadata. |
+| [`Hit`](#hit) | class | A search result: the document and its cosine similarity to the query. |
+
+## Collection
+
+```python
+class Collection:
+    def __init__(self, name: str)
+```
+
+Documents searched by meaning. Open one with `open`.
+
+Each document's text is turned into a vector by an embedding model and
+stored in a `Storage` with the text and metadata. A search embeds the
+query and returns the closest documents. Use it to give an agent a
+knowledge base (`as_tool`) or to look things up yourself
+(`search`).
+
+**Parameters**
+
+- `name` (`str`): The collection's name. Internal: use `open`, which also builds the index.
+
+**Example**
+
+```python
+from criogen import Collection, Embedder
+
+docs = await Collection.open("handbook", embedder=Embedder.fake())
+await docs.add([
+    {"id": "leave", "text": "Annual leave is 25 days a year.", "metadata": {"section": "hr"}},
+    {"id": "parking", "text": "Staff parking is behind building B."},
+])
+hits = await docs.search("How many days of annual leave?", k=1)
+hits[0].id   # "leave"
+```
+
+### Collection.open
+
+```python
+@staticmethod
+async def open(
+    name: str,
+    *,
+    embedder: Any,
+    storage: Any = None,
+    index: str = 'flat',
+    ef_search: Optional[int] = None,
+) -> 'Collection'
+```
+
+Opens a collection and builds its index from the stored vectors.
+
+A collection that does not exist yet starts empty. Several
+collections can share one storage; each lives in its own namespace.
+
+**Parameters**
+
+- `name` (`str`): The collection's name.
+- `embedder` (`Any`): An `criogen.Embedder` that turns texts into vectors, e.g. `Embedder.openai()`; use the same one every time you open the collection.
+- `storage` (`Any`, default `None`): A `criogen.Storage` or a storage URL (e.g. `"sqlite://docs.db"`). Default: process memory.
+- `index` (`str`, default `'flat'`): `"flat"` (the default) compares the query with every vector: exact, and opens at once. `"hnsw"` is approximate: faster queries on large collections, slower to open (it is rebuilt each time).
+- `ef_search` (`Optional[int]`, default `None`): `"hnsw"` only: candidates kept while searching (at least `k`). Higher finds more of the true nearest documents and is slower. Default 64.
+
+**Returns:** The open collection.
+
+**Raises**
+
+- `ValueError`: `index` is not `"flat"` or `"hnsw"`.
+
+### Collection.add
+
+```python
+async def add(documents: Iterable[Union[Document, Mapping[str, Any]]]) -> int
+```
+
+Embeds, stores and indexes documents; an existing id is replaced.
+
+Texts are embedded 64 per call to the embedding model.
+
+**Parameters**
+
+- `documents` (`Iterable[Union[Document, Mapping[str, Any]]]`): `Document` objects or dicts with `id`, `text` and optionally `metadata`.
+
+**Returns:** How many documents the collection holds now.
+
+**Raises**
+
+- `ValidationError`: An id is empty or longer than 256 bytes, a text is longer than 100,000 characters, or metadata is larger than 8 KB (`invalid_value`).
+- `ModelError`: The embedding model failed (`model_failed`).
+
+### Collection.search
+
+```python
+async def search(
+    query: str,
+    k: int = 5,
+    where: Optional[Mapping[str, Any]] = None,
+) -> List[Hit]
+```
+
+The `k` documents closest in meaning to `query`, best first.
+
+**Parameters**
+
+- `query` (`str`): The text to look for.
+- `k` (`int`, default `5`): The most hits to return. Default 5; 0 returns none.
+- `where` (`Optional[Mapping[str, Any]]`, default `None`): Keeps only documents whose metadata has every one of these fields with exactly that value, e.g. `{"section": "hr"}`. The filter is applied to the `4 * k` closest documents, so fewer than `k` hits may come back.
+
+**Returns:** The hits, closest first.
+
+**Example**
+
+```python
+hits = await docs.search("parking", k=3, where={"section": "facilities"})
+for hit in hits:
+    print(round(hit.score, 2), hit.text)
+```
+
+### Collection.remove
+
+```python
+async def remove(id: str) -> bool
+```
+
+Removes a document from the storage and the index.
+
+**Parameters**
+
+- `id` (`str`): The document's id.
+
+**Returns:** `True` if it was there.
+
+### Collection.reload
+
+```python
+async def reload() -> int
+```
+
+Rebuilds the index from storage, e.g. after another process added documents.
+
+**Returns:** How many documents the index holds.
+
+### Collection.count
+
+```python
+async def count() -> int
+```
+
+How many documents the index holds.
+
+### Collection.as_tool
+
+```python
+def as_tool(name: str, description: str) -> CollectionTool
+```
+
+This collection as a read-only agent tool.
+
+The model gives a `query` (and optionally `k`, 1 to 20, default
+5) and gets the hits as JSON, each text cut to 2,000 characters.
+
+**Parameters**
+
+- `name` (`str`): The tool's name, as the model sees it, e.g. `"search_handbook"`.
+- `description` (`str`): What the model reads to decide when to search, e.g. `"Search the staff handbook."`.
+
+**Returns:** A tool for `Agent(tools=[...])`.
+
+**Example**
+
+```python
+from criogen import Agent
+
+agent = Agent(
+    "openai:gpt-5-mini",
+    tools=[docs.as_tool("search_handbook", "Search the staff handbook.")],
+)
+```
+
+## Document
+
+```python
+@dataclass
+class Document:
+    id: str
+    text: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
+```
+
+A text to search, with an id and metadata.
+
+`Collection.add` also takes plain dicts with the same keys.
+
+**Attributes**
+
+- `id` (`str`): Unique in its collection (1 to 256 bytes); adding the same id again replaces the document.
+- `text` (`str`): What is embedded, searched and returned (at most 100,000 characters: split longer texts).
+- `metadata` (`Dict[str, Any]`, default `field(default_factory=dict)`): JSON fields kept with the document (at most 8 KB), returned with hits and usable in `search(where=...)`.
+
+**Example**
+
+```python
+from criogen import Document
+
+doc = Document("leave", "Annual leave is 25 days a year.", {"section": "hr"})
+```
+
+## Hit
+
+```python
+@dataclass
+class Hit:
+    id: str
+    text: str
+    metadata: Dict[str, Any]
+    score: float
+```
+
+A search result: the document and its cosine similarity to the query.
+
+**Attributes**
+
+- `id` (`str`): The document's id.
+- `text` (`str`): The document's text.
+- `metadata` (`Dict[str, Any]`): The document's metadata.
+- `score` (`float`): Cosine similarity between the query and the document, from -1 to 1 (higher is closer).

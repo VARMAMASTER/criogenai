@@ -1,21 +1,30 @@
 ---
-title: "Python API: Storage, memory and collections"
-description: "Python API reference for storage, memory and collections: Storage, Memory, Collection, Document, Hit."
+title: "Python API: Storage and memory"
+description: "Python API reference, storage and memory: Storage, Memory."
 ---
 
-Generated from the source of `criogen` 0.1.6 (docstrings and type hints) every time the site is built. Also in [TypeScript](/docs/reference/api/typescript/storage/) and [Rust](/docs/reference/api/rust/). Back to the [API reference](/docs/reference/api/).
+Durable threads (SQLite, Postgres, in memory), encryption, audit, retention and long-term memory. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/storage/).
 
-## Storage and memory
+Storage and memory: where threads, long-term memory and the audit trail
+live.
 
-Storage and memory: where threads, long-term memory and
-the audit trail live. The Rust engine does the work; this holds the
-settings.
+The Rust engine does the work; these classes hold the settings. Pass one
+`Storage` to every agent and workflow that should share threads and
+memory, and give an agent a `Memory` to recall facts across
+conversations.
 
 ```python
 from criogen import Storage, Memory
 ```
 
-### Storage
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`Storage`](#storage) | class | Keeps threads (every checkpoint), long-term memory and the audit trail. |
+| [`Memory`](#memory) | class | Long-term memory for an agent: facts recalled before each model call, and tools to save them. |
+
+## Storage
 
 ```python
 class Storage:
@@ -31,25 +40,56 @@ class Storage:
     )
 ```
 
-Threads, memory and the audit trail. `url`: `None` (process
-memory), `"sqlite://path.db"` or `"postgres://…"`.
+Keeps threads (every checkpoint), long-term memory and the audit trail.
 
-`encryption_keys`: `"k2:<64 hex>,k1:<64 hex>"` (the first is
-active) encrypts content at rest. `audit=True` records who did what.
-`retention`: `{"thread_ttl_secs": …, "keep_checkpoints": …}`,
-applied by `prune`. Agents built with the same `Storage`
-share it.
+Pick the backend with `url`: process memory (tests and scripts, gone
+when the process ends), a SQLite file (one process) or Postgres
+(several processes or machines; one run per thread across all of
+them). Tables are created on first use. Agents and workflows built
+with the same `Storage` share its threads and memory.
 
-#### Storage.close
+The database is opened when the object is created, so a bad URL or key
+fails here. Call `close` at shutdown.
+
+**Parameters**
+
+- `url` (`Optional[str]`, default `None`): Where the data lives. `None` (the default) keeps it in process memory; `"sqlite://path/to/file.db"` uses a SQLite file; `"postgres://user:password@host/database"` uses Postgres.
+- `encryption_keys` (`Optional[str]`, default `None`): Encrypts content at rest (AES-256-GCM) in a database given by `url`. Text such as `"k2:<64 hex digits>,k1:<64 hex digits>"`: each entry is a key id and a 32-byte key in hex. The first key encrypts new writes; the others only decrypt older rows. A database written with keys refuses to open without them. Keep the keys outside the database (an environment variable or a secret store).
+- `audit` (`bool`, default `False`): `True` records who did what (model calls, tool calls, runs, approvals, rewinds, deletions, memory writes) in a hash-chained audit trail, without message content. Read it with `audit_records` and check it with `verify_audit`. Default `False`.
+- `retention` (`Optional[Dict[str, Any]]`, default `None`): How long data is kept, applied each time `prune` runs (nothing is deleted before that). A dict with any of `"thread_ttl_secs"` (delete threads whose last change is at least this many seconds old), `"keep_checkpoints"` (keep each thread's head and its `n - 1` ancestors; older checkpoints and abandoned branches go) and `"drop_branches"` (`True`: delete the branches `rewind` leaves behind). Default: keep everything.
+- `on_busy` (`Optional[str]`, default `None`): What a second call on a thread that is already running does. `"wait"` (the default) waits its turn, up to `busy_timeout`, then fails with `thread_busy`; `"reject"` fails at once with `thread_busy`; `"interrupt"` cancels the running call (it is saved, so `retry` can continue it) and goes next.
+- `busy_timeout` (`Optional[float]`, default `None`): How long `"wait"` and `"interrupt"` wait for the thread, in seconds. Default 60.
+
+**Raises**
+
+- `ValidationError`: An unknown `on_busy` value or unreadable keys (`invalid_value`).
+- `StorageError`: The database cannot be opened, or it is encrypted and the keys do not match.
+
+**Example**
+
+```python
+from criogen import Agent, FakeModel, Storage
+
+storage = Storage("sqlite://agent.db", audit=True)
+agent = Agent(FakeModel(["Hello!"]), storage=storage)
+reply = await agent.thread("conversation-1").send("Hi")
+records = await storage.audit_records(thread_id="conversation-1")
+await storage.close()
+```
+
+### Storage.close
 
 ```python
 async def close() -> None
 ```
 
 Closes the database's connections (SQLite releases the file).
-Later calls fail with `StorageError` (`storage_unavailable`).
 
-#### Storage.remember
+Call it after the last run. Later calls on this storage fail with
+`StorageError` (`storage_unavailable`). In-memory storage has
+nothing to close.
+
+### Storage.remember
 
 ```python
 async def remember(
@@ -60,17 +100,46 @@ async def remember(
 ) -> None
 ```
 
-Saves a fact under `namespace` (e.g. `"users/42"`).
+Saves a fact in long-term memory, replacing any value under the same key.
 
-#### Storage.recall
+Facts saved here are found by keyword search, also by an agent whose
+memory is semantic (no vector is stored for them).
+
+**Parameters**
+
+- `namespace` (`str`): A path such as `"users/42"`: segments separated by `/`, each non-empty and without control characters.
+- `key` (`str`): The fact's key within the namespace.
+- `value` (`Any`): Any JSON value.
+- `ttl` (`Optional[float]`, default `None`): Seconds until the fact expires. Default: kept until deleted.
+
+**Raises**
+
+- `ValidationError`: An invalid namespace (`invalid_value`).
+
+**Example**
+
+```python
+await storage.remember("users/42", "language", "French")
+item = await storage.recall("users/42", "language")
+item["value"]   # "French"
+```
+
+### Storage.recall
 
 ```python
 async def recall(namespace: str, key: str) -> Optional[Dict[str, Any]]
 ```
 
-The item, or `None`.
+Reads one fact from long-term memory.
 
-#### Storage.search
+**Parameters**
+
+- `namespace` (`str`): The namespace path, e.g. `"users/42"`.
+- `key` (`str`): The fact's key.
+
+**Returns:** The item as a dict (`namespace` as a list of segments, `key`, `value`, `created_at_ms`, `updated_at_ms` and, with a time to live, `expires_at_ms`; times in Unix milliseconds), or `None` if there is no such fact or it has expired.
+
+### Storage.search
 
 ```python
 async def search(
@@ -80,25 +149,43 @@ async def search(
 ) -> List[Dict[str, Any]]
 ```
 
-Items in `namespace` and below matching `text` (keywords).
+Finds facts in `namespace` and every namespace below it, by keywords.
 
-#### Storage.forget_all
+**Parameters**
+
+- `namespace` (`str`): Where to look: `"users"` covers `"users/42"` and `"users/43"`; `""` searches everything.
+- `text` (`Optional[str]`, default `None`): Words to match; results come best first, each with a `score` from 0 to 1. `None` returns every item, newest first.
+- `limit` (`int`, default `10`): The most items to return. Default 10.
+
+**Returns:** Items shaped like `recall`'s.
+
+### Storage.forget_all
 
 ```python
 async def forget_all(namespace: str) -> int
 ```
 
-Deletes everything in `namespace` and below (e.g. one patient).
+Deletes every fact in `namespace` and below it, e.g. everything about one user.
 
-#### Storage.prune
+**Parameters**
+
+- `namespace` (`str`): The namespace path, e.g. `"users/42"`.
+
+**Returns:** How many facts were deleted.
+
+### Storage.prune
 
 ```python
 async def prune() -> Dict[str, int]
 ```
 
-Applies the retention rules once.
+Applies the `retention` rules once, and removes expired memory facts.
 
-#### Storage.audit_records
+Run it on a schedule (a cron job, a background task).
+
+**Returns:** Counts: `threads_deleted` (idle threads deleted), `threads_busy` (expired threads skipped because a run held them), `checkpoints_deleted` (from threads that were kept) and `memory_items_deleted` (expired facts removed).
+
+### Storage.audit_records
 
 ```python
 async def audit_records(
@@ -109,27 +196,87 @@ async def audit_records(
 ) -> List[Dict[str, Any]]
 ```
 
-Audit records, oldest first (needs `audit=True`).
+Reads the audit trail, oldest first. Needs `Storage(audit=True)`.
 
-#### Storage.verify_audit
+Each record has `seq` (1, 2, 3... without gaps), `at_ms` (Unix
+milliseconds), `action` (e.g. `"model.called"`,
+`"run.finished"`), and when known `actor`, `thread_id`,
+`run_id`, `subject`, `outcome` and `details`, plus the
+`prev_hash` and `hash` that chain the records. Records hold ids,
+names, codes and counts, never message content.
+
+**Parameters**
+
+- `thread_id` (`Optional[str]`, default `None`): Only this thread's records.
+- `action` (`Optional[str]`, default `None`): Only records of this action.
+- `after_seq` (`Optional[int]`, default `None`): Only records after this `seq`; pass the last `seq` you read to get the next page.
+- `limit` (`int`, default `100`): The most records to return. Default 100.
+
+**Raises**
+
+- `ValidationError`: The audit trail is off (`invalid_value`).
+
+**Example**
+
+```python
+records = await storage.audit_records(thread_id="conversation-1")
+for r in records:
+    print(r["seq"], r["action"], r.get("outcome"))
+```
+
+### Storage.verify_audit
 
 ```python
 async def verify_audit() -> Dict[str, Any]
 ```
 
-Checks the audit trail's hash chain.
+Checks the audit trail's hash chain. Needs `Storage(audit=True)`.
 
-### Memory
+**Returns:** `{"ok", "records", "first_broken", "head"}`: `ok` is `True` when every hash and link is right and no `seq` is missing; `records` is how many were checked; `first_broken` is the first wrong record's `seq` (else `None`); `head` is the last record's `[seq, hash]`. Copy `head` somewhere else now and then: a chain rewritten from the start would still verify.
+
+**Raises**
+
+- `ValidationError`: The audit trail is off (`invalid_value`).
+
+## Memory
 
 ```python
 class Memory:
     def __init__(self, spec: Dict[str, Any])
 ```
 
-Long-term memory for an agent: recalled before each model call, and
-`remember` / `forget` / `search_memory` tools for the model.
+Long-term memory for an agent: facts recalled before each model call, and tools to save them.
 
-#### Memory.by_state
+Before each model call, the facts that best match the conversation
+(then the newest) are added to the request, marked as information, not
+instructions; they are not stored in the transcript. The model also
+gets the `remember`, `forget` and `search_memory` tools. Facts
+live in the agent's `storage`.
+
+Build one with `by_state` (one namespace per user or customer)
+or `shared` (one for everybody), and pass it as
+`Agent(memory=...)`.
+
+**Parameters**
+
+- `spec` (`Dict[str, Any]`): The settings. Internal: use `by_state` or `shared` instead.
+
+**Example**
+
+```python
+from criogen import Agent, FakeModel, Memory, Storage
+
+storage = Storage()
+await storage.remember("users/42", "diet", "vegetarian")
+agent = Agent(
+    FakeModel(["How about a mushroom risotto?"]),
+    storage=storage,
+    memory=Memory.by_state("user_id", "users"),
+)
+result = await agent.run("Suggest a dinner.", user_id="42")
+```
+
+### Memory.by_state
 
 ```python
 @staticmethod
@@ -142,154 +289,63 @@ def by_state(
 ) -> 'Memory'
 ```
 
-One namespace per value of the run's `key` (e.g. per user):
-`prefix/<value>`. Pass the value with `run(..., key=value)`.
+One namespace per value of a run's state key, e.g. per user: `prefix/<value>`.
 
-#### Memory.shared
+Pass the value with each call, e.g. `agent.run(text, user_id="42")`
+or `thread.send(text, user_id="42")`. A run without the key fails
+(`invalid_state`) instead of seeing another user's facts.
+
+**Parameters**
+
+- `key` (`str`): The state key that names the namespace (its value is a string or a number).
+- `prefix` (`str`): The namespace path the value goes under: `"users"` gives `users/42`.
+- `recall` (`int`, default `5`): How many facts to add before each model call. Default 5; 0 turns recall off (the tools still work).
+- `tools` (`bool`, default `True`): Whether the model gets the `remember`, `forget` and `search_memory` tools. Default `True`.
+- `ttl` (`Optional[float]`, default `None`): Seconds that facts saved by the `remember` tool are kept. Default: until deleted.
+
+**Returns:** The memory setting for `Agent(memory=...)`.
+
+### Memory.shared
 
 ```python
 @staticmethod
 def shared(namespace: str, recall: int = 5, tools: bool = True) -> 'Memory'
 ```
 
-One namespace for every run.
+One namespace for every run: knowledge shared by all users.
 
-#### Memory.semantic
+**Parameters**
+
+- `namespace` (`str`): The namespace path, e.g. `"team/handbook"`.
+- `recall` (`int`, default `5`): How many facts to add before each model call. Default 5; 0 turns recall off (the tools still work).
+- `tools` (`bool`, default `True`): Whether the model gets the `remember`, `forget` and `search_memory` tools. Default `True`.
+
+**Returns:** The memory setting for `Agent(memory=...)`.
+
+### Memory.semantic
 
 ```python
 def semantic(embedder: Any) -> 'Memory'
 ```
 
-Searches by meaning with `embedder` (an `Embedder`): recall and
-`search_memory` find facts that say the same thing in other words.
-If the embedder fails, search falls back to keywords.
+This memory, searched by meaning with an embedding model.
 
-## Collections
+Recall and `search_memory` then find facts that say the same thing
+in other words. Facts the agent saves with `remember` get a vector
+(stored, and encrypted, with the fact); facts saved with
+`Storage.remember` are found by keywords only. If the
+embedder fails, search falls back to keywords.
 
-Collections: documents searched by meaning.
+**Parameters**
 
-```python
-from criogen import Agent, Collection, Embedder
+- `embedder` (`Any`): An `criogen.Embedder`, e.g. `Embedder.openai()` or `Embedder.ollama()`.
 
-docs = await Collection.open("handbook", embedder=Embedder.openai(), storage=storage)
-await docs.add([{"id": "leave", "text": "Annual leave is 25 days.", "metadata": {"section": "hr"}}])
-hits = await docs.search("How many vacation days?", k=5)
-agent = Agent("openai:gpt-5-mini", tools=[docs.as_tool("search_handbook", "Search the staff handbook.")])
-```
+**Returns:** A new `Memory`; this one is unchanged.
 
-Documents are kept in the storage (encrypted when it is) and indexed in
-memory when the collection opens. The index is exact by default; pass
-`index="hnsw"` for very large collections (faster queries, approximate,
-slower to open).
+**Example**
 
 ```python
-from criogen import Collection, Document, Hit
+from criogen import Embedder, Memory
+
+memory = Memory.by_state("user_id", "users").semantic(Embedder.ollama())
 ```
-
-### Collection
-
-```python
-class Collection:
-    def __init__(self, name: str)
-```
-
-Documents searched by meaning. Open one with `open`.
-
-#### Collection.open
-
-```python
-@staticmethod
-async def open(
-    name: str,
-    *,
-    embedder: Any,
-    storage: Any = None,
-    index: str = 'flat',
-    ef_search: Optional[int] = None,
-) -> 'Collection'
-```
-
-Opens collection `name` in `storage` (a Storage or a URL; in
-memory without one), building its index from the stored vectors.
-`embedder`: an `criogen.Embedder`. `index`: `"flat"`
-(exact, the default) or `"hnsw"`.
-
-#### Collection.add
-
-```python
-async def add(documents: Iterable[Union[Document, Mapping[str, Any]]]) -> int
-```
-
-Embeds, stores and indexes documents (an existing id is replaced).
-Returns how many the collection holds.
-
-#### Collection.search
-
-```python
-async def search(
-    query: str,
-    k: int = 5,
-    where: Optional[Mapping[str, Any]] = None,
-) -> List[Hit]
-```
-
-The `k` documents closest in meaning to `query`, best first;
-`where` keeps only those whose metadata has these values.
-
-#### Collection.remove
-
-```python
-async def remove(id: str) -> bool
-```
-
-Removes a document; `True` if it was there.
-
-#### Collection.reload
-
-```python
-async def reload() -> int
-```
-
-Rebuilds the index from storage (another process added documents).
-
-#### Collection.count
-
-```python
-async def count() -> int
-```
-
-Documents in the index.
-
-#### Collection.as_tool
-
-```python
-def as_tool(name: str, description: str) -> CollectionTool
-```
-
-This collection as an agent tool: the model gives a `query` (and
-optionally `k`, up to 20) and gets the hits.
-
-### Document
-
-```python
-@dataclass
-class Document:
-    id: str
-    text: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
-```
-
-A text to search, with an id and metadata.
-
-### Hit
-
-```python
-@dataclass
-class Hit:
-    id: str
-    text: str
-    metadata: Dict[str, Any]
-    score: float
-```
-
-A search result: the document and its cosine similarity to the query.

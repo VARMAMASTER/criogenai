@@ -1,0 +1,295 @@
+---
+title: "Python API: MCP servers"
+description: "Python API reference, mcp servers: McpServer, stdio, http, McpTool."
+---
+
+Tools from Model Context Protocol servers, over HTTP or a local process. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/mcp/).
+
+Tools from MCP servers (Model Context Protocol), for agents.
+
+```python
+from criogen import Agent, mcp
+
+async with await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."]) as files:
+    agent = Agent("openai:gpt-5-mini", tools=[files])          # all its tools
+    # or tools=[files.tool("read_file")], or [*files.tools[:3]]
+
+docs = await mcp.http("https://mcp.example.com/mcp",
+                      headers={"Authorization": f"Bearer {token}"}, prefix="docs")
+```
+
+The client runs in the Rust engine: it speaks MCP 2026-07-28 and falls back
+to the `initialize` handshake of older servers; stdio servers are started
+as a process (and started again if they exit). It only uses tools: a server
+cannot sample your model or read your files.
+
+What a server says is data: names are mapped to names models accept (set
+`prefix` to keep two servers apart), schemas and messages are bounded, and
+its `readOnlyHint` / `idempotentHint` decide nothing unless
+`trust_annotations=True`. Header and env values never appear in a repr or
+an error.
+
+```python
+from criogen import mcp
+
+mcp.McpServer(...)
+```
+
+These are used as `mcp.<name>`.
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`McpServer`](#mcpserver) | class | A connected MCP server. |
+| [`stdio`](#stdio) | function | Starts an MCP server as a process (speaking MCP on stdin and stdout) and lists its tools. |
+| [`http`](#http) | function | Connects to an MCP server over Streamable HTTP and lists its tools. |
+| [`McpTool`](#mcptool) | class | One tool of a connected MCP server; pass it in `Agent(tools=[...])` to give an agent only this tool. |
+
+## McpServer
+
+```python
+class McpServer:
+    def __init__(self, spec: Dict[str, Any])
+```
+
+A connected MCP server. Get one with `stdio` or `http`.
+
+Pass it (all its tools) or some of its `tools` to `Agent`. Close
+it with `close` or `async with`; a stdio server also stops when
+the last agent using it and this object are gone.
+
+Its attributes:
+
+- `name`: the server's name, as given, else the prefix, the command or
+  the URL.
+- `info`: what the server said about itself: `name`, `version`,
+  `protocol_version` and `instructions`.
+- `tools`: its tools (`McpTool`), after `only` and `exclude`.
+
+**Parameters**
+
+- `spec` (`Dict[str, Any]`): The connection settings. Internal: use `stdio` or `http`, which also connect.
+
+**Example**
+
+```python
+import sys
+from criogen import Agent, mcp
+
+async with await mcp.stdio(sys.executable, ["my_mcp_server.py"], prefix="files") as files:
+    agent = Agent("openai:gpt-5-mini", tools=[files])                   # every tool
+    reader = Agent("openai:gpt-5-mini", tools=[files.tool("files_read")])  # one tool
+    result = await agent.run("List the files.")
+```
+
+### McpServer.instructions
+
+```python
+instructions: Optional[str]
+```
+
+The server's instructions for models (not added to any prompt).
+
+### McpServer.tool
+
+```python
+def tool(name: str) -> McpTool
+```
+
+The tool the agent sees as `name`.
+
+**Parameters**
+
+- `name` (`str`): The tool's name with the prefix, as in `tools`.
+
+**Raises**
+
+- `KeyError`: No such tool (the message lists the names).
+
+### McpServer.refresh
+
+```python
+async def refresh() -> None
+```
+
+Lists the tools again (agents already built keep theirs).
+
+### McpServer.call
+
+```python
+async def call(name: str, args: Optional[Mapping[str, Any]] = None) -> Any
+```
+
+Calls a tool directly, without an agent.
+
+**Parameters**
+
+- `name` (`str`): The tool's name as the agent sees it (with the prefix).
+- `args` (`Optional[Mapping[str, Any]]`, default `None`): The tool's arguments. Default none.
+
+**Returns:** The tool's text, its JSON value, or its content blocks.
+
+**Raises**
+
+- `ToolError`: The tool reported an error.
+
+**Example**
+
+```python
+text = await server.call("files_read", {"path": "notes.txt"})
+```
+
+### McpServer.close
+
+```python
+async def close() -> None
+```
+
+Stops the server (a process: stdin closed, killed after 2 s).
+
+## stdio
+
+```python
+async def stdio(
+    command: str,
+    args: Sequence[str] = (),
+    *,
+    env: Optional[Mapping[str, str]] = None,
+    cwd: Optional[str] = None,
+    name: Optional[str] = None,
+    prefix: Optional[str] = None,
+    timeout: Optional[float] = None,
+    connect_timeout: Optional[float] = None,
+    max_message_bytes: Optional[int] = None,
+    trust_annotations: bool = False,
+    only: Optional[Sequence[str]] = None,
+    exclude: Sequence[str] = (),
+) -> McpServer
+```
+
+Starts an MCP server as a process (speaking MCP on stdin and stdout) and lists its tools.
+
+The process inherits this process's environment, plus `env`.
+
+**Parameters**
+
+- `command` (`str`): The program to start, e.g. `"npx"` or `sys.executable`.
+- `args` (`Sequence[str]`, default `()`): Its arguments.
+- `env` (`Optional[Mapping[str, str]]`, default `None`): Environment variables to add or override for the process (their values never appear in a repr or an error).
+- `cwd` (`Optional[str]`, default `None`): The process's working directory. Default: this process's.
+- `name` (`Optional[str]`, default `None`): The server's name in errors and in `repr`. Default: the prefix, else the command or the URL.
+- `prefix` (`Optional[str]`, default `None`): The agent sees each tool as `<prefix>_<tool>`; use it to keep two servers' tools apart.
+- `timeout` (`Optional[float]`, default `None`): The longest one request (a tool call) may take, in seconds. Default 60.
+- `connect_timeout` (`Optional[float]`, default `None`): The longest connecting and listing the tools may take, in seconds. Default 30.
+- `max_message_bytes` (`Optional[int]`, default `None`): The largest message read from the server, in bytes. Default 4 MiB.
+- `trust_annotations` (`bool`, default `False`): Believe the server's `readOnlyHint` and `idempotentHint` (they decide whether a failed call is retried). Default `False`: the hints are the server's own claims.
+- `only` (`Optional[Sequence[str]]`, default `None`): Take only these tools (the server's names, before `prefix`).
+- `exclude` (`Sequence[str]`, default `()`): Leave these tools out (the server's names).
+
+**Returns:** The connected `McpServer`.
+
+**Raises**
+
+- `CriogenError`: The server could not be started or answered something unusable: `mcp_connect`, `mcp_protocol`, `mcp_timeout`, `mcp_tool_name` (two tools map to the same name) or `mcp_tool_schema`.
+
+**Example**
+
+```python
+from criogen import Agent, mcp
+
+files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."], prefix="fs")
+try:
+    agent = Agent("openai:gpt-5-mini", tools=[files])
+    result = await agent.run("Which files are here?")
+finally:
+    await files.close()
+```
+
+## http
+
+```python
+async def http(
+    url: str,
+    *,
+    headers: Optional[Mapping[str, str]] = None,
+    name: Optional[str] = None,
+    prefix: Optional[str] = None,
+    timeout: Optional[float] = None,
+    connect_timeout: Optional[float] = None,
+    max_message_bytes: Optional[int] = None,
+    trust_annotations: bool = False,
+    only: Optional[Sequence[str]] = None,
+    exclude: Sequence[str] = (),
+) -> McpServer
+```
+
+Connects to an MCP server over Streamable HTTP and lists its tools.
+
+Use `https`; plain `http` is refused when `headers` are set, except
+to this computer (headers usually hold a token).
+
+**Parameters**
+
+- `url` (`str`): The server's MCP endpoint, e.g. `"https://mcp.example.com/mcp"`.
+- `headers` (`Optional[Mapping[str, str]]`, default `None`): Headers sent with every request, e.g. `Authorization` (their values never appear in a repr or an error).
+- `name` (`Optional[str]`, default `None`): The server's name in errors and in `repr`. Default: the prefix, else the command or the URL.
+- `prefix` (`Optional[str]`, default `None`): The agent sees each tool as `<prefix>_<tool>`; use it to keep two servers' tools apart.
+- `timeout` (`Optional[float]`, default `None`): The longest one request (a tool call) may take, in seconds. Default 60.
+- `connect_timeout` (`Optional[float]`, default `None`): The longest connecting and listing the tools may take, in seconds. Default 30.
+- `max_message_bytes` (`Optional[int]`, default `None`): The largest message read from the server, in bytes. Default 4 MiB.
+- `trust_annotations` (`bool`, default `False`): Believe the server's `readOnlyHint` and `idempotentHint` (they decide whether a failed call is retried). Default `False`: the hints are the server's own claims.
+- `only` (`Optional[Sequence[str]]`, default `None`): Take only these tools (the server's names, before `prefix`).
+- `exclude` (`Sequence[str]`, default `()`): Leave these tools out (the server's names).
+
+**Returns:** The connected `McpServer`.
+
+**Raises**
+
+- `CriogenError`: The server could not be reached or answered something unusable: `mcp_connect`, `mcp_protocol`, `mcp_timeout`, `mcp_tool_name` or `mcp_tool_schema`.
+
+**Example**
+
+```python
+import os
+from criogen import Agent, mcp
+
+docs = await mcp.http(
+    "https://mcp.example.com/mcp",
+    headers={"Authorization": f"Bearer {os.environ['DOCS_MCP_TOKEN']}"},
+    prefix="docs",
+)
+agent = Agent("openai:gpt-5-mini", tools=[docs])
+```
+
+## McpTool
+
+```python
+class McpTool:
+    def __init__(self, server: 'McpServer', spec: Dict[str, Any])
+```
+
+One tool of a connected MCP server; pass it in `Agent(tools=[...])` to give an agent only this tool.
+
+Get it from `McpServer.tools` or `McpServer.tool`. Calling it
+(`await tool(text="hi")`) calls the server directly, like
+`McpServer.call`.
+
+Its attributes:
+
+- `server`: the `McpServer` it belongs to.
+- `name`: the name the agent sees (with the prefix, mapped to characters
+  models accept).
+- `description`: the server's description of the tool (cut to 8,000
+  characters).
+- `schema`: the tool's input JSON Schema.
+- `read_only`: the server says the tool changes nothing (believed only
+  with `trust_annotations=True`; else `False`).
+- `destructive`: the server says the tool may delete or overwrite data.
+- `idempotent`: the server says calling it twice is safe (believed only
+  with `trust_annotations=True`, or when it is read-only; else `False`).
+
+**Parameters**
+
+- `server` (`'McpServer'`): The server. Internal: tools are made when the server connects.
+- `spec` (`Dict[str, Any]`): The tool as the server described it.

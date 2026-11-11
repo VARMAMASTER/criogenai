@@ -6,28 +6,84 @@ export const API_NAV: NavGroup[] = [
     "label": "Python API",
     "items": [
       {
-        "label": "Agents, tools and errors",
-        "slug": "reference/api/python/agents"
+        "label": "Overview",
+        "slug": "reference/api/python"
       },
       {
-        "label": "Models and the gateway",
+        "label": "Agents",
+        "slug": "reference/api/python/agent"
+      },
+      {
+        "label": "Tools",
+        "slug": "reference/api/python/tools"
+      },
+      {
+        "label": "Hooks",
+        "slug": "reference/api/python/hooks"
+      },
+      {
+        "label": "Errors",
+        "slug": "reference/api/python/errors"
+      },
+      {
+        "label": "Usage and cost",
+        "slug": "reference/api/python/usage"
+      },
+      {
+        "label": "Models",
         "slug": "reference/api/python/models"
       },
       {
-        "label": "Storage, memory and collections",
+        "label": "Gateway",
+        "slug": "reference/api/python/gateway"
+      },
+      {
+        "label": "Keys and environment",
+        "slug": "reference/api/python/env"
+      },
+      {
+        "label": "Storage and memory",
         "slug": "reference/api/python/storage"
       },
       {
-        "label": "Workflows",
-        "slug": "reference/api/python/workflows"
+        "label": "Collections",
+        "slug": "reference/api/python/collections"
       },
       {
-        "label": "Patterns, specialists, web and MCP",
+        "label": "Workflows",
+        "slug": "reference/api/python/workflow"
+      },
+      {
+        "label": "Patterns",
         "slug": "reference/api/python/patterns"
       },
       {
-        "label": "Tracing, evals and checks",
-        "slug": "reference/api/python/observability"
+        "label": "Specialist agents",
+        "slug": "reference/api/python/specialists"
+      },
+      {
+        "label": "MCP servers",
+        "slug": "reference/api/python/mcp"
+      },
+      {
+        "label": "Web search and page reading",
+        "slug": "reference/api/python/web"
+      },
+      {
+        "label": "Telemetry",
+        "slug": "reference/api/python/telemetry"
+      },
+      {
+        "label": "Trace viewer",
+        "slug": "reference/api/python/trace"
+      },
+      {
+        "label": "Evals",
+        "slug": "reference/api/python/evals"
+      },
+      {
+        "label": "Readiness check",
+        "slug": "reference/api/python/ready"
       }
     ]
   },
@@ -35,28 +91,88 @@ export const API_NAV: NavGroup[] = [
     "label": "TypeScript API",
     "items": [
       {
-        "label": "Agents, tools and errors",
-        "slug": "reference/api/typescript/agents"
+        "label": "Overview",
+        "slug": "reference/api/typescript"
       },
       {
-        "label": "Models and the gateway",
+        "label": "Agents",
+        "slug": "reference/api/typescript/agent"
+      },
+      {
+        "label": "Tools",
+        "slug": "reference/api/typescript/tools"
+      },
+      {
+        "label": "Hooks",
+        "slug": "reference/api/typescript/hooks"
+      },
+      {
+        "label": "Errors",
+        "slug": "reference/api/typescript/errors"
+      },
+      {
+        "label": "Usage and cost",
+        "slug": "reference/api/typescript/usage"
+      },
+      {
+        "label": "Models",
         "slug": "reference/api/typescript/models"
       },
       {
-        "label": "Storage, memory and collections",
+        "label": "Gateway",
+        "slug": "reference/api/typescript/gateway"
+      },
+      {
+        "label": "Keys and environment",
+        "slug": "reference/api/typescript/env"
+      },
+      {
+        "label": "Redaction",
+        "slug": "reference/api/typescript/redact"
+      },
+      {
+        "label": "Storage and memory",
         "slug": "reference/api/typescript/storage"
       },
       {
-        "label": "Workflows",
-        "slug": "reference/api/typescript/workflows"
+        "label": "Collections",
+        "slug": "reference/api/typescript/collections"
       },
       {
-        "label": "Patterns, specialists, web and MCP",
+        "label": "Workflows",
+        "slug": "reference/api/typescript/workflow"
+      },
+      {
+        "label": "Patterns",
         "slug": "reference/api/typescript/patterns"
       },
       {
-        "label": "Tracing, evals and checks",
-        "slug": "reference/api/typescript/observability"
+        "label": "Specialist agents",
+        "slug": "reference/api/typescript/specialists"
+      },
+      {
+        "label": "MCP servers",
+        "slug": "reference/api/typescript/mcp"
+      },
+      {
+        "label": "Web search and page reading",
+        "slug": "reference/api/typescript/web"
+      },
+      {
+        "label": "Telemetry",
+        "slug": "reference/api/typescript/telemetry"
+      },
+      {
+        "label": "Trace viewer",
+        "slug": "reference/api/typescript/trace"
+      },
+      {
+        "label": "Evals",
+        "slug": "reference/api/typescript/evals"
+      },
+      {
+        "label": "Readiness check",
+        "slug": "reference/api/typescript/ready"
       }
     ]
   },

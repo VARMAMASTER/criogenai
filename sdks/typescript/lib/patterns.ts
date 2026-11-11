@@ -1,8 +1,8 @@
 // Design patterns for agentic systems, ready to use (design 0019).
 //
-//   import { patterns } from "criogen";
-//   const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
-//   console.log(String(await flow.run("Write about solar panels")));
+//     import { patterns } from "criogen";
+//     const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
+//     console.log(String(await flow.run("Write about solar panels")));
 //
 // Steps can be an Agent, a Specialist or its registered name (a string), a
 // plain function `text => text` (sync or async), or `[name, step]`. The model
@@ -24,10 +24,16 @@ import * as specialists from "./specialists";
 
 /** No loop runs more often than this, whatever the caller asks for. */
 export const CEILING = 50;
+/** The environment variable that names the model for specialists when a pattern gets no `model`. */
 export const DEFAULT_MODEL_ENV = "CRIOGEN_MODEL";
 
 type State = Record<string, unknown>;
 type Run = (text: string) => Promise<string>;
+/**
+ * One step of a pattern: an `Agent`, a `Specialist`, a registered specialist's
+ * name (a string), a function `text => text` (sync or async), or
+ * `[name, step]` to name the step in the trace.
+ */
 export type Step = Agent<any> | specialists.Specialist | string | ((text: string) => unknown) | [string, Step];
 
 interface Entry {
@@ -37,12 +43,25 @@ interface Entry {
 
 /** What a pattern produced. `String(result)` is the output; `result.explain()` shows each step. */
 export class PatternResult {
+  /**
+   * @param output The final answer, or `null` while suspended.
+   * @param trace Each step and what it returned, in order.
+   * @param state The workflow's final state.
+   * @param stopReason Why it ended.
+   * @param suspended `true` when a person must answer first.
+   * @param waitingFor What the person is asked, when suspended.
+   * @param raw The workflow result it was made from.
+   */
   constructor(
+    /** The final answer, or `null` while the run waits for a person. */
     readonly output: string | null,
+    /** Each step and what it returned (`{ step, output }`), in order. */
     readonly trace: Entry[],
+    /** The workflow's final state. */
     readonly state: State,
     /** Why it ended: done, condition, approved, max_iterations, max_rounds, final, max_handoffs, unknown_handoff, rejected or suspended. */
     readonly stopReason: string,
+    /** `true` when a `humanReview` run waits for a person: continue with `pattern.resume`. */
     readonly suspended: boolean,
     /** What a person is asked, when suspended. */
     readonly waitingFor: unknown,
@@ -50,6 +69,7 @@ export class PatternResult {
     readonly raw: WorkflowResult,
   ) {}
 
+  /** The output as text (`""` when there is none), so `String(result)` is the answer. */
   toString(): string {
     return this.output ?? "";
   }
@@ -123,30 +143,63 @@ function unique(names: string[]): string[] {
 
 const entry = (step: string, output: string): Entry[] => [{ step, output }];
 
-/** A workflow pattern: run it, compile it for durability, or extend it. */
+/**
+ * A workflow pattern: run it, compile it for durability, or extend it.
+ *
+ * Returned by `sequential`, `parallel`, `loop`, `iterativeRefinement`,
+ * `reviewAndCritique`, `swarm`, `humanReview`, `quick` and `custom`.
+ */
 export class Pattern {
   #compiled?: CompiledWorkflow;
 
+  /**
+   * @param name The pattern's name, e.g. `"sequential"`.
+   * @param workflow The workflow that implements it.
+   * @param budget The step limit for `run` when none is given.
+   */
   constructor(
+    /** The pattern's name, e.g. `"sequential"` or `"review_and_critique"`. */
     readonly name: string,
     /** The plain Workflow: add nodes and edges to extend it before the first run. */
     readonly workflow: Workflow,
     private readonly budget: number,
   ) {}
 
-  /** The checked, durable form: `compile(storage).thread(id).run({ input })`, with approvals, resume and an audit trail. */
+  /**
+   * The checked, durable form: `compile(storage).thread(id).run({ input })`, with approvals, resume and an audit trail.
+   *
+   * The state starts as `{ input }`; the answer is in `state.output`.
+   *
+   * @param storage A `Storage` or a URL for the threads; in memory without one.
+   * @throws {ValidationError} The workflow (after your changes) does not validate.
+   */
   compile(storage?: Storage | string): CompiledWorkflow {
     return this.workflow.compile({ storage });
   }
 
-  /** Runs once. A `humanReview` pattern returns `suspended: true`; continue with `resume`. */
+  /**
+   * Runs once. A `humanReview` pattern returns `suspended: true`; continue with `resume`.
+   *
+   * @param text The request: the first step's input.
+   * @param options `maxSteps`: the run's step limit (each pattern sets one from its own caps). `signal`: aborting it cancels the run.
+   * @returns The answer (`String(result)`), the trace and why it ended.
+   */
   async run(text: string, options: { maxSteps?: number; signal?: AbortSignal } = {}): Promise<PatternResult> {
     this.#compiled ??= this.compile();
     const raw = await this.#compiled.run({ input: text }, { maxSteps: options.maxSteps ?? this.budget, signal: options.signal });
     return toResult(raw);
   }
 
-  /** Continues a `humanReview` run: "approve", `{ decision: "edit", text }` or `{ decision: "reject" }`. */
+  /**
+   * Continues a `humanReview` run: "approve", `{ decision: "edit", text }` or `{ decision: "reject" }`.
+   *
+   * Works on the result of this object's own `run`. For a pause that must
+   * outlive the process, use `compile(storage).thread(id)` instead.
+   *
+   * @param paused The suspended result of `run`.
+   * @param decision `"approve"` keeps the draft, `{ decision: "edit", text }` replaces it, `{ decision: "reject" }` ends with an empty output and `stopReason` "rejected".
+   * @throws {Error} `paused` is not a run of this pattern that waits for a person.
+   */
   async resume(paused: PatternResult, decision: unknown): Promise<PatternResult> {
     if (!this.#compiled || !paused.suspended || !paused.raw.interrupts.length) {
       throw new Error("resume needs the result of a run that is waiting for a person");
@@ -168,7 +221,22 @@ function toResult(raw: WorkflowResult): PatternResult {
   );
 }
 
-/** Custom logic: any Workflow, with the same `run` / `compile` as the ready-made patterns. Start state `{ input }`; the answer is `state.output`. */
+/**
+ * Custom logic: any Workflow, with the same `run` / `compile` as the ready-made patterns. Start state `{ input }`; the answer is `state.output`.
+ *
+ * @param workflow A workflow whose nodes read `state.input` and write `state.output` (and optionally `trace` and `stop_reason`).
+ * @param options `name` (default `"custom"`) and `maxSteps`, the step limit for `run` (default 64).
+ *
+ * @example
+ * import { END, Workflow, patterns } from "criogen";
+ *
+ * const wf = new Workflow()
+ *   .node("shout", (state) => ({ output: String(state.input).toUpperCase() }))
+ *   .start("shout")
+ *   .edge("shout", END);
+ * const result = await patterns.custom(wf).run("hello");
+ * console.log(String(result)); // "HELLO"
+ */
 export function custom(workflow: Workflow, options: { name?: string; maxSteps?: number } = {}): Pattern {
   return new Pattern(options.name ?? "custom", workflow, options.maxSteps ?? 64);
 }
@@ -188,7 +256,25 @@ function stepNode(name: string, run: Run) {
 
 // ----------------------------------------------------------- workflow patterns
 
-/** Runs the steps in a fixed order; each one's output is the next one's input. `quick("researcher > writer")` is the one-liner. */
+/**
+ * Runs the steps in a fixed order; each one's output is the next one's input. `quick("researcher > writer")` is the one-liner.
+ *
+ * @param steps At least one step.
+ * @param options `model`: the model for specialist steps (else the `CRIOGEN_MODEL` environment variable).
+ * @throws {Error} No steps, or a specialist step and no model.
+ * @throws {TypeError} A step is not an Agent, a Specialist (or its name) or a function.
+ *
+ * @example
+ * import { patterns } from "criogen";
+ *
+ * const flow = patterns.sequential([
+ *   ["trim", (text: string) => text.trim()],
+ *   ["shout", async (text: string) => text.toUpperCase()],
+ * ]);
+ * const result = await flow.run("  hello  ");
+ * console.log(String(result)); // "HELLO"
+ * console.log(result.explain()); // ended: done, then one line per step
+ */
 export function sequential(steps: Step[], options: { model?: Model } = {}): Pattern {
   if (!steps.length) throw new Error("sequential needs at least one step");
   const resolved = steps.map((s, i) => resolve(s, options.model, i));
@@ -207,6 +293,24 @@ export function sequential(steps: Step[], options: { model?: Model } = {}): Patt
  * Runs the branches at the same time on the same input, then combines them:
  * with a `synthesizer` step (it receives the input and every branch's answer),
  * or as a titled list in branch order.
+ *
+ * @param branches The steps, as a list or as `{ name: step }` (the names title the combined list).
+ * @param options `synthesizer`: a step that writes one answer from the request and the branches' answers. `model`: the model for specialist steps.
+ * @throws {Error} No branches.
+ *
+ * @example
+ * import { patterns } from "criogen";
+ *
+ * const flow = patterns.parallel({
+ *   words: (text: string) => `${text.split(" ").length} words`,
+ *   letters: (text: string) => `${text.length} characters`,
+ * });
+ * console.log(String(await flow.run("the quick brown fox")));
+ * // ## words
+ * // 4 words
+ * //
+ * // ## letters
+ * // 19 characters
  */
 export function parallel(branches: Step[] | Record<string, Step>, options: { synthesizer?: Step; model?: Model } = {}): Pattern {
   const items: Step[] = Array.isArray(branches) ? branches : Object.entries(branches).map(([n, s]): Step => [n, s]);
@@ -236,6 +340,18 @@ export function parallel(branches: Step[] | Record<string, Step>, options: { syn
 /**
  * Repeats the steps (a chain) until `until(text, round)` is true or
  * `maxIterations` is reached (default 5, at most 50). `stopReason` says which.
+ *
+ * @param steps The chain to repeat; each round starts from the last round's output.
+ * @param until Checked after each round with the output and the round number (from 1): `true` stops (`stopReason` "condition").
+ * @param options `maxIterations` (a whole number of at least 1; values above 50 count as 50) and `model` for specialist steps.
+ * @throws {RangeError} `maxIterations` is not a whole number of at least 1.
+ *
+ * @example
+ * import { patterns } from "criogen";
+ *
+ * const flow = patterns.loop([(text: string) => text + "!"], (text) => text.endsWith("!!!"), { maxIterations: 10 });
+ * const result = await flow.run("go");
+ * console.log(String(result), result.stopReason); // "go!!!" "condition"
  */
 export function loop(
   steps: Step[],
@@ -263,7 +379,22 @@ export function loop(
   return new Pattern("loop", wf, limit * (steps.length + 2) + 8);
 }
 
-/** Improves a result step by step: `refine` gets the current text and returns a better one; stops when `score(text) >= threshold` or after `maxIterations`. */
+/**
+ * Improves a result step by step: `refine` gets the current text and returns a better one; stops when `score(text) >= threshold` or after `maxIterations`.
+ *
+ * @param refine The step that rewrites the text.
+ * @param score Rates a text, typically from 0 to 1.
+ * @param options `threshold` (default 0.8), `maxIterations` (default 5, at most 50) and `model` for a specialist step.
+ *
+ * @example
+ * import { patterns } from "criogen";
+ *
+ * const flow = patterns.iterativeRefinement(
+ *   (text: string) => text + " More detail.",
+ *   (text) => Math.min(text.length / 40, 1),
+ * );
+ * console.log((await flow.run("A short note.")).stopReason); // "condition"
+ */
 export function iterativeRefinement(
   refine: Step,
   score: (text: string) => number,
@@ -278,6 +409,19 @@ export function iterativeRefinement(
  * with APPROVED, or `approved(reply)` is true) or returns feedback; the
  * generator revises. Ends on approval or after `maxRounds` (default 3, at most
  * 50) with the last draft. `stopReason` is "approved" or "max_rounds".
+ *
+ * @param generator The step that writes and revises. From the second round it gets the request, its previous draft and the critic's feedback.
+ * @param critic The step that reviews; it gets the request and the draft.
+ * @param options `maxRounds` (default 3, at most 50), `approved` (decides from the critic's reply; default: it starts with "APPROVED"), `model` for specialist steps.
+ * @throws {RangeError} `maxRounds` is not a whole number of at least 1.
+ *
+ * @example
+ * import { Agent, FakeModel, patterns } from "criogen";
+ *
+ * const writer = new Agent({ model: new FakeModel(["Draft one.", "Draft two, with sources."]) });
+ * const critic = new Agent({ model: new FakeModel(["Add sources.", "APPROVED"]) });
+ * const result = await patterns.reviewAndCritique(writer, critic).run("Write a short note on hand washing.");
+ * console.log(String(result), result.stopReason); // "Draft two, with sources." "approved"
  */
 export function reviewAndCritique(
   generator: Step,
@@ -319,6 +463,19 @@ export function reviewAndCritique(
  * (or is a dispatcher step that replies with a name); default: the first. Ends
  * on FINAL or after `maxHandoffs` (default 6, at most 50); a hand-off to an
  * unknown name ends the run with stopReason "unknown_handoff".
+ *
+ * @param agents At least two named steps, `{ name: step }`.
+ * @param options `start`: the first agent's name, or a dispatcher step that replies with a name. `maxHandoffs` (default 6, at most 50). `model` for specialist steps.
+ * @throws {Error} Fewer than two agents.
+ * @throws {RangeError} `maxHandoffs` is not a whole number of at least 1.
+ *
+ * @example
+ * import { Agent, FakeModel, patterns } from "criogen";
+ *
+ * const triage = new Agent({ model: new FakeModel(["This is a billing question.\nHANDOFF: billing"]) });
+ * const billing = new Agent({ model: new FakeModel(["Your invoice was sent on Monday.\nFINAL"]) });
+ * const result = await patterns.swarm({ triage, billing }).run("Where is my invoice?");
+ * console.log(result.stopReason, result.trace.map((t) => t.step)); // "final" ["triage", "billing"]
  */
 export function swarm(
   agents: Record<string, Step>,
@@ -372,6 +529,20 @@ export function swarm(
  * Runs a step, then pauses for a person to look at its draft. Resume with
  * "approve", `{ decision: "edit", text }` or `{ decision: "reject" }`. With
  * `compile(storage)` the pause is durable: another process can resume it days later.
+ *
+ * While paused, `waitingFor` is `{ draft, question }`.
+ *
+ * @param step The step that writes the draft.
+ * @param options `model` for a specialist step.
+ *
+ * @example
+ * import { patterns } from "criogen";
+ *
+ * const flow = patterns.humanReview((text: string) => `Reply: ${text}`);
+ * const paused = await flow.run("Thanks for your order.");
+ * console.log(paused.suspended, paused.waitingFor); // true { draft: "Reply: ...", question: "..." }
+ * const done = await flow.resume(paused, { decision: "edit", text: "Thank you for your order!" });
+ * console.log(String(done), done.stopReason); // "Thank you for your order!" "approved"
  */
 export function humanReview(step: Step, options: { model?: Model } = {}): Pattern {
   const [name, run] = resolve(step, options.model, 0);
@@ -397,12 +568,28 @@ export function humanReview(step: Step, options: { model?: Model } = {}): Patter
 /**
  * A pattern from one line of registered specialist names (plug and play):
  *
- *   quick("researcher > writer")   one after the other
- *   quick("sentiment | keywords")  at the same time
- *   quick("writer <-> critic")     write, review, revise until approved
- *   quick("summarizer")            a single specialist
+ *     quick("researcher > writer")   one after the other
+ *     quick("sentiment | keywords")  at the same time
+ *     quick("writer <-> critic")     write, review, revise until approved
+ *     quick("summarizer")            a single specialist
  *
  * One kind of connector per line (combine patterns with the functions above).
+ *
+ * The specialists need a model: `options.model`, or the `CRIOGEN_MODEL`
+ * environment variable.
+ *
+ * @param spec The line, e.g. `"researcher > writer"`.
+ * @param options `model`: a model or a model string such as `"openai:gpt-5-mini"`.
+ * @throws {Error} The line is empty, mixes connectors, has an empty name, or uses `<->` with other than two names; a name is not registered; or there is no model.
+ *
+ * @example
+ * import { patterns } from "criogen";
+ *
+ * // Needs OPENAI_API_KEY.
+ * const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
+ * const result = await flow.run("Write about solar panels");
+ * console.log(String(result));
+ * console.log(result.explain());
  */
 export function quick(spec: string, options: { model?: Model } = {}): Pattern {
   if (typeof spec !== "string" || !spec.trim()) throw new Error("quick needs a line like 'researcher > writer'");
@@ -428,7 +615,29 @@ const REACT =
 
 type AgentExtras = Omit<AgentOptions, "model" | "tools" | "instructions">;
 
-/** A single agent in a reason-act loop with a hard cap on model calls (default 8, at most 50). */
+/**
+ * A single agent in a reason-act loop with a hard cap on model calls (default 8, at most 50).
+ *
+ * Returns an `Agent`, so it can be a step of another pattern.
+ *
+ * @param model The agent's model.
+ * @param tools The tools it may call.
+ * @param options Any other `Agent` option, plus `maxSteps` (the cap on model calls) and `instructions` (put before the reason-act instructions).
+ * @throws {RangeError} `maxSteps` is not a whole number of at least 1.
+ *
+ * @example
+ * import { FakeModel, FakeReply, patterns, tool } from "criogen";
+ *
+ * const lookup = tool({
+ *   name: "order_status",
+ *   description: "Status of an order.",
+ *   input: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+ *   run: async ({ id }: { id: string }) => ({ id, status: "shipped" }),
+ * });
+ * const model = new FakeModel([FakeReply.toolCall("order_status", { id: "A-1" }), "Order A-1 has shipped."]);
+ * const agent = patterns.react(model, [lookup], { maxSteps: 4 });
+ * console.log((await agent.run("Where is order A-1?")).text);
+ */
 export function react(
   model: Model,
   tools: (Tool<any> | AgentTool)[],
@@ -443,6 +652,24 @@ export function react(
  * An agent that reads each request and hands it to the right specialist, which
  * it calls as a tool. `specialists`: `{ name: Agent | Specialist | "registered-name" | [Agent, "when to use it"] }`.
  * A model decides the routing (more flexible than a fixed workflow, and more model calls).
+ *
+ * Returns an `Agent`; each specialist becomes one of its tools.
+ *
+ * @param model The coordinator's model (also used to build specialists given as a `Specialist` or a name).
+ * @param team The specialists by tool name. A description (from the pair, or the Specialist's own) tells the model when to call each.
+ * @param options Any other `Agent` option, plus `instructions` to replace the default coordinator instructions.
+ * @throws {Error} The team is empty, or a name is not a registered specialist.
+ * @throws {TypeError} A team member is not an Agent, a Specialist or its name.
+ *
+ * @example
+ * import { Agent, FakeModel, FakeReply, patterns } from "criogen";
+ *
+ * const billing = new Agent({ model: new FakeModel(["Your invoice was sent on Monday."]) });
+ * const lead = patterns.coordinator(
+ *   new FakeModel([FakeReply.toolCall("billing", { input: "Where is my invoice?" }), "It was sent on Monday."]),
+ *   { billing: [billing, "Invoices and payments"] },
+ * );
+ * console.log((await lead.run("Where is my invoice?")).text);
  */
 export function coordinator(
   model: Model,
@@ -481,6 +708,22 @@ type TreeNode = Agent<any> | specialists.Specialist | string | [Agent<any>, stri
  * further down, workers do it. `tree` maps names to a worker (as for
  * `coordinator`) or to a nested object, which becomes a sub-coordinator
  * (describe it with a `_description` key).
+ *
+ * Returns the root coordinator, an `Agent`.
+ *
+ * @param model The model of every coordinator (and of specialists given as a `Specialist` or a name).
+ * @param tree Names mapped to workers or to nested objects (sub-teams).
+ * @param options Any other `Agent` option for the root, plus its `instructions`.
+ *
+ * @example
+ * import { patterns } from "criogen";
+ *
+ * // Needs OPENAI_API_KEY; "researcher" and "writer" are registered specialists.
+ * const lead = patterns.hierarchical("openai:gpt-5-mini", {
+ *   research: { _description: "Finds facts", web: "researcher" },
+ *   writing: { _description: "Writes the text", writer: "writer" },
+ * });
+ * console.log((await lead.run("A one-page brief on heat pumps")).text);
  */
 export function hierarchical(model: Model, tree: Record<string, TreeNode>, options: AgentExtras & { instructions?: string } = {}): Agent<any> {
   const build = (level: Record<string, TreeNode>): Record<string, any> => {

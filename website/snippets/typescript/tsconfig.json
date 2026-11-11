@@ -21,6 +21,12 @@
       ],
       "criogen/web": [
         "../../../sdks/typescript/dist/index.d.ts"
+      ],
+      "@/lib/agent": [
+        "./deploy_agent.ts"
+      ],
+      "@/lib/support_agent": [
+        "./support_agent.ts"
       ]
     },
     "lib": [

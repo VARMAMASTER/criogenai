@@ -1,17 +1,17 @@
 ---
-title: "TypeScript API: Patterns, specialists, web and MCP"
-description: "TypeScript API reference for patterns, specialists, web and mcp: sequential, parallel, loop, custom, CEILING, Step, PatternResult, Pattern, and more."
+title: "TypeScript API: Patterns"
+description: "TypeScript API reference, patterns: sequential, parallel, loop, custom, CEILING, DEFAULT_MODEL_ENV, Step, PatternResult, and more."
 ---
 
-Generated from the source of `criogen` 0.1.6 (declarations and doc comments) every time the site is built. Also in [Python](/docs/reference/api/python/patterns/) and [Rust](/docs/reference/api/rust/). Back to the [API reference](/docs/reference/api/).
-
-## Patterns
+Ready-made multi-agent designs: sequential, parallel, loops, routers, debates and more. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/patterns/).
 
 Design patterns for agentic systems, ready to use.
 
-  &#105;mport \{ patterns \} from "criogen";
-  const flow = patterns.quick("researcher > writer", \{ model: "openai:gpt-5-mini" \});
-  console.log(String(await flow.run("Write about solar panels")));
+```ts
+import { patterns } from "criogen";
+const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
+console.log(String(await flow.run("Write about solar panels")));
+```
 
 Steps can be an Agent, a Specialist or its registered name (a string), a
 plain function `text => text` (sync or async), or `[name, step]`. The model
@@ -30,7 +30,29 @@ patterns.sequential
 
 These are used as `patterns.<name>`.
 
-### sequential
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`sequential`](#sequential) | function | Runs the steps in a fixed order; each one's output is the next one's input. |
+| [`parallel`](#parallel) | function | Runs the branches at the same time on the same input, then combines them: with a `synthesizer` step (it receives the input and every branch's answer), or as a titled list in branch order. |
+| [`loop`](#loop) | function | Repeats the steps (a chain) until `until(text, round)` is true or `maxIterations` is reached (default 5, at most 50). |
+| [`custom`](#custom) | function | Custom logic: any Workflow, with the same `run` / `compile` as the ready-made patterns. |
+| [`CEILING`](#ceiling) | constant | No loop runs more often than this, whatever the caller asks for. |
+| [`DEFAULT_MODEL_ENV`](#default_model_env) | constant | The environment variable that names the model for specialists when a pattern gets no `model`. |
+| [`Step`](#step) | type | One step of a pattern: an `Agent`, a `Specialist`, a registered specialist's name (a string), a function `text => text` (sync or async), or `[name, step]` to name the step in the trace. |
+| [`PatternResult`](#patternresult) | class | What a pattern produced. |
+| [`Pattern`](#pattern) | class | A workflow pattern: run it, compile it for durability, or extend it. |
+| [`iterativeRefinement`](#iterativerefinement) | function | Improves a result step by step: `refine` gets the current text and returns a better one; stops when `score(text) >= threshold` or after `maxIterations`. |
+| [`reviewAndCritique`](#reviewandcritique) | function | A generator writes, a critic reviews. |
+| [`swarm`](#swarm) | function | Agents hand the work to each other with no central coordinator. |
+| [`humanReview`](#humanreview) | function | Runs a step, then pauses for a person to look at its draft. |
+| [`quick`](#quick) | function | A pattern from one line of registered specialist names (plug and play): |
+| [`react`](#react) | function | A single agent in a reason-act loop with a hard cap on model calls (default 8, at most 50). |
+| [`coordinator`](#coordinator) | function | An agent that reads each request and hands it to the right specialist, which it calls as a tool. |
+| [`hierarchical`](#hierarchical) | function | A coordinator of coordinators: the root splits the work, each level hands it further down, workers do it. |
+
+## sequential
 
 ```ts
 function sequential(steps: Step[], options?: { model?: Model; }): Pattern
@@ -38,7 +60,31 @@ function sequential(steps: Step[], options?: { model?: Model; }): Pattern
 
 Runs the steps in a fixed order; each one's output is the next one's input. `quick("researcher > writer")` is the one-liner.
 
-### parallel
+**Parameters**
+
+- `steps` (`Step[]`): At least one step.
+- `options` (`{ model?: Model; }`, default `{}`): `model`: the model for specialist steps (else the `CRIOGEN_MODEL` environment variable).
+
+**Raises**
+
+- `Error`: No steps, or a specialist step and no model.
+- `TypeError`: A step is not an Agent, a Specialist (or its name) or a function.
+
+**Example**
+
+```ts
+import { patterns } from "criogen";
+
+const flow = patterns.sequential([
+  ["trim", (text: string) => text.trim()],
+  ["shout", async (text: string) => text.toUpperCase()],
+]);
+const result = await flow.run("  hello  ");
+console.log(String(result)); // "HELLO"
+console.log(result.explain()); // ended: done, then one line per step
+```
+
+## parallel
 
 ```ts
 function parallel(branches: Step[] | Record<string, Step>, options?: { synthesizer?: Step; model?: Model; }): Pattern
@@ -48,7 +94,33 @@ Runs the branches at the same time on the same input, then combines them:
 with a `synthesizer` step (it receives the input and every branch's answer),
 or as a titled list in branch order.
 
-### loop
+**Parameters**
+
+- `branches` (`Step[] | Record<string, Step>`): The steps, as a list or as `{ name: step }` (the names title the combined list).
+- `options` (`{ synthesizer?: Step; model?: Model; }`, default `{}`): `synthesizer`: a step that writes one answer from the request and the branches' answers. `model`: the model for specialist steps.
+
+**Raises**
+
+- `Error`: No branches.
+
+**Example**
+
+```ts
+import { patterns } from "criogen";
+
+const flow = patterns.parallel({
+  words: (text: string) => `${text.split(" ").length} words`,
+  letters: (text: string) => `${text.length} characters`,
+});
+console.log(String(await flow.run("the quick brown fox")));
+// ## words
+// 4 words
+//
+// ## letters
+// 19 characters
+```
+
+## loop
 
 ```ts
 function loop(steps: Step[], until: (text: string, round: number) => boolean, options?: { maxIterations?: number; model?: Model; }): Pattern
@@ -57,7 +129,27 @@ function loop(steps: Step[], until: (text: string, round: number) => boolean, op
 Repeats the steps (a chain) until `until(text, round)` is true or
 `maxIterations` is reached (default 5, at most 50). `stopReason` says which.
 
-### custom
+**Parameters**
+
+- `steps` (`Step[]`): The chain to repeat; each round starts from the last round's output.
+- `until` (`(text: string, round: number) => boolean`): Checked after each round with the output and the round number (from 1): `true` stops (`stopReason` "condition").
+- `options` (`{ maxIterations?: number; model?: Model; }`, default `{}`): `maxIterations` (a whole number of at least 1; values above 50 count as 50) and `model` for specialist steps.
+
+**Raises**
+
+- `RangeError`: `maxIterations` is not a whole number of at least 1.
+
+**Example**
+
+```ts
+import { patterns } from "criogen";
+
+const flow = patterns.loop([(text: string) => text + "!"], (text) => text.endsWith("!!!"), { maxIterations: 10 });
+const result = await flow.run("go");
+console.log(String(result), result.stopReason); // "go!!!" "condition"
+```
+
+## custom
 
 ```ts
 function custom(workflow: Workflow, options?: { name?: string; maxSteps?: number; }): Pattern
@@ -65,7 +157,25 @@ function custom(workflow: Workflow, options?: { name?: string; maxSteps?: number
 
 Custom logic: any Workflow, with the same `run` / `compile` as the ready-made patterns. Start state `{ input }`; the answer is `state.output`.
 
-### CEILING
+**Parameters**
+
+- `workflow` (`Workflow`): A workflow whose nodes read `state.input` and write `state.output` (and optionally `trace` and `stop_reason`).
+- `options` (`{ name?: string; maxSteps?: number; }`, default `{}`): `name` (default `"custom"`) and `maxSteps`, the step limit for `run` (default 64).
+
+**Example**
+
+```ts
+import { END, Workflow, patterns } from "criogen";
+
+const wf = new Workflow()
+  .node("shout", (state) => ({ output: String(state.input).toUpperCase() }))
+  .start("shout")
+  .edge("shout", END);
+const result = await patterns.custom(wf).run("hello");
+console.log(String(result)); // "HELLO"
+```
+
+## CEILING
 
 ```ts
 const CEILING: 50
@@ -73,13 +183,25 @@ const CEILING: 50
 
 No loop runs more often than this, whatever the caller asks for.
 
-### Step
+## DEFAULT_MODEL_ENV
+
+```ts
+const DEFAULT_MODEL_ENV: "CRIOGEN_MODEL"
+```
+
+The environment variable that names the model for specialists when a pattern gets no `model`.
+
+## Step
 
 ```ts
 type Step = Agent<any> | specialists.Specialist | string | ((text: string) => unknown) | [string, Step];
 ```
 
-### PatternResult
+One step of a pattern: an `Agent`, a `Specialist`, a registered specialist's
+name (a string), a function `text => text` (sync or async), or
+`[name, step]` to name the step in the trace.
+
+## PatternResult
 
 ```ts
 class PatternResult {
@@ -89,13 +211,30 @@ class PatternResult {
 
 What a pattern produced. `String(result)` is the output; `result.explain()` shows each step.
 
-#### PatternResult.toString
+**Parameters**
+
+- `output` (`string | null`): The final answer, or `null` while the run waits for a person.
+  The final answer, or `null` while suspended.
+- `trace` (`Entry[]`): Each step and what it returned (`{ step, output }`), in order.
+  Each step and what it returned, in order.
+- `state` (`State`): The workflow's final state.
+- `stopReason` (`string`): Why it ended: done, condition, approved, max_iterations, max_rounds, final, max_handoffs, unknown_handoff, rejected or suspended.
+  Why it ended.
+- `suspended` (`boolean`): `true` when a `humanReview` run waits for a person: continue with `pattern.resume`.
+  `true` when a person must answer first.
+- `waitingFor` (`unknown`): What a person is asked, when suspended.
+  What the person is asked, when suspended.
+- `raw` (`WorkflowResult`): The workflow result it was made from.
+
+### PatternResult.toString
 
 ```ts
 toString(): string
 ```
 
-#### PatternResult.explain
+The output as text (`""` when there is none), so `String(result)` is the answer.
+
+### PatternResult.explain
 
 ```ts
 explain(): string
@@ -103,7 +242,7 @@ explain(): string
 
 Each step on its own line: which step, what it returned (shortened).
 
-### Pattern
+## Pattern
 
 ```ts
 class Pattern {
@@ -113,7 +252,18 @@ class Pattern {
 
 A workflow pattern: run it, compile it for durability, or extend it.
 
-#### Pattern.compile
+Returned by `sequential`, `parallel`, `loop`, `iterativeRefinement`,
+`reviewAndCritique`, `swarm`, `humanReview`, `quick` and `custom`.
+
+**Parameters**
+
+- `name` (`string`): The pattern's name, e.g. `"sequential"` or `"review_and_critique"`.
+  The pattern's name, e.g. `"sequential"`.
+- `workflow` (`Workflow`): The plain Workflow: add nodes and edges to extend it before the first run.
+  The workflow that implements it.
+- `budget` (`number`): The step limit for `run` when none is given.
+
+### Pattern.compile
 
 ```ts
 compile(storage?: string | Storage): CompiledWorkflow
@@ -121,7 +271,17 @@ compile(storage?: string | Storage): CompiledWorkflow
 
 The checked, durable form: `compile(storage).thread(id).run({ input })`, with approvals, resume and an audit trail.
 
-#### Pattern.run
+The state starts as `{ input }`; the answer is in `state.output`.
+
+**Parameters**
+
+- `storage` (`string | Storage`, optional): A `Storage` or a URL for the threads; in memory without one.
+
+**Raises**
+
+- `ValidationError`: The workflow (after your changes) does not validate.
+
+### Pattern.run
 
 ```ts
 run(text: string, options?: { maxSteps?: number; signal?: any; }): Promise<PatternResult>
@@ -129,7 +289,14 @@ run(text: string, options?: { maxSteps?: number; signal?: any; }): Promise<Patte
 
 Runs once. A `humanReview` pattern returns `suspended: true`; continue with `resume`.
 
-#### Pattern.resume
+**Parameters**
+
+- `text` (`string`): The request: the first step's input.
+- `options` (`{ maxSteps?: number; signal?: any; }`, default `{}`): `maxSteps`: the run's step limit (each pattern sets one from its own caps). `signal`: aborting it cancels the run.
+
+**Returns:** The answer (`String(result)`), the trace and why it ended.
+
+### Pattern.resume
 
 ```ts
 resume(paused: PatternResult, decision: unknown): Promise<PatternResult>
@@ -137,7 +304,19 @@ resume(paused: PatternResult, decision: unknown): Promise<PatternResult>
 
 Continues a `humanReview` run: "approve", `{ decision: "edit", text }` or `{ decision: "reject" }`.
 
-### iterativeRefinement
+Works on the result of this object's own `run`. For a pause that must
+outlive the process, use `compile(storage).thread(id)` instead.
+
+**Parameters**
+
+- `paused` (`PatternResult`): The suspended result of `run`.
+- `decision` (`unknown`): `"approve"` keeps the draft, `{ decision: "edit", text }` replaces it, `{ decision: "reject" }` ends with an empty output and `stopReason` "rejected".
+
+**Raises**
+
+- `Error`: `paused` is not a run of this pattern that waits for a person.
+
+## iterativeRefinement
 
 ```ts
 function iterativeRefinement(refine: Step, score: (text: string) => number, options?: { threshold?: number; maxIterations?: number; model?: Model; }): Pattern
@@ -145,7 +324,25 @@ function iterativeRefinement(refine: Step, score: (text: string) => number, opti
 
 Improves a result step by step: `refine` gets the current text and returns a better one; stops when `score(text) >= threshold` or after `maxIterations`.
 
-### reviewAndCritique
+**Parameters**
+
+- `refine` (`Step`): The step that rewrites the text.
+- `score` (`(text: string) => number`): Rates a text, typically from 0 to 1.
+- `options` (`{ threshold?: number; maxIterations?: number; model?: Model; }`, default `{}`): `threshold` (default 0.8), `maxIterations` (default 5, at most 50) and `model` for a specialist step.
+
+**Example**
+
+```ts
+import { patterns } from "criogen";
+
+const flow = patterns.iterativeRefinement(
+  (text: string) => text + " More detail.",
+  (text) => Math.min(text.length / 40, 1),
+);
+console.log((await flow.run("A short note.")).stopReason); // "condition"
+```
+
+## reviewAndCritique
 
 ```ts
 function reviewAndCritique(generator: Step, critic: Step, options?: { maxRounds?: number; approved?: ((reply: string) => boolean); model?: Model; }): Pattern
@@ -156,7 +353,28 @@ with APPROVED, or `approved(reply)` is true) or returns feedback; the
 generator revises. Ends on approval or after `maxRounds` (default 3, at most
 50) with the last draft. `stopReason` is "approved" or "max_rounds".
 
-### swarm
+**Parameters**
+
+- `generator` (`Step`): The step that writes and revises. From the second round it gets the request, its previous draft and the critic's feedback.
+- `critic` (`Step`): The step that reviews; it gets the request and the draft.
+- `options` (`{ maxRounds?: number; approved?: ((reply: string) => boolean); model?: Model; }`, default `{}`): `maxRounds` (default 3, at most 50), `approved` (decides from the critic's reply; default: it starts with "APPROVED"), `model` for specialist steps.
+
+**Raises**
+
+- `RangeError`: `maxRounds` is not a whole number of at least 1.
+
+**Example**
+
+```ts
+import { Agent, FakeModel, patterns } from "criogen";
+
+const writer = new Agent({ model: new FakeModel(["Draft one.", "Draft two, with sources."]) });
+const critic = new Agent({ model: new FakeModel(["Add sources.", "APPROVED"]) });
+const result = await patterns.reviewAndCritique(writer, critic).run("Write a short note on hand washing.");
+console.log(String(result), result.stopReason); // "Draft two, with sources." "approved"
+```
+
+## swarm
 
 ```ts
 function swarm(agents: Record<string, Step>, options?: { start?: Step; maxHandoffs?: number; model?: Model; }): Pattern
@@ -169,7 +387,28 @@ the work on or `FINAL` when the answer is ready. `start` names the first agent
 on FINAL or after `maxHandoffs` (default 6, at most 50); a hand-off to an
 unknown name ends the run with stopReason "unknown_handoff".
 
-### humanReview
+**Parameters**
+
+- `agents` (`Record<string, Step>`): At least two named steps, `{ name: step }`.
+- `options` (`{ start?: Step; maxHandoffs?: number; model?: Model; }`, default `{}`): `start`: the first agent's name, or a dispatcher step that replies with a name. `maxHandoffs` (default 6, at most 50). `model` for specialist steps.
+
+**Raises**
+
+- `Error`: Fewer than two agents.
+- `RangeError`: `maxHandoffs` is not a whole number of at least 1.
+
+**Example**
+
+```ts
+import { Agent, FakeModel, patterns } from "criogen";
+
+const triage = new Agent({ model: new FakeModel(["This is a billing question.\nHANDOFF: billing"]) });
+const billing = new Agent({ model: new FakeModel(["Your invoice was sent on Monday.\nFINAL"]) });
+const result = await patterns.swarm({ triage, billing }).run("Where is my invoice?");
+console.log(result.stopReason, result.trace.map((t) => t.step)); // "final" ["triage", "billing"]
+```
+
+## humanReview
 
 ```ts
 function humanReview(step: Step, options?: { model?: Model; }): Pattern
@@ -179,7 +418,26 @@ Runs a step, then pauses for a person to look at its draft. Resume with
 "approve", `{ decision: "edit", text }` or `{ decision: "reject" }`. With
 `compile(storage)` the pause is durable: another process can resume it days later.
 
-### quick
+While paused, `waitingFor` is `{ draft, question }`.
+
+**Parameters**
+
+- `step` (`Step`): The step that writes the draft.
+- `options` (`{ model?: Model; }`, default `{}`): `model` for a specialist step.
+
+**Example**
+
+```ts
+import { patterns } from "criogen";
+
+const flow = patterns.humanReview((text: string) => `Reply: ${text}`);
+const paused = await flow.run("Thanks for your order.");
+console.log(paused.suspended, paused.waitingFor); // true { draft: "Reply: ...", question: "..." }
+const done = await flow.resume(paused, { decision: "edit", text: "Thank you for your order!" });
+console.log(String(done), done.stopReason); // "Thank you for your order!" "approved"
+```
+
+## quick
 
 ```ts
 function quick(spec: string, options?: { model?: Model; }): Pattern
@@ -187,14 +445,40 @@ function quick(spec: string, options?: { model?: Model; }): Pattern
 
 A pattern from one line of registered specialist names (plug and play):
 
-  quick("researcher > writer")   one after the other
-  quick("sentiment | keywords")  at the same time
-  quick("writer &lt;-> critic")     write, review, revise until approved
-  quick("summarizer")            a single specialist
+```ts
+quick("researcher > writer")   one after the other
+quick("sentiment | keywords")  at the same time
+quick("writer <-> critic")     write, review, revise until approved
+quick("summarizer")            a single specialist
+```
 
 One kind of connector per line (combine patterns with the functions above).
 
-### react
+The specialists need a model: `options.model`, or the `CRIOGEN_MODEL`
+environment variable.
+
+**Parameters**
+
+- `spec` (`string`): The line, e.g. `"researcher > writer"`.
+- `options` (`{ model?: Model; }`, default `{}`): `model`: a model or a model string such as `"openai:gpt-5-mini"`.
+
+**Raises**
+
+- `Error`: The line is empty, mixes connectors, has an empty name, or uses `<->` with other than two names; a name is not registered; or there is no model.
+
+**Example**
+
+```ts
+import { patterns } from "criogen";
+
+// Needs OPENAI_API_KEY.
+const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
+const result = await flow.run("Write about solar panels");
+console.log(String(result));
+console.log(result.explain());
+```
+
+## react
 
 ```ts
 function react(model: Model, tools: (AgentTool | Tool<any>)[], options?: AgentExtras & { maxSteps?: number; instructions?: string; }): Agent<any>
@@ -202,7 +486,35 @@ function react(model: Model, tools: (AgentTool | Tool<any>)[], options?: AgentEx
 
 A single agent in a reason-act loop with a hard cap on model calls (default 8, at most 50).
 
-### coordinator
+Returns an `Agent`, so it can be a step of another pattern.
+
+**Parameters**
+
+- `model` (`Model`): The agent's model.
+- `tools` (`(AgentTool | Tool<any>)[]`): The tools it may call.
+- `options` (`AgentExtras & { maxSteps?: number; instructions?: string; }`, default `{}`): Any other `Agent` option, plus `maxSteps` (the cap on model calls) and `instructions` (put before the reason-act instructions).
+
+**Raises**
+
+- `RangeError`: `maxSteps` is not a whole number of at least 1.
+
+**Example**
+
+```ts
+import { FakeModel, FakeReply, patterns, tool } from "criogen";
+
+const lookup = tool({
+  name: "order_status",
+  description: "Status of an order.",
+  input: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+  run: async ({ id }: { id: string }) => ({ id, status: "shipped" }),
+});
+const model = new FakeModel([FakeReply.toolCall("order_status", { id: "A-1" }), "Order A-1 has shipped."]);
+const agent = patterns.react(model, [lookup], { maxSteps: 4 });
+console.log((await agent.run("Where is order A-1?")).text);
+```
+
+## coordinator
 
 ```ts
 function coordinator(model: Model, team: Record<string, string | Agent<any> | Specialist | [string | Agent<any> | Specialist, string]>, options?: AgentExtras & { instructions?: string; }): Agent<any>
@@ -212,7 +524,33 @@ An agent that reads each request and hands it to the right specialist, which
 it calls as a tool. `specialists`: `{ name: Agent | Specialist | "registered-name" | [Agent, "when to use it"] }`.
 A model decides the routing (more flexible than a fixed workflow, and more model calls).
 
-### hierarchical
+Returns an `Agent`; each specialist becomes one of its tools.
+
+**Parameters**
+
+- `model` (`Model`): The coordinator's model (also used to build specialists given as a `Specialist` or a name).
+- `team` (`Record<string, string | Agent<any> | Specialist | [string | Agent<any> | Specialist, string]>`): The specialists by tool name. A description (from the pair, or the Specialist's own) tells the model when to call each.
+- `options` (`AgentExtras & { instructions?: string; }`, default `{}`): Any other `Agent` option, plus `instructions` to replace the default coordinator instructions.
+
+**Raises**
+
+- `Error`: The team is empty, or a name is not a registered specialist.
+- `TypeError`: A team member is not an Agent, a Specialist or its name.
+
+**Example**
+
+```ts
+import { Agent, FakeModel, FakeReply, patterns } from "criogen";
+
+const billing = new Agent({ model: new FakeModel(["Your invoice was sent on Monday."]) });
+const lead = patterns.coordinator(
+  new FakeModel([FakeReply.toolCall("billing", { input: "Where is my invoice?" }), "It was sent on Monday."]),
+  { billing: [billing, "Invoices and payments"] },
+);
+console.log((await lead.run("Where is my invoice?")).text);
+```
+
+## hierarchical
 
 ```ts
 function hierarchical(model: Model, tree: Record<string, TreeNode>, options?: AgentExtras & { instructions?: string; }): Agent<any>
@@ -223,427 +561,23 @@ further down, workers do it. `tree` maps names to a worker (as for
 `coordinator`) or to a nested object, which becomes a sub-coordinator
 (describe it with a `_description` key).
 
-## Specialist agents
+Returns the root coordinator, an `Agent`.
 
-Specialist agents: default recipes for common jobs that you configure,
-extend or replace.
+**Parameters**
 
-  &#105;mport \{ specialists \} from "criogen";
-  const agent = specialists.researcher.build("openai:gpt-5-mini", \{ tools: [search] \});
-  const careful = specialists.researcher.extend("careful-researcher", \{ add: "Always give two sources." \});
-  specialists.register(careful);
+- `model` (`Model`): The model of every coordinator (and of specialists given as a `Specialist` or a name).
+- `tree` (`Record<string, TreeNode>`): Names mapped to workers or to nested objects (sub-teams).
+- `options` (`AgentExtras & { instructions?: string; }`, default `{}`): Any other `Agent` option for the root, plus its `instructions`.
 
-A Specialist is a recipe, not an agent: a name, a description (what a
-coordinator reads to decide when to use it), instructions and default agent
-options. `build` makes the agent. The built-in ones are prompts and sensible
-defaults; tools come from you, and no claim is made about their quality on
-your data.
+**Example**
 
 ```ts
-import { specialists } from "criogen";
-specialists.SpecialistSettings
+import { patterns } from "criogen";
+
+// Needs OPENAI_API_KEY; "researcher" and "writer" are registered specialists.
+const lead = patterns.hierarchical("openai:gpt-5-mini", {
+  research: { _description: "Finds facts", web: "researcher" },
+  writing: { _description: "Writes the text", writer: "writer" },
+});
+console.log((await lead.run("A one-page brief on heat pumps")).text);
 ```
-
-These are used as `specialists.<name>`.
-
-### SpecialistSettings
-
-```ts
-type SpecialistSettings = Omit<AgentOptions, "model" | "instructions"> & {
-  /** Called when `build` gets no tools of its own: e.g. web search when a key is set. */
-  defaultTools?: () => Tool<any>[];
-};
-```
-
-Agent options a recipe may carry (everything but the model).
-
-### ExtendOptions
-
-```ts
-interface ExtendOptions extends SpecialistSettings {
-  /** Appended to the instructions. */
-  add?: string;
-  /** Replaces the instructions. */
-  instructions?: string;
-  description?: string;
-}
-```
-
-### Specialist
-
-```ts
-class Specialist {
-  constructor(name: string, description: string, instructions: string, settings?: SpecialistSettings);
-}
-```
-
-A recipe for an agent.
-
-#### Specialist.settings
-
-```ts
-readonly settings: SpecialistSettings
-```
-
-#### Specialist.build
-
-```ts
-build(model: Model, overrides?: Omit<AgentOptions, "model" | "instructions"> & { defaultTools?: (() => Tool<any>[]); } & { instructions?: string; }): Agent<any>
-```
-
-The agent. `overrides` win over the recipe's settings; `instructions`
-replaces the instructions and `tools` replaces the tools (use `extend` to add).
-
-#### Specialist.extend
-
-```ts
-extend(name?: string, options?: ExtendOptions): Specialist
-```
-
-A new recipe from this one: `add` appends to the instructions,
-`instructions` replaces them, `tools` are added to the existing ones, other
-options override settings. This recipe is unchanged.
-
-#### Specialist.toString
-
-```ts
-toString(): string
-```
-
-### register
-
-```ts
-function register(specialist: Specialist, options?: { replace?: boolean; }): Specialist
-```
-
-Keeps a recipe under its name, so workflows and configuration can refer to it by name. A taken name throws unless `replace`.
-
-### unregister
-
-```ts
-function unregister(name: string): void
-```
-
-Forgets a registered recipe (the built-in ones stay available as module exports).
-
-### get
-
-```ts
-function get(name: string): Specialist
-```
-
-The recipe registered under `name` (throws, listing the names).
-
-### available
-
-```ts
-function available(): string[]
-```
-
-Registered names, sorted.
-
-## Web search and page reading
-
-Internet tools for agents: web search (Tavily or Brave) and reading a page.
-
-  &#105;mport \{ Agent, web \} from "criogen";
-  const agent = new Agent(\{ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] \});
-
-`web.search()` needs no arguments: it uses TAVILY_API_KEY if set, else
-BRAVE_API_KEY, and says what to set if neither is. The key is read from the
-environment (or passed in), sent only in a request header over https, and
-never appears in an error, a log or a tool result.
-
-Results are data for the model, so they are bounded: a few results, short
-snippets, pages cut to a fixed size. `fetch` refuses addresses on private
-networks (a model must not reach your internal services through it), does
-not follow redirects, and reads at most 500 KB.
-
-```ts
-import { web } from "criogen";
-web.tavilySearch
-```
-
-These are used as `web.<name>`.
-
-### tavilySearch
-
-```ts
-function tavilySearch(options?: { apiKey?: string; maxResults?: number; depth?: "basic" | "advanced"; baseUrl?: string; }): Tool<{ query: string; }>
-```
-
-A `web_search` tool backed by Tavily (TAVILY_API_KEY). `depth`: "basic" or "advanced".
-
-### braveSearch
-
-```ts
-function braveSearch(options?: { apiKey?: string; maxResults?: number; baseUrl?: string; }): Tool<{ query: string; }>
-```
-
-A `web_search` tool backed by Brave Search (BRAVE_API_KEY).
-
-### search
-
-```ts
-function search(options?: { apiKey?: string; provider?: "tavily" | "brave"; maxResults?: number; }): Tool<{ query: string; }>
-```
-
-A web search tool with no setup: Tavily if TAVILY_API_KEY is set, else Brave
-if BRAVE_API_KEY is. `provider: "tavily" | "brave"` chooses explicitly.
-
-### defaultTools
-
-```ts
-function defaultTools(): Tool<any>[]
-```
-
-What a researcher gets when you give it no tools: web search if a key is set, else nothing.
-
-### fetchPage
-
-```ts
-function fetchPage(options?: { allowPrivate?: boolean; maxChars?: number; }): Tool<{ url: string; }>
-```
-
-A `read_page` tool: fetches a public web page and returns its text (cut to
-`maxChars`). Private-network addresses are refused unless `allowPrivate`
-(tests, or on purpose).
-
-### fetch
-
-```ts
-function fetch(options?: { allowPrivate?: boolean; maxChars?: number; }): Tool<{ url: string; }>
-```
-
-A `read_page` tool: fetches a public web page and returns its text (cut to
-`maxChars`). Private-network addresses are refused unless `allowPrivate`
-(tests, or on purpose).
-
-## MCP servers
-
-Tools from MCP servers.
-
-  &#105;mport \{ Agent, mcp \} from "criogen";
-  const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."]);
-  const agent = new Agent(\{ model, tools: [files] \});          // all its tools
-  // or tools: [files.tool("read_file")]
-  await files.close();
-
-The client runs in the Rust engine: it speaks MCP 2026-07-28 and falls back
-to the `initialize` handshake of older servers; stdio servers are started as
-a process (and again if they exit). It only uses tools: a server cannot
-sample your model or read your files. In criogen/web only `mcp.http` works.
-
-What a server says is data: names are mapped to names models accept (set
-`prefix` to keep two servers apart), schemas and messages are bounded, and
-its readOnlyHint / idempotentHint decide nothing unless `trustAnnotations`.
-Header and env values never appear in an error.
-
-```ts
-import { mcp } from "criogen";
-mcp.stdio
-import {
-  McpServer,
-  McpOptions,
-  StdioOptions,
-  HttpOptions,
-  McpInfo,
-  McpTool,
-} from "criogen";
-```
-
-These are used as `mcp.<name>`. Also exported at the top level: `McpServer`, `McpOptions`, `StdioOptions`, `HttpOptions`, `McpInfo`, `McpTool`.
-
-### McpServer
-
-```ts
-class McpServer {
-  constructor(name: string);
-}
-```
-
-A connected MCP server: get one with `mcp.stdio` or `mcp.http`.
-
-#### McpServer.info
-
-```ts
-info: McpInfo
-```
-
-#### McpServer.tools
-
-```ts
-tools: McpTool[]
-```
-
-#### McpServer.instructions
-
-```ts
-readonly instructions: string | null
-```
-
-The server's instructions for models (not added to any prompt).
-
-#### McpServer.tool
-
-```ts
-tool(name: string): McpTool
-```
-
-The tool the agent sees as `name`.
-
-#### McpServer.refresh
-
-```ts
-refresh(): Promise<void>
-```
-
-Lists the tools again (agents already built keep theirs).
-
-#### McpServer.call
-
-```ts
-call(name: string, args?: Record<string, unknown>): Promise<unknown>
-```
-
-Calls a tool directly: its text, its JSON value, or its content blocks. Throws ToolError when the tool fails.
-
-#### McpServer.close
-
-```ts
-close(): Promise<void>
-```
-
-Stops the server (a process: stdin closed, killed after 2 s).
-
-### McpOptions
-
-```ts
-interface McpOptions {
-  /** The server's name in errors (default: the prefix, else the command or host). */
-  name?: string;
-  /** The agent sees `<prefix>_<tool>`: keeps two servers' tools apart. */
-  prefix?: string;
-  /** Seconds one call may take. Default 60. */
-  timeoutSecs?: number;
-  /** Seconds to be ready. Default 30. */
-  connectTimeoutSecs?: number;
-  /** The largest message read from the server. Default 4 MiB. */
-  maxMessageBytes?: number;
-  /** Believe the server's readOnlyHint / idempotentHint (they decide retries). Default false. */
-  trustAnnotations?: boolean;
-  /** Only these tools (the server's names). */
-  only?: string[];
-  /** Leave these tools out (the server's names). */
-  exclude?: string[];
-}
-```
-
-Options for every MCP server.
-
-### stdio
-
-```ts
-function stdio(command: string, args?: string[], options?: StdioOptions): Promise<McpServer>
-```
-
-Starts `command` with `args` as an MCP server (stdio) and lists its tools. Servers only.
-
-### http
-
-```ts
-function http(url: string, options?: HttpOptions): Promise<McpServer>
-```
-
-Connects to the MCP server at `url` (Streamable HTTP) and lists its tools. Use https; plain http only to this computer when headers are set.
-
-### StdioOptions
-
-```ts
-interface StdioOptions extends McpOptions {
-  /** Added to this process's environment. */
-  env?: Record<string, string>;
-  cwd?: string;
-}
-```
-
-A server this app starts (not in the browser).
-
-### HttpOptions
-
-```ts
-interface HttpOptions extends McpOptions {
-  /** Sent with every request, e.g. `{ Authorization: "Bearer …" }`. */
-  headers?: Record<string, string>;
-}
-```
-
-A server at a URL (Streamable HTTP).
-
-### McpInfo
-
-```ts
-interface McpInfo {
-  name: string | null;
-  version: string | null;
-  protocolVersion: string;
-  /** Its instructions for models (not added to any prompt). */
-  instructions: string | null;
-}
-```
-
-What the server said about itself.
-
-### McpTool
-
-```ts
-class McpTool {
-  constructor(server: McpServer, spec: { name: string; description: string; schema: Record<string, unknown>; read_only: boolean; destructive: boolean; idempotent: boolean; });
-}
-```
-
-One tool of a connected server; put it in an agent's `tools`.
-
-#### McpTool.name
-
-```ts
-readonly name: string
-```
-
-#### McpTool.description
-
-```ts
-readonly description: string
-```
-
-#### McpTool.schema
-
-```ts
-readonly schema: Record<string, unknown>
-```
-
-#### McpTool.readOnly
-
-```ts
-readonly readOnly: boolean
-```
-
-#### McpTool.destructive
-
-```ts
-readonly destructive: boolean
-```
-
-#### McpTool.idempotent
-
-```ts
-readonly idempotent: boolean
-```
-
-#### McpTool.call
-
-```ts
-call(args?: Record<string, unknown>): Promise<unknown>
-```
-
-Calls it directly (see `McpServer.call`).

@@ -1,0 +1,144 @@
+---
+title: "Python API: Errors"
+description: "Python API reference, errors: CriogenError, ModelError, ToolExecutionError, LimitExceededError, ThreadBusyError, ThreadSuspendedError, StorageError, ValidationError, and more."
+---
+
+Every error class, one per stable error code. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/errors/).
+
+Errors: one exception class per family of failures.
+
+Every exception carries the stable `code` the Rust engine uses (for
+example `model_failed` or `thread_busy`), the same in every language;
+the error reference (/docs/reference/errors/) lists them all. Catch a class for a
+family, or compare `error.code` for one failure.
+
+```python
+from criogen import (
+    CriogenError,
+    ModelError,
+    ToolExecutionError,
+    LimitExceededError,
+    ThreadBusyError,
+    ThreadSuspendedError,
+    StorageError,
+    ValidationError,
+    CancelledError,
+)
+```
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`CriogenError`](#criogenerror) | class | Any Criogen failure; the base class of the others. |
+| [`ModelError`](#modelerror) | class | The model failed after retries (`model_failed`). |
+| [`ToolExecutionError`](#toolexecutionerror) | class | A tool crashed (`tool_failed`); `__cause__` is the exception. |
+| [`LimitExceededError`](#limitexceedederror) | class | A run limit was reached (`limit_exceeded`). |
+| [`ThreadBusyError`](#threadbusyerror) | class | Another run holds the thread (`thread_busy`). |
+| [`ThreadSuspendedError`](#threadsuspendederror) | class | The thread waits for approval (`thread_suspended`). |
+| [`StorageError`](#storageerror) | class | Storage failed (`storage_*`, `encryption_*`, `audit_failed`). |
+| [`ValidationError`](#validationerror) | class | Something given was not accepted (`invalid_*`, `resume_invalid`). |
+| [`CancelledError`](#cancellederror) | class | The run was cancelled (`cancelled`). |
+
+## CriogenError
+
+```python
+class CriogenError(Exception):
+    def __init__(self, code: str, message: str, details: Optional[Dict[str, Any]] = None)
+```
+
+Any Criogen failure; the base class of the others.
+
+The engine raises these; you rarely build one yourself. `str(error)`
+is `"<code>: <message>"`.
+
+**Parameters**
+
+- `code` (`str`): The stable snake_case error code, such as `"model_failed"`.
+- `message` (`str`): What went wrong, for people.
+- `details` (`Optional[Dict[str, Any]]`, default `None`): More about the failure as a JSON-like dict (it may hold the run's `snapshot`). Default `{}`.
+
+**Example**
+
+```python
+from criogen import CriogenError, LimitExceededError
+
+try:
+    result = agent.run_sync("Plan the week.")
+except LimitExceededError:
+    print("the run hit a limit")
+except CriogenError as error:
+    print(error.code, error.message)
+```
+
+### CriogenError.snapshot
+
+```python
+snapshot: Optional[Dict[str, Any]]
+```
+
+The run's snapshot, if the error carries one.
+
+## ModelError
+
+```python
+class ModelError(CriogenError)
+```
+
+The model failed after retries (`model_failed`).
+
+## ToolExecutionError
+
+```python
+class ToolExecutionError(CriogenError)
+```
+
+A tool crashed (`tool_failed`); `__cause__` is the exception.
+
+## LimitExceededError
+
+```python
+class LimitExceededError(CriogenError)
+```
+
+A run limit was reached (`limit_exceeded`).
+
+## ThreadBusyError
+
+```python
+class ThreadBusyError(CriogenError)
+```
+
+Another run holds the thread (`thread_busy`).
+
+## ThreadSuspendedError
+
+```python
+class ThreadSuspendedError(CriogenError)
+```
+
+The thread waits for approval (`thread_suspended`).
+
+## StorageError
+
+```python
+class StorageError(CriogenError)
+```
+
+Storage failed (`storage_*`, `encryption_*`, `audit_failed`).
+
+## ValidationError
+
+```python
+class ValidationError(CriogenError)
+```
+
+Something given was not accepted (`invalid_*`, `resume_invalid`).
+
+## CancelledError
+
+```python
+class CancelledError(CriogenError)
+```
+
+The run was cancelled (`cancelled`).

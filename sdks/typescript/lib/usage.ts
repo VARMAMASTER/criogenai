@@ -4,7 +4,9 @@
 
 /** One model used in a run. */
 export interface ModelUse {
+  /** The provider, e.g. "openai" ("fake" for a FakeModel). */
   provider: string;
+  /** The model name the provider reported. */
   model: string;
   /** Model calls this run made to it. */
   calls: number;
@@ -57,7 +59,9 @@ export function withRunFacts<T extends { messages: Record<string, unknown>[] }>(
 
 /** USD per million tokens. */
 export interface Price {
+  /** USD per million input tokens. */
   input: number;
+  /** USD per million output tokens (reasoning tokens included). */
   output: number;
   /** Cached input tokens (default: the input price). */
   cacheRead?: number;
@@ -67,6 +71,20 @@ export interface Price {
  * The cost of a run in USD from your prices, keyed by `"provider:model"` or by
  * model name. `null` when a model that was used has no price. Reasoning tokens
  * are counted as output tokens.
+ *
+ * Criogen ships no price list: prices change too often. Put in your
+ * provider's current prices.
+ *
+ * @param result A run result or reply (anything with `models`).
+ * @param prices USD per million tokens, keyed by "provider:model" (checked first) or by model name.
+ * @returns The estimated cost in USD, or `null` if a used model has no price.
+ * @example
+ * import { Agent, estimateCost } from "criogen";
+ *
+ * const result = await new Agent({ model: "openai:gpt-5-mini" }).run("Hello");
+ * // Example prices: use your provider's current ones.
+ * const usd = estimateCost(result, { "openai:gpt-5-mini": { input: 0.25, output: 2 } });
+ * console.log(usd === null ? "no price for a model" : `$${usd.toFixed(4)}`);
  */
 export function estimateCost(result: Pick<RunFacts, "models">, prices: Record<string, Price>): number | null {
   let total = 0;

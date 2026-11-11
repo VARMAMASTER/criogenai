@@ -216,7 +216,9 @@ write our own implementation.
   `snippets/`), benchmark lab, install counter, blog (`content/blog`). The
   API reference (`/docs/reference/api/`): `website/scripts/gen-api.mjs` writes the
   Python (read with `ast`) and TypeScript (compiler API) pages from the SDK
-  sources, committed and checked by `ci-local.sh`; `--rust` builds rustdoc into
+  sources (an overview and one page per module; Google-style docstrings and JSDoc
+  `@param`/`@example`), committed and checked by `ci-local.sh`, which also fails on
+  new undocumented public API (`website/scripts/api/undocumented.json`); `--rust` builds rustdoc into
   `public/rustdoc` without the `src/` pages (the code stays private). `npm run
   build` / `npm run preview` (port 4400); checked by `ci-local.sh` step `website`.
   Pattern playground (`/playground/`): 19 agent patterns

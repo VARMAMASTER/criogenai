@@ -1,95 +1,163 @@
 ---
-title: Agents and tools
-description: Tools with validated arguments, limits, structured output and testing without a model.
+title: Agents
+description: Build an agent, choose its options, read its result, ask for typed output, run agents inside agents, and cancel or time-limit a run.
 ---
 
+An **agent** is a model with instructions and tools, run as a loop until the
+model answers. Use an agent when the model should decide which steps to take
+(look something up, then act, then answer). When the steps are known in
+advance, use a [workflow](/docs/guides/workflows/) instead, or put agents
+inside one. How the loop works is on
+[Agents and the loop](/docs/concepts/agent-loop/).
 
-An **agent** is a model plus tools, run as a loop: the model answers or asks
-for tool calls, the tools run, the results go back, until the model answers
-without calling a tool (or a limit is reached).
-
-## Tools, limits and typed output
+## Build and run one
 
 <Sample name="agents" />
 
-In Rust, typed output is a JSON Schema:
+`run` is one task with no history. For a conversation that continues, use a
+[thread](/docs/guides/threads/): `agent.thread(id).send(text)`. Python also
+has `run_sync` and `send_sync` for scripts and notebooks (not inside a
+running event loop).
 
-<Sample name="agents" region="structured" only={["rust"]} />
+## Options
 
-- **Arguments are validated** against the schema before your function runs
-  ([how](/docs/concepts/messages-and-tools/)).
-- **Limits** stop runaway loops: `model_calls` (default 25), `tool_calls`
-  (200), `tokens`, and a timeout per tool call (60 s). Reaching one fails
-  the run with `limit_exceeded`.
-- **Typed output** makes the run end with JSON matching a schema (in Python,
-  a Pydantic model). Invalid answers go back to the model with the
-  problems. Models with a JSON mode answer in it; others call a reserved
-  `final_output` tool.
+Every option is a keyword argument in Python and a field of the options
+object in TypeScript. Only the model is required.
 
-In TypeScript, a tool's `input` can also be a Zod schema, or any
-[Standard Schema](https://standardschema.dev) (ArkType, Valibot). The
-engine checks the JSON Schema the library makes; then the library checks
-what JSON Schema cannot say (refinements), and its issues go back to the
-model as invalid arguments. `run` receives the library's output, with
-defaults and transforms applied, and its type is inferred. Valibot cannot
-make a JSON Schema itself: pass `jsonSchema: toJsonSchema(schema)` (from
-`@valibot/to-json-schema`).
+| Python | TypeScript | Default | What it does |
+|---|---|---|---|
+| `model` (first argument) | `model` | required | `"provider:model"` string or a model object ([Models](/docs/guides/models/)) |
+| `instructions` | `instructions` | none | The system prompt |
+| `tools` | `tools` | none | Tools, agents as tools (`as_tool`), MCP servers, collection search tools |
+| `approve` | `approve` | none | Names of tools a person must approve ([Human approval](/docs/guides/approvals/)) |
+| `output` | `output` | none | A Pydantic model (Python) or JSON Schema: the run ends with JSON that matches it |
+| `limits` | `limits` | 25 model calls, 200 tool calls, 60 s per tool | Bounds on one run ([limits](/docs/concepts/agent-loop/#limits)) |
+| `storage` | `storage` | in memory, per agent | A `Storage` or a URL: where threads live ([Storage](/docs/guides/storage/)) |
+| `memory` | `memory` | none | Long-term memory ([Memory](/docs/guides/memory/)) |
+| `on_tool_exception` | `onToolException` | return to model | What an unexpected tool exception does ([Tools](/docs/guides/tools/#when-a-tool-fails)) |
+| `fallbacks`, `fallback_on` | `fallbacks`, `fallbackOn` | none | Models tried when the first one fails ([Errors and retries](/docs/concepts/errors-and-retries/)) |
+| `model_retry`, `tool_retry` | `modelRetry`, `toolRetry` | 3 attempts, from 0.5 s | Retries of transient failures |
+| `max_retry_after` | `maxRetryAfterSecs` | 60 s | The longest `Retry-After` the agent waits |
+| `hooks` | `hooks` | none | Your code around model and tool calls ([Hooks](/docs/guides/hooks/)) |
+| `redact` | `redact` | none | A function applied to every text before each model call ([redaction](/docs/guides/production/#redaction-before-anything-leaves)) |
+| `telemetry` | `telemetry` | none | Export each run as a trace ([Tracing](/docs/guides/telemetry/)) |
 
-<Sample name="agents" region="zod" only={["typescript"]} />
+An agent is cheap to keep and safe to share: build it once (at start-up, or
+in a module) and use it from every request. Building one with a hosted model
+and no API key fails at once, naming the variable to set.
+
+### Writing instructions
+
+The instructions are the system prompt. They work best when they say:
+
+- who the agent is and who it talks to ("the support assistant of an online
+  shop, talking to customers");
+- what to do before answering ("look an order up before you answer about
+  it");
+- the rules for risky tools ("refunds need a staff member's approval");
+- the shape of the answer ("two sentences at most", "in the customer's
+  language").
+
+Put rules that must hold in code, not only in instructions: argument limits in
+the tool's schema, approval in `approve`, checks in the tool or a
+[hook](/docs/guides/hooks/). A model can ignore an instruction; it cannot skip
+an approval.
 
 ## The result
 
-| Field (Python / TypeScript) | Rust | Meaning |
+| Python | TypeScript | Meaning |
 |---|---|---|
-| `text` | `result.text()` | The final answer |
-| `output` | `result.output` | The typed output, if you asked for one |
-| `messages` | `result.messages` | The whole transcript |
-| `usage` | `result.usage` | Tokens across all model calls |
-| `model_calls`, `tool_calls` / `modelCalls`, `toolCalls` | same names | How much the run did |
-| `needs_approval`, `approvals` / `needsApproval`, `approvals` | `is_suspended()`, `approval_requests()` | Paused for a person |
+| `text` | `text` | The final answer (`None` / `null` while waiting for approval) |
+| `output` | `output` | The typed output, if you asked for one |
+| `messages` | `messages` | The whole transcript, as JSON [messages](/docs/concepts/messages-and-tools/) |
+| `stop_reason` | `stopReason` | Why the run ended: `final_answer`, `output`, `hook_end`, `content_filter` |
+| `needs_approval`, `approvals` | `needsApproval`, `approvals` | Paused for a person, and the waiting calls |
+| `usage` | `usage` | Tokens across all model calls of this run |
+| `model_calls`, `tool_calls` | `modelCalls`, `toolCalls` | How much the run did |
+| `answered_by`, `models` | `answeredBy`, `models` | Which model answered; calls and tokens per model |
+| `duration_ms` | `durationMs` | Wall time of the call |
+| `run_id` | `runId` | The run's id (also in traces and audit records) |
 
-## Testing
+A thread call returns a `Reply`: the same fields plus `version` and
+`checkpoint_id` (`checkpointId`) of the checkpoint it saved.
 
-Use `FakeModel` in tests: scripted replies (text or tool calls) in order,
-with no network. In Rust it can also fail on purpose (`failing_on`,
-`flaky_first`) to test error handling.
+## Typed (structured) output
 
-<Sample name="agents" region="testing" only={["rust"]} />
+Give `output` a Pydantic model (Python) or a JSON Schema (both languages),
+and the run ends with an object that matches it, in `result.output`:
 
-## Sub-agents
+- Models with a JSON mode answer in it; others get a reserved
+  `final_output` tool to call. You do not need to know which.
+- The **engine** checks the answer against the schema. An invalid answer goes
+  back to the model with the problems; after 2 invalid answers the run fails
+  with `output_invalid`, and `details` holds the `problem` and the `raw`
+  answer.
+- In Python, `result.output` is an instance of your Pydantic model. In
+  TypeScript, type it with `new Agent<YourType>({...})`.
 
-An agent can be a tool of another agent: the tool takes a question
-(`input`) and returns the sub-agent's answer. How deep agents may call
-agents is limited (8 by default). An agent can also be one step of a
-[workflow](/docs/guides/workflows/).
+Typed output pairs well with tools: the agent can look things up first, then
+answer in the shape your code needs.
+
+## Run state
+
+Values you pass with a message become part of the run's state. Long-term
+memory uses them to pick the person's namespace, and hooks can read them:
+
+```python
+await agent.run("What should I eat?", user_id="42")
+```
+
+```ts
+await agent.run("What should I eat?", { state: { user_id: "42" } });
+```
+
+A value cannot use one of the agent's own state keys (`messages`, for
+example): that fails with `invalid_input`.
+
+## Agents inside agents
+
+An agent can be a tool of another agent. The tool takes one argument,
+`input` (text), runs the sub-agent, and returns its answer:
 
 <Sample name="agents" region="subagents" />
 
-Retries and fallback models are on the [models](/docs/guides/models/) page.
+- The sub-agent has its own instructions, tools and limits; the parent sees
+  only its final answer.
+- How deep agents may call agents is limited (8 levels); deeper calls fail
+  with `limit_exceeded`.
+- For fixed hand-offs (always triage, then answer), a
+  [workflow](/docs/guides/workflows/#agents-as-nodes) with agents as nodes is
+  clearer. For coordinators, swarms and review loops built from agents, see
+  [Patterns](/docs/guides/patterns/).
 
-## Hooks
+## Cancelling and time limits
 
-Hooks run your code around the loop: at the start and end of a run, and
-before and after every model call and tool call. Use them to block or
-change a tool call, hide data from the model, answer from a cache, or stop
-a run early. A hook is an object with any of these methods (sync or async):
+- **TypeScript:** every call takes an `AbortSignal`:
+  `agent.run(text, { signal: AbortSignal.timeout(30_000) })`. When it fires,
+  the model call stops at once and the call rejects with `CancelledError`.
+- **Python:** cancel the task, or use `asyncio.wait_for(agent.run(text), 30)`.
+  The model call stops at once.
 
-<Sample name="agents" region="hooks" />
+On a thread, a cancelled run is saved, and `retry()` continues it. Tools have
+their own time limit (`tool_timeout_secs` / `toolTimeoutSecs`).
 
-| Python | TypeScript | When | It may |
-|---|---|---|---|
-| `on_start(ctx)` | `onStart(ctx)` | once per run (and per resume or retry) | save state for later calls: `HookAction(state=…)` |
-| `before_model(ctx)` | `beforeModel(ctx)` | before each model call | replace the transcript (`messages`), or end the run (`end`, `output`) |
-| `after_model(ctx)` | `afterModel(ctx)` | after each model reply | replace the reply (`message`), or end the run |
-| `before_tool(call)` | `beforeTool(call)` | before each tool call | change the call (return it), skip the tool (`ToolResult(value)`), or raise `ToolError` |
-| `after_tool(call, result)` | `afterTool(call, result)` | after each tool call | return a replacement result |
-| `on_end(ctx, outcome)` | `onEnd(ctx, outcome)` | always, once per run | nothing (it cannot change the outcome) |
+## Errors
 
-`ctx` has the run id, the messages so far, the number of model calls, the
-hook's saved state and the run state. Hooks run in list order, and the
-"after" methods in reverse order, like layers. An exception in
-`on_start`, `before_model` or `after_model` fails the run with
-`hook_failed` (what was raised is the error's cause); one in a tool hook
-counts as the tool's own exception (see the tool exception setting above).
-In Rust, a hook implements `Hook`, with `wrap_tool` and `wrap_model` around
-each call instead of a before and an after method.
+| Code | When | What to do |
+|---|---|---|
+| `limit_exceeded` | A limit was reached (`details["limit"]`) | Raise the limit or tighten the instructions |
+| `model_failed` | The model failed after retries and fallbacks | Check `details["model_error"]["kind"]`; retry later if transient |
+| `output_invalid` | Typed output still invalid after retries | Simplify the schema; describe the fields in it |
+| `tool_failed` | A tool crashed and `on_tool_exception` is `fail` | Fix the tool; the exception is the error's cause |
+| `hook_failed` | A hook raised | Fix the hook; the exception is the error's cause |
+| `invalid_state` | Memory by state, but the run has no value for the key | Pass the key with every message |
+
+All codes: [Error codes](/docs/reference/errors/). How to catch them:
+[Errors and retries](/docs/concepts/errors-and-retries/).
+
+## Next
+
+- [Tools](/docs/guides/tools/): schemas, errors, retries and the tool context.
+- [Human approval](/docs/guides/approvals/) and [Hooks](/docs/guides/hooks/).
+- [Testing without a model](/docs/guides/testing/).
+- API: [Python `Agent`](/docs/reference/api/python/agent/), [TypeScript `Agent`](/docs/reference/api/typescript/agent/).

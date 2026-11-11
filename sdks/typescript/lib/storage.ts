@@ -4,30 +4,89 @@
 import { native, NativeStorage } from "./native";
 import { translate } from "./errors";
 
+/**
+ * Rules for deleting old data, applied by `storage.prune()`. Without any rule
+ * everything is kept.
+ */
 export interface RetentionOptions {
+  /** Deletes threads whose last save is this many seconds old or older, as `thread.delete()` would. Threads waiting for an approval count as idle. */
   threadTtlSecs?: number;
+  /** Keeps each thread's latest checkpoint and the `n - 1` before it (at least one); older checkpoints and abandoned branches are deleted, and history then starts at the oldest kept one. */
   keepCheckpoints?: number;
+  /** Deletes the branches that `rewind` left behind and keeps the current branch whole. `keepCheckpoints` drops them too. */
   dropBranches?: boolean;
 }
 
+/** Settings for `new Storage(...)`. */
 export interface StorageOptions {
-  /** `undefined` (process memory), "sqlite://path.db" or "postgres://…". */
+  /**
+   * Where data lives: `"sqlite:///path/to/app.db"` (a file),
+   * `"postgres://user@host/db"`, or nothing to keep everything in process
+   * memory (lost when the process exits).
+   */
   url?: string;
-  /** "k2:<64 hex>,k1:<64 hex>" (the first is active): encryption at rest. */
+  /**
+   * Encrypts content at rest: `"k2:<64 hex digits>,k1:<64 hex digits>"`. The
+   * first key encrypts new rows; the others still decrypt older ones (key
+   * rotation). Used only with a `url`. A database written with keys refuses
+   * to open without them. Keep the keys in an environment variable or a
+   * secret store, never in code.
+   */
   encryptionKeys?: string;
-  /** Record who did what (design 0010). */
+  /**
+   * Keeps a tamper-evident audit trail of model calls, tool calls, runs,
+   * approvals, rewinds, deletions and memory writes: ids, names and outcomes,
+   * no content. Read it with `auditRecords()`, check it with `verifyAudit()`.
+   * @default false
+   */
   audit?: boolean;
+  /** Rules for deleting old threads and checkpoints, applied by `prune()`. */
   retention?: RetentionOptions;
+  /**
+   * What a second call on a thread that is already running does: `"wait"`
+   * for the running call to finish (at most `busyTimeoutSecs`, then
+   * `ThreadBusyError`), `"reject"` at once with `ThreadBusyError`, or
+   * `"interrupt"` (cancel the running call, then go). Holds across processes
+   * on Postgres, within this process otherwise.
+   * @default "wait"
+   */
   onBusy?: "wait" | "reject" | "interrupt";
+  /**
+   * How long `"wait"` and `"interrupt"` wait for the running call, in seconds.
+   * @default 60
+   */
   busyTimeoutSecs?: number;
 }
 
-/** Threads, memory and the audit trail. Agents built with one share it. */
+/**
+ * Where threads, long-term memory and the audit trail are kept.
+ *
+ * Pass one to agents and workflows (their `storage` option) so that threads
+ * survive restarts; agents built with the same storage share it. Without a
+ * URL everything stays in process memory.
+ *
+ * @example
+ * import { Storage } from "criogen";
+ *
+ * const storage = new Storage(); // or new Storage("sqlite:///data/app.db")
+ * await storage.remember("users/u-1", "diet", "vegetarian");
+ * const item = await storage.recall("users/u-1", "diet");
+ * console.log(item?.value); // "vegetarian"
+ * const hits = await storage.search("users", "vegetarian");
+ * console.log(hits.length); // 1
+ * await storage.close();
+ */
 export class Storage {
+  /** The URL it was opened with; `undefined` for in-memory storage. */
   readonly url?: string;
   /** @internal */
   readonly native: NativeStorage;
 
+  /**
+   * @param options A URL, or the settings. Nothing: in-memory storage.
+   * @throws {StorageError} The database cannot be opened, or the encryption keys are missing or do not match it.
+   * @throws {ValidationError} An option has a value the engine does not accept (e.g. an unknown `onBusy`).
+   */
   constructor(options: StorageOptions | string = {}) {
     const o = typeof options === "string" ? { url: options } : options;
     this.url = o.url;
@@ -46,71 +105,171 @@ export class Storage {
     }
   }
 
-  /** Closes the database's connections (SQLite releases the file). Later calls fail with StorageError. */
+  /** Closes the database's connections (SQLite releases the file). Later calls fail with `StorageError`. */
   async close(): Promise<void> {
     await this.native.close();
   }
 
-  /** Saves a fact under `namespace` (e.g. "users/42"). */
+  /**
+   * Saves a fact in long-term memory, replacing any value under the same key.
+   *
+   * Facts saved here are found by keywords. (An agent with `Memory.semantic`
+   * finds by meaning only the facts it saved itself.)
+   *
+   * @param namespace A path such as `"users/42"`: non-empty segments separated by `/`. The root `""` is refused.
+   * @param key The fact's name in the namespace.
+   * @param value Any JSON value, at most 1 MiB as JSON text.
+   * @param options `ttlSecs`: delete the fact this many seconds from now. Without it the fact is kept until deleted.
+   * @throws {ValidationError} The namespace, key or value is not accepted (`invalid_value`).
+   * @throws {StorageError} The database failed.
+   */
   async remember(namespace: string, key: string, value: unknown, options: { ttlSecs?: number } = {}): Promise<void> {
     await this.op("memory_put", { namespace, key, value, ttlSecs: options.ttlSecs });
   }
 
-  /** The item, or null. */
+  /**
+   * Reads one fact from long-term memory.
+   *
+   * @param namespace The namespace it was saved in, e.g. `"users/42"`.
+   * @param key Its key.
+   * @returns The item (`namespace`, `key`, `value`, `created_at_ms`, `updated_at_ms`, and `expires_at_ms` when it has a time to live), or `null` if it is missing or expired.
+   */
   recall(namespace: string, key: string): Promise<Record<string, unknown> | null> {
     return this.op("memory_get", { namespace, key });
   }
 
-  /** Items in `namespace` and below matching `text` (keywords). */
+  /**
+   * Searches long-term memory by keywords, in a namespace and the namespaces inside it.
+   *
+   * An item matches when its key or the text in its value contains the
+   * query's words (common words such as "the" are ignored). Results are
+   * ranked by the share of words matched, then newest first.
+   *
+   * @param namespace Where to search: `"users"` also covers `"users/42"`.
+   * @param text The words to look for. Without them: every item, newest first.
+   * @param limit The most items to return.
+   * @returns Items as `recall` returns them, with a `score` from 0 to 1 when `text` was given.
+   */
   search(namespace: string, text?: string, limit = 10): Promise<Record<string, unknown>[]> {
     return this.op("memory_search", { namespace, text, limit });
   }
 
-  /** Deletes everything in `namespace` and below (e.g. one patient). */
+  /**
+   * Deletes every fact in a namespace and the namespaces inside it, for
+   * example everything about one person.
+   *
+   * @param namespace The namespace, e.g. `"users/42"`. The root `""` is refused.
+   * @returns How many items were deleted.
+   */
   forgetAll(namespace: string): Promise<number> {
     return this.op("memory_delete_namespace", { namespace });
   }
 
-  /** Applies the retention rules once. */
+  /**
+   * Applies the `retention` rules once and removes expired memory items.
+   *
+   * @returns Counts: `threadsDeleted`, `threadsBusy` (skipped because they were running), `checkpointsDeleted`, `memoryItemsDeleted`.
+   */
   prune(): Promise<Record<string, number>> {
     return this.op("prune");
   }
 
-  /** Audit records, oldest first (needs `audit: true`). */
+  /**
+   * Reads the audit trail, oldest first. Needs `audit: true`.
+   *
+   * Each record has `seq` (1, 2, 3, ...), `at_ms`, `action` (e.g.
+   * `"approval.decided"`), when they apply `actor`, `thread_id`, `run_id`,
+   * `subject`, `outcome` and `details`, and the chain's `prev_hash` and `hash`.
+   *
+   * @param query Filters: `threadId`, `action`, `afterSeq` (only records after this `seq`), `limit` (default 100).
+   * @throws {ValidationError} The storage was opened without `audit: true`.
+   */
   auditRecords(query: { threadId?: string; action?: string; afterSeq?: number; limit?: number } = {}): Promise<Record<string, unknown>[]> {
     return this.op("audit_query", query);
   }
 
-  /** Checks the audit trail's hash chain. */
+  /**
+   * Checks the audit trail's hash chain. Needs `audit: true`.
+   *
+   * @returns `records` checked, `ok`, and `first_broken`: the `seq` of the first record that does not match the chain, or `null`.
+   * @throws {ValidationError} The storage was opened without `audit: true`.
+   */
   verifyAudit(): Promise<{ records: number; ok: boolean; first_broken: number | null }> {
     return this.op("audit_verify");
   }
 }
 
+/** Settings for `Memory.byState` and `Memory.shared`. */
 export interface MemoryOptions {
+  /**
+   * How many facts are added to the model's request before each model call
+   * (the best matches for the conversation, then the newest). `0` turns
+   * recall off; the tools still work.
+   * @default 5
+   */
   recall?: number;
+  /**
+   * Whether the model gets the `remember`, `forget` and `search_memory` tools.
+   * @default true
+   */
   tools?: boolean;
+  /** How long facts saved by the `remember` tool are kept, in seconds. Without it they are kept until deleted. */
   ttlSecs?: number;
 }
 
 /**
- * Long-term memory for an agent: recalled before each model call, and
- * remember / forget / search_memory tools for the model.
+ * Long-term memory for an agent: facts recalled before each model call, and
+ * `remember`, `forget` and `search_memory` tools for the model.
+ *
+ * Facts live in the agent's `storage`, in a namespace such as `users/42`.
+ * Create one with `Memory.byState` (one namespace per user) or
+ * `Memory.shared` (one namespace for every run).
+ *
+ * @example
+ * import { Agent, FakeModel, Memory, Storage } from "criogen";
+ *
+ * const storage = new Storage();
+ * await storage.remember("users/u-1", "language", "Prefers answers in French.");
+ * const agent = new Agent({
+ *   model: new FakeModel(["Bonjour !"]),
+ *   storage,
+ *   memory: Memory.byState("user_id", "users", { recall: 3 }),
+ * });
+ * const reply = await agent.run("Hello", { state: { user_id: "u-1" } });
+ * console.log(reply.text); // "Bonjour !"
  */
 export class Memory {
   /** @internal */
   readonly spec: Record<string, unknown>;
 
+  /**
+   * Use `Memory.byState` or `Memory.shared`.
+   * @param spec The settings, as the engine reads them.
+   */
   private constructor(spec: Record<string, unknown>) {
     this.spec = spec;
   }
 
-  /** One namespace per value of the run's `key` (e.g. per user): `prefix/<value>`. */
+  /**
+   * One namespace per value of a run state key, e.g. one per user: `prefix/<value>`.
+   *
+   * A run whose state lacks the key fails with `invalid_state` instead of
+   * seeing someone else's facts.
+   *
+   * @param key The state key whose value (a string or a number) picks the namespace, e.g. `"user_id"`.
+   * @param prefix The namespace above it: `"users"` gives `users/<user_id>`.
+   * @param options Recall size, tools and time to live.
+   */
   static byState(key: string, prefix: string, options: MemoryOptions = {}): Memory {
     return new Memory({ byState: key, prefix, ...options });
   }
 
-  /** One namespace for every run. */
+  /**
+   * One namespace for every run: knowledge shared by all users.
+   *
+   * @param namespace The namespace, e.g. `"team/facts"`.
+   * @param options Recall size, tools and time to live.
+   */
   static shared(namespace: string, options: MemoryOptions = {}): Memory {
     return new Memory({ shared: namespace, ...options });
   }
@@ -119,6 +278,12 @@ export class Memory {
    * Searches by meaning with `embedder`: recall and `search_memory` find facts
    * that say the same thing in other words. If the embedder fails, search
    * falls back to keywords.
+   *
+   * Facts the agent saves with its `remember` tool get a vector; facts saved
+   * with `storage.remember` are found by keywords only.
+   *
+   * @param embedder An `Embedder`, e.g. `Embedder.openai()`.
+   * @returns A new `Memory` with the same settings and the embedder.
    */
   semantic(embedder: { readonly spec: Record<string, unknown> }): Memory {
     return new Memory({ ...this.spec, embedder: embedder.spec });

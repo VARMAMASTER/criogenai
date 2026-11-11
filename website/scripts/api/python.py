@@ -149,6 +149,109 @@ def short(node, limit=70):
     return text if len(text) <= limit else "..."
 
 
+def param_list(args, drop_first):
+    """[{name, type, default}] for a signature, in order (self/cls left out)."""
+    out = []
+    positional = list(args.posonlyargs) + list(args.args)
+    defaults = [None] * (len(positional) - len(args.defaults)) + list(args.defaults)
+    for i, (arg, default) in enumerate(zip(positional, defaults)):
+        if drop_first and i == 0 and arg.arg in ("self", "cls"):
+            continue
+        out.append({"name": arg.arg, "type": unparse(arg.annotation), "default": unparse(default) if default is not None else None})
+    if args.vararg:
+        out.append({"name": "*" + args.vararg.arg, "type": unparse(args.vararg.annotation), "default": None})
+    for arg, default in zip(args.kwonlyargs, args.kw_defaults):
+        out.append({"name": arg.arg, "type": unparse(arg.annotation), "default": unparse(default) if default is not None else None})
+    if args.kwarg:
+        out.append({"name": "**" + args.kwarg.arg, "type": unparse(args.kwarg.annotation), "default": None})
+    return out
+
+
+# ---------- docstrings: Google style sections ----------
+
+SECTION = re.compile(r"^(Args|Arguments|Parameters|Keyword [Aa]rguments|Returns|Yields|Raises|Examples?|Fields|Attributes):\s*$")
+ENTRY = re.compile(r"^(\*{0,2}[A-Za-z_][A-Za-z0-9_]*)(?:\s*\([^)]*\))?\s*:\s*(.*)$")
+
+
+def _dedent(lines):
+    width = min((len(l) - len(l.lstrip()) for l in lines if l.strip()), default=0)
+    return [l[width:] for l in lines]
+
+
+def _entries(lines):
+    """`name: text` entries with indented continuation lines -> {name: text}."""
+    out = {}
+    current = None
+    for line in _dedent(lines):
+        match = ENTRY.match(line) if line and not line[0].isspace() else None
+        if match:
+            current = match.group(1)
+            out[current] = match.group(2).strip()
+        elif current is not None and line.strip():
+            out[current] = (out[current] + " " + line.strip()).strip()
+        elif current is not None and not line.strip():
+            out[current] += "\n\n"
+    return {k: re.sub(r"\n\n\s*$", "", v).strip() for k, v in out.items()}
+
+
+def sections(doc):
+    """Splits a docstring into its body and its Google style sections."""
+    lines = doc.split("\n")
+    body, found, name, chunk = [], {}, None, []
+
+    def close():
+        if name is not None:
+            found.setdefault(name, []).extend(chunk)
+
+    for line in lines:
+        match = SECTION.match(line)
+        if match:
+            close()
+            name, chunk = match.group(1).lower(), []
+        elif name is None:
+            body.append(line)
+        elif line and not line[0].isspace():
+            # Text back at the left margin ends the section.
+            close()
+            name, chunk = None, []
+            body.append(line)
+        else:
+            chunk.append(line)
+    close()
+    parsed = {"body": "\n".join(body).strip(), "params": {}, "fields": {}, "returns": "", "raises": {}, "examples": []}
+    for key, chunk in found.items():
+        if key in ("args", "arguments", "parameters", "keyword arguments"):
+            parsed["params"].update(_entries(chunk))
+        elif key in ("fields", "attributes"):
+            parsed["fields"].update(_entries(chunk))
+        elif key in ("returns", "yields"):
+            parsed["returns"] = " ".join(l.strip() for l in chunk if l.strip())
+        elif key == "raises":
+            parsed["raises"].update(_entries(chunk))
+        else:
+            code = "\n".join(_dedent(chunk)).strip("\n")
+            if code:
+                parsed["examples"].append(code)
+    return parsed
+
+
+def documented(node_doc, params, extra_params=None):
+    """The item's doc fields: body text, params with their descriptions, returns, raises, examples."""
+    parsed = sections(node_doc)
+    described = dict(extra_params or {})
+    described.update(parsed["params"])
+    for p in params:
+        p["doc"] = described.get(p["name"].lstrip("*"), described.get(p["name"], ""))
+    return {
+        "doc": parsed["body"],
+        "params": params,
+        "returns": parsed["returns"],
+        "raises": [{"name": k, "doc": v} for k, v in parsed["raises"].items()],
+        "examples": parsed["examples"],
+        "_fields": parsed["fields"],
+    }
+
+
 # ---------- items ----------
 
 
@@ -185,10 +288,14 @@ def method_items(cls):
         drop = "staticmethod" not in names
         if kind == "property":
             sig = f"{name}: {unparse(main.returns)}" if main.returns is not None else name
+            params = []
         else:
             shown = overloads or [main]
             sig = "\n".join(prefix + signature(n, drop) for n in shown)
-        members.append({"name": name, "kind": kind, "signature": sig, "doc": docstring(main)})
+            params = param_list(main.args, drop)
+        info = documented(docstring(main), params)
+        info.pop("_fields")
+        members.append({"name": name, "kind": kind, "signature": sig, **info})
     return members
 
 
@@ -208,34 +315,49 @@ def class_item(name, cls, module, access):
                 text += f" = {short(node.value)}"
             lines.append(text)
             nxt = body[i + 1] if i + 1 < len(body) else None
+            attr_doc = ""
             if isinstance(nxt, ast.Expr) and isinstance(nxt.value, ast.Constant) and isinstance(nxt.value.value, str):
-                fields.append((node.target.id, ast.get_docstring(ast.Module(body=[nxt], type_ignores=[]), clean=True) or ""))
+                attr_doc = ast.get_docstring(ast.Module(body=[nxt], type_ignores=[]), clean=True) or ""
+            fields.append({
+                "name": node.target.id,
+                "type": unparse(node.annotation),
+                "default": short(node.value) if node.value is not None else None,
+                "doc": attr_doc,
+            })
     init = next((n for n in body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "__init__"), None)
+    params = []
+    init_doc = {}
     if init is not None:
         sig = signature(init, False)
         lines.extend(("    " + line) if line else line for line in sig.splitlines())
+        params = param_list(init.args, True)
+        init_doc = sections(docstring(init))["params"]
     if lines[-1] == head:
         # Nothing to show inside the class: no dangling colon.
         lines[-1] = head[:-1]
-    doc = docstring(cls)
-    if fields:
-        doc += "\n\n" + "\n".join(f"- `{n}`: {d}" for n, d in fields if d)
+    info = documented(docstring(cls), params, init_doc)
+    described = info.pop("_fields")
+    for f in fields:
+        f["doc"] = f["doc"] or described.get(f["name"], "")
     return {
         "name": name,
         "kind": "class",
         "signature": "\n".join(lines),
-        "doc": doc.strip(),
+        **info,
+        "fields": fields,
         "members": method_items(cls),
         "access": access,
     }
 
 
 def function_item(name, node, access):
+    info = documented(docstring(node), param_list(node.args, False))
+    info.pop("_fields")
     return {
         "name": name,
         "kind": "function",
         "signature": signature(node, False, name),
-        "doc": docstring(node),
+        **info,
         "members": [],
         "access": access,
     }
@@ -251,6 +373,10 @@ def constant_item(name, node, attribute_doc, access):
         "kind": "constant",
         "signature": text,
         "doc": (attribute_doc or "").strip(),
+        "params": [],
+        "returns": "",
+        "raises": [],
+        "examples": [],
         "members": [],
         "access": access,
     }

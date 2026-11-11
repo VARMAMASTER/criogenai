@@ -1,0 +1,201 @@
+---
+title: "TypeScript API: Web search and page reading"
+description: "TypeScript API reference, web search and page reading: TAVILY_URL, BRAVE_URL, tavilySearch, braveSearch, search, defaultTools, fetchPage, fetch."
+---
+
+Web search (Tavily, Brave) and safe page reading tools. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/web/).
+
+Internet tools for agents: web search (Tavily or Brave) and reading a page.
+
+```ts
+import { Agent, web } from "criogen";
+const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
+```
+
+`web.search()` needs no arguments: it uses TAVILY_API_KEY if set, else
+BRAVE_API_KEY, and says what to set if neither is. The key is read from the
+environment (or passed in), sent only in a request header over https, and
+never appears in an error, a log or a tool result.
+
+Results are data for the model, so they are bounded: a few results, short
+snippets, pages cut to a fixed size. `fetch` refuses addresses on private
+networks (a model must not reach your internal services through it), does
+not follow redirects, and reads at most 500 KB.
+
+```ts
+import { web } from "criogen";
+web.TAVILY_URL
+```
+
+These are used as `web.<name>`.
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`TAVILY_URL`](#tavily_url) | constant | Tavily's API, the default `baseUrl` of `tavilySearch`. |
+| [`BRAVE_URL`](#brave_url) | constant | Brave Search's API, the default `baseUrl` of `braveSearch`. |
+| [`tavilySearch`](#tavilysearch) | function | A `web_search` tool backed by Tavily (TAVILY_API_KEY). |
+| [`braveSearch`](#bravesearch) | function | A `web_search` tool backed by Brave Search (BRAVE_API_KEY). |
+| [`search`](#search) | function | A web search tool with no setup: Tavily if TAVILY_API_KEY is set, else Brave if BRAVE_API_KEY is. |
+| [`defaultTools`](#defaulttools) | function | What a researcher gets when you give it no tools: web search if a key is set, else nothing. |
+| [`fetchPage`](#fetchpage) | function | A `read_page` tool: fetches a public web page and returns its text (cut to `maxChars`). |
+| [`fetch`](#fetch) | function | A `read_page` tool: fetches a public web page and returns its text (cut to `maxChars`). |
+
+## TAVILY_URL
+
+```ts
+const TAVILY_URL: "https://api.tavily.com"
+```
+
+Tavily's API, the default `baseUrl` of `tavilySearch`.
+
+## BRAVE_URL
+
+```ts
+const BRAVE_URL: "https://api.search.brave.com"
+```
+
+Brave Search's API, the default `baseUrl` of `braveSearch`.
+
+## tavilySearch
+
+```ts
+function tavilySearch(options?: { apiKey?: string; maxResults?: number; depth?: "basic" | "advanced"; baseUrl?: string; }): Tool<{ query: string; }>
+```
+
+A `web_search` tool backed by Tavily (TAVILY_API_KEY). `depth`: "basic" or "advanced".
+
+The model gives a `query` (cut to 400 characters) and gets
+`{ answer, results: [{ title, url, snippet }] }`, with snippets cut to 600
+characters. The key is read when the tool runs; without one the call fails
+with a `ToolError` that says what to set.
+
+**Parameters**
+
+- `options` (`{ apiKey?: string; maxResults?: number; depth?: "basic" | "advanced"; baseUrl?: string; }`, default `{}`): `apiKey` (default: the `TAVILY_API_KEY` environment variable), `maxResults` (1 to 10, default 5), `depth` (default "basic"), `baseUrl` (default `TAVILY_URL`; https only, plain http only to this computer).
+
+**Raises**
+
+- `TypeError`: `depth` is not "basic" or "advanced", or `baseUrl` is not https.
+
+**Example**
+
+```ts
+import { Agent, web } from "criogen";
+
+// Needs TAVILY_API_KEY and OPENAI_API_KEY.
+const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.tavilySearch({ maxResults: 3, depth: "advanced" })] });
+console.log((await agent.run("What changed in the latest Node.js release?")).text);
+```
+
+## braveSearch
+
+```ts
+function braveSearch(options?: { apiKey?: string; maxResults?: number; baseUrl?: string; }): Tool<{ query: string; }>
+```
+
+A `web_search` tool backed by Brave Search (BRAVE_API_KEY).
+
+The model gives a `query` (cut to 400 characters) and gets
+`{ answer: null, results: [{ title, url, snippet }] }`.
+
+**Parameters**
+
+- `options` (`{ apiKey?: string; maxResults?: number; baseUrl?: string; }`, default `{}`): `apiKey` (default: the `BRAVE_API_KEY` environment variable), `maxResults` (1 to 10, default 5), `baseUrl` (default `BRAVE_URL`; https only, plain http only to this computer).
+
+**Raises**
+
+- `TypeError`: `baseUrl` is not https.
+
+## search
+
+```ts
+function search(options?: { apiKey?: string; provider?: "tavily" | "brave"; maxResults?: number; }): Tool<{ query: string; }>
+```
+
+A web search tool with no setup: Tavily if TAVILY_API_KEY is set, else Brave
+if BRAVE_API_KEY is. `provider: "tavily" | "brave"` chooses explicitly.
+
+**Parameters**
+
+- `options` (`{ apiKey?: string; provider?: "tavily" | "brave"; maxResults?: number; }`, default `{}`): `provider`, `apiKey` (with no provider, a key given here is used for Tavily) and `maxResults` (1 to 10, default 5).
+
+**Raises**
+
+- `Error`: No provider is chosen, no key is given, and neither environment variable is set.
+- `TypeError`: `provider` is neither "tavily" nor "brave".
+
+**Example**
+
+```ts
+import { Agent, web } from "criogen";
+
+// Needs TAVILY_API_KEY or BRAVE_API_KEY, and OPENAI_API_KEY.
+const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
+console.log((await agent.run("Find this week's weather forecast for Lisbon.")).text);
+```
+
+## defaultTools
+
+```ts
+function defaultTools(): Tool<any>[]
+```
+
+What a researcher gets when you give it no tools: web search if a key is set, else nothing.
+
+## fetchPage
+
+```ts
+function fetchPage(options?: { allowPrivate?: boolean; maxChars?: number; }): Tool<{ url: string; }>
+```
+
+A `read_page` tool: fetches a public web page and returns its text (cut to
+`maxChars`). Private-network addresses are refused unless `allowPrivate`
+(tests, or on purpose).
+
+Also exported as `web.fetch`. The model gives a `url` and gets
+`{ url, text, truncated }`: the page's text without markup. Redirects are
+not followed, at most 500 KB is read, and a request times out after 20 s.
+
+**Parameters**
+
+- `options` (`{ allowPrivate?: boolean; maxChars?: number; }`, default `{}`): `allowPrivate` (default false) and `maxChars`, the most characters returned (200 to 50,000, default 8,000).
+
+**Example**
+
+```ts
+import { Agent, web } from "criogen";
+
+// Needs OPENAI_API_KEY; reading the page needs no key.
+const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.fetchPage({ maxChars: 4000 })] });
+console.log((await agent.run("Summarize https://example.com")).text);
+```
+
+## fetch
+
+```ts
+function fetch(options?: { allowPrivate?: boolean; maxChars?: number; }): Tool<{ url: string; }>
+```
+
+A `read_page` tool: fetches a public web page and returns its text (cut to
+`maxChars`). Private-network addresses are refused unless `allowPrivate`
+(tests, or on purpose).
+
+Also exported as `web.fetch`. The model gives a `url` and gets
+`{ url, text, truncated }`: the page's text without markup. Redirects are
+not followed, at most 500 KB is read, and a request times out after 20 s.
+
+**Parameters**
+
+- `options` (`{ allowPrivate?: boolean; maxChars?: number; }`, default `{}`): `allowPrivate` (default false) and `maxChars`, the most characters returned (200 to 50,000, default 8,000).
+
+**Example**
+
+```ts
+import { Agent, web } from "criogen";
+
+// Needs OPENAI_API_KEY; reading the page needs no key.
+const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.fetchPage({ maxChars: 4000 })] });
+console.log((await agent.run("Summarize https://example.com")).text);
+```

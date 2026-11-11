@@ -1,0 +1,108 @@
+---
+title: Hooks
+description: Run your own code around the agent loop - block or change tool calls, hide data from the model, answer from a cache, or stop a run early.
+---
+
+Hooks are your code at fixed points of the [agent loop](/docs/concepts/agent-loop/):
+at the start and end of a run, and before and after every model call and
+tool call. Use them for rules that must hold whatever the model does:
+
+- block a tool call, or change its arguments (refunds over 500 need a manager);
+- hide data from the model (card numbers, identifiers);
+- answer a tool call from a cache, without running the tool;
+- stop a run early (too many calls, a budget, a stop button);
+- count, log or measure.
+
+For rules about **who** must approve a call, use
+[approval](/docs/guides/approvals/) instead: it pauses the run and waits for a
+person. For removing identifiers from **every** text the model sees, use
+`redact` ([details](/docs/guides/production/#redaction-before-anything-leaves)),
+which runs before all hooks.
+
+## A hook
+
+A hook is any object with some of these methods, each sync or async:
+
+<Sample name="agents" region="hooks" />
+
+| Python | TypeScript | When | It may |
+|---|---|---|---|
+| `on_start(ctx)` | `onStart(ctx)` | once per run (and per resume or retry) | save state for later calls: `HookAction(state=…)` / `{ state }` |
+| `before_model(ctx)` | `beforeModel(ctx)` | before each model call | replace the transcript (`messages`), or end the run (`end`, `output`) |
+| `after_model(ctx)` | `afterModel(ctx)` | after each model reply (the last message of `ctx.messages`) | replace the reply (`message`), or end the run |
+| `before_tool(call)` | `beforeTool(call)` | before each tool call | change the call (return it), skip the tool (`ToolResult(value)`), or raise `ToolError` |
+| `after_tool(call, result)` | `afterTool(call, result)` | after each tool call | return a replacement result |
+| `on_end(ctx, outcome)` | `onEnd(ctx, outcome)` | always, once per run: `"completed"`, `"suspended"` or `"failed"` | nothing (it cannot change the outcome) |
+
+Return `None` / `undefined` to change nothing. A hook may have a `name`
+attribute; it appears in errors and traces (Python uses the class name if
+there is none).
+
+## What a hook sees
+
+`ctx` (`HookContext`) has:
+
+| Python | TypeScript | Meaning |
+|---|---|---|
+| `run_id` | `runId` | The run's id |
+| `messages` | `messages` | The transcript so far, as JSON messages |
+| `model_calls` | `modelCalls` | Model calls made so far in this run |
+| `hook_state` | `hookState` | What this hook saved with `state`, if anything |
+| `state` | `state` | The run state, read-only (for example `user_id`) |
+
+A tool hook gets a `ToolCall` with `call_id`, `name` and `args`
+(`callId`, `name`, `args`). To change the call, change `name` or `args` and
+return it.
+
+## Order
+
+Hooks run in list order, and the "after" methods in reverse order, like
+layers around the call: with `hooks=[a, b]`, the order is `a.before_tool`,
+`b.before_tool`, the tool, `b.after_tool`, `a.after_tool`.
+
+## Examples
+
+**Answer from a cache.** Return a `ToolResult` from `before_tool` and the tool
+does not run; the model sees the value as the tool's result.
+
+```python
+from criogen import ToolCall, ToolResult
+
+class Cache:
+    def __init__(self) -> None:
+        self.seen: dict = {}
+
+    def before_tool(self, call: ToolCall):
+        key = (call.name, repr(sorted(call.args.items())))
+        return ToolResult(self.seen[key]) if key in self.seen else None
+
+    def after_tool(self, call: ToolCall, result: object):
+        self.seen[(call.name, repr(sorted(call.args.items())))] = result
+        return None
+```
+
+**Keep state across the run.** `on_start` can return `HookAction(state=...)`;
+later calls see it in `ctx.hook_state`. The state is saved with the run, so it
+survives an approval pause or a `retry()`.
+
+## Errors
+
+- An exception in `on_start`, `before_model` or `after_model` fails the run
+  with `hook_failed`; the exception is the error's cause.
+- `ToolError` from `before_tool` goes to the model as the tool's result (the
+  tool does not run).
+- Any other exception in a tool hook counts as the tool's own exception, and
+  follows the agent's `on_tool_exception`.
+- `on_end` cannot fail the run.
+
+Hook methods run on your event loop (Python) or your Node.js thread: keep sync
+ones quick, and make slow ones async.
+
+In Rust, a hook implements `Hook`, with `wrap_tool` and `wrap_model` around
+each call instead of a "before" and an "after" method.
+
+## Next
+
+- [Human approval](/docs/guides/approvals/): pause for a person instead of deciding by rule.
+- [Tracing](/docs/guides/telemetry/): every model and tool call as a span, without writing a hook.
+- API: [Python hooks](/docs/reference/api/python/hooks/), [TypeScript hooks](/docs/reference/api/typescript/hooks/).

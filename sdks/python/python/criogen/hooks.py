@@ -1,6 +1,7 @@
-"""Hooks (design 0017 §5): code that runs around the agent loop, in order.
+"""Hooks: your code at fixed points of the agent loop.
 
-A hook is any object with some of these methods (each sync or async):
+Pass hooks with ``Agent(hooks=[...])``. A hook is any object with some of
+these methods (each may be sync or async):
 
 - ``on_start(ctx)``: once per run segment; may return ``HookAction(state=…)``.
 - ``before_model(ctx)``: before each model call; may replace the
@@ -19,7 +20,20 @@ others in reverse. An exception in ``on_start``, ``before_model`` or
 ``after_model`` fails the run with ``hook_failed`` (the exception is its
 ``__cause__``); one in ``before_tool`` / ``after_tool`` counts as the tool's
 (see ``on_tool_exception``). Hook methods run on your event loop: keep sync
-ones quick.
+ones quick. A hook's ``name`` attribute, or else its class name, identifies
+its saved state.
+
+Example:
+
+    from criogen import Agent, FakeModel, HookAction
+
+    class StopAfterTwoCalls:
+        def before_model(self, ctx):
+            if ctx.model_calls >= 2:
+                return HookAction(end=True, output="stopped: too many model calls")
+            return None
+
+    agent = Agent(FakeModel(["Hello."]), hooks=[StopAfterTwoCalls()])
 """
 
 import inspect
@@ -34,15 +48,26 @@ STAGES = ("on_start", "before_model", "after_model", "before_tool", "after_tool"
 
 @dataclass
 class HookContext:
-    """What a hook sees."""
+    """What a hook sees: passed to ``on_start``, ``before_model``,
+    ``after_model`` and ``on_end``.
+
+    Fields:
+        run_id: The run's id.
+        messages: The transcript so far, as dicts (the form of
+            ``result.messages``). In ``after_model`` it ends with the new
+            reply.
+        model_calls: Model calls made in the run so far.
+        hook_state: What this hook saved with ``HookAction(state=...)``, or
+            ``None``.
+        state: The whole run state, including values passed as keyword
+            arguments to ``run`` or ``send``. Read-only: changes are not
+            kept.
+    """
 
     run_id: str
-    #: The transcript so far (dicts, as in ``result.messages``).
     messages: List[Dict[str, Any]]
     model_calls: int
-    #: What this hook saved with ``HookAction(state=…)``, if anything.
     hook_state: Any
-    #: The whole run state, read-only.
     state: Dict[str, Any]
 
 
@@ -51,9 +76,25 @@ _UNSET: Any = object()
 
 @dataclass
 class HookAction:
-    """What a hook wants: save its ``state``; replace the transcript
-    (``messages``, ``before_model``) or the new reply (``message``,
-    ``after_model``); or ``end`` the run, with ``output``."""
+    """What a hook wants done; returned by ``on_start``, ``before_model`` or
+    ``after_model`` (return ``None`` to change nothing).
+
+    Fields:
+        state: A JSON value to save for this hook; later calls see it as
+            ``ctx.hook_state``. Left unset, the saved state is kept.
+        messages: A new transcript to send to the model instead
+            (``before_model``).
+        message: A new reply to use instead of the model's
+            (``after_model``), as a message dict.
+        end: End the run now, with stop reason ``"hook_end"``.
+        output: With ``end``, the run's ``output``.
+
+    Example:
+        class CountRuns:
+            def on_start(self, ctx):
+                runs = (ctx.hook_state or {}).get("runs", 0) + 1
+                return HookAction(state={"runs": runs})
+    """
 
     state: Any = _UNSET
     messages: Optional[List[Dict[str, Any]]] = None
@@ -70,8 +111,16 @@ class HookAction:
 
 @dataclass
 class ToolCall:
-    """A tool call going through ``before_tool`` (change ``name`` or
-    ``args`` and return it)."""
+    """A tool call, as ``before_tool`` and ``after_tool`` see it.
+
+    In ``before_tool``, change ``name`` or ``args`` and return the call to
+    run the changed call.
+
+    Fields:
+        call_id: The call's id.
+        name: The tool to call.
+        args: The arguments, as a dict.
+    """
 
     call_id: str
     name: str
@@ -80,8 +129,19 @@ class ToolCall:
 
 @dataclass
 class ToolResult:
-    """Returned by ``before_tool``: use ``value`` as the result and skip the
-    tool (e.g. a cached answer)."""
+    """Returned by ``before_tool`` to skip the tool and use ``value`` as its
+    result, for example a cached answer.
+
+    Fields:
+        value: The result the model receives, any JSON value.
+
+    Example:
+        class Cache:
+            def before_tool(self, call):
+                if call.name == "weather" and call.args.get("city") == "Paris":
+                    return ToolResult("sunny (cached)")
+                return None
+    """
 
     value: Any
 

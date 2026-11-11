@@ -1,10 +1,10 @@
 // Tools from MCP servers (design 0022).
 //
-//   import { Agent, mcp } from "criogen";
-//   const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."]);
-//   const agent = new Agent({ model, tools: [files] });          // all its tools
-//   // or tools: [files.tool("read_file")]
-//   await files.close();
+//     import { Agent, mcp } from "criogen";
+//     const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."]);
+//     const agent = new Agent({ model, tools: [files] });          // all its tools
+//     // or tools: [files.tool("read_file")]
+//     await files.close();
 //
 // The client runs in the Rust engine: it speaks MCP 2026-07-28 and falls back
 // to the `initialize` handshake of older servers; stdio servers are started as
@@ -44,6 +44,7 @@ export interface McpOptions {
 export interface StdioOptions extends McpOptions {
   /** Added to this process's environment. */
   env?: Record<string, string>;
+  /** The server process's working directory; default this process's. */
   cwd?: string;
 }
 
@@ -55,8 +56,11 @@ export interface HttpOptions extends McpOptions {
 
 /** What the server said about itself. */
 export interface McpInfo {
+  /** The server's name, if it gave one. */
   name: string | null;
+  /** The server's version, if it gave one. */
   version: string | null;
+  /** The MCP version both sides agreed on, e.g. `"2026-07-28"`. */
   protocolVersion: string;
   /** Its instructions for models (not added to any prompt). */
   instructions: string | null;
@@ -86,16 +90,28 @@ function engine(): McpAddon {
   return addon as McpAddon;
 }
 
-/** One tool of a connected server; put it in an agent's `tools`. */
+/** One tool of a connected server; put it in an agent's `tools`. Get it with `server.tool(name)` or from `server.tools`. */
 export class McpTool {
+  /** The name the agent sees: mapped to what model APIs accept, with the server's `prefix`. */
   readonly name: string;
+  /** The server's description of the tool (cut to 8,000 characters). */
   readonly description: string;
+  /** The JSON Schema of its arguments. */
   readonly schema: Record<string, unknown>;
+  /** The server's readOnlyHint; always `false` unless `trustAnnotations` is set. */
   readonly readOnly: boolean;
+  /** The server's destructiveHint (kept without `trustAnnotations`: it only makes Criogen more careful). */
   readonly destructive: boolean;
+  /** The server's idempotentHint (or readOnlyHint); always `false` unless `trustAnnotations` is set. Idempotent tools are retried after a failure. */
   readonly idempotent: boolean;
 
+  /**
+   * @internal
+   * @param server The server it belongs to.
+   * @param spec The tool as the engine describes it.
+   */
   constructor(
+    /** The server it belongs to. */
     readonly server: McpServer,
     spec: Described["tools"][number],
   ) {
@@ -107,21 +123,51 @@ export class McpTool {
     this.idempotent = spec.idempotent;
   }
 
-  /** Calls it directly (see `McpServer.call`). */
+  /**
+   * Calls it directly (see `McpServer.call`).
+   *
+   * @param args The tool's arguments.
+   * @throws {ToolError} The tool reported a failure.
+   */
   call(args: Record<string, unknown> = {}): Promise<unknown> {
     return this.server.call(this.name, args);
   }
 }
 
-/** A connected MCP server: get one with `mcp.stdio` or `mcp.http`. */
+/**
+ * A connected MCP server: get one with `mcp.stdio` or `mcp.http`.
+ *
+ * Put the server in an agent's `tools` for all its tools, or pick some with
+ * `server.tool(name)`. MCP tools work like any other tool: approvals,
+ * timeouts, limits, hooks and the audit trail apply. Close it with `close()`
+ * (or `await using`).
+ *
+ * @example
+ * import { Agent, mcp } from "criogen";
+ *
+ * // Starts the server as a process (needs Node's npx and network access to fetch it).
+ * const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."], { prefix: "files" });
+ * console.log(files.tools.map((t) => t.name)); // e.g. ["files_read_file", ...]
+ * const agent = new Agent({ model: "openai:gpt-5-mini", tools: [files] });
+ * console.log((await agent.run("What is in README.md?")).text);
+ * await files.close();
+ */
 export class McpServer {
   /** @internal The engine's handle. */
   handle = 0;
+  /** What the server said about itself when it connected. */
   info: McpInfo = { name: null, version: null, protocolVersion: "", instructions: null };
+  /** Its tools, as the agent sees them (after `only`, `exclude` and `prefix`). */
   tools: McpTool[] = [];
 
-  /** @internal */
-  constructor(readonly name: string) {}
+  /**
+   * @internal
+   * @param name The server's name in errors.
+   */
+  constructor(
+    /** The server's name in errors: `name`, else `prefix`, else the command or URL. */
+    readonly name: string,
+  ) {}
 
   /** @internal */
   load(raw: string): this {
@@ -138,7 +184,12 @@ export class McpServer {
     return this.info.instructions;
   }
 
-  /** The tool the agent sees as `name`. */
+  /**
+   * The tool the agent sees as `name`.
+   *
+   * @param name The tool's name as the agent sees it (with the `prefix`).
+   * @throws {Error} The server has no such tool; the message lists its tools.
+   */
   tool(name: string): McpTool {
     const found = this.tools.find((t) => t.name === name);
     if (!found) throw new Error(`no tool named "${name}"; this server has ${this.tools.map((t) => t.name).join(", ")}`);
@@ -154,7 +205,21 @@ export class McpServer {
     }
   }
 
-  /** Calls a tool directly: its text, its JSON value, or its content blocks. Throws ToolError when the tool fails. */
+  /**
+   * Calls a tool directly: its text, its JSON value, or its content blocks. Throws ToolError when the tool fails.
+   *
+   * @param name The tool's name as the agent sees it (with the `prefix`).
+   * @param args The tool's arguments.
+   * @returns The tool's text, its JSON value (`structuredContent`), or its content blocks.
+   * @throws {ToolError} The tool reported a failure (`isError`); the message is the server's.
+   *
+   * @example
+   * import { mcp } from "criogen";
+   *
+   * const server = await mcp.http("https://mcp.example.com/mcp", { headers: { Authorization: `Bearer ${process.env.MCP_TOKEN}` } });
+   * const answer = await server.call("search_docs", { query: "rate limits" });
+   * await server.close();
+   */
   async call(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
     let out: { ok: boolean; error?: string; text?: string; value?: unknown; content?: unknown };
     try {
@@ -202,13 +267,52 @@ async function connect(name: string, spec: string): Promise<McpServer> {
   }
 }
 
-/** Starts `command` with `args` as an MCP server (stdio) and lists its tools. Servers only. */
+/**
+ * Starts `command` with `args` as an MCP server (stdio) and lists its tools. Servers only.
+ *
+ * The process inherits this process's environment plus `env`. If it exits,
+ * the next call starts it again. In the browser (`criogen/web`) this throws
+ * `unsupported`.
+ *
+ * @param command The program, e.g. `"npx"` or `"python"`.
+ * @param args Its arguments.
+ * @param options Environment, working directory, `prefix`, timeouts, limits and which tools to keep.
+ * @returns The connected server.
+ *
+ * @example
+ * import { mcp } from "criogen";
+ *
+ * const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."], {
+ *   prefix: "files",
+ *   only: ["read_file", "list_directory"],
+ * });
+ * console.log(files.info.name, files.tools.length);
+ * await files.close();
+ */
 export function stdio(command: string, args: string[] = [], options: StdioOptions = {}): Promise<McpServer> {
   const spec = common({ transport: "stdio", command, args, env: options.env ?? {}, cwd: options.cwd }, options);
   return connect(options.name ?? options.prefix ?? command, spec);
 }
 
-/** Connects to the MCP server at `url` (Streamable HTTP) and lists its tools. Use https; plain http only to this computer when headers are set. */
+/**
+ * Connects to the MCP server at `url` (Streamable HTTP) and lists its tools. Use https; plain http only to this computer when headers are set.
+ *
+ * Works in both engines, the browser included. Pass a token in `headers`;
+ * header values never appear in an error.
+ *
+ * @param url The server's endpoint, e.g. `"https://mcp.example.com/mcp"`.
+ * @param options Headers, `prefix`, timeouts, limits and which tools to keep.
+ * @returns The connected server.
+ *
+ * @example
+ * import { Agent, mcp } from "criogen";
+ *
+ * const docs = await mcp.http("https://mcp.example.com/mcp", {
+ *   headers: { Authorization: `Bearer ${process.env.MCP_TOKEN}` },
+ *   prefix: "docs",
+ * });
+ * const agent = new Agent({ model: "openai:gpt-5-mini", tools: [docs] });
+ */
 export function http(url: string, options: HttpOptions = {}): Promise<McpServer> {
   const spec = common({ transport: "http", url, headers: options.headers ?? {} }, options);
   return connect(options.name ?? options.prefix ?? url, spec);

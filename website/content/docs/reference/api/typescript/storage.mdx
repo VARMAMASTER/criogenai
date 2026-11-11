@@ -1,11 +1,9 @@
 ---
-title: "TypeScript API: Storage, memory and collections"
-description: "TypeScript API reference for storage, memory and collections: Storage, Memory, StorageOptions, MemoryOptions, RetentionOptions, Collection, CollectionOptions, Document, and more."
+title: "TypeScript API: Storage and memory"
+description: "TypeScript API reference, storage and memory: Storage, Memory, StorageOptions, MemoryOptions, RetentionOptions."
 ---
 
-Generated from the source of `criogen` 0.1.6 (declarations and doc comments) every time the site is built. Also in [Python](/docs/reference/api/python/storage/) and [Rust](/docs/reference/api/rust/). Back to the [API reference](/docs/reference/api/).
-
-## Storage and memory
+Durable threads (SQLite, Postgres, in memory), encryption, audit, retention and long-term memory. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/storage/).
 
 ```ts
 import {
@@ -17,7 +15,17 @@ import {
 } from "criogen";
 ```
 
-### Storage
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`Storage`](#storage) | class | Where threads, long-term memory and the audit trail are kept. |
+| [`Memory`](#memory) | class | Long-term memory for an agent: facts recalled before each model call, and `remember`, `forget` and `search_memory` tools for the model. |
+| [`StorageOptions`](#storageoptions) | interface | Settings for `new Storage(...)`. |
+| [`MemoryOptions`](#memoryoptions) | interface | Settings for `Memory.byState` and `Memory.shared`. |
+| [`RetentionOptions`](#retentionoptions) | interface | Rules for deleting old data, applied by `storage.prune()`. |
+
+## Storage
 
 ```ts
 class Storage {
@@ -25,79 +33,169 @@ class Storage {
 }
 ```
 
-Threads, memory and the audit trail. Agents built with one share it.
+Where threads, long-term memory and the audit trail are kept.
 
-#### Storage.url
+Pass one to agents and workflows (their `storage` option) so that threads
+survive restarts; agents built with the same storage share it. Without a
+URL everything stays in process memory.
+
+**Parameters**
+
+- `options` (`string | StorageOptions`, default `{}`): A URL, or the settings. Nothing: in-memory storage.
+
+**Raises**
+
+- `StorageError`: The database cannot be opened, or the encryption keys are missing or do not match it.
+- `ValidationError`: An option has a value the engine does not accept (e.g. an unknown `onBusy`).
+
+**Example**
+
+```ts
+import { Storage } from "criogen";
+
+const storage = new Storage(); // or new Storage("sqlite:///data/app.db")
+await storage.remember("users/u-1", "diet", "vegetarian");
+const item = await storage.recall("users/u-1", "diet");
+console.log(item?.value); // "vegetarian"
+const hits = await storage.search("users", "vegetarian");
+console.log(hits.length); // 1
+await storage.close();
+```
+
+### Storage.url
 
 ```ts
 readonly url?: string
 ```
 
-#### Storage.close
+The URL it was opened with; `undefined` for in-memory storage.
+
+### Storage.close
 
 ```ts
 close(): Promise<void>
 ```
 
-Closes the database's connections (SQLite releases the file). Later calls fail with StorageError.
+Closes the database's connections (SQLite releases the file). Later calls fail with `StorageError`.
 
-#### Storage.remember
+### Storage.remember
 
 ```ts
 remember(namespace: string, key: string, value: unknown, options?: { ttlSecs?: number; }): Promise<void>
 ```
 
-Saves a fact under `namespace` (e.g. "users/42").
+Saves a fact in long-term memory, replacing any value under the same key.
 
-#### Storage.recall
+Facts saved here are found by keywords. (An agent with `Memory.semantic`
+finds by meaning only the facts it saved itself.)
+
+**Parameters**
+
+- `namespace` (`string`): A path such as `"users/42"`: non-empty segments separated by `/`. The root `""` is refused.
+- `key` (`string`): The fact's name in the namespace.
+- `value` (`unknown`): Any JSON value, at most 1 MiB as JSON text.
+- `options` (`{ ttlSecs?: number; }`, default `{}`): `ttlSecs`: delete the fact this many seconds from now. Without it the fact is kept until deleted.
+
+**Raises**
+
+- `ValidationError`: The namespace, key or value is not accepted (`invalid_value`).
+- `StorageError`: The database failed.
+
+### Storage.recall
 
 ```ts
 recall(namespace: string, key: string): Promise<Record<string, unknown> | null>
 ```
 
-The item, or null.
+Reads one fact from long-term memory.
 
-#### Storage.search
+**Parameters**
+
+- `namespace` (`string`): The namespace it was saved in, e.g. `"users/42"`.
+- `key` (`string`): Its key.
+
+**Returns:** The item (`namespace`, `key`, `value`, `created_at_ms`, `updated_at_ms`, and `expires_at_ms` when it has a time to live), or `null` if it is missing or expired.
+
+### Storage.search
 
 ```ts
 search(namespace: string, text?: string, limit?: number): Promise<Record<string, unknown>[]>
 ```
 
-Items in `namespace` and below matching `text` (keywords).
+Searches long-term memory by keywords, in a namespace and the namespaces inside it.
 
-#### Storage.forgetAll
+An item matches when its key or the text in its value contains the
+query's words (common words such as "the" are ignored). Results are
+ranked by the share of words matched, then newest first.
+
+**Parameters**
+
+- `namespace` (`string`): Where to search: `"users"` also covers `"users/42"`.
+- `text` (`string`, optional): The words to look for. Without them: every item, newest first.
+- `limit` (`number`, default `10`): The most items to return.
+
+**Returns:** Items as `recall` returns them, with a `score` from 0 to 1 when `text` was given.
+
+### Storage.forgetAll
 
 ```ts
 forgetAll(namespace: string): Promise<number>
 ```
 
-Deletes everything in `namespace` and below (e.g. one patient).
+Deletes every fact in a namespace and the namespaces inside it, for
+example everything about one person.
 
-#### Storage.prune
+**Parameters**
+
+- `namespace` (`string`): The namespace, e.g. `"users/42"`. The root `""` is refused.
+
+**Returns:** How many items were deleted.
+
+### Storage.prune
 
 ```ts
 prune(): Promise<Record<string, number>>
 ```
 
-Applies the retention rules once.
+Applies the `retention` rules once and removes expired memory items.
 
-#### Storage.auditRecords
+**Returns:** Counts: `threadsDeleted`, `threadsBusy` (skipped because they were running), `checkpointsDeleted`, `memoryItemsDeleted`.
+
+### Storage.auditRecords
 
 ```ts
 auditRecords(query?: { threadId?: string; action?: string; afterSeq?: number; limit?: number; }): Promise<Record<string, unknown>[]>
 ```
 
-Audit records, oldest first (needs `audit: true`).
+Reads the audit trail, oldest first. Needs `audit: true`.
 
-#### Storage.verifyAudit
+Each record has `seq` (1, 2, 3, ...), `at_ms`, `action` (e.g.
+`"approval.decided"`), when they apply `actor`, `thread_id`, `run_id`,
+`subject`, `outcome` and `details`, and the chain's `prev_hash` and `hash`.
+
+**Parameters**
+
+- `query` (`{ threadId?: string; action?: string; afterSeq?: number; limit?: number; }`, default `{}`): Filters: `threadId`, `action`, `afterSeq` (only records after this `seq`), `limit` (default 100).
+
+**Raises**
+
+- `ValidationError`: The storage was opened without `audit: true`.
+
+### Storage.verifyAudit
 
 ```ts
 verifyAudit(): Promise<{ records: number; ok: boolean; first_broken: number | null; }>
 ```
 
-Checks the audit trail's hash chain.
+Checks the audit trail's hash chain. Needs `audit: true`.
 
-### Memory
+**Returns:** `records` checked, `ok`, and `first_broken`: the `seq` of the first record that does not match the chain, or `null`.
+
+**Raises**
+
+- `ValidationError`: The storage was opened without `audit: true`.
+
+## Memory
 
 ```ts
 class Memory {
@@ -105,26 +203,64 @@ class Memory {
 }
 ```
 
-Long-term memory for an agent: recalled before each model call, and
-remember / forget / search_memory tools for the model.
+Long-term memory for an agent: facts recalled before each model call, and
+`remember`, `forget` and `search_memory` tools for the model.
 
-#### Memory.byState
+Facts live in the agent's `storage`, in a namespace such as `users/42`.
+Create one with `Memory.byState` (one namespace per user) or
+`Memory.shared` (one namespace for every run).
+
+**Parameters**
+
+- `spec` (`Record<string, unknown>`): The settings, as the engine reads them.
+
+**Example**
+
+```ts
+import { Agent, FakeModel, Memory, Storage } from "criogen";
+
+const storage = new Storage();
+await storage.remember("users/u-1", "language", "Prefers answers in French.");
+const agent = new Agent({
+  model: new FakeModel(["Bonjour !"]),
+  storage,
+  memory: Memory.byState("user_id", "users", { recall: 3 }),
+});
+const reply = await agent.run("Hello", { state: { user_id: "u-1" } });
+console.log(reply.text); // "Bonjour !"
+```
+
+### Memory.byState
 
 ```ts
 static byState(key: string, prefix: string, options?: MemoryOptions): Memory
 ```
 
-One namespace per value of the run's `key` (e.g. per user): `prefix/<value>`.
+One namespace per value of a run state key, e.g. one per user: `prefix/<value>`.
 
-#### Memory.shared
+A run whose state lacks the key fails with `invalid_state` instead of
+seeing someone else's facts.
+
+**Parameters**
+
+- `key` (`string`): The state key whose value (a string or a number) picks the namespace, e.g. `"user_id"`.
+- `prefix` (`string`): The namespace above it: `"users"` gives `users/<user_id>`.
+- `options` (`MemoryOptions`, default `{}`): Recall size, tools and time to live.
+
+### Memory.shared
 
 ```ts
 static shared(namespace: string, options?: MemoryOptions): Memory
 ```
 
-One namespace for every run.
+One namespace for every run: knowledge shared by all users.
 
-#### Memory.semantic
+**Parameters**
+
+- `namespace` (`string`): The namespace, e.g. `"team/facts"`.
+- `options` (`MemoryOptions`, default `{}`): Recall size, tools and time to live.
+
+### Memory.semantic
 
 ```ts
 semantic(embedder: { readonly spec: Record<string, unknown>; }): Memory
@@ -134,15 +270,21 @@ Searches by meaning with `embedder`: recall and `search_memory` find facts
 that say the same thing in other words. If the embedder fails, search
 falls back to keywords.
 
-### StorageOptions
+Facts the agent saves with its `remember` tool get a vector; facts saved
+with `storage.remember` are found by keywords only.
+
+**Parameters**
+
+- `embedder` (`{ readonly spec: Record<string, unknown>; }`): An `Embedder`, e.g. `Embedder.openai()`.
+
+**Returns:** A new `Memory` with the same settings and the embedder.
+
+## StorageOptions
 
 ```ts
 interface StorageOptions {
-  /** `undefined` (process memory), "sqlite://path.db" or "postgres://…". */
   url?: string;
-  /** "k2:<64 hex>,k1:<64 hex>" (the first is active): encryption at rest. */
   encryptionKeys?: string;
-  /** Record who did what. */
   audit?: boolean;
   retention?: RetentionOptions;
   onBusy?: "wait" | "reject" | "interrupt";
@@ -150,7 +292,30 @@ interface StorageOptions {
 }
 ```
 
-### MemoryOptions
+Settings for `new Storage(...)`.
+
+**Fields**
+
+- `url` (`string`, optional): Where data lives: `"sqlite:///path/to/app.db"` (a file),
+  `"postgres://user@host/db"`, or nothing to keep everything in process
+  memory (lost when the process exits).
+- `encryptionKeys` (`string`, optional): Encrypts content at rest: `"k2:<64 hex digits>,k1:<64 hex digits>"`. The
+  first key encrypts new rows; the others still decrypt older ones (key
+  rotation). Used only with a `url`. A database written with keys refuses
+  to open without them. Keep the keys in an environment variable or a
+  secret store, never in code.
+- `audit` (`boolean`, default `false`): Keeps a tamper-evident audit trail of model calls, tool calls, runs,
+  approvals, rewinds, deletions and memory writes: ids, names and outcomes,
+  no content. Read it with `auditRecords()`, check it with `verifyAudit()`.
+- `retention` (`RetentionOptions`, optional): Rules for deleting old threads and checkpoints, applied by `prune()`.
+- `onBusy` (`"wait" | "reject" | "interrupt"`, default `"wait"`): What a second call on a thread that is already running does: `"wait"`
+  for the running call to finish (at most `busyTimeoutSecs`, then
+  `ThreadBusyError`), `"reject"` at once with `ThreadBusyError`, or
+  `"interrupt"` (cancel the running call, then go). Holds across processes
+  on Postgres, within this process otherwise.
+- `busyTimeoutSecs` (`number`, default `60`): How long `"wait"` and `"interrupt"` wait for the running call, in seconds.
+
+## MemoryOptions
 
 ```ts
 interface MemoryOptions {
@@ -160,7 +325,17 @@ interface MemoryOptions {
 }
 ```
 
-### RetentionOptions
+Settings for `Memory.byState` and `Memory.shared`.
+
+**Fields**
+
+- `recall` (`number`, default `5`): How many facts are added to the model's request before each model call
+  (the best matches for the conversation, then the newest). `0` turns
+  recall off; the tools still work.
+- `tools` (`boolean`, default `true`): Whether the model gets the `remember`, `forget` and `search_memory` tools.
+- `ttlSecs` (`number`, optional): How long facts saved by the `remember` tool are kept, in seconds. Without it they are kept until deleted.
+
+## RetentionOptions
 
 ```ts
 interface RetentionOptions {
@@ -170,131 +345,11 @@ interface RetentionOptions {
 }
 ```
 
-## Collections
+Rules for deleting old data, applied by `storage.prune()`. Without any rule
+everything is kept.
 
-```ts
-import { Collection, CollectionOptions, Document, Hit, CollectionTool } from "criogen";
-```
+**Fields**
 
-### Collection
-
-```ts
-class Collection {
-  constructor(name: string, storage: Storage, handle: number);
-}
-```
-
-Documents searched by meaning. Open one with `Collection.open`.
-
-#### Collection.open
-
-```ts
-static open(name: string, options: CollectionOptions): Promise<Collection>
-```
-
-Opens collection `name`, building its index from the stored vectors.
-
-#### Collection.add
-
-```ts
-add(documents: Document[]): Promise<number>
-```
-
-Embeds, stores and indexes documents (an existing id is replaced). Returns how many the collection holds.
-
-#### Collection.search
-
-```ts
-search(query: string, options?: { k?: number; where?: Record<string, unknown>; }): Promise<Hit[]>
-```
-
-The `k` documents closest in meaning to `query`, best first; `where` keeps only those whose metadata has these values.
-
-#### Collection.remove
-
-```ts
-remove(id: string): Promise<boolean>
-```
-
-Removes a document; `true` if it was there.
-
-#### Collection.reload
-
-```ts
-reload(): Promise<number>
-```
-
-Rebuilds the index from storage (another process added documents).
-
-#### Collection.count
-
-```ts
-count(): Promise<number>
-```
-
-Documents in the index.
-
-#### Collection.close
-
-```ts
-close(): Promise<boolean>
-```
-
-Forgets the in-memory index (the documents stay stored).
-
-#### Collection.asTool
-
-```ts
-asTool(name: string, description: string): CollectionTool
-```
-
-This collection as an agent tool: the model gives a `query` (and optionally `k`, up to 20) and gets the hits.
-
-### CollectionOptions
-
-```ts
-interface CollectionOptions {
-  embedder: Embedder;
-  /** A Storage or a URL; in memory without one. */
-  storage?: Storage | string;
-  /** "flat" (exact, the default) or "hnsw". */
-  index?: "flat" | "hnsw";
-  /** HNSW only: candidates kept per search (default 64; higher is slower and more accurate). */
-  efSearch?: number;
-}
-```
-
-### Document
-
-```ts
-interface Document {
-  id: string;
-  text: string;
-  metadata?: Record<string, unknown>;
-}
-```
-
-A text to search, with an id and metadata.
-
-### Hit
-
-```ts
-interface Hit {
-  id: string;
-  text: string;
-  metadata: Record<string, unknown>;
-  score: number;
-}
-```
-
-A search result: the document and its cosine similarity to the query.
-
-### CollectionTool
-
-```ts
-class CollectionTool {
-  constructor(collection: Collection, name: string, description: string);
-}
-```
-
-A collection as an agent tool (`collection.asTool(...)`).
+- `threadTtlSecs` (`number`, optional): Deletes threads whose last save is this many seconds old or older, as `thread.delete()` would. Threads waiting for an approval count as idle.
+- `keepCheckpoints` (`number`, optional): Keeps each thread's latest checkpoint and the `n - 1` before it (at least one); older checkpoints and abandoned branches are deleted, and history then starts at the oldest kept one.
+- `dropBranches` (`boolean`, optional): Deletes the branches that `rewind` left behind and keeps the current branch whole. `keepCheckpoints` drops them too.

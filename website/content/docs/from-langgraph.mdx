@@ -1,0 +1,183 @@
+---
+title: Coming from LangGraph or LangChain
+description: How LangGraph and LangChain ideas map to Criogen - graphs, state and reducers, checkpointers and threads, interrupts and approvals, stores and memory - with side-by-side code and the differences that matter.
+---
+
+If you know LangGraph or LangChain's agents, most of Criogen will look
+familiar: a graph of steps over a shared state, run in steps, saved by a
+checkpointer, paused for a person. This page maps the ideas one to one, shows
+the same program in both, and lists the differences that change how you write
+code. The LangGraph snippets are short sketches to show the idea, not complete
+programs.
+
+## The map
+
+| LangGraph / LangChain | Criogen | Notes |
+|---|---|---|
+| `StateGraph(State)` with a `TypedDict` | `Workflow()` | The state is plain JSON: no schema class |
+| `add_node(name, fn)` | `@wf.node`, `wf.add_node(name, fn)`, `.node(name, fn)` | Same contract: return the keys you change |
+| `add_edge(START, "a")` | `wf.start("a")` | |
+| `add_edge("a", "b")` | `wf.edge("a", "b")` | |
+| `add_conditional_edges("a", fn, path_map)` | `wf.route("a", fn, {label: node})` | Labels must be declared; an unknown label is an error (`unknown_route`) |
+| `Annotated[list, operator.add]` | `Workflow(reducers={"key": "append"})` | Two writes to a key in one step without a reducer fail in both (here: `update_conflict`) |
+| `add_messages` | `"upsert_by_id"` | Agent nodes write the whole transcript back, so keep the default for `messages` |
+| `Command(goto=..., update=...)` | `goto(targets, update)` | The node's possible targets are declared with `wf.goto(node, [...])` |
+| Waiting for several branches | `wf.join([a, b], c)` | |
+| `Send` (a dynamic fan-out) | none | Fixed fan-out: several edges and a `join`. Dynamic: `asyncio.gather` / `Promise.all` inside one node |
+| `compile(checkpointer=...)` | `wf.compile(storage=...)`, `Agent(storage=...)` | |
+| `InMemorySaver`, `SqliteSaver`, `PostgresSaver` | `Storage()`, `Storage("sqlite://...")`, `Storage("postgres://...")` | One storage also holds memory and the audit trail |
+| `config={"configurable": {"thread_id": ...}}` | `agent.thread(id)`, `app.thread(id)` | A handle instead of a config dict |
+| `interrupt(value)` and `Command(resume=...)` | `suspend(payload)` and `thread.resume({node: value})` | The paused node runs again with `ctx.resume`, as with `interrupt` |
+| Human approval of tool calls | `Agent(approve=[...])`, then `approve`, `reject`, `decide` | No node to write: the agent pauses before the tools run |
+| `get_state_history`, time travel | `thread.history()`, `thread.rewind(id)` | No `update_state`: rewind, then send |
+| `stream_mode="messages"` / `"updates"` | `thread.stream(...)` events | `text`, `tool_call_started`, `approval_needed`, ... |
+| `recursion_limit` | `max_steps` (workflows), `limits` (agents) | Agents always have limits (25 model calls by default) |
+| `RetryPolicy` on a node | `model_retry`, `tool_retry` on agents | Per-node retry policies are in Rust only |
+| `create_react_agent` / `create_agent` | `Agent(model, tools=[...])` | The loop runs in the engine; no graph to build |
+| `@tool` (`langchain_core.tools`) | `@tool` (Python), `tool({...})` (TypeScript) | Arguments are checked against the schema by the engine before your function runs |
+| `ToolNode` | built into the agent | Tool calls run concurrently; results in call order |
+| `BaseStore`: `put`, `search` with tuple namespaces | `storage.remember`, `storage.search` with path namespaces | `"users/1"` instead of `("users", "1")` |
+| Memory tools for the agent | `Agent(memory=Memory.by_state(...))` | Recall before each model call, plus `remember` / `forget` / `search_memory` |
+| Middleware / callbacks | [Hooks](/docs/guides/hooks/) | Before and after every model and tool call |
+| LangSmith | [Tracing](/docs/guides/telemetry/): OTLP, Langfuse, a local viewer | |
+| `init_chat_model("openai:...")` | `"openai:gpt-5-mini"` | The same `provider:model` string style |
+
+## A graph
+
+LangGraph, in outline:
+
+```python
+# LangGraph (sketch)
+class State(TypedDict):
+    steps: list[str]
+    answer: str
+    log: Annotated[list[str], operator.add]
+
+graph = StateGraph(State)
+graph.add_node("plan", plan)
+graph.add_node("write", write)
+graph.add_edge(START, "plan")
+graph.add_conditional_edges("plan", lambda s: "write" if s["steps"] else END)
+graph.add_edge("write", END)
+app = graph.compile()
+app.invoke({"question": "..."})
+```
+
+Criogen:
+
+<Sample name="migrate" region="graph" />
+
+What changes:
+
+- No state class. Keys are whatever nodes write; give a reducer only to keys
+  that several nodes write in the same step.
+- `compile()` checks the whole graph and reports every problem at once
+  (unknown nodes, unreachable nodes, nodes with no way out), as a
+  `ValidationError` with `details["issues"]`.
+- A router sees the state **after** the step's updates are merged, including
+  what parallel nodes of the same step wrote.
+
+## An agent with a checkpointer
+
+LangGraph, in outline:
+
+```python
+# LangGraph (sketch)
+agent = create_react_agent(model, tools=[get_weather], checkpointer=SqliteSaver(conn))
+agent.invoke(
+    {"messages": [{"role": "user", "content": "Weather in Paris?"}]},
+    config={"configurable": {"thread_id": "user-1"}},
+)
+```
+
+Criogen:
+
+<Sample name="migrate" region="agent" />
+
+The thread handle replaces the config dict, and the reply carries the answer,
+the transcript, usage and the checkpoint it saved. One run uses a thread at a
+time: a second `send` waits (or is rejected) instead of racing.
+
+## Human in the loop
+
+In LangGraph you call `interrupt()` inside a node (often a node in front of
+the tools) and resume with `Command(resume=...)`. In Criogen, approval of
+tool calls is an agent option; the four answers (approve, edit, reject,
+respond) are built in:
+
+<Sample name="migrate" region="interrupt" />
+
+For pauses that are not about tool calls, a workflow node returns
+`suspend(payload)`; `thread.resume({node: value})` continues it, and the node
+runs again with `ctx.resume == value`, much like `interrupt` returning its
+resume value. See [Human approval](/docs/guides/approvals/) and
+[Workflows](/docs/guides/workflows/#pause-for-a-person).
+
+## A store for long-term memory
+
+LangGraph's store keeps JSON documents under tuple namespaces:
+
+```python
+# LangGraph (sketch)
+store.put(("users", "1"), "language", {"value": "French"})
+store.search(("users", "1"), query="language")
+```
+
+Criogen's memory lives in the same storage as threads, under path namespaces,
+and an agent can use it directly:
+
+<Sample name="migrate" region="store" />
+
+## Differences that change how you write code
+
+- **Strict by default.** Tool arguments, edited approvals, structured output
+  and graphs are validated, and problems are errors with stable codes, not
+  warnings. A typo in a route label fails at once.
+- **The engine is not in your language.** Scheduling, merging, validation,
+  retries and saving run in Rust; your Python or TypeScript functions are the
+  nodes and tools. The state and messages are JSON, so a thread saved from
+  Python can be continued from TypeScript.
+- **Agents are not graphs you assemble.** The model/tools loop, approvals,
+  structured output, memory recall and retries are options of `Agent`. You
+  build a graph only for your own steps.
+- **Saved per tool call.** Finished tool calls are saved one by one, so
+  `retry()` after a crash never repeats them.
+- **One run per thread.** Concurrent calls on one thread wait, are rejected,
+  or interrupt the running one ([`on_busy`](/docs/guides/storage/#a-thread-that-is-busy)).
+
+## What Criogen does not have (yet)
+
+Be sure these are not load-bearing for you before you move:
+
+- No `Send`: a dynamic number of parallel branches needs one node that runs
+  them itself.
+- No functional API (`@entrypoint` / `@task`): use a `Workflow`.
+- No `update_state`: you cannot edit a thread's state directly; rewind or send
+  a new message.
+- No subgraph type: put an agent in a node, or call another compiled workflow
+  from a node.
+- No large catalog of integrations (document loaders, many vector stores):
+  Criogen has its own [collections](/docs/guides/retrieval/) and
+  [MCP](/docs/guides/mcp/) for outside tools.
+
+The [status page](/docs/status/) lists what is built per language.
+
+## Moving a project
+
+1. Install Criogen next to LangGraph; nothing conflicts.
+2. Move tools first: a LangChain `@tool` function usually needs only the
+   import changed in Python. Check the schema with `tool.schema`.
+3. Replace `create_react_agent` / `create_agent` with `Agent`, and the
+   checkpointer with a `Storage`. Approvals become `approve=[...]`.
+4. Move custom graphs node by node: the node functions often stay as they
+   are (they take the state and return a dict).
+5. Existing LangGraph checkpoints cannot be read by Criogen: start new threads,
+   or copy the messages you need into the first message of a new thread.
+6. Test with `FakeModel` ([Testing](/docs/guides/testing/)) before switching
+   traffic.
+
+## Next
+
+- [Tutorial: build a support agent](/docs/tutorial/support-agent/).
+- [Agents and the loop](/docs/concepts/agent-loop/) and [How a run works](/docs/concepts/runs/).
+- [Benchmarks](/docs/reference/benchmarks/): measured comparisons, with how they were measured.

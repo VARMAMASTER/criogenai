@@ -1,0 +1,272 @@
+---
+title: "TypeScript API: Errors"
+description: "TypeScript API reference, errors: CriogenError, NativeUnavailableError, ModelError, ToolExecutionError, LimitExceededError, ThreadBusyError, ThreadSuspendedError, StorageError, and more."
+---
+
+Every error class, one per stable error code. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/errors/).
+
+```ts
+import {
+  CriogenError,
+  NativeUnavailableError,
+  ModelError,
+  ToolExecutionError,
+  LimitExceededError,
+  ThreadBusyError,
+  ThreadSuspendedError,
+  StorageError,
+  ValidationError,
+  CancelledError,
+  isCriogenError,
+} from "criogen";
+```
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`CriogenError`](#criogenerror) | class | Any Criogen failure. |
+| [`NativeUnavailableError`](#nativeunavailableerror) | class | The native engine cannot be loaded on this system (`native_unavailable`). |
+| [`ModelError`](#modelerror) | class | The model failed after retries (`model_failed`). |
+| [`ToolExecutionError`](#toolexecutionerror) | class | A tool crashed (`tool_failed`); `cause` is the thrown value. |
+| [`LimitExceededError`](#limitexceedederror) | class | A run limit was reached (`limit_exceeded`). |
+| [`ThreadBusyError`](#threadbusyerror) | class | Another run holds the thread (`thread_busy`). |
+| [`ThreadSuspendedError`](#threadsuspendederror) | class | The thread waits for approval (`thread_suspended`). |
+| [`StorageError`](#storageerror) | class | Storage failed (`storage_*`, `encryption_*`, `audit_failed`). |
+| [`ValidationError`](#validationerror) | class | Something given was not accepted (`invalid_*`, `resume_invalid`). |
+| [`CancelledError`](#cancellederror) | class | The run was cancelled (`cancelled`), e.g. by an `AbortSignal`. |
+| [`isCriogenError`](#iscriogenerror) | function | `true` if `error` is a Criogen error, with `code` if given. |
+
+## CriogenError
+
+```ts
+class CriogenError extends Error {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+Any Criogen failure. `code` is stable across languages.
+
+Every error the engine raises is a `CriogenError` or one of its
+subclasses, chosen by `code`. The message starts with the code
+(`"limit_exceeded: ..."`). Branch on the class or on `code`, never on the
+message text.
+
+**Parameters**
+
+- `code` (`string`): The stable error code.
+- `message` (`string`): What went wrong; the error's `message` is `"<code>: <message>"`.
+- `details` (`Record<string, unknown> | null`, optional): Structured facts about the failure.
+- `cause` (`unknown`, optional): What caused it, e.g. the value a crashing tool threw; becomes the error's `cause`.
+
+**Example**
+
+```ts
+import { Agent, FakeModel, FakeReply, LimitExceededError, tool } from "criogen";
+
+const ping = tool({ name: "ping", description: "Ping.", input: { type: "object" }, run: () => "pong" });
+const agent = new Agent({ model: new FakeModel([FakeReply.toolCall("ping")]), tools: [ping], limits: { modelCalls: 1 } });
+try {
+  await agent.run("Keep pinging.");
+} catch (error) {
+  if (error instanceof LimitExceededError) console.log(error.code, error.details); // limit_exceeded { limit: "model_calls", value: 1 }
+  else throw error;
+}
+```
+
+### CriogenError.code
+
+```ts
+readonly code: string
+```
+
+The stable snake_case error code, e.g. "model_failed" (listed in the errors reference).
+
+### CriogenError.details
+
+```ts
+readonly details: Record<string, unknown>
+```
+
+Structured facts about the failure (which limit, which call, ...); `{}` when there are none.
+
+## NativeUnavailableError
+
+```ts
+class NativeUnavailableError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+The native engine cannot be loaded on this system (`native_unavailable`).
+Thrown on first use, never at import: `details` names the platform, the
+architecture, the C library and the package that was tried.
+
+**Parameters**
+
+- `code` (`string`): The stable error code.
+- `message` (`string`): What went wrong; the error's `message` is `"<code>: <message>"`.
+- `details` (`Record<string, unknown> | null`, optional): Structured facts about the failure.
+- `cause` (`unknown`, optional): What caused it, e.g. the value a crashing tool threw; becomes the error's `cause`.
+
+## ModelError
+
+```ts
+class ModelError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+The model failed after retries (`model_failed`).
+
+**Parameters**
+
+- `code` (`string`): The stable error code.
+- `message` (`string`): What went wrong; the error's `message` is `"<code>: <message>"`.
+- `details` (`Record<string, unknown> | null`, optional): Structured facts about the failure.
+- `cause` (`unknown`, optional): What caused it, e.g. the value a crashing tool threw; becomes the error's `cause`.
+
+## ToolExecutionError
+
+```ts
+class ToolExecutionError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+A tool crashed (`tool_failed`); `cause` is the thrown value.
+
+**Parameters**
+
+- `code` (`string`): The stable error code.
+- `message` (`string`): What went wrong; the error's `message` is `"<code>: <message>"`.
+- `details` (`Record<string, unknown> | null`, optional): Structured facts about the failure.
+- `cause` (`unknown`, optional): What caused it, e.g. the value a crashing tool threw; becomes the error's `cause`.
+
+## LimitExceededError
+
+```ts
+class LimitExceededError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+A run limit was reached (`limit_exceeded`).
+
+**Parameters**
+
+- `code` (`string`): The stable error code.
+- `message` (`string`): What went wrong; the error's `message` is `"<code>: <message>"`.
+- `details` (`Record<string, unknown> | null`, optional): Structured facts about the failure.
+- `cause` (`unknown`, optional): What caused it, e.g. the value a crashing tool threw; becomes the error's `cause`.
+
+## ThreadBusyError
+
+```ts
+class ThreadBusyError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+Another run holds the thread (`thread_busy`).
+
+**Parameters**
+
+- `code` (`string`): The stable error code.
+- `message` (`string`): What went wrong; the error's `message` is `"<code>: <message>"`.
+- `details` (`Record<string, unknown> | null`, optional): Structured facts about the failure.
+- `cause` (`unknown`, optional): What caused it, e.g. the value a crashing tool threw; becomes the error's `cause`.
+
+## ThreadSuspendedError
+
+```ts
+class ThreadSuspendedError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+The thread waits for approval (`thread_suspended`).
+
+**Parameters**
+
+- `code` (`string`): The stable error code.
+- `message` (`string`): What went wrong; the error's `message` is `"<code>: <message>"`.
+- `details` (`Record<string, unknown> | null`, optional): Structured facts about the failure.
+- `cause` (`unknown`, optional): What caused it, e.g. the value a crashing tool threw; becomes the error's `cause`.
+
+## StorageError
+
+```ts
+class StorageError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+Storage failed (`storage_*`, `encryption_*`, `audit_failed`).
+
+**Parameters**
+
+- `code` (`string`): The stable error code.
+- `message` (`string`): What went wrong; the error's `message` is `"<code>: <message>"`.
+- `details` (`Record<string, unknown> | null`, optional): Structured facts about the failure.
+- `cause` (`unknown`, optional): What caused it, e.g. the value a crashing tool threw; becomes the error's `cause`.
+
+## ValidationError
+
+```ts
+class ValidationError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+Something given was not accepted (`invalid_*`, `resume_invalid`).
+
+**Parameters**
+
+- `code` (`string`): The stable error code.
+- `message` (`string`): What went wrong; the error's `message` is `"<code>: <message>"`.
+- `details` (`Record<string, unknown> | null`, optional): Structured facts about the failure.
+- `cause` (`unknown`, optional): What caused it, e.g. the value a crashing tool threw; becomes the error's `cause`.
+
+## CancelledError
+
+```ts
+class CancelledError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+The run was cancelled (`cancelled`), e.g. by an `AbortSignal`.
+
+**Parameters**
+
+- `code` (`string`): The stable error code.
+- `message` (`string`): What went wrong; the error's `message` is `"<code>: <message>"`.
+- `details` (`Record<string, unknown> | null`, optional): Structured facts about the failure.
+- `cause` (`unknown`, optional): What caused it, e.g. the value a crashing tool threw; becomes the error's `cause`.
+
+## isCriogenError
+
+```ts
+function isCriogenError(error: unknown, code?: string): boolean
+```
+
+`true` if `error` is a Criogen error, with `code` if given.
+
+**Parameters**
+
+- `error` (`unknown`): Any caught value.
+- `code` (`string`, optional): Also require this error code, e.g. "thread_busy".
+
+**Example**
+
+```ts
+import { isCriogenError } from "criogen";
+
+try {
+  await thread.send("Hello");
+} catch (error) {
+  if (isCriogenError(error, "thread_busy")) console.log("Try again in a moment.");
+  else throw error;
+}
+```

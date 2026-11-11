@@ -1,0 +1,264 @@
+---
+title: "Python API: Gateway"
+description: "Python API reference, gateway: Gateway, ChatReply, Chunk, ChatStream."
+---
+
+Chat, stream and embed without an agent, with retries and fallbacks. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/gateway/).
+
+Calling a model without an agent: `Gateway`.
+
+```python
+gw = Gateway(fallbacks=["gemini:gemini-2.5-flash"])
+reply = await gw.chat("openai:gpt-5-mini", "Summarize: …", instructions="Be brief.")
+print(reply.text)
+```
+
+Retries and fallback models work as for an agent, in the Rust engine.
+
+```python
+from criogen import Gateway, ChatReply, Chunk, ChatStream
+```
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`Gateway`](#gateway) | class | Model calls without an agent: `chat`, `stream` and `embed`. |
+| [`ChatReply`](#chatreply) | class | A model's answer, from `Gateway.chat` or `ChatStream.reply`. |
+| [`Chunk`](#chunk) | class | A piece of a streamed answer. |
+| [`ChatStream`](#chatstream) | class | A streamed answer, from `Gateway.stream`. |
+
+## Gateway
+
+```python
+class Gateway:
+    def __init__(
+        self,
+        *,
+        fallbacks: Sequence[Any] = (),
+        fallback_on: Sequence[str] = (),
+        retry: Optional[Retry] = None,
+        max_retry_after: Optional[float] = None,
+    )
+```
+
+Model calls without an agent: `chat`, `stream` and `embed`.
+
+Each call names its model, and gets the same retries and fallback
+models as an agent, run by the engine. No tools, no threads. One
+`Gateway` can serve many calls at once.
+
+**Parameters**
+
+- `fallbacks` (`Sequence[Any]`, default `()`): Models tried in order when the model asked for fails with a transient error (rate limit, overload, server error, timeout, network) after its retries. Model objects or `"provider:model"` strings.
+- `fallback_on` (`Sequence[str]`, default `()`): More model error kinds that also move to the next fallback, for example `"context_overflow"`.
+- `retry` (`Optional[Retry]`, default `None`): How transient errors are retried. Default `Retry()`: 3 attempts, backoff from 0.5 s doubling up to 20 s, with jitter.
+- `max_retry_after` (`Optional[float]`, default `None`): The longest `Retry-After` that is waited for, in seconds (default 60). Longer requests fail at once, or move to a fallback.
+
+**Example**
+
+```python
+from criogen import FakeModel, Gateway
+
+gateway = Gateway(fallbacks=[FakeModel(["From the backup."], name="backup")])
+reply = gateway.chat_sync(FakeModel(["Hi there."]), "Hello", instructions="Be brief.")
+print(reply.text, reply.model)  # Hi there. fake:fake
+```
+
+### Gateway.chat
+
+```python
+async def chat(
+    model: Any,
+    input: Input,
+    *,
+    instructions: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    output: Any = None,
+) -> ChatReply
+```
+
+Asks a model for one answer.
+
+**Parameters**
+
+- `model` (`Any`): The model: a model object or a `"provider:model"` string.
+- `input` (`Input`): The user's text, or a list of message dicts (`role` and `content`; `content` may be a string).
+- `instructions` (`Optional[str]`, default `None`): A system prompt, sent before `input`.
+- `temperature` (`Optional[float]`, default `None`): The sampling temperature. `None` leaves the provider's default.
+- `max_tokens` (`Optional[int]`, default `None`): The most tokens the answer may have. `None` leaves the provider's default.
+- `output` (`Any`, default `None`): A JSON Schema (dict) or a Pydantic model class the answer must match; `reply.output` is then the parsed JSON (a dict).
+
+**Returns:** The `ChatReply`.
+
+**Raises**
+
+- `ModelError`: The model and every fallback failed.
+
+**Example**
+
+```python
+reply = await gateway.chat(
+    "openai:gpt-5-mini",
+    [{"role": "user", "content": "Name a colour."}],
+    max_tokens=20,
+)
+```
+
+### Gateway.stream
+
+```python
+def stream(
+    model: Any,
+    input: Input,
+    *,
+    instructions: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    output: Any = None,
+) -> ChatStream
+```
+
+Asks a model for one answer and streams it as it is written.
+
+Takes the same arguments as `chat`. Call it inside a running event
+loop.
+
+**Parameters**
+
+- `model` (`Any`): The model: a model object or a `"provider:model"` string.
+- `input` (`Input`): The user's text, or a list of message dicts.
+- `instructions` (`Optional[str]`, default `None`): A system prompt, sent before `input`.
+- `temperature` (`Optional[float]`, default `None`): The sampling temperature.
+- `max_tokens` (`Optional[int]`, default `None`): The most tokens the answer may have.
+- `output` (`Any`, default `None`): A JSON Schema or a Pydantic model class the answer must match.
+
+**Returns:** A `ChatStream` of `Chunk` objects.
+
+**Example**
+
+```python
+stream = gateway.stream("openai:gpt-5-mini", "Tell a short story.")
+async for chunk in stream:
+    print(chunk.text, end="")
+print(stream.reply.usage)
+```
+
+### Gateway.embed
+
+```python
+async def embed(embedder: Embedder, texts: Sequence[str]) -> List[List[float]]
+```
+
+Turns texts into vectors.
+
+**Parameters**
+
+- `embedder` (`Embedder`): The `Embedder` to use.
+- `texts` (`Sequence[str]`): The texts.
+
+**Returns:** One vector (a list of floats) per text, in order.
+
+### Gateway.chat_sync
+
+```python
+def chat_sync(model: Any, input: Input, **options: Any) -> ChatReply
+```
+
+`chat` for code without a running event loop.
+
+**Parameters**
+
+- `model` (`Any`): The model: a model object or a `"provider:model"` string.
+- `input` (`Input`): The user's text, or a list of message dicts.
+- `**options` (`Any`): `instructions`, `temperature`, `max_tokens` and `output`, as for `chat`.
+
+**Returns:** The `ChatReply`.
+
+### Gateway.embed_sync
+
+```python
+def embed_sync(embedder: Embedder, texts: Sequence[str]) -> List[List[float]]
+```
+
+`embed` for code without a running event loop.
+
+**Parameters**
+
+- `embedder` (`Embedder`): The `Embedder` to use.
+- `texts` (`Sequence[str]`): The texts.
+
+**Returns:** One vector per text, in order.
+
+## ChatReply
+
+```python
+@dataclass(frozen=True)
+class ChatReply:
+    text: str
+    message: Dict[str, Any]
+    usage: Dict[str, Any]
+    stop_reason: Optional[str]
+    model: str
+    output: Any = None
+```
+
+A model's answer, from `Gateway.chat` or `ChatStream.reply`.
+
+**Attributes**
+
+- `text` (`str`): All text of the answer.
+- `message` (`Dict[str, Any]`): The assistant message, in the transcript form of `result.messages`.
+- `usage` (`Dict[str, Any]`): Tokens used: `input_tokens`, `output_tokens`, `reasoning_tokens`, `cache_read_tokens`, `cache_write_tokens`.
+- `stop_reason` (`Optional[str]`): Why the model stopped, for example `"stop"` or `"length"`.
+- `model` (`str`): `"provider:model"` that answered; a fallback's name when the first model failed.
+- `output` (`Any`, default `None`): The parsed JSON answer when `output` was given, else `None`.
+
+## Chunk
+
+```python
+@dataclass(frozen=True)
+class Chunk:
+    text: str
+    restart: bool = False
+```
+
+A piece of a streamed answer.
+
+**Attributes**
+
+- `text` (`str`): The new text.
+- `restart` (`bool`, default `False`): A retry started the answer over: drop the text shown so far. Its `text` is empty.
+
+## ChatStream
+
+```python
+class ChatStream:
+    def __init__(self, native: Any)
+```
+
+A streamed answer, from `Gateway.stream`.
+
+Iterate with `async for chunk in stream`; then `stream.reply` holds
+the whole answer. Leaving the loop early cancels the call.
+
+**Parameters**
+
+- `native` (`Any`): The engine's stream (internal).
+
+### ChatStream.reply
+
+```python
+reply: ChatReply
+```
+
+The whole answer, once the loop has finished.
+
+### ChatStream.cancel
+
+```python
+def cancel() -> None
+```
+
+Cancels the call.

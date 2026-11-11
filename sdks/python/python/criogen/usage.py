@@ -31,10 +31,29 @@ def run_facts(messages: List[Dict[str, Any]], started: Optional[float]) -> Dict[
 
 
 def estimate_cost(result: Any, prices: Mapping[str, Mapping[str, float]]) -> Optional[float]:
-    """The cost of a run in USD from your prices (USD per million tokens:
-    ``{"input": .., "output": .., "cache_read": ..}``), keyed by
-    ``"provider:model"`` or by model name. ``None`` when a model that was used
-    has no price. Reasoning tokens count as output tokens."""
+    """Estimates what a run cost in USD, from prices you supply.
+
+    Criogen ships no prices (they change too often). Cached input tokens
+    are charged at ``cache_read`` (or ``input`` when it is missing).
+    Reasoning tokens count as output tokens.
+
+    Args:
+        result: A ``RunResult`` or ``Reply``; its ``models`` field is read.
+        prices: USD per million tokens for each model, keyed by
+            ``"provider:model"`` or by model name:
+            ``{"input": ..., "output": ..., "cache_read": ...}``
+            (``cache_read`` is optional).
+
+    Returns:
+        The cost in USD, or ``None`` when a model the run used has no price.
+
+    Example:
+        from criogen import Agent, FakeModel, estimate_cost
+
+        result = Agent(FakeModel(["Hello."])).run_sync("Hi")
+        cost = estimate_cost(result, {"fake": {"input": 0.25, "output": 2.0}})
+        print(f"{cost:.8f} USD")
+    """
     total = 0.0
     for use in result.models:
         price = prices.get(f"{use['provider']}:{use['model']}") or prices.get(use["model"])

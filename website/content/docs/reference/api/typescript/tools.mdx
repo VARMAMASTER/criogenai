@@ -1,0 +1,290 @@
+---
+title: "TypeScript API: Tools"
+description: "TypeScript API reference, tools: tool, Tool, ToolDefinition, ToolError, ToolContext, JsonSchema, StandardIssue, StandardResult, and more."
+---
+
+Functions the model can call: definitions, input schemas, errors and the tool context. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/tools/).
+
+```ts
+import {
+  tool,
+  Tool,
+  ToolDefinition,
+  ToolError,
+  ToolContext,
+  JsonSchema,
+  StandardIssue,
+  StandardResult,
+  StandardSchema,
+} from "criogen";
+```
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`tool`](#tool) | function | Defines a tool. |
+| [`Tool`](#tool-1) | class | A function the model can call. |
+| [`ToolDefinition`](#tooldefinition-1) | interface | What `tool({...})` takes: the name, description and input schema the model sees, and the function to run. |
+| [`ToolError`](#toolerror) | class | A failure the model should see (and may recover from), unlike a crash. |
+| [`ToolContext`](#toolcontext) | interface | What a tool can know about its call: the second argument of `run`. |
+| [`JsonSchema`](#jsonschema) | type | A JSON Schema, as a plain object (e.g. `{ type: "object", properties: {...}, required: [...] }`). |
+| [`StandardIssue`](#standardissue) | interface | One problem a Standard Schema found. |
+| [`StandardResult`](#standardresult) | type | What a Standard Schema's `validate` returns. |
+| [`StandardSchema`](#standardschema) | interface | A schema from a library that implements Standard Schema v1 (standardschema.dev): Zod 4, Valibot, ArkType and others. |
+
+## tool
+
+```ts
+function tool<Args = Record<string, unknown>>(definition: ToolDefinition<Args>): Tool<Args>
+```
+
+Defines a tool. With a Standard Schema `input`, `Args` is what it outputs.
+
+The engine checks the model's arguments against the input schema before
+`run` is called; arguments that do not match go back to the model as an
+error, and `run` is not called. Give the tool to an agent in its `tools`
+option.
+
+**Parameters**
+
+- `definition` (`ToolDefinition<Args>`): The name, description, input schema and `run` function.
+
+**Returns:** A `Tool` for an agent's `tools`.
+
+**Raises**
+
+- `TypeError`: An invalid name, a missing `run`, or a Standard Schema with no JSON Schema.
+
+**Example**
+
+```ts
+import { tool } from "criogen";
+
+const weather = tool<{ city: string }>({
+  name: "get_weather",
+  description: "Current weather for a city.",
+  input: { type: "object", properties: { city: { type: "string" } }, required: ["city"] },
+  readOnly: true,
+  run: async ({ city }, ctx) => ({ city, forecast: "sunny", callId: ctx.callId }),
+});
+```
+
+**Another example**
+
+```ts
+// With Zod 4 (or another Standard Schema library): the model sees its JSON Schema.
+import { z } from "zod";
+import { tool } from "criogen";
+
+const order = tool({
+  name: "order",
+  description: "Orders an item.",
+  input: z.object({ sku: z.string(), qty: z.number().int().min(1).default(1) }),
+  run: ({ sku, qty }) => `ordered ${qty} x ${sku}`,
+});
+```
+
+## Tool
+
+```ts
+class Tool<Args = Record<string, unknown>> {
+  constructor(definition: ToolDefinition<Args>);
+}
+```
+
+A function the model can call. Made by `tool({...})`.
+
+**Parameters**
+
+- `definition` (`ToolDefinition<Args>`): The name, description, input schema and `run` function.
+
+**Raises**
+
+- `TypeError`: The name has characters other than letters, digits, `_` and `-` (or is not 1 to 64 long), `run` is not a function, or a Standard Schema cannot make a JSON Schema and none was given as `jsonSchema`.
+
+### Tool.definition
+
+```ts
+readonly definition: ToolDefinition<Args>
+```
+
+The definition the tool was made from.
+
+### Tool.jsonSchema
+
+```ts
+readonly jsonSchema: JsonSchema
+```
+
+The JSON Schema of the arguments, as the model and the engine see it.
+
+### Tool.name
+
+```ts
+readonly name: string
+```
+
+The tool's name, from its definition.
+
+### Tool.spec
+
+```ts
+spec(): Record<string, unknown>
+```
+
+The tool as the engine receives it: name, description, the JSON Schema of its input and the three hints.
+
+## ToolDefinition
+
+```ts
+interface ToolDefinition<Args = Record<string, unknown>> {
+  name: string;
+  description: string;
+  input: JsonSchema | StandardSchema<any, Args>;
+  jsonSchema?: JsonSchema;
+  run: (args: Args, ctx: ToolContext) => unknown | Promise<unknown>;
+  readOnly?: boolean;
+  destructive?: boolean;
+  idempotent?: boolean;
+}
+```
+
+What `tool({...})` takes: the name, description and input schema the model sees, and the function to run.
+
+**Fields**
+
+- `name` (`string`): The name the model calls the tool by: letters, digits, `_` and `-`, 1 to 64 characters.
+- `description` (`string`): What the tool does and when to use it; the model reads this to decide.
+- `input` (`JsonSchema | StandardSchema<any, Args>`): The arguments: a JSON Schema (an object schema), or a Standard Schema
+  (e.g. a Zod object). With a Standard Schema, `run` receives what it
+  outputs (defaults, transforms), and its issues go back to the model.
+- `jsonSchema` (`JsonSchema`, optional): The JSON Schema the model sees, for a Standard Schema whose library
+  cannot produce one itself (Valibot: `toJsonSchema` from
+  `@valibot/to-json-schema`). Zod 4 and ArkType produce their own.
+- `run` (`(args: Args, ctx: ToolContext) => unknown`): The function, called with the checked arguments and a `ToolContext`.
+  Its return value (or what its Promise resolves to) is the result the
+  model sees, as JSON, so return something `JSON.stringify` accepts;
+  `undefined` means no output. Throw `ToolError` for a failure the model
+  should see.
+- `readOnly` (`boolean`, default `false`): The tool has no side effects. Read-only and idempotent tools are retried
+  after a timeout or a retryable `ToolError` (the agent's `toolRetry`).
+- `destructive` (`boolean`, default `false`): The tool may destroy data. A hint for people and policies; to require a
+  human decision, list the tool in the agent's `approve` option.
+- `idempotent` (`boolean`, default `false`): Calling the tool twice with the same arguments has the same effect as
+  once, so it is safe to retry (see `readOnly`).
+
+## ToolError
+
+```ts
+class ToolError extends Error {
+  constructor(message: string, options?: { retryable?: boolean; });
+}
+```
+
+A failure the model should see (and may recover from), unlike a crash.
+
+Throw it from a tool's `run` when the call cannot succeed as asked (an
+unknown id, a closed account): the model receives `message` as the tool's
+error result and the run goes on. Any other exception is a crash, handled
+as the agent's `onToolException` option says.
+
+**Parameters**
+
+- `message` (`string`): What the model sees as the tool's error.
+- `options` (`{ retryable?: boolean; }`, default `{}`): `retryable` (default false): the call may work if tried
+  again. Tools marked `readOnly` or `idempotent` are then retried
+  (the agent's `toolRetry`); the model also sees the flag.
+
+**Example**
+
+```ts
+import { tool, ToolError } from "criogen";
+
+const lookup = tool<{ orderId: string }>({
+  name: "lookup",
+  description: "Find an order by id.",
+  input: { type: "object", properties: { orderId: { type: "string" } }, required: ["orderId"] },
+  run: ({ orderId }) => {
+    throw new ToolError(`no order ${orderId}`); // the model sees "no order …"
+  },
+});
+```
+
+### ToolError.retryable
+
+```ts
+readonly retryable: boolean
+```
+
+Whether trying the same call again may work; see the constructor.
+
+## ToolContext
+
+```ts
+interface ToolContext {
+  callId: string;
+  runId: string;
+}
+```
+
+What a tool can know about its call: the second argument of `run`.
+
+**Fields**
+
+- `callId` (`string`): The id of this tool call, as in the transcript and in approval requests.
+- `runId` (`string`): The id of the run that made the call (`result.runId`).
+
+## JsonSchema
+
+```ts
+type JsonSchema = Record<string, unknown>;
+```
+
+A JSON Schema, as a plain object (e.g. `{ type: "object", properties: {...}, required: [...] }`).
+
+## StandardIssue
+
+```ts
+interface StandardIssue {
+  readonly message: string;
+  readonly path?: ReadonlyArray<PropertyKey | { readonly key: PropertyKey }> | undefined;
+}
+```
+
+One problem a Standard Schema found.
+
+**Fields**
+
+- `message` (`string`): What is wrong, in the schema library's words.
+- `path` (`readonly (PropertyKey | { readonly key: PropertyKey; })[]`, optional): Where in the value the problem is (property names and array indexes).
+
+## StandardResult
+
+```ts
+type StandardResult<Output> =
+  | { readonly value: Output; readonly issues?: undefined }
+  | { readonly issues: ReadonlyArray<StandardIssue> };
+```
+
+What a Standard Schema's `validate` returns.
+
+## StandardSchema
+
+```ts
+interface StandardSchema<Input = unknown, Output = Input> {
+  readonly "~standard": {
+    readonly version: 1;
+    readonly vendor: string;
+    readonly validate: (value: unknown) => StandardResult<Output> | Promise<StandardResult<Output>>;
+    readonly types?: { readonly input: Input; readonly output: Output } | undefined;
+  };
+}
+```
+
+A schema from a library that implements Standard Schema v1
+(standardschema.dev): Zod 4, Valibot, ArkType and others.
+
+**Fields**
+
+- `~standard` (`{ readonly version: 1; readonly vendor: string; readonly validate: (value: unknown) => StandardResult<Output> | Promise<StandardResult<Output>>; readonly types?: { readonly input: Input; readonly output: Output; } | undefined; }`): The Standard Schema interface the library provides (version, vendor, validate).

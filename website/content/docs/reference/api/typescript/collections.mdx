@@ -1,0 +1,254 @@
+---
+title: "TypeScript API: Collections"
+description: "TypeScript API reference, collections: Collection, CollectionOptions, Document, Hit, CollectionTool."
+---
+
+Documents to search by meaning, and a retrieval tool for agents. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/collections/).
+
+```ts
+import { Collection, CollectionOptions, Document, Hit, CollectionTool } from "criogen";
+```
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`Collection`](#collection) | class | Documents searched by meaning: a small knowledge base for retrieval. |
+| [`CollectionOptions`](#collectionoptions) | interface | Settings for `Collection.open`. |
+| [`Document`](#document) | interface | A text to search, with an id and metadata. |
+| [`Hit`](#hit) | interface | A search result: the document and its cosine similarity to the query. |
+| [`CollectionTool`](#collectiontool) | class | A collection as an agent tool, made by `collection.asTool(name, description)`. |
+
+## Collection
+
+```ts
+class Collection {
+  constructor(name: string, storage: Storage, handle: number);
+}
+```
+
+Documents searched by meaning: a small knowledge base for retrieval.
+
+Open one with `Collection.open`. Documents and their vectors are kept in
+the storage (encrypted when the storage is) and indexed in memory when the
+collection opens. Give it to an agent with `asTool`.
+
+**Parameters**
+
+- `name` (`string`): The collection's name.
+- `storage` (`Storage`): The storage that holds its documents.
+  Where its documents are stored.
+- `handle` (`number`): The engine's handle for the open index.
+
+**Example**
+
+```ts
+import { Collection, Embedder } from "criogen";
+
+const docs = await Collection.open("handbook", { embedder: Embedder.fake() });
+await docs.add([
+  { id: "leave", text: "Annual leave is 25 days a year.", metadata: { section: "hr" } },
+  { id: "parking", text: "Staff parking is behind building B." },
+]);
+const hits = await docs.search("how many days of annual leave", { k: 1 });
+console.log(hits[0].id); // "leave"
+```
+
+### Collection.open
+
+```ts
+static open(name: string, options: CollectionOptions): Promise<Collection>
+```
+
+Opens collection `name`, building its index from the stored vectors.
+
+A new name starts an empty collection. Opening the same name again (in
+this or another process, on the same storage) finds the documents added
+before.
+
+**Parameters**
+
+- `name` (`string`): The collection's name.
+- `options` (`CollectionOptions`): The embedder, the storage and the index kind.
+
+**Raises**
+
+- `StorageError`: The storage failed.
+
+### Collection.add
+
+```ts
+add(documents: Document[]): Promise<number>
+```
+
+Embeds, stores and indexes documents (an existing id is replaced). Returns how many the collection holds.
+
+**Parameters**
+
+- `documents` (`Document[]`): The documents to add.
+
+**Returns:** How many documents the collection holds afterwards.
+
+**Raises**
+
+- `ValidationError`: A document's id, text or metadata is too long (`invalid_value`).
+- `ModelError`: The embedding model failed.
+
+### Collection.search
+
+```ts
+search(query: string, options?: { k?: number; where?: Record<string, unknown>; }): Promise<Hit[]>
+```
+
+The `k` documents closest in meaning to `query`, best first; `where` keeps only those whose metadata has these values.
+
+**Parameters**
+
+- `query` (`string`): The question or text to match.
+- `options` (`{ k?: number; where?: Record<string, unknown>; }`, default `{}`): `k`: how many hits (default 5). `where`: metadata fields and the values they must equal, e.g. `{ section: "hr" }`.
+
+**Raises**
+
+- `ModelError`: The embedding model failed.
+
+### Collection.remove
+
+```ts
+remove(id: string): Promise<boolean>
+```
+
+Removes a document; `true` if it was there.
+
+**Parameters**
+
+- `id` (`string`): The document's id.
+
+### Collection.reload
+
+```ts
+reload(): Promise<number>
+```
+
+Rebuilds the index from storage (another process added documents). Returns how many documents it holds.
+
+### Collection.count
+
+```ts
+count(): Promise<number>
+```
+
+Documents in the index.
+
+### Collection.close
+
+```ts
+close(): Promise<boolean>
+```
+
+Forgets the in-memory index (the documents stay stored). Later calls on this object fail; open it again to use it.
+
+### Collection.asTool
+
+```ts
+asTool(name: string, description: string): CollectionTool
+```
+
+This collection as an agent tool: the model gives a `query` (and optionally `k`, up to 20) and gets the hits.
+
+The tool is read-only; each hit's text is cut to 2,000 characters.
+
+**Parameters**
+
+- `name` (`string`): The tool's name, e.g. `"search_handbook"`.
+- `description` (`string`): What it searches, so the model knows when to call it.
+
+**Example**
+
+```ts
+import { Agent, Collection, Embedder, FakeModel } from "criogen";
+
+const docs = await Collection.open("handbook", { embedder: Embedder.fake() });
+await docs.add([{ id: "leave", text: "Annual leave is 25 days a year." }]);
+const agent = new Agent({
+  model: new FakeModel(["Annual leave is 25 days."]),
+  tools: [docs.asTool("search_handbook", "Search the staff handbook.")],
+});
+console.log((await agent.run("How much leave do I get?")).text);
+```
+
+## CollectionOptions
+
+```ts
+interface CollectionOptions {
+  embedder: Embedder;
+  storage?: Storage | string;
+  index?: "flat" | "hnsw";
+  efSearch?: number;
+}
+```
+
+Settings for `Collection.open`.
+
+**Fields**
+
+- `embedder` (`Embedder`): The embedding model that turns texts into vectors, e.g. `Embedder.openai()`. Use the same one every time you open the collection.
+- `storage` (`string | Storage`, optional): A Storage or a URL; in memory without one.
+- `index` (`"flat" | "hnsw"`, default `"flat"`): `"flat"` compares the query with every vector (exact, builds at once).
+  `"hnsw"` is approximate: faster queries on very large collections, slower
+  to open (the index is rebuilt each time).
+- `efSearch` (`number`, optional): HNSW only: candidates kept per search (default 64; higher is slower and more accurate).
+
+## Document
+
+```ts
+interface Document {
+  id: string;
+  text: string;
+  metadata?: Record<string, unknown>;
+}
+```
+
+A text to search, with an id and metadata.
+
+**Fields**
+
+- `id` (`string`): Unique in its collection (at most 256 bytes); adding the same id again replaces the document.
+- `text` (`string`): What is embedded, searched and returned (at most 100,000 characters; split longer texts).
+- `metadata` (`Record<string, unknown>`, optional): Kept with the document, returned with hits and usable in `search`'s `where` filter (at most 8 KiB as JSON).
+
+## Hit
+
+```ts
+interface Hit {
+  id: string;
+  text: string;
+  metadata: Record<string, unknown>;
+  score: number;
+}
+```
+
+A search result: the document and its cosine similarity to the query.
+
+**Fields**
+
+- `id` (`string`): The document's id.
+- `text` (`string`): The document's text.
+- `metadata` (`Record<string, unknown>`): The document's metadata (`{}` when it has none).
+- `score` (`number`): Cosine similarity between the query and the document, from -1 to 1; higher is closer.
+
+## CollectionTool
+
+```ts
+class CollectionTool {
+  constructor(collection: Collection, name: string, description: string);
+}
+```
+
+A collection as an agent tool, made by `collection.asTool(name, description)`.
+Put it in an agent's `tools`.
+
+**Parameters**
+
+- `collection` (`Collection`): The collection the tool searches.
+- `name` (`string`): The tool's name, as the model sees it.
+- `description` (`string`): What the tool searches, for the model.

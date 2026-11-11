@@ -1,31 +1,84 @@
 ---
 title: Streaming
-description: Show text, tool calls and approvals as they happen, then get the saved reply.
+description: Show text, tool calls and approvals as they happen, send them to a browser, and know what happens when the reader goes away.
 ---
 
-
-`stream(...)` runs one turn on a thread and gives its events as they
-happen; the reply at the end is saved exactly like `send`'s.
+`send` returns when the turn is over, which can take seconds or minutes with
+tools. `stream` runs the same turn and gives you its events as they happen:
+the answer as the model writes it, each tool call as it starts and ends, and
+a pause for approval. At the end, `reply()` gives the saved reply, exactly
+what `send` would have returned. Use streaming for chat interfaces and
+anything a person watches.
 
 <Sample name="streaming" />
 
 ## Events
 
-| Type | Fields | When |
-|---|---|---|
-| `text` | `text`, message id | More of the model's answer |
-| `tool_call_started` | call id, `tool`, `args` | A tool call starts |
-| `tool_call_finished` | call id, `tool`, `status` | It ends (`success`, `error`, …) |
-| `message` | `message` | A complete message (the authoritative version) |
-| `approval_needed` | `requests` | The run paused for a person |
-| `other` | | Steps, retries, warnings |
+Each event has a `type`; the other fields depend on it.
 
-`stream_approve` / `streamApprove`, `stream_reject`, `stream_decide` and
-`stream_retry` stream the other thread operations.
+| `type` | Python fields | TypeScript fields | When |
+|---|---|---|---|
+| `text` | `text`, `message_id` | `text`, `messageId` | More of the model's answer |
+| `tool_call_started` | `call_id`, `tool`, `args` | `callId`, `tool`, `args` | A tool call starts (after its arguments were checked) |
+| `tool_call_finished` | `call_id`, `tool`, `status` | `callId`, `tool`, `status` | It ended: `success`, `error`, `rejected`, ... |
+| `message` | `message` | `message` | A complete message (the authoritative version) |
+| `approval_needed` | `requests` | `requests` | The run paused for a person (each request has `call_id`, `tool`, `args`) |
+| `other` | `event` | `event` | Engine events: steps, retries, warnings |
+
+- `text` events are pieces: append them. When the message is complete, a
+  `message` event carries all of it; prefer that to your own concatenation
+  if you store it.
+- Treat `other` as diagnostics. Its content is not a stable format, and
+  it can include the request sent to the model: do not forward it to a
+  browser.
+- In Python, reading a field the event type does not have raises
+  `AttributeError`; check `event.type` first.
+
+## Streaming the other operations
+
+| Python | TypeScript | Streams |
+|---|---|---|
+| `thread.stream(text, **state)` | `thread.stream(text, { state })` | a new turn |
+| `stream_approve()` | `streamApprove()` | the run after an approval |
+| `stream_reject(reason)` | `streamReject(reason)` | the run after a rejection |
+| (use `decide`) | `streamDecide(decisions)` | the run after per-call decisions |
+| `stream_retry()` | `streamRetry()` | a retried run |
+
+Streaming is for threads. A one-off `agent.run` does not stream: use a thread
+with a fresh id if you need events for a single task.
 
 ## When the reader goes away
 
-Leaving the loop early, cancelling it, or dropping the stream (a browser
-that closed) **cancels** the run instead of abandoning it: the model call
-stops at once, the run is saved as failed with `cancelled`, and `retry()`
-continues it later. Nothing half-written is left in the thread.
+Leaving the loop early (`break`, an exception in your loop body, cancelling
+the task), calling `stream.cancel()`, or a browser closing the connection
+**cancels** the run instead of leaving it running unseen:
+
+- the model call stops at once, and no tool calls start;
+- the run is saved as failed with `cancelled`, and `reply()` raises
+  `CancelledError`;
+- `retry()` (or `stream_retry()`) continues it later. Nothing half-written is
+  left in the thread.
+
+If you want the turn to finish even when nobody watches, use `send` in a
+background task and let the page poll for the result.
+
+## To a browser
+
+Run the stream on your server and forward the events as Server-Sent Events.
+The browser needs no Criogen package: it reads the events with `fetch` or
+`EventSource`. Send only what the page needs (`text`, tool names,
+`done`), and send error **codes**, not messages. Complete examples for
+FastAPI and a Next.js route handler are on [Deploying](/docs/guides/deploying/#stream-to-a-browser).
+
+## Errors
+
+Errors reach you from `reply()` (and, for some, from the loop): the same codes
+as `send`, such as `thread_busy`, `thread_suspended`, `model_failed` and
+`cancelled`. A stream started on a suspended thread fails with
+`thread_suspended`.
+
+## Next
+
+- [Deploying](/docs/guides/deploying/): Server-Sent Events from FastAPI and Next.js.
+- [Conversations (threads)](/docs/guides/threads/): retry and history.
+- [Tracing](/docs/guides/telemetry/): see every run's steps after the fact.

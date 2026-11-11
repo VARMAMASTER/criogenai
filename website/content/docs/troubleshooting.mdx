@@ -1,0 +1,211 @@
+---
+title: Troubleshooting and FAQ
+description: Install problems by platform, missing keys, common errors by code and what to do about each, timeouts, notebooks, Next.js, and frequent questions.
+---
+
+Find the error code or the symptom below. Every Criogen error has a stable
+`code` (`error.code`); the full catalog is on [Error codes](/docs/reference/errors/),
+and how to catch errors is on [Errors and retries](/docs/concepts/errors-and-retries/).
+
+## Install
+
+### Which version do I have?
+
+```sh
+python -c "import criogen; print(criogen.__version__)"
+npm ls criogen criogen-linux-x64 criogen-darwin-arm64 criogen-windows-x64
+```
+
+### A feature is missing on Linux or macOS
+
+The newest engine is not yet built for every platform:
+
+| Platform | Python (`pip install criogen`) | Node.js (`npm install criogen`) |
+|---|---|---|
+| Windows x64 | 0.1.6 | 0.1.6 (engine `criogen-windows-x64` 0.1.6) |
+| Linux x64, Linux ARM64, macOS Apple Silicon | 0.1.3 | package 0.1.6, engine 0.1.3 |
+| macOS Intel | 0.1.2 | package 0.1.6, engine 0.1.3 |
+| Browser (`criogen/web`) | – | 0.1.6 |
+
+Features marked 0.1.4, 0.1.5 or 0.1.6 on the [status page](/docs/status/)
+(MCP, collections, evals, the trace viewer, Azure, Bedrock, Vertex AI, the
+Responses API, `FunctionModel`) are not in a 0.1.3 engine. In TypeScript,
+such a feature fails with `unsupported` and a message saying which engine it
+needs. The other platforms get the new engine with their next build.
+
+### `native_unavailable` (TypeScript) or no wheel found (Python)
+
+The package has no engine for this system. Supported: Linux x64 and ARM64
+with glibc 2.28 or newer, macOS (Apple Silicon and Intel), Windows x64. Not
+supported yet: Alpine and other musl-based Linux, Windows on ARM, 32-bit
+systems, and Edge runtimes.
+
+- **TypeScript:** importing `criogen` never fails; the first use throws
+  `NativeUnavailableError` with `details.platform`, `details.arch`,
+  `details.libc` and the package it tried. If the platform is supported,
+  the engine package was probably not installed: npm skips it when optional
+  dependencies are turned off (`--omit=optional`, `--no-optional`) or when the
+  lock file was made on another platform. Reinstall without those flags, or
+  add the platform package (`criogen-linux-x64`, ...) explicitly.
+- **Python:** pip says "no matching distribution" on an unsupported platform
+  or Python older than 3.9. Check `python --version` and the platform.
+- **Docker:** use a Debian- or Ubuntu-based image, not Alpine.
+
+### pip prints retry warnings for another index
+
+If your pip configuration has an extra index that cannot be reached, pip
+prints warnings and then installs from PyPI. The warnings are harmless; remove
+the extra index from your pip configuration to silence them.
+
+## Keys
+
+### "no API key for openai: set OPENAI_API_KEY ..."
+
+Building an agent with a hosted model checks for its key at once, and fails
+naming the variable (`ready(model)` reports the same text in its `model.error`
+instead of raising). Set it in the
+environment, or put it in a `.env` file and call `load_env()` / `loadEnv()`
+**before** you build the agent. Each provider has its own variable
+([Models](/docs/guides/models/#keep-your-keys-in-the-environment)). Self-hosted
+models (`ollama:`, `lmstudio:`) need none.
+
+### `model_failed` with kind `auth` or `permission`
+
+The provider refused the key, or the key may not use this model. Check that
+the variable holds the right key for **this** provider (an OpenAI key does not
+work for `gemini:`), that it has not expired, and that the account has access
+to the model. Keys never appear in errors or logs, so the message will not show
+which key was sent: print `criogen.env.status()` (Python) or `envStatus()`
+(TypeScript) to see which providers have a key set (names and yes/no only).
+
+### `model_failed` with kind `not_found`
+
+The provider does not know the model name. Check its spelling against the
+provider's model list (`openai:gpt-5-mini`, not `gpt-5-mini` alone, and no
+spaces).
+
+## Errors by code
+
+| Code | Usually means | What to do |
+|---|---|---|
+| `thread_busy` | Another call is running on this thread (a double click, two tabs), and the wait timed out or storage rejects | Wait, or tell the user; see `on_busy` in [Storage](/docs/guides/storage/#a-thread-that-is-busy) |
+| `thread_suspended` | An approval waits on this thread | `approve()`, `reject()` or `decide()` first ([Approval](/docs/guides/approvals/)) |
+| `thread_interrupted` | The process died while the last run was going | `retry()` continues it |
+| `resume_invalid` | `retry()` with nothing to retry; `approve()` with nothing waiting; a decision for an unknown call, or missing one | Check `history()`; answer every waiting call |
+| `workflow_mismatch` | A paused or saved run is continued by an agent or workflow built differently (for example, without the `approve` list it paused with) | Continue it with the same configuration, then change it |
+| `limit_exceeded` | Model calls, tool calls, tokens or nesting ran out (`details["limit"]`) | Raise the limit, or fix what loops (often a tool that keeps failing) |
+| `model_failed` | The model failed after retries and fallbacks (`details["model_error"]["kind"]`) | Transient kinds: retry later or add `fallbacks`. `context_overflow`: shorten the thread or fall back to a longer-context model |
+| `output_invalid` | Typed output still invalid after 2 corrections | Simplify the schema; describe each field; check `details["raw"]` |
+| `tool_failed` | A tool crashed and `on_tool_exception` is `"fail"` | The exception is the error's cause (`__cause__` / `cause`) |
+| `hook_failed` | A hook raised | The exception is the error's cause |
+| `invalid_state` | Memory by state, but the run has no value for its key | Pass it: `send(text, user_id=...)` |
+| `invalid_input` | A message sets one of the agent's own state keys, or changes the memory key of a thread | Use another key name; keep the same user per thread |
+| `invalid_workflow` | The graph does not validate (`details["issues"]` lists every problem) | Fix each issue listed |
+| `update_conflict` | Two parallel nodes wrote the same key in one step | Give the key a reducer (`append`), or write different keys |
+| `node_failed` | A workflow node raised | The exception is the error's cause; `retry()` on a thread |
+| `step_limit_exceeded`, `deadline_exceeded` | A workflow loop did not end in time | Check the loop's exit, or raise `max_steps` / `deadline` |
+| `cancelled` | A signal fired, the task was cancelled, a stream was left, or `on_busy="interrupt"` replaced the call | `retry()` continues it on a thread |
+| `storage_unavailable` | The database cannot be reached, timed out, or `close()` was called | Check the URL and network; do not use a storage after closing it |
+| `storage_incompatible` | The database was written by a newer Criogen | Upgrade the package |
+| `encryption_key_missing`, `encryption_key_invalid` | An encrypted database opened without (or with the wrong) keys | Pass the same `encryption_keys` as before ([Encryption](/docs/guides/compliance/#encryption-at-rest)) |
+| `audit_failed` | The audit trail is on and a record could not be written, so the action did not happen | Check the database; the action can be retried |
+| `unsupported` | The feature needs a server (in `criogen/web`), or a newer engine than the one installed | See the install table above |
+| `native_unavailable` | No engine for this system | See above |
+
+## Tool problems
+
+**The model calls a tool with the wrong arguments again and again.** Each
+time it sees `invalid_arguments` with the problems. Make the schema and
+description clearer (an example value helps: "an id like A-1001"), and keep
+argument names plain. The model-call limit ends a loop that does not converge.
+
+**A tool's exception text reaches the model.** That is the default
+(`on_tool_exception="return_to_model"`). Use `"return_generic"` to hide it, or
+raise `ToolError` with a message written for the model.
+
+**A tool times out.** The default limit is 60 s per call. Raise it with
+`limits={"tool_timeout_secs": 120}` (`limits: { toolTimeoutSecs: 120 }`), or
+make the tool return quickly (start the long job, return a reference, and add
+a second tool to check on it).
+
+**A tool ran twice.** Within one run, only `read_only` and `idempotent` tools
+are retried. After a crash, `retry()` does not repeat tool calls that had
+finished, but a call that was in progress when the process died may run again.
+Use the call id (`ctx.call_id`) as an idempotency key for anything that sends
+or pays.
+
+## Timeouts and slow runs
+
+- **Model calls** have the provider's own time limits; a timeout is a
+  transient error and is retried. To bound a whole call, use a signal
+  (TypeScript: `{ signal: AbortSignal.timeout(30_000) }`) or
+  `asyncio.wait_for(...)` (Python).
+- **Runs that take many model calls** are usually loops: look at
+  `result.messages` (or the [trace viewer](/docs/guides/telemetry/)) to see
+  what the model kept trying.
+- **Workflows** take `max_steps` and `deadline`.
+
+## Python
+
+**`RuntimeError: the *_sync methods cannot run inside an event loop`.**
+`run_sync` and `send_sync` are for scripts. In async code (FastAPI, Jupyter
+notebooks, which run an event loop), `await agent.run(...)` instead.
+
+**`asyncio.CancelledError` versus `criogen.CancelledError`.** Cancelling your
+own task raises asyncio's. Criogen's (code `cancelled`) means the run was
+cancelled for another reason, such as a stream you left.
+
+**`TypeError: no JSON Schema for the type ...` when defining a tool.** The
+parameter's type hint has no JSON form. Use `str`, `int`, `float`, `bool`,
+`list`, `dict`, `Literal`, `Optional` or a Pydantic model.
+
+## TypeScript and Next.js
+
+**`await` at the top level fails.** Use ES modules: `"type": "module"` in
+`package.json`, or `.mts` files.
+
+**Next.js fails to bundle `criogen`, or the route says the engine is
+unavailable.** Add `serverExternalPackages: ["criogen"]` to `next.config.mjs`
+and `export const runtime = "nodejs"` to the route. The Edge runtime cannot
+load native code ([Deploying](/docs/guides/deploying/#nextjs-typescript)).
+
+## FAQ
+
+**Does Criogen send my data anywhere?** Only to the model providers you
+configure, and to a tracing endpoint if you set one. Tracing exports no
+message content unless you turn content capture on. There is no usage
+reporting from the package.
+
+**Can it run without any cloud provider?** Yes: use a self-hosted model
+(`ollama:`, `lmstudio:`, or `OpenAICompatible` for vLLM and other servers) and
+SQLite or Postgres on your own machines. `Embedder.ollama(...)` keeps memory
+search local too.
+
+**How do I see what an agent did?** `result.messages` has the whole
+transcript, including every tool call and result. For a timeline of every
+run, use the local trace viewer or Langfuse ([Tracing](/docs/guides/telemetry/)).
+
+**Can two users share a thread?** Yes: a thread is just an id. Give each
+person their own handle with their `actor`, and runs take turns.
+
+**Can I change the tools of an agent with existing threads?** Yes, between
+turns: the thread stores the conversation, not the tools, and `send` and
+`retry` work with the new agent. Calls to a tool that no longer exists come
+back as `unknown_tool`. A run that is **waiting for approval** must be
+answered by an agent with the same tools and `approve` list as the one that
+paused it; otherwise the answer fails with `workflow_mismatch` or
+`resume_invalid`. Answer waiting approvals before you deploy such a change.
+
+**How do I delete everything about a person?** Delete their threads
+(`thread.delete()`) and their memory (`forget_all("users/<id>")`). See
+[Long-term memory](/docs/guides/memory/#deleting-a-person).
+
+**Is the source code available?** Not yet. The Python and TypeScript packages
+are free to use; the code opens when the packages reach 10,000 installs. The
+Rust crates are published then too.
+
+## Still stuck
+
+Check [Status: built and planned](/docs/status/) to see if what you need
+exists yet, and the [API reference](/docs/reference/api/) for exact
+signatures.

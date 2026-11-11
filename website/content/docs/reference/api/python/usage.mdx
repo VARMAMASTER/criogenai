@@ -1,0 +1,52 @@
+---
+title: "Python API: Usage and cost"
+description: "Python API reference, usage and cost: estimate_cost."
+---
+
+Tokens and an estimated price for a run. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/usage/).
+
+What a run cost: which models answered, with their calls and tokens (from
+the engine's per-message metadata), the call's wall time, and a cost estimate
+from prices the caller supplies (they change too often to ship).
+
+```python
+from criogen import estimate_cost
+```
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`estimate_cost`](#estimate_cost) | function | Estimates what a run cost in USD, from prices you supply. |
+
+## estimate_cost
+
+```python
+def estimate_cost(
+    result: Any,
+    prices: Mapping[str, Mapping[str, float]],
+) -> Optional[float]
+```
+
+Estimates what a run cost in USD, from prices you supply.
+
+Criogen ships no prices (they change too often). Cached input tokens
+are charged at `cache_read` (or `input` when it is missing).
+Reasoning tokens count as output tokens.
+
+**Parameters**
+
+- `result` (`Any`): A `RunResult` or `Reply`; its `models` field is read.
+- `prices` (`Mapping[str, Mapping[str, float]]`): USD per million tokens for each model, keyed by `"provider:model"` or by model name: `{"input": ..., "output": ..., "cache_read": ...}` (`cache_read` is optional).
+
+**Returns:** The cost in USD, or `None` when a model the run used has no price.
+
+**Example**
+
+```python
+from criogen import Agent, FakeModel, estimate_cost
+
+result = Agent(FakeModel(["Hello."])).run_sync("Hi")
+cost = estimate_cost(result, {"fake": {"input": 0.25, "output": 2.0}})
+print(f"{cost:.8f} USD")
+```

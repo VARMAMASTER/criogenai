@@ -1,8 +1,8 @@
 // Internet tools for agents: web search (Tavily or Brave) and reading a page
 // (design 0019).
 //
-//   import { Agent, web } from "criogen";
-//   const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
+//     import { Agent, web } from "criogen";
+//     const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
 //
 // `web.search()` needs no arguments: it uses TAVILY_API_KEY if set, else
 // BRAVE_API_KEY, and says what to set if neither is. The key is read from the
@@ -18,7 +18,9 @@ import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { Tool, ToolError, tool } from "./tools";
 
+/** Tavily's API, the default `baseUrl` of `tavilySearch`. */
 export const TAVILY_URL = "https://api.tavily.com";
+/** Brave Search's API, the default `baseUrl` of `braveSearch`. */
 export const BRAVE_URL = "https://api.search.brave.com";
 const MAX_RESULTS = 10;
 const SNIPPET_CHARS = 600;
@@ -99,7 +101,24 @@ function results(items: unknown, title: string, url: string, snippet: string, li
 const QUERY_SCHEMA = { type: "object", properties: { query: { type: "string" } }, required: ["query"], additionalProperties: false };
 const clampResults = (n: number | undefined): number => Math.max(1, Math.min(Math.trunc(n ?? 5), MAX_RESULTS));
 
-/** A `web_search` tool backed by Tavily (TAVILY_API_KEY). `depth`: "basic" or "advanced". */
+/**
+ * A `web_search` tool backed by Tavily (TAVILY_API_KEY). `depth`: "basic" or "advanced".
+ *
+ * The model gives a `query` (cut to 400 characters) and gets
+ * `{ answer, results: [{ title, url, snippet }] }`, with snippets cut to 600
+ * characters. The key is read when the tool runs; without one the call fails
+ * with a `ToolError` that says what to set.
+ *
+ * @param options `apiKey` (default: the `TAVILY_API_KEY` environment variable), `maxResults` (1 to 10, default 5), `depth` (default "basic"), `baseUrl` (default `TAVILY_URL`; https only, plain http only to this computer).
+ * @throws {TypeError} `depth` is not "basic" or "advanced", or `baseUrl` is not https.
+ *
+ * @example
+ * import { Agent, web } from "criogen";
+ *
+ * // Needs TAVILY_API_KEY and OPENAI_API_KEY.
+ * const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.tavilySearch({ maxResults: 3, depth: "advanced" })] });
+ * console.log((await agent.run("What changed in the latest Node.js release?")).text);
+ */
 export function tavilySearch(options: { apiKey?: string; maxResults?: number; depth?: "basic" | "advanced"; baseUrl?: string } = {}): Tool<{ query: string }> {
   const limit = clampResults(options.maxResults);
   const depth = options.depth ?? "basic";
@@ -130,7 +149,15 @@ export function tavilySearch(options: { apiKey?: string; maxResults?: number; de
   });
 }
 
-/** A `web_search` tool backed by Brave Search (BRAVE_API_KEY). */
+/**
+ * A `web_search` tool backed by Brave Search (BRAVE_API_KEY).
+ *
+ * The model gives a `query` (cut to 400 characters) and gets
+ * `{ answer: null, results: [{ title, url, snippet }] }`.
+ *
+ * @param options `apiKey` (default: the `BRAVE_API_KEY` environment variable), `maxResults` (1 to 10, default 5), `baseUrl` (default `BRAVE_URL`; https only, plain http only to this computer).
+ * @throws {TypeError} `baseUrl` is not https.
+ */
 export function braveSearch(options: { apiKey?: string; maxResults?: number; baseUrl?: string } = {}): Tool<{ query: string }> {
   const limit = clampResults(options.maxResults);
   const base = checkUrl(`${(options.baseUrl ?? BRAVE_URL).replace(/\/$/, "")}/res/v1/web/search`);
@@ -151,6 +178,17 @@ export function braveSearch(options: { apiKey?: string; maxResults?: number; bas
 /**
  * A web search tool with no setup: Tavily if TAVILY_API_KEY is set, else Brave
  * if BRAVE_API_KEY is. `provider: "tavily" | "brave"` chooses explicitly.
+ *
+ * @param options `provider`, `apiKey` (with no provider, a key given here is used for Tavily) and `maxResults` (1 to 10, default 5).
+ * @throws {Error} No provider is chosen, no key is given, and neither environment variable is set.
+ * @throws {TypeError} `provider` is neither "tavily" nor "brave".
+ *
+ * @example
+ * import { Agent, web } from "criogen";
+ *
+ * // Needs TAVILY_API_KEY or BRAVE_API_KEY, and OPENAI_API_KEY.
+ * const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
+ * console.log((await agent.run("Find this week's weather forecast for Lisbon.")).text);
  */
 export function search(options: { apiKey?: string; provider?: "tavily" | "brave"; maxResults?: number } = {}): Tool<{ query: string }> {
   const chosen = options.provider ?? (process.env.TAVILY_API_KEY ? "tavily" : process.env.BRAVE_API_KEY ? "brave" : undefined);
@@ -235,6 +273,19 @@ function htmlToText(html: string): string {
  * A `read_page` tool: fetches a public web page and returns its text (cut to
  * `maxChars`). Private-network addresses are refused unless `allowPrivate`
  * (tests, or on purpose).
+ *
+ * Also exported as `web.fetch`. The model gives a `url` and gets
+ * `{ url, text, truncated }`: the page's text without markup. Redirects are
+ * not followed, at most 500 KB is read, and a request times out after 20 s.
+ *
+ * @param options `allowPrivate` (default false) and `maxChars`, the most characters returned (200 to 50,000, default 8,000).
+ *
+ * @example
+ * import { Agent, web } from "criogen";
+ *
+ * // Needs OPENAI_API_KEY; reading the page needs no key.
+ * const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.fetchPage({ maxChars: 4000 })] });
+ * console.log((await agent.run("Summarize https://example.com")).text);
  */
 export function fetchPage(options: { allowPrivate?: boolean; maxChars?: number } = {}): Tool<{ url: string }> {
   const cap = Math.max(200, Math.min(Math.trunc(options.maxChars ?? MAX_PAGE_CHARS), 50_000));

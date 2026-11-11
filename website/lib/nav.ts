@@ -26,36 +26,72 @@ export const SIDEBAR: NavGroup[] = [
       { label: "Install", slug: "install" },
       { label: "Quickstart", slug: "quickstart" },
       { label: "Status: built and planned", slug: "status" },
-      { label: "Using Criogen in your app", slug: "guides/production" },
+      { label: "Coming from LangGraph", slug: "from-langgraph" },
     ],
+  },
+  {
+    label: "Tutorials",
+    items: [{ label: "Build a support agent", slug: "tutorial/support-agent" }],
   },
   {
     label: "Concepts",
     items: [
+      { label: "Agents and the loop", slug: "concepts/agent-loop" },
       { label: "How a run works", slug: "concepts/runs" },
       { label: "Messages and tools", slug: "concepts/messages-and-tools" },
+      { label: "State, storage and threads", slug: "concepts/state-and-threads" },
+      { label: "Errors and retries", slug: "concepts/errors-and-retries" },
     ],
   },
   {
-    label: "Guides",
+    label: "Build agents",
     items: [
-      { label: "Agents and tools", slug: "guides/agents" },
+      { label: "Agents", slug: "guides/agents" },
+      { label: "Tools", slug: "guides/tools" },
       { label: "Human approval", slug: "guides/approvals" },
-      { label: "Conversations (threads)", slug: "guides/threads" },
+      { label: "Hooks", slug: "guides/hooks" },
       { label: "Streaming", slug: "guides/streaming" },
+      { label: "MCP servers' tools", slug: "guides/mcp" },
+      { label: "Testing without a model", slug: "guides/testing" },
+    ],
+  },
+  {
+    label: "Data and memory",
+    items: [
+      { label: "Conversations (threads)", slug: "guides/threads" },
+      { label: "Storage: SQLite and Postgres", slug: "guides/storage" },
       { label: "Long-term memory", slug: "guides/memory" },
       { label: "Collections and retrieval", slug: "guides/retrieval" },
+    ],
+  },
+  {
+    label: "Orchestration",
+    items: [
       { label: "Workflows", slug: "guides/workflows" },
       { label: "Patterns and specialists", slug: "guides/patterns" },
-      { label: "Storage: SQLite and Postgres", slug: "guides/storage" },
-      { label: "Encryption, audit, retention", slug: "guides/compliance" },
+    ],
+  },
+  {
+    label: "Models and gateway",
+    items: [
       { label: "Models and providers", slug: "guides/models" },
-      { label: "MCP servers' tools", slug: "guides/mcp" },
       { label: "The LLM gateway", slug: "guides/gateway" },
       { label: "In the browser (WebAssembly)", slug: "guides/browser" },
+    ],
+  },
+  {
+    label: "Production and compliance",
+    items: [
+      { label: "Using Criogen in your app", slug: "guides/production" },
+      { label: "Deploying", slug: "guides/deploying" },
+      { label: "Encryption, audit, retention", slug: "guides/compliance" },
       { label: "Tracing (Langfuse, OpenTelemetry)", slug: "guides/telemetry" },
       { label: "Evals and quality gates", slug: "guides/evals" },
     ],
+  },
+  {
+    label: "Help",
+    items: [{ label: "Troubleshooting and FAQ", slug: "troubleshooting" }],
   },
   {
     label: "Reference",
@@ -94,8 +130,9 @@ export const FOOTER_COLUMNS = [
     title: "Learn",
     links: [
       { label: "Quickstart", href: "/docs/quickstart/" },
-      { label: "How a run works", href: "/docs/concepts/runs/" },
+      { label: "Tutorial: a support agent", href: "/docs/tutorial/support-agent/" },
       { label: "Human approval", href: "/docs/guides/approvals/" },
+      { label: "Troubleshooting", href: "/docs/troubleshooting/" },
     ],
   },
   {

@@ -1,31 +1,115 @@
 ---
 title: Conversations (threads)
-description: Durable conversations that remember, survive crashes, and can be rewound.
+description: Durable conversations that remember, wait for approvals, survive crashes, take turns, and can be listed, rewound and deleted.
 ---
 
-
-A **thread** is one conversation, kept in the agent's
-[storage](/docs/guides/storage/). Every call saves checkpoints: before each
-step and after each tool call.
+A **thread** is one conversation with an agent, kept in the agent's
+[storage](/docs/guides/storage/). Use a thread whenever a person comes back:
+a chat, a support ticket, a patient case. Each `send` runs one turn on top of
+everything said before, and progress is saved as it happens: when a message
+arrives, after every step, and after every tool call. What a checkpoint and a
+thread status are is explained in
+[State, storage and threads](/docs/concepts/state-and-threads/).
 
 <Sample name="threads" />
 
-In Python, every call also has a blocking form for scripts and notebooks:
+In Python, `send` also has a blocking form for scripts and notebooks:
 
 <Sample name="threads" region="sync" only={["python"]} />
 
+## Operations
+
+| Python | TypeScript | What it does |
+|---|---|---|
+| `agent.thread(id, actor=None)` | `agent.thread(id, { actor })` | A handle; the thread is created by its first `send` |
+| `send(text, **state)` | `send(text, { state, signal })` | Runs one turn; returns a `Reply` |
+| `stream(text, **state)` | `stream(text, { state })` | The same, yielding events ([Streaming](/docs/guides/streaming/)) |
+| `approve()`, `reject(reason)`, `decide({...})` | same | Answer a waiting approval ([Human approval](/docs/guides/approvals/)) |
+| `retry()` | `retry({ signal })` | Continue a failed or interrupted run |
+| `messages()` | `messages()` | The stored conversation |
+| `history(limit=20)` | `history(limit)` | Checkpoints, newest first |
+| `rewind(checkpoint_id)` | `rewind(checkpointId)` | Make an older checkpoint the head again |
+| `delete()` | `delete()` | Delete the thread and its checkpoints; `True` if it existed |
+
+A handle holds nothing but the id and the actor: make one per request, in any
+process. Two handles on the same id are the same conversation.
+
 ## What a thread guarantees
 
-- **One run at a time.** A second `send` on a busy thread waits by default;
-  with Postgres this holds across processes and machines. Storage can
-  instead reject (`thread_busy`) or interrupt the running one.
-- **Nothing lost on a crash.** If the process dies mid-run, the thread
-  shows an unfinished run: `send` refuses (`thread_interrupted`) until
-  `retry()` continues it. Tool calls that finished are not run again.
-- **History.** `history(n)` lists checkpoints, newest first; `rewind(id)`
-  makes an older one current (the newer ones stay stored, off the history).
-- **Identity.** `actor` names who acts through this handle (for example
-  `user:dr-rao`), for the [audit trail](/docs/guides/compliance/).
+**It remembers.** The model sees the whole stored conversation on every
+turn. Long conversations cost more tokens each turn; start a new thread for a
+new topic, or keep lasting facts in [memory](/docs/guides/memory/) instead.
 
-Thread ids are visible in the database even when it is encrypted: use opaque
-ids (a UUID), not names or record numbers.
+**One run at a time.** A second call on a busy thread waits for the first by
+default (up to 60 s), then fails with `thread_busy`. Storage can instead
+reject at once, or interrupt the running call; see
+[Storage](/docs/guides/storage/#a-thread-that-is-busy). With Postgres this
+holds across processes and machines.
+
+**Nothing lost on a crash.** If the process dies mid-run, the thread keeps
+the unfinished run. The next `send` fails with `thread_interrupted` until
+`retry()` continues the run from where it stopped. Tool calls that had
+finished are not run again.
+
+**Failures can be continued.** When a call fails (the model was down, a
+limit was reached, the call was cancelled), the failed run is saved.
+`retry()` continues it from the failed step; `send()` leaves it and starts a
+new turn.
+
+**Approvals wait.** A run that needs approval is saved as `suspended`; `send`
+fails with `thread_suspended` until someone answers.
+
+## Handling the states in your code
+
+<Sample name="threads" region="recover" only={["python", "typescript"]} />
+
+## History and rewind
+
+`history(n)` lists the newest checkpoints first. Each is a dict / object:
+
+| Field | Meaning |
+|---|---|
+| `id` | The checkpoint id, for `rewind` |
+| `version` | Grows by one with every write to the thread |
+| `status` | `in_progress`, `suspended`, `completed` or `failed` |
+| `source` | What wrote it: `input`, `step`, `suspend`, `failure`, `fork` |
+| `step` | The engine step it was taken after |
+| `run_id`, `parent_id`, `created_at_ms` | The run, the checkpoint before it, and when (ms since 1970) |
+
+`rewind(id)` writes a new head that copies the older checkpoint
+(`source: "fork"`), so the next `send` or `retry` continues from there. The newer
+checkpoints are kept in storage, off the history: nothing is overwritten.
+Use it to undo a turn, or to try again from before a bad answer.
+
+## Deleting
+
+`delete()` removes the thread and every checkpoint of it. It does not remove
+long-term memory: that belongs to the person, not the conversation. To erase
+everything about a person, delete their threads and call
+`forget_all("users/<id>")` (`forgetAll`) too. For deleting old threads on a
+schedule, see [retention](/docs/guides/compliance/#retention).
+
+## Thread ids
+
+Choose ids your app can find again: a ticket number, a chat id, a UUID you
+store with the user. Thread ids are stored in clear text even in an
+[encrypted](/docs/guides/compliance/#encryption-at-rest) database, so use
+opaque ids (a UUID), not names or record numbers.
+
+## Errors
+
+| Code | When | What to do |
+|---|---|---|
+| `thread_busy` | Another run holds the thread (after waiting, or at once with `on_busy="reject"`) | Try again later, or tell the user to wait |
+| `thread_suspended` | An approval waits | `approve`, `reject` or `decide` first |
+| `thread_interrupted` | The last run never finished (the process died) | `retry()` |
+| `resume_invalid` | `retry()` with nothing to retry, or a decision that does not fit | Check `history()` |
+| `checkpoint_not_found` | `rewind` to an id the thread does not have | Use an id from `history()` |
+| `cancelled` | The call was cancelled (signal, task cancel, a left stream) | `retry()` to continue it |
+
+## Next
+
+- [Streaming](/docs/guides/streaming/): show a turn as it happens.
+- [Storage](/docs/guides/storage/): SQLite, Postgres and busy threads.
+- [Workflows](/docs/guides/workflows/#durable-workflows): threads for workflows.
+- API: [Python `Thread`](/docs/reference/api/python/agent/), [TypeScript `Thread`](/docs/reference/api/typescript/agent/).

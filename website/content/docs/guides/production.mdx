@@ -121,10 +121,9 @@ continues it. Tools have their own timeout (`limits.toolTimeoutSecs`, default 60
 
 To show the answer in a browser as it is written, send the events as Server-Sent Events from a
 route handler and read them with `fetch` in the page: the engine stays on the server, and the
-browser needs no Criogen package. The `examples/nextjs-route` folder has both halves, the
-`/api/agent/stream` route and a `useAgentStream()` React hook (answer, tool calls, busy, error,
-`stop()`). Send error codes to the browser, not error messages: a message can quote what the
-model or a tool saw.
+browser needs no Criogen package. [Deploying](/docs/guides/deploying/#stream-to-a-browser) has
+the route for FastAPI and Next.js. Send error codes to the browser, not error messages: a message
+can quote what the model or a tool saw.
 
 ## Tracing
 
@@ -143,7 +142,8 @@ Every failure has a stable `code` and a class you can catch (`ModelError`, `Limi
 `ValidationError`, `NativeUnavailableError`, ...): the [error codes](/docs/reference/errors/) list all of
 them, with what each means and whether a retry can help.
 
-## Examples
+## Next
 
-The repository's `examples/` folder has a **Next.js route handler** (also what runs on Vercel)
-and a **NestJS service**, each with an agent, tools, a health route and the settings above.
+- [Deploying](/docs/guides/deploying/): FastAPI and Next.js routes, storage per deployment, serverless.
+- [Encryption, audit, retention](/docs/guides/compliance/) for sensitive data.
+- [Troubleshooting and FAQ](/docs/troubleshooting/).

@@ -1,10 +1,10 @@
 // Specialist agents: default recipes for common jobs that you configure,
 // extend or replace (design 0019).
 //
-//   import { specialists } from "criogen";
-//   const agent = specialists.researcher.build("openai:gpt-5-mini", { tools: [search] });
-//   const careful = specialists.researcher.extend("careful-researcher", { add: "Always give two sources." });
-//   specialists.register(careful);
+//     import { specialists } from "criogen";
+//     const agent = specialists.researcher.build("openai:gpt-5-mini", { tools: [search] });
+//     const careful = specialists.researcher.extend("careful-researcher", { add: "Always give two sources." });
+//     specialists.register(careful);
 //
 // A Specialist is a recipe, not an agent: a name, a description (what a
 // coordinator reads to decide when to use it), instructions and default agent
@@ -24,21 +24,54 @@ export type SpecialistSettings = Omit<AgentOptions, "model" | "instructions"> & 
   defaultTools?: () => Tool<any>[];
 };
 
+/**
+ * Settings for `Specialist.extend`: `add` or `instructions` for the prompt, a
+ * new `description`, and any agent option (`tools` are added to the recipe's,
+ * the others replace its settings).
+ */
 export interface ExtendOptions extends SpecialistSettings {
   /** Appended to the instructions. */
   add?: string;
   /** Replaces the instructions. */
   instructions?: string;
+  /** Replaces the description (what a coordinator reads to decide when to use it). */
   description?: string;
 }
 
-/** A recipe for an agent. */
+/**
+ * A recipe for an agent.
+ *
+ * A name, a description (what a coordinator reads to decide when to use it),
+ * instructions and default agent options. `build` makes the agent. The
+ * module exports the built-in recipes (`researcher`, `summarizer`,
+ * `classifier`, `extractor`, `planner`, `writer`, `critic`, `factChecker`,
+ * `codeReviewer`, `translator`, `supportAgent`), already registered by name.
+ *
+ * @example
+ * import { FakeModel, specialists } from "criogen";
+ *
+ * const careful = specialists.writer.extend("careful_writer", { add: "Keep it under 50 words." });
+ * specialists.register(careful);
+ * const agent = careful.build(new FakeModel(["A short, clear text."])); // or a model string
+ * console.log((await agent.run("Notes: the clinic opens at 9.")).text);
+ */
 export class Specialist {
+  /** The agent options the recipe carries (everything but the model and instructions). */
   readonly settings: SpecialistSettings;
 
+  /**
+   * @param name Letters, digits, `-` and `_`, at most 64 characters.
+   * @param description What it is for; coordinators choose by it. Must not be empty.
+   * @param instructions The agent's instructions (its system prompt).
+   * @param settings Default agent options, e.g. `tools` or `limits`.
+   * @throws {TypeError} The name has other characters or is too long, or the description is empty.
+   */
   constructor(
+    /** The recipe's name, used by `register`, `get` and `patterns.quick`. */
     readonly name: string,
+    /** What it is for; coordinators read it to decide when to use it. */
     readonly description: string,
+    /** The agent's instructions. */
     readonly instructions: string,
     settings: SpecialistSettings = {},
   ) {
@@ -52,6 +85,13 @@ export class Specialist {
   /**
    * The agent. `overrides` win over the recipe's settings; `instructions`
    * replaces the instructions and `tools` replaces the tools (use `extend` to add).
+   *
+   * When neither the recipe nor `overrides` give tools, the recipe's default
+   * tools are used (the `researcher` gets web search and page reading when
+   * `TAVILY_API_KEY` or `BRAVE_API_KEY` is set).
+   *
+   * @param model The agent's model: a model object or a string such as `"openai:gpt-5-mini"`.
+   * @param overrides Agent options for this agent only.
    */
   build(model: Model, overrides: SpecialistSettings & { instructions?: string } = {}): Agent<any> {
     const { instructions, defaultTools, ...settings } = { ...this.settings, ...overrides } as SpecialistSettings & { instructions?: string };
@@ -64,6 +104,12 @@ export class Specialist {
    * A new recipe from this one: `add` appends to the instructions,
    * `instructions` replaces them, `tools` are added to the existing ones, other
    * options override settings. This recipe is unchanged.
+   *
+   * The new recipe is not registered: call `register` to use it by name.
+   *
+   * @param name The new recipe's name; default `<this name>-extended`.
+   * @param options What to change.
+   * @throws {TypeError} The name is not valid.
    */
   extend(name?: string, options: ExtendOptions = {}): Specialist {
     const { add, instructions, description, tools, ...settings } = options;
@@ -76,6 +122,7 @@ export class Specialist {
     });
   }
 
+  /** `Specialist(<name>)`. */
   toString(): string {
     return `Specialist(${this.name})`;
   }
@@ -83,7 +130,16 @@ export class Specialist {
 
 const registry = new Map<string, Specialist>();
 
-/** Keeps a recipe under its name, so workflows and configuration can refer to it by name. A taken name throws unless `replace`. */
+/**
+ * Keeps a recipe under its name, so workflows and configuration can refer to it by name. A taken name throws unless `replace`.
+ *
+ * The registry belongs to this process (module state).
+ *
+ * @param specialist The recipe.
+ * @param options `replace: true` overwrites a recipe with the same name, built-in ones included.
+ * @returns The same recipe.
+ * @throws {Error} The name is taken and `replace` is not set.
+ */
 export function register(specialist: Specialist, options: { replace?: boolean } = {}): Specialist {
   if (registry.has(specialist.name) && !options.replace) {
     throw new Error(`a specialist named "${specialist.name}" is already registered (replace: true to overwrite)`);
@@ -92,12 +148,21 @@ export function register(specialist: Specialist, options: { replace?: boolean } 
   return specialist;
 }
 
-/** Forgets a registered recipe (the built-in ones stay available as module exports). */
+/**
+ * Forgets a registered recipe (the built-in ones stay available as module exports).
+ *
+ * @param name The recipe's name. An unknown name does nothing.
+ */
 export function unregister(name: string): void {
   registry.delete(name);
 }
 
-/** The recipe registered under `name` (throws, listing the names). */
+/**
+ * The recipe registered under `name` (throws, listing the names).
+ *
+ * @param name A registered name, e.g. `"researcher"`.
+ * @throws {Error} No recipe has this name; the message lists the registered ones.
+ */
 export function get(name: string): Specialist {
   const found = registry.get(name);
   if (!found) throw new Error(`no specialist "${name}"; registered: ${available().join(", ")}`);

@@ -4,10 +4,13 @@ description: Criogen for Python, TypeScript and Rust, on Linux, macOS and Window
 ---
 
 
-<Aside type="note" title="Version 0.1.0">
-The TypeScript package is on npm for Linux, macOS and Windows. The Python package
-follows on PyPI shortly; the command below is the one it will use. The Rust crates are
-published when Criogen's code opens, at 10,000 installs.
+<Aside type="note" title="Versions by platform">
+The Python and TypeScript packages are on PyPI and npm as `criogen`. The newest
+engine (0.1.6) is built for Windows x64 and the browser; on Linux and macOS,
+pip installs 0.1.3 (0.1.2 on Intel Macs) and npm runs the 0.1.3 engine until
+their next build. Features marked 0.1.4 or later on the [status page](/docs/status/)
+need the newer engine. The Rust crates are published when Criogen's code opens,
+at 10,000 installs.
 </Aside>
 
 ## Supported platforms
@@ -17,7 +20,7 @@ published when Criogen's code opens, at 10,000 installs.
 | Python 3.9+ (one wheel per platform) | yes | yes | yes | yes | yes |
 | Node.js 18+ (a prebuilt addon per platform) | yes | yes | yes | yes | yes |
 | Rust 1.88+ (crates published when the code opens) | later | later | later | later | later |
-| Built and tested in CI on its own platform | yes | yes | yes | yes | yes |
+| Newest engine on the registry (Python / Node.js) | 0.1.3 / 0.1.3 | 0.1.3 / 0.1.3 | 0.1.3 / 0.1.3 | 0.1.2 / 0.1.3 | 0.1.6 / 0.1.6 |
 
 Other platforms (Windows on ARM, Alpine/musl, 32-bit) are not supported yet.
 
@@ -86,3 +89,30 @@ Models read their keys from environment variables: `OPENAI_API_KEY`,
 `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`. Self-hosted
 models (Ollama, vLLM, LM Studio) need none. Keys never appear in errors or
 logs: Criogen removes them from provider error messages.
+
+## Check the install
+
+<Tabs syncKey="lang">
+<TabItem label="Python">
+
+```sh
+python -c "import criogen; print(criogen.__version__, criogen.ready_sync())"
+```
+
+</TabItem>
+<TabItem label="TypeScript">
+
+```sh
+node -e "import('criogen').then(async (c) => console.log(await c.ready()))"
+```
+
+</TabItem>
+</Tabs>
+
+`ready()` loads the engine and reports the platform; it never throws. If the
+engine cannot load, see [Troubleshooting](/docs/troubleshooting/#install).
+
+## Next
+
+- [Quickstart](/docs/quickstart/): an agent, a conversation and an approval in a few minutes.
+- [Tutorial: build a support agent](/docs/tutorial/support-agent/): a complete small app, step by step.

@@ -1,0 +1,114 @@
+---
+title: State, storage and threads
+description: What a run's state is, what storage keeps, what a thread and a checkpoint are, and how they relate.
+---
+
+Four words come back on every page: **state**, **checkpoint**, **thread**
+and **storage**. This page says what each one is and how they fit, so the
+guides can be short.
+
+## State
+
+Every run has a **state**: a JSON object with string keys.
+
+- In a **workflow**, you choose the keys. Nodes read the state and return the
+  keys they change; the engine merges the changes after each step.
+- In an **agent**, the engine keeps the transcript under `messages` and its
+  own counters under a reserved key. Values you pass with a message
+  (`send(text, user_id="42")` in Python, `{ state: { user_id: "42" } }` in
+  TypeScript) are added to the state: memory and hooks read them.
+
+The state is always plain JSON, so it can be saved, sent and inspected in
+any language.
+
+## Checkpoint
+
+A **checkpoint** is the saved state of a run at one moment, with what is
+needed to continue: which step comes next, which tool calls have finished,
+whether the run is paused and why. Criogen writes one:
+
+- when a message arrives (`source: "input"`),
+- after every step and every finished tool call (`"step"`),
+- when the run pauses for a person (`"suspend"`),
+- when it fails (`"failure"`),
+- when you rewind (`"fork"`).
+
+Each checkpoint has an `id`, the `run_id` it belongs to, a `status`
+(`in_progress`, `suspended`, `completed`, `failed`) and a `version` that
+grows by one with every write. `history()` lists them, newest first.
+
+## Thread
+
+A **thread** is a named line of checkpoints: one conversation with an agent,
+or one durable run history of a workflow. Its newest checkpoint is the
+**head**; the next message continues from it.
+
+```
+thread "ticket-7"
+  v1 input → v2 step → v3 step → v4 suspend      ← head: waiting for approval
+                                   approve()
+                                 → v5 step → v6 step (completed)   ← new head
+```
+
+You never create a thread explicitly: the first `send` (or `run`, for a
+workflow) on a new id creates it. A thread's id is yours to choose; use an
+opaque id (a UUID, a ticket number) rather than a person's name, because
+thread ids are stored in clear text even in an encrypted database.
+
+What the head's status means for the next call:
+
+| Head | `send` (agents) / `run` (workflows) | What to call |
+|---|---|---|
+| `completed` | Starts a new turn | anything |
+| `suspended` | Fails: `thread_suspended` | `approve`, `reject`, `decide` (agents), `resume` (workflows) |
+| `failed` | Starts a new turn; the failed one is left as it was | `retry()` continues the failed turn instead |
+| `in_progress` with no run alive (the process died) | Fails: `thread_interrupted` | `retry()` |
+
+Only one run uses a thread at a time. A second call on a busy thread waits by
+default; see [Storage](/docs/guides/storage/#a-thread-that-is-busy).
+
+## Storage
+
+**Storage** is the database behind threads. One `Storage` keeps:
+
+- every thread's checkpoints,
+- long-term [memory](/docs/guides/memory/) (facts per person) and
+  [collections](/docs/guides/retrieval/) (documents),
+- the [audit trail](/docs/guides/compliance/), if you turn it on.
+
+| Backend | URL | Use for |
+|---|---|---|
+| In memory | none | Tests, scripts. Gone when the process ends |
+| SQLite | `sqlite://path/to/file.db` | One process on one machine |
+| Postgres | `postgres://user:password@host/db` | Several processes or machines |
+
+An agent without `storage` gets its own in-memory storage: threads work, but
+only until the process ends, and only within that agent object. Agents (and
+workflows) built with the **same** `Storage` share its threads and memory, so
+a second process with the same database can answer an approval the first one
+is waiting for.
+
+## Snapshot
+
+A **snapshot** is a checkpoint you hold yourself instead of storage: plain
+JSON returned by a workflow that paused or failed while running **without**
+storage (`result.snapshot`, `error.snapshot`). Pass it back to `resume` to
+continue. Use threads instead whenever you can: they save and load
+snapshots for you.
+
+## Putting it together
+
+| You want | Use |
+|---|---|
+| One answer, no history | `agent.run(text)` |
+| A conversation that continues later | `agent.thread(id).send(text)` with a `Storage` |
+| A person to approve a tool call, maybe days later | `approve=[...]` and a SQLite or Postgres `Storage` |
+| Facts about a person in every conversation | `memory=Memory.by_state(...)` |
+| A fixed series of steps that may pause | A `Workflow` compiled with a `Storage`, and `app.thread(id)` |
+| To go back to an earlier point | `history()` and `rewind(checkpoint_id)` |
+
+## Next
+
+- [Conversations (threads)](/docs/guides/threads/): every thread operation, and what it guarantees.
+- [Storage](/docs/guides/storage/): backends, busy threads, Postgres in production.
+- [How a run works](/docs/concepts/runs/): steps, merging and pauses.

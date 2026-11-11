@@ -12,7 +12,7 @@ from the environment (or passed in), sent only in a request header over
 Results are data for the model, so they are bounded: a few results, short
 snippets, and pages cut to a fixed size. ``fetch`` refuses addresses on private
 networks (a model must not be able to reach your internal services through
-it), does not follow redirects, and reads at most 500 KB.
+it), does not follow redirects, and refuses pages larger than 500 KB.
 """
 
 import ipaddress
@@ -97,7 +97,36 @@ def _results(items: Any, title: str, url: str, snippet: str, limit: int) -> List
 
 
 def tavily_search(api_key: Optional[str] = None, *, max_results: int = 5, depth: str = "basic", base_url: str = TAVILY_URL) -> Tool:
-    """A ``web_search`` tool backed by Tavily (``TAVILY_API_KEY``). ``depth``: ``"basic"`` or ``"advanced"``."""
+    """A read-only ``web_search`` tool backed by Tavily.
+
+    The tool takes a ``query`` (cut to 400 characters) and returns
+    ``{"answer", "results"}``: each result has a ``title`` (cut to 200
+    characters), a ``url`` and a ``snippet`` (cut to 600 characters). A failed
+    search raises a ``ToolError`` the model sees (HTTP 408, 429 and 5xx, and
+    network errors, are marked retryable); requests time out after 20 seconds. ``answer`` is Tavily's short answer when it gives one.
+
+    Args:
+        api_key: The Tavily key. Default: the ``TAVILY_API_KEY`` environment
+            variable, read when the tool runs (a missing key is reported to the
+            model as a tool error).
+        max_results: Results per search, 1 to 10. Default 5.
+        depth: ``"basic"`` (the default) or ``"advanced"`` (Tavily's deeper,
+            slower search).
+        base_url: The API's address. Default ``https://api.tavily.com``; must
+            be ``https`` (plain ``http`` only to this computer, for tests).
+
+    Returns:
+        A tool for ``Agent(tools=[...])``.
+
+    Raises:
+        ValueError: An unknown ``depth``, or a ``base_url`` that is not
+            ``https``.
+
+    Example:
+        from criogen import Agent, web
+
+        agent = Agent("openai:gpt-5-mini", tools=[web.tavily_search(max_results=3, depth="advanced")])
+    """
     limit = max(1, min(int(max_results), MAX_RESULTS))
     if depth not in ("basic", "advanced"):
         raise ValueError("depth is 'basic' or 'advanced'")
@@ -128,7 +157,28 @@ def tavily_search(api_key: Optional[str] = None, *, max_results: int = 5, depth:
 
 
 def brave_search(api_key: Optional[str] = None, *, max_results: int = 5, base_url: str = BRAVE_URL) -> Tool:
-    """A ``web_search`` tool backed by Brave Search (``BRAVE_API_KEY``)."""
+    """A read-only ``web_search`` tool backed by Brave Search.
+
+    The tool takes a ``query`` (cut to 400 characters) and returns
+    ``{"answer", "results"}``: each result has a ``title`` (cut to 200
+    characters), a ``url`` and a ``snippet`` (cut to 600 characters). A failed
+    search raises a ``ToolError`` the model sees (HTTP 408, 429 and 5xx, and
+    network errors, are marked retryable); requests time out after 20 seconds. ``answer`` is always ``None``.
+
+    Args:
+        api_key: The Brave Search key. Default: the ``BRAVE_API_KEY``
+            environment variable, read when the tool runs.
+        max_results: Results per search, 1 to 10. Default 5.
+        base_url: The API's address. Default ``https://api.search.brave.com``;
+            must be ``https`` (plain ``http`` only to this computer, for
+            tests).
+
+    Returns:
+        A tool for ``Agent(tools=[...])``.
+
+    Raises:
+        ValueError: A ``base_url`` that is not ``https``.
+    """
     limit = max(1, min(int(max_results), MAX_RESULTS))
     base = _check_url(base_url.rstrip("/") + "/res/v1/web/search").geturl()
 
@@ -150,7 +200,27 @@ def brave_search(api_key: Optional[str] = None, *, max_results: int = 5, base_ur
 
 def search(api_key: Optional[str] = None, *, provider: Optional[str] = None, max_results: int = 5) -> Tool:
     """A web search tool with no setup: Tavily if ``TAVILY_API_KEY`` is set, else Brave if ``BRAVE_API_KEY`` is.
-    ``provider="tavily"`` or ``"brave"`` chooses explicitly."""
+
+    Args:
+        api_key: A key for the chosen provider. With no provider chosen and
+            neither variable set, the key is taken as a Tavily key.
+        provider: ``"tavily"`` or ``"brave"`` to choose explicitly.
+        max_results: Results per search, 1 to 10. Default 5.
+
+    Returns:
+        The ``web_search`` tool of :func:`tavily_search` or
+        :func:`brave_search`.
+
+    Raises:
+        ValueError: No ``provider``, no key in the environment and no
+            ``api_key``; or an unknown ``provider``.
+
+    Example:
+        from criogen import Agent, web
+
+        agent = Agent("openai:gpt-5-mini", tools=[web.search(), web.fetch()])
+        result = await agent.run("What changed in the latest Python release?")
+    """
     chosen = provider or ("tavily" if os.environ.get("TAVILY_API_KEY") else "brave" if os.environ.get("BRAVE_API_KEY") else None)
     if chosen is None and api_key is None:
         raise ValueError("web search needs a key: set TAVILY_API_KEY (tavily.com) or BRAVE_API_KEY, or pass provider= and api_key=")
@@ -162,7 +232,12 @@ def search(api_key: Optional[str] = None, *, provider: Optional[str] = None, max
 
 
 def default_tools() -> List[Tool]:
-    """What a researcher gets when you give it no tools: web search if a key is set, else nothing."""
+    """What the ``researcher`` specialist gets when you give it no tools: web search and page reading if a search key is set, else nothing.
+
+    Returns:
+        ``[search(), fetch()]``, or ``[]`` when neither ``TAVILY_API_KEY`` nor
+        ``BRAVE_API_KEY`` is set.
+    """
     try:
         return [search(), fetch()]
     except ValueError:
@@ -208,8 +283,30 @@ def _public_address(host: str, allow_private: bool) -> None:
 
 
 def fetch(*, allow_private: bool = False, max_chars: int = MAX_PAGE_CHARS) -> Tool:
-    """A ``read_page`` tool: fetches a public web page and returns its text (cut to ``max_chars``).
-    Private-network addresses are refused unless ``allow_private=True`` (tests, or on purpose)."""
+    """A read-only ``read_page`` tool: fetches a public web page and returns its text.
+
+    The model gives a full ``http`` or ``https`` URL. Scripts, styles and
+    the page head are dropped; the text is cut to ``max_chars``. The tool
+    returns ``{"url", "text", "truncated"}``. Hosts that resolve to private,
+    loopback, link-local, reserved or multicast addresses are refused,
+    redirects are not followed, and pages larger than 500 KB are refused;
+    these come back to the model as tool errors.
+
+    Args:
+        allow_private: ``True`` also reads private-network addresses (tests,
+            or an intranet on purpose). Default ``False``.
+        max_chars: The most characters of text returned, from 200 to 50,000.
+            Default 8,000.
+
+    Returns:
+        A tool for ``Agent(tools=[...])``.
+
+    Example:
+        from criogen import Agent, web
+
+        agent = Agent("openai:gpt-5-mini", tools=[web.fetch(max_chars=4000)])
+        result = await agent.run("Summarize https://example.com")
+    """
     cap = max(200, min(int(max_chars), 50_000))
 
     @tool(read_only=True, name="read_page")

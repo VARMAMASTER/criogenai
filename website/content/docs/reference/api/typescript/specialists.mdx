@@ -1,0 +1,257 @@
+---
+title: "TypeScript API: Specialist agents"
+description: "TypeScript API reference, specialist agents: SpecialistSettings, ExtendOptions, Specialist, register, unregister, get, available."
+---
+
+Default agent recipes (researcher, writer, critic, ...) and a registry for your own. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/specialists/).
+
+Specialist agents: default recipes for common jobs that you configure,
+extend or replace.
+
+```ts
+import { specialists } from "criogen";
+const agent = specialists.researcher.build("openai:gpt-5-mini", { tools: [search] });
+const careful = specialists.researcher.extend("careful-researcher", { add: "Always give two sources." });
+specialists.register(careful);
+```
+
+A Specialist is a recipe, not an agent: a name, a description (what a
+coordinator reads to decide when to use it), instructions and default agent
+options. `build` makes the agent. The built-in ones are prompts and sensible
+defaults; tools come from you, and no claim is made about their quality on
+your data.
+
+```ts
+import { specialists } from "criogen";
+specialists.SpecialistSettings
+```
+
+These are used as `specialists.<name>`.
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`SpecialistSettings`](#specialistsettings) | type | Agent options a recipe may carry (everything but the model). |
+| [`ExtendOptions`](#extendoptions) | interface | Settings for `Specialist.extend`: `add` or `instructions` for the prompt, a new `description`, and any agent option (`tools` are added to the recipe's, the others replace its settings). |
+| [`Specialist`](#specialist) | class | A recipe for an agent. |
+| [`register`](#register) | function | Keeps a recipe under its name, so workflows and configuration can refer to it by name. |
+| [`unregister`](#unregister) | function | Forgets a registered recipe (the built-in ones stay available as module exports). |
+| [`get`](#get) | function | The recipe registered under `name` (throws, listing the names). |
+| [`available`](#available) | function | Registered names, sorted. |
+
+## SpecialistSettings
+
+```ts
+type SpecialistSettings = Omit<AgentOptions, "model" | "instructions"> & {
+  defaultTools?: () => Tool<any>[];
+};
+```
+
+Agent options a recipe may carry (everything but the model).
+
+## ExtendOptions
+
+```ts
+interface ExtendOptions extends SpecialistSettings {
+  add?: string;
+  instructions?: string;
+  description?: string;
+}
+```
+
+Settings for `Specialist.extend`: `add` or `instructions` for the prompt, a
+new `description`, and any agent option (`tools` are added to the recipe's,
+the others replace its settings).
+
+**Fields**
+
+- `add` (`string`, optional): Appended to the instructions.
+- `instructions` (`string`, optional): Replaces the instructions.
+- `description` (`string`, optional): Replaces the description (what a coordinator reads to decide when to use it).
+- `tools` (`(AgentTool | Tool<any> | McpServer | McpTool | CollectionTool)[]`, optional): Tools: `tool({...})`, `agent.asTool(...)`, an MCP server (all its tools) or one of its tools.
+- `approve` (`string[]`, optional): Names of tools that need human approval before they run. A call to one
+  stops the run (`reply.needsApproval`); use a thread to approve, reject or
+  edit it.
+- `output` (`JsonSchema`, optional): JSON Schema of the final answer (`result.output`).
+- `limits` (`{ modelCalls?: number; toolCalls?: number; tokens?: number; toolTimeoutSecs?: number; }`, optional): Bounds on one run: `modelCalls` (default 25; retries of one call do not
+  count), `toolCalls` (default 200), `tokens` (input plus output tokens
+  across the run, checked before each model call; no limit by default) and
+  `toolTimeoutSecs` (per tool call, default 60). Reaching a limit fails the
+  run with `LimitExceededError`; a tool that times out returns an error to
+  the model instead.
+- `onToolException` (`"returnToModel" | "returnGeneric" | "fail"`, optional): When a tool throws an exception that is not a ToolError: "returnToModel"
+  (default; the model sees its name and message, the run goes on),
+  "returnGeneric" (the model only learns that the tool failed; the text
+  stays in the result's `artifact`) or "fail" (the run fails with
+  ToolExecutionError, the exception as its `cause`).
+- `storage` (`string | Storage`, optional): Where threads are kept: a `Storage`, or a URL ("sqlite://x.db",
+  "postgres://…"). Without it, threads live in memory and end with the process.
+- `memory` (`Memory`, optional): Long-term memory (`Memory.byState(...)` or `Memory.shared(...)`): facts
+  recalled before each model call, and (unless the memory's options turn
+  them off) tools for the model to remember, forget and search them. Kept
+  in the agent's storage.
+- `fallbacks` (`Model[]`, optional): Models tried in order when the previous one fails with a transient error (after its retries).
+- `fallbackOn` (`string[]`, optional): Other error kinds that also move to the next model, e.g. "context_overflow".
+- `modelRetry` (`Retry`, optional): Retries of transient model errors (default: 3 attempts, backoff from 0.5 s).
+- `toolRetry` (`Retry`, optional): Retries of tools marked readOnly or idempotent (default: 3 attempts).
+- `maxRetryAfterSecs` (`number`, optional): The longest Retry-After the agent waits, in seconds (default 60).
+- `telemetry` (`{ readonly native: { readonly handle: number; }; }`, optional): Exports every run of this agent (`Telemetry.langfuse()`, `Telemetry.otlp(url)`).
+- `hooks` (`Hook[]`, optional): Code around the loop (see `Hook`): `onStart`, `beforeModel`, `afterModel`, `beforeTool`, `afterTool`, `onEnd`.
+- `redact` (`Redactor`, optional): Applied to every text before each model call (input, replies, tool
+  results), ahead of all hooks: e.g. strip patient identifiers before
+  anything reaches a provider. The redacted transcript is what is saved.
+- `defaultTools` (`(() => Tool<any>[])`, optional): Called when `build` gets no tools of its own: e.g. web search when a key is set.
+
+## Specialist
+
+```ts
+class Specialist {
+  constructor(name: string, description: string, instructions: string, settings?: SpecialistSettings);
+}
+```
+
+A recipe for an agent.
+
+A name, a description (what a coordinator reads to decide when to use it),
+instructions and default agent options. `build` makes the agent. The
+module exports the built-in recipes (`researcher`, `summarizer`,
+`classifier`, `extractor`, `planner`, `writer`, `critic`, `factChecker`,
+`codeReviewer`, `translator`, `supportAgent`), already registered by name.
+
+**Parameters**
+
+- `name` (`string`): The recipe's name, used by `register`, `get` and `patterns.quick`.
+  Letters, digits, `-` and `_`, at most 64 characters.
+- `description` (`string`): What it is for; coordinators read it to decide when to use it.
+  What it is for; coordinators choose by it. Must not be empty.
+- `instructions` (`string`): The agent's instructions.
+  The agent's instructions (its system prompt).
+- `settings` (`SpecialistSettings`, default `{}`): Default agent options, e.g. `tools` or `limits`.
+
+**Raises**
+
+- `TypeError`: The name has other characters or is too long, or the description is empty.
+
+**Example**
+
+```ts
+import { FakeModel, specialists } from "criogen";
+
+const careful = specialists.writer.extend("careful_writer", { add: "Keep it under 50 words." });
+specialists.register(careful);
+const agent = careful.build(new FakeModel(["A short, clear text."])); // or a model string
+console.log((await agent.run("Notes: the clinic opens at 9.")).text);
+```
+
+### Specialist.settings
+
+```ts
+readonly settings: SpecialistSettings
+```
+
+The agent options the recipe carries (everything but the model and instructions).
+
+### Specialist.build
+
+```ts
+build(model: Model, overrides?: Omit<AgentOptions, "model" | "instructions"> & { defaultTools?: (() => Tool<any>[]); } & { instructions?: string; }): Agent<any>
+```
+
+The agent. `overrides` win over the recipe's settings; `instructions`
+replaces the instructions and `tools` replaces the tools (use `extend` to add).
+
+When neither the recipe nor `overrides` give tools, the recipe's default
+tools are used (the `researcher` gets web search and page reading when
+`TAVILY_API_KEY` or `BRAVE_API_KEY` is set).
+
+**Parameters**
+
+- `model` (`Model`): The agent's model: a model object or a string such as `"openai:gpt-5-mini"`.
+- `overrides` (`Omit<AgentOptions, "model" | "instructions"> & { defaultTools?: (() => Tool<any>[]); } & { instructions?: string; }`, default `{}`): Agent options for this agent only.
+
+### Specialist.extend
+
+```ts
+extend(name?: string, options?: ExtendOptions): Specialist
+```
+
+A new recipe from this one: `add` appends to the instructions,
+`instructions` replaces them, `tools` are added to the existing ones, other
+options override settings. This recipe is unchanged.
+
+The new recipe is not registered: call `register` to use it by name.
+
+**Parameters**
+
+- `name` (`string`, optional): The new recipe's name; default `<this name>-extended`.
+- `options` (`ExtendOptions`, default `{}`): What to change.
+
+**Raises**
+
+- `TypeError`: The name is not valid.
+
+### Specialist.toString
+
+```ts
+toString(): string
+```
+
+`Specialist(<name>)`.
+
+## register
+
+```ts
+function register(specialist: Specialist, options?: { replace?: boolean; }): Specialist
+```
+
+Keeps a recipe under its name, so workflows and configuration can refer to it by name. A taken name throws unless `replace`.
+
+The registry belongs to this process (module state).
+
+**Parameters**
+
+- `specialist` (`Specialist`): The recipe.
+- `options` (`{ replace?: boolean; }`, default `{}`): `replace: true` overwrites a recipe with the same name, built-in ones included.
+
+**Returns:** The same recipe.
+
+**Raises**
+
+- `Error`: The name is taken and `replace` is not set.
+
+## unregister
+
+```ts
+function unregister(name: string): void
+```
+
+Forgets a registered recipe (the built-in ones stay available as module exports).
+
+**Parameters**
+
+- `name` (`string`): The recipe's name. An unknown name does nothing.
+
+## get
+
+```ts
+function get(name: string): Specialist
+```
+
+The recipe registered under `name` (throws, listing the names).
+
+**Parameters**
+
+- `name` (`string`): A registered name, e.g. `"researcher"`.
+
+**Raises**
+
+- `Error`: No recipe has this name; the message lists the registered ones.
+
+## available
+
+```ts
+function available(): string[]
+```
+
+Registered names, sorted.

@@ -30,10 +30,30 @@ _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def parse_env(text: str) -> Dict[str, str]:
-    """Parse ``.env`` text: ``NAME=value`` lines, ``export NAME=value``, ``#``
-    comments, and values in single or double quotes. No variable expansion.
-    A malformed line raises ``ValueError`` naming the line number (never its
-    content: it may be a secret)."""
+    """Parses the text of a ``.env`` file into a dict, without touching the
+    environment.
+
+    Accepts ``NAME=value`` lines, ``export NAME=value``, ``#`` comments
+    (whole lines, or after a value following a space) and values in single or
+    double quotes. Variables are not expanded.
+
+    Args:
+        text: The file's content.
+
+    Returns:
+        ``{name: value}`` in file order; a later line wins over an earlier
+        one with the same name.
+
+    Raises:
+        ValueError: A line is malformed. The message names the line number,
+            never its content (it may be a secret).
+
+    Example:
+        from criogen.env import parse_env
+
+        values = parse_env("# keys\\nexport MODE=test\\nGREETING='hello world'  # quoted\\n")
+        assert values == {"MODE": "test", "GREETING": "hello world"}
+    """
     out: Dict[str, str] = {}
     for number, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
@@ -64,14 +84,30 @@ def parse_env(text: str) -> Dict[str, str]:
 
 
 def load_env(path: Union[str, "os.PathLike[str]"] = ".env", *, override: bool = False, required: bool = False) -> List[str]:
-    """Read a ``.env`` file into ``os.environ`` and return the NAMES it set
-    (sorted; never the values).
+    """Reads a ``.env`` file into ``os.environ``; returns the names it set.
 
-    - A variable that is already set is kept, unless ``override=True``.
-    - A missing file is fine (returns ``[]``), unless ``required=True``.
-    - Files over 1 MB are refused.
+    Call it before you build a model. Never returns or prints a value. Keep
+    the file out of git (add ``.env`` to ``.gitignore``).
 
-    Keep the file out of git (add ``.env`` to ``.gitignore``).
+    Args:
+        path: The file to read. Default: ``.env`` in the current directory.
+        override: Replace variables that are already set. By default they
+            are kept.
+        required: Raise when the file is missing. By default a missing file
+            is fine and nothing is set.
+
+    Returns:
+        The names of the variables it set, sorted.
+
+    Raises:
+        FileNotFoundError: The file is missing and ``required=True``.
+        ValueError: The file is over 1 MB or has a malformed line.
+
+    Example:
+        import criogen
+
+        criogen.load_env()  # reads ./.env if there is one
+        agent = criogen.Agent("openai:gpt-5-mini")
     """
     try:
         size = os.path.getsize(path)
@@ -98,7 +134,24 @@ def status() -> Dict[str, bool]:
 
 
 def key_name(provider: str) -> str:
-    """The environment variable a provider's key comes from (``"openai"`` -> ``"OPENAI_API_KEY"``)."""
+    """The environment variable a provider's key comes from.
+
+    Args:
+        provider: A provider name, such as ``"openai"`` or ``"qwen"``.
+
+    Returns:
+        The variable's name, such as ``"OPENAI_API_KEY"`` or
+        ``"DASHSCOPE_API_KEY"``.
+
+    Raises:
+        ValueError: The provider has no single key variable: unknown, or
+            one such as ``ollama``, ``kaggle`` or ``azure``.
+
+    Example:
+        from criogen.env import key_name
+
+        assert key_name("openai") == "OPENAI_API_KEY"
+    """
     try:
         return _KEYS[provider]
     except KeyError:

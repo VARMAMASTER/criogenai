@@ -1,0 +1,281 @@
+---
+title: "TypeScript API: Gateway"
+description: "TypeScript API reference, gateway: Gateway, ChatInput, ChatOptions, ChatReply, Chunk, GatewayOptions, ChatStream."
+---
+
+Chat, stream and embed without an agent, with retries and fallbacks. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/gateway/).
+
+```ts
+import {
+  Gateway,
+  ChatInput,
+  ChatOptions,
+  ChatReply,
+  Chunk,
+  GatewayOptions,
+  ChatStream,
+} from "criogen";
+```
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`Gateway`](#gateway) | class | Model calls without an agent: `chat`, `stream` and `embed`, with the agent's retries and fallback models. |
+| [`ChatInput`](#chatinput) | type | Text, or messages (the transcript format of `result.messages`; `content` may be a string). |
+| [`ChatOptions`](#chatoptions) | interface | Options of `gateway.chat` and `gateway.stream`. |
+| [`ChatReply`](#chatreply) | interface | A model's answer. |
+| [`Chunk`](#chunk) | interface | A piece of a streamed answer. |
+| [`GatewayOptions`](#gatewayoptions) | interface | Options of `new Gateway(...)`: what happens when a model call fails. |
+| [`ChatStream`](#chatstream) | class | A streamed answer: `for await (const chunk of stream)`, then `await stream.reply()`. |
+
+## Gateway
+
+```ts
+class Gateway {
+  constructor(options?: GatewayOptions);
+}
+```
+
+Model calls without an agent: `chat`, `stream` and `embed`, with the agent's retries and fallback models.
+
+Use it for one-shot calls (classify, summarize, extract JSON) where you do
+not need tools run for you or a saved conversation. One gateway can call
+any model; each call names its model, and the provider clients are reused.
+
+**Parameters**
+
+- `options` (`GatewayOptions`, default `{}`): Retries and fallback models for every call (see `GatewayOptions`).
+
+**Raises**
+
+- `ValidationError`: An option the engine does not accept (e.g. an unknown `fallbackOn` kind).
+
+**Example**
+
+```ts
+import { FakeModel, Gateway } from "criogen";
+
+const gateway = new Gateway({ retry: { maxAttempts: 2 } });
+const reply = await gateway.chat(new FakeModel(["pong"]), "ping"); // or "openai:gpt-5-mini"
+console.log(reply.text, reply.model); // "pong" "fake:fake"
+```
+
+### Gateway.chat
+
+```ts
+chat<Output = unknown>(model: Model, input: ChatInput, options?: ChatOptions): Promise<ChatReply<Output>>
+```
+
+One answer.
+
+**Parameters**
+
+- `model` (`Model`): The model to call: a "provider:model" string or a model object. The gateway's fallbacks follow it.
+- `input` (`ChatInput`): Text (one user message) or a list of messages.
+- `options` (`ChatOptions`, default `{}`): Instructions, temperature, token limit, an `output` schema, tools and an abort `signal`.
+
+**Raises**
+
+- `ModelError`: The call failed after retries and fallbacks.
+- `CriogenError`: With `output`: the answer is not JSON matching the schema (code `output_invalid`).
+- `CancelledError`: `signal` was aborted.
+
+**Example**
+
+```ts
+import { Gateway } from "criogen";
+
+const gateway = new Gateway();
+const reply = await gateway.chat<{ label: string }>("openai:gpt-5-mini", "The package arrived broken.", {
+  instructions: "Classify the customer message.",
+  output: { type: "object", properties: { label: { type: "string", enum: ["complaint", "question", "praise"] } }, required: ["label"] },
+});
+console.log(reply.output?.label);
+```
+
+### Gateway.stream
+
+```ts
+stream<Output = unknown>(model: Model, input: ChatInput, options?: ChatOptions): ChatStream<Output>
+```
+
+The answer as it is written: `for await (const chunk of gw.stream(…))`.
+
+On a "restart" chunk, drop the text shown so far: a retry started the
+answer over.
+
+**Parameters**
+
+- `model` (`Model`): The model to call: a "provider:model" string or a model object.
+- `input` (`ChatInput`): Text (one user message) or a list of messages.
+- `options` (`ChatOptions`, default `{}`): As for `chat`; aborting `signal` cancels the stream.
+
+**Example**
+
+```ts
+import { FakeModel, Gateway } from "criogen";
+
+const stream = new Gateway().stream(new FakeModel(["Hello there."]), "Say hello.");
+let shown = "";
+for await (const chunk of stream) shown = chunk.type === "restart" ? "" : shown + chunk.text;
+const reply = await stream.reply(); // usage, stopReason, the full message
+```
+
+### Gateway.embed
+
+```ts
+embed(embedder: Embedder, texts: string[], options?: { signal?: any; }): Promise<number[][]>
+```
+
+One vector per text, in order.
+
+The gateway's retries and fallbacks do not apply to embeddings.
+
+**Parameters**
+
+- `embedder` (`Embedder`): Which embedding model to call (`Embedder.openai()`, `Embedder.ollama()`, ...).
+- `texts` (`string[]`): The texts to embed.
+- `options` (`{ signal?: any; }`, default `{}`): `signal` cancels the call.
+
+**Raises**
+
+- `ModelError`: The provider call failed.
+
+**Example**
+
+```ts
+import { Embedder, Gateway } from "criogen";
+
+const vectors = await new Gateway().embed(Embedder.fake(), ["red car", "blue car"]); // or Embedder.openai()
+console.log(vectors.length, vectors[0].length);
+```
+
+## ChatInput
+
+```ts
+type ChatInput = string | Record<string, unknown>[];
+```
+
+Text, or messages (the transcript format of `result.messages`; `content` may be a string).
+
+## ChatOptions
+
+```ts
+interface ChatOptions {
+  instructions?: string;
+  temperature?: number;
+  maxTokens?: number;
+  output?: Record<string, unknown>;
+  tools?: Record<string, unknown>[];
+  signal?: AbortSignal;
+}
+```
+
+Options of `gateway.chat` and `gateway.stream`.
+
+**Fields**
+
+- `instructions` (`string`, optional): The system message.
+- `temperature` (`number`, optional): Sampling temperature, passed to the provider (the provider's default when left out).
+- `maxTokens` (`number`, optional): The most tokens the answer may have (the provider's default when left out).
+- `output` (`Record<string, unknown>`, optional): A JSON Schema the answer must match; `reply.output` is then the parsed JSON.
+- `tools` (`Record<string, unknown>[]`, optional): Tools the model may call (tool specs, as a FunctionModel's `call.tools`):
+  the reply's `message` then holds its tool calls, for you to run. With
+  this, a FunctionModel can pass an agent's request on to a real model.
+- `signal` (`any`, optional): Aborting cancels the call (the HTTP request stops).
+
+## ChatReply
+
+```ts
+interface ChatReply<Output = unknown> {
+  text: string;
+  message: Record<string, unknown>;
+  usage: Record<string, number>;
+  stopReason: string | null;
+  model: string;
+  output: Output | null;
+}
+```
+
+A model's answer.
+
+**Fields**
+
+- `text` (`string`): All text of the answer.
+- `message` (`Record<string, unknown>`): The assistant message.
+- `usage` (`Record<string, number>`): Tokens of this call: input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens.
+- `stopReason` (`string | null`): Why the model stopped, e.g. "stop" or "length".
+- `model` (`string`): "provider:model" that answered (a fallback, if the first failed).
+- `output` (`Output | null`): The parsed JSON answer, with `output`.
+
+## Chunk
+
+```ts
+interface Chunk {
+  type: "text" | "restart";
+  text: string;
+}
+```
+
+A piece of a streamed answer. `restart`: a retry started the answer over, so drop the text shown so far.
+
+**Fields**
+
+- `type` (`"text" | "restart"`): "text": more of the answer; "restart": a retry started the answer over.
+- `text` (`string`): The new text ("" for "restart").
+
+## GatewayOptions
+
+```ts
+interface GatewayOptions {
+  fallbacks?: Model[];
+  fallbackOn?: string[];
+  retry?: Retry;
+  maxRetryAfterSecs?: number;
+}
+```
+
+Options of `new Gateway(...)`: what happens when a model call fails. They apply to every call.
+
+**Fields**
+
+- `fallbacks` (`Model[]`, optional): Models tried in order when the one asked for fails with a transient error (after its retries).
+- `fallbackOn` (`string[]`, optional): Other error kinds that also move on, e.g. "context_overflow".
+- `retry` (`Retry`, optional): How transient errors are retried (default: 3 attempts, backoff from 0.5 s).
+- `maxRetryAfterSecs` (`number`, optional): The longest Retry-After that is waited for, in seconds (default 60).
+
+## ChatStream
+
+```ts
+class ChatStream<Output = unknown> implements AsyncIterable<Chunk> {
+  constructor(nativeStream: NativeChatStream);
+}
+```
+
+A streamed answer: `for await (const chunk of stream)`, then `await stream.reply()`. Leaving the loop early cancels the call.
+
+**Parameters**
+
+- `nativeStream` (`NativeChatStream`): The engine's stream.
+
+### ChatStream.reply
+
+```ts
+reply(): Promise<ChatReply<Output>>
+```
+
+Waits for the call; the whole answer.
+
+**Raises**
+
+- `ModelError`: The call failed after retries and fallbacks.
+- `CancelledError`: The stream was cancelled.
+
+### ChatStream.cancel
+
+```ts
+cancel(): void
+```
+
+Cancels the call.

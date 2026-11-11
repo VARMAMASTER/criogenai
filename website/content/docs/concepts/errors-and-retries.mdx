@@ -1,0 +1,128 @@
+---
+title: Errors and retries
+description: Which failures the engine handles for you, which reach your code, how to tell them apart by code, and how retries, fallbacks and thread retry work.
+---
+
+Things fail: providers rate-limit, tools time out, processes die. Criogen
+sorts failures into three groups, and handles the first two without your
+code seeing an exception:
+
+| Group | Examples | Who handles it |
+|---|---|---|
+| **The model can fix it** | Wrong tool arguments, an unknown tool, a `ToolError`, a tool exception (by default) | The engine sends the problem back to the model as the tool's result, and the run goes on |
+| **Waiting may fix it** | Rate limits, overload, 5xx, timeouts, network errors | The engine retries with backoff, honours `Retry-After`, then tries fallback models |
+| **Your code must decide** | A bad key, a limit reached, a busy thread, a crash, a cancelled run | The call raises (Python) or rejects (TypeScript) with an error that has a stable `code` |
+
+## Every error has a code
+
+Every exception Criogen raises is a `CriogenError` with:
+
+- `code`: a stable snake_case string, the same in Python, TypeScript and
+  Rust (`model_failed`, `limit_exceeded`, `thread_busy`, ...). Write your
+  checks against it. Messages are for people and may change.
+- `details`: JSON with more about the failure, such as `details["limit"]`
+  for `limit_exceeded`, or `details["model_error"]["kind"]` for
+  `model_failed`.
+- a subclass per family, for `except` / `instanceof`.
+
+| Class (Python and TypeScript) | Codes |
+|---|---|
+| `ModelError` | `model_failed` |
+| `ToolExecutionError` | `tool_failed` (with `on_tool_exception="fail"`; the cause is your exception) |
+| `LimitExceededError` | `limit_exceeded`, `step_limit_exceeded`, `deadline_exceeded` |
+| `ThreadBusyError` | `thread_busy` |
+| `ThreadSuspendedError` | `thread_suspended` |
+| `CancelledError` | `cancelled` |
+| `StorageError` | `storage_*`, `encryption_*`, `checkpoint_not_found`, `audit_failed` |
+| `ValidationError` | `invalid_*`, `resume_invalid`, `workflow_mismatch` |
+| `NativeUnavailableError` (TypeScript) | `native_unavailable` |
+| `CriogenError` (the base) | everything else, e.g. `thread_interrupted`, `output_invalid`, `hook_failed`, `node_failed` |
+
+The full list, with what each code means and whether a retry can help, is
+on [Error codes](/docs/reference/errors/).
+
+<Sample name="errors" region="catch" />
+
+<Aside type="caution" title="Python: two CancelledErrors">
+Cancelling your own asyncio task raises **asyncio's** `CancelledError`, as
+always. `criogen.CancelledError` (code `cancelled`) is raised when Criogen
+cancels the run for another reason: a stream you left, or another process
+that interrupted the thread (`on_busy="interrupt"`). Either way the thread
+is saved, and `retry()` continues it.
+</Aside>
+
+## Model errors: retries, then fallbacks
+
+When a model call fails, the provider's error is first classified into a
+**kind**: `rate_limited`, `overloaded`, `server`, `timeout`, `network`
+(transient), or `auth`, `permission`, `not_found`, `invalid_request`,
+`context_overflow`, `content_filter`, `quota_exhausted`, `invalid_response`,
+`unknown`. Then:
+
+1. **Retry.** Transient kinds are retried: 3 attempts in total by default,
+   waiting 0.5 s, then 1 s, ... up to 20 s, with jitter. A `Retry-After` from
+   the provider is honoured (up to 60 s by default). A request that never
+   left your machine is retried at once.
+2. **Fall back.** If the attempts run out, the next model in `fallbacks` is
+   tried, with its own retries. By default only the transient kinds move to
+   the next model; `fallback_on` (`fallbackOn`) adds others:
+   `quota_exhausted` (another provider may still answer), or
+   `context_overflow` to a model with a longer context.
+3. **Fail.** If every model fails, the call raises `ModelError` (code
+   `model_failed`). `details["model_error"]` has the `kind`, the `provider`
+   and the `model` of the last failure. Keys never appear in it.
+
+<Sample name="errors" region="retry" />
+
+`result.answered_by` (`answeredBy`) says which provider and model wrote the
+final answer, so you can see when a fallback answered.
+
+## Tool errors: back to the model
+
+A tool can fail four ways, and only one stops the run by default:
+
+| The tool... | The model sees | The run |
+|---|---|---|
+| raises `ToolError("...")` | your message | goes on |
+| raises `ToolError(..., retryable=True)` | your message, after the engine retried a `read_only` or `idempotent` tool | goes on |
+| raises any other exception | its type and message (`return_to_model`), or only "the tool failed" (`return_generic`) | goes on |
+| raises with `on_tool_exception="fail"` | nothing | fails with `tool_failed`; the exception is the error's cause |
+| times out | a timeout | goes on (a `read_only` / `idempotent` tool is retried first) |
+
+Arguments that fail the schema never reach your function; the model gets
+the problems and usually corrects itself. See [Tools](/docs/guides/tools/).
+
+## Thread retry: continue after a failure
+
+On a thread, a failed run is saved with its state. `retry()` continues it
+**from the failed step**:
+
+- Tool calls that had finished are **not run again**: their results were
+  saved. A refund or an email is never repeated by a retry.
+- The model call that failed is made again.
+- If the process died mid-run (no error reached your code), the next `send`
+  fails with `thread_interrupted`; `retry()` continues that run too.
+- `retry()` on a thread with nothing to retry fails with `resume_invalid`.
+
+A failed head does not block the thread: `send` starts a new turn instead.
+Choose: `retry()` to finish what failed, `send()` to move on.
+
+## Limits are errors on purpose
+
+`limit_exceeded` (model calls, tool calls, tokens), `step_limit_exceeded` and
+`deadline_exceeded` (workflows) stop work that went on too long. Retrying
+the same run usually hits the same limit; raise the limit, change the
+instructions, or tell the user. See [Agents and the loop](/docs/concepts/agent-loop/#limits).
+
+## What never goes in an error
+
+Criogen keeps secrets and content out of errors: API keys are removed from
+provider messages, and the gateway and telemetry send no content or error
+text unless you ask. When you return errors to a browser, return the `code`,
+not the message: a message can quote what a tool or the model saw.
+
+## Next
+
+- [Troubleshooting and FAQ](/docs/troubleshooting/): common errors and what to do.
+- [Error codes](/docs/reference/errors/): the full catalog.
+- API: [Python errors](/docs/reference/api/python/errors/), [TypeScript errors](/docs/reference/api/typescript/errors/).

@@ -1,0 +1,165 @@
+---
+title: "TypeScript API: Hooks"
+description: "TypeScript API reference, hooks: HookContext, HookAction, ToolCall, ToolResult, Hook."
+---
+
+Your code around the agent loop: before and after model and tool calls. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/hooks/).
+
+```ts
+import { HookContext, HookAction, ToolCall, ToolResult, Hook } from "criogen";
+```
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`HookContext`](#hookcontext) | interface | What a hook sees. |
+| [`HookAction`](#hookaction) | interface | What a hook wants: save its `state`; replace the transcript (`messages`, `beforeModel`) or the new reply (`message`, `afterModel`); or `end` the run, with `output`. |
+| [`ToolCall`](#toolcall) | interface | A tool call going through `beforeTool` (change `name` or `args` and return it). |
+| [`ToolResult`](#toolresult) | class | Returned by `beforeTool`: use `value` as the result and skip the tool (e.g. a cached answer). |
+| [`Hook`](#hook) | interface | Code that runs around the agent loop: an object (or class instance) with any of the methods below, each of which may be async. |
+
+## HookContext
+
+```ts
+interface HookContext {
+  runId: string;
+  messages: Record<string, unknown>[];
+  modelCalls: number;
+  hookState: unknown;
+  state: Record<string, unknown>;
+}
+```
+
+What a hook sees.
+
+**Fields**
+
+- `runId` (`string`): The id of the run (`result.runId`).
+- `messages` (`Record<string, unknown>[]`): The transcript so far (as in `result.messages`).
+- `modelCalls` (`number`): Model calls made so far in this run.
+- `hookState` (`unknown`): What this hook saved with `{ state }`, if anything.
+- `state` (`Record<string, unknown>`): The whole run state, read-only.
+
+## HookAction
+
+```ts
+interface HookAction {
+  state?: unknown;
+  messages?: Record<string, unknown>[];
+  message?: Record<string, unknown>;
+  end?: boolean;
+  output?: unknown;
+}
+```
+
+What a hook wants: save its `state`; replace the transcript (`messages`,
+`beforeModel`) or the new reply (`message`, `afterModel`); or `end` the
+run, with `output`.
+
+**Fields**
+
+- `state` (`unknown`, optional): A value to keep for this hook; later calls see it as `ctx.hookState`.
+- `messages` (`Record<string, unknown>[]`, optional): `beforeModel` only: the transcript to send instead (and to keep).
+- `message` (`Record<string, unknown>`, optional): `afterModel` only: the assistant message to use instead of the model's reply.
+- `end` (`boolean`, optional): `true` ends the run now, with stop reason "hook_end".
+- `output` (`unknown`, optional): With `end`: the run's output.
+
+## ToolCall
+
+```ts
+interface ToolCall {
+  callId: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+```
+
+A tool call going through `beforeTool` (change `name` or `args` and return it).
+
+**Fields**
+
+- `callId` (`string`): The call's id, as in the transcript.
+- `name` (`string`): The tool the model called. Return a call with another name to run that tool instead.
+- `args` (`Record<string, unknown>`): The arguments the model wrote.
+
+## ToolResult
+
+```ts
+class ToolResult {
+  constructor(value: unknown);
+}
+```
+
+Returned by `beforeTool`: use `value` as the result and skip the tool (e.g. a cached answer).
+
+**Parameters**
+
+- `value` (`unknown`): The tool result the model sees, as JSON.
+
+**Example**
+
+```ts
+import { ToolResult, type Hook } from "criogen";
+
+const cache = new Map<string, unknown>([["get_weather:Paris", { forecast: "sunny" }]]);
+const cached: Hook = {
+  beforeTool(call) {
+    const hit = cache.get(`${call.name}:${call.args.city}`);
+    if (hit !== undefined) return new ToolResult(hit);
+  },
+};
+```
+
+## Hook
+
+```ts
+interface Hook {
+  name?: string;
+  onStart?(ctx: HookContext): Maybe<HookAction>;
+  beforeModel?(ctx: HookContext): Maybe<HookAction>;
+  afterModel?(ctx: HookContext): Maybe<HookAction>;
+  beforeTool?(call: ToolCall): Maybe<ToolCall | ToolResult>;
+  afterTool?(call: ToolCall, result: unknown): unknown;
+  onEnd?(ctx: HookContext, outcome: "completed" | "suspended" | "failed"): void | Promise<void>;
+}
+```
+
+Code that runs around the agent loop: an object (or class instance) with
+any of the methods below, each of which may be async. Pass hooks in the
+agent's `hooks` option.
+
+`onStart`, `beforeModel` and `beforeTool` run in list order, the others in
+reverse. A throw in `onStart`, `beforeModel` or `afterModel` fails the run
+(code `hook_failed`; what was thrown is the error's `cause`); a throw in
+`beforeTool` or `afterTool` counts as the tool's (see the agent's
+`onToolException`).
+
+**Fields**
+
+- `name` (`string`, optional): Shown in errors and audit records; defaults to the class name.
+- `onStart` (`((ctx: HookContext) => Maybe<HookAction>)`, optional): Once per run segment (a run, or its continuation after approval or retry), before anything else; may return `{ state }`.
+- `beforeModel` (`((ctx: HookContext) => Maybe<HookAction>)`, optional): Before each model call; may replace the transcript (`{ messages }`) or end the run (`{ end: true, output }`).
+- `afterModel` (`((ctx: HookContext) => Maybe<HookAction>)`, optional): After each model reply (`ctx.messages` ends with it); may replace it (`{ message }`) or end the run.
+- `beforeTool` (`((call: ToolCall) => Maybe<ToolResult | ToolCall>)`, optional): Before each tool call: return a changed `ToolCall` to run that instead,
+  a `ToolResult` to skip the tool, or nothing to go on. Throwing
+  `ToolError` gives the model that error instead of running the tool.
+- `afterTool` (`((call: ToolCall, result: unknown) => unknown)`, optional): After each tool call; a value other than `undefined` replaces the result the model sees.
+- `onEnd` (`((ctx: HookContext, outcome: "completed" | "suspended" | "failed") => void | Promise<void>)`, optional): Always, once per run segment, with how it ended: "completed", "suspended" (waiting for approval) or "failed". Cannot change the outcome.
+
+**Example**
+
+```ts
+import { Agent, type Hook } from "criogen";
+
+const logTools: Hook = {
+  name: "log-tools",
+  beforeTool(call) {
+    console.log("calling", call.name);
+  },
+  onEnd(ctx, outcome) {
+    console.log(`run ${ctx.runId}: ${outcome} after ${ctx.modelCalls} model calls`);
+  },
+};
+const agent = new Agent({ model: "openai:gpt-5-mini", hooks: [logTools] });
+```

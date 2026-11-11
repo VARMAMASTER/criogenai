@@ -1,0 +1,408 @@
+---
+title: "TypeScript API: MCP servers"
+description: "TypeScript API reference, mcp servers: McpServer, McpOptions, stdio, http, StdioOptions, HttpOptions, McpInfo, McpTool."
+---
+
+Tools from Model Context Protocol servers, over HTTP or a local process. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/mcp/).
+
+Tools from MCP servers.
+
+```ts
+import { Agent, mcp } from "criogen";
+const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."]);
+const agent = new Agent({ model, tools: [files] });          // all its tools
+// or tools: [files.tool("read_file")]
+await files.close();
+```
+
+The client runs in the Rust engine: it speaks MCP 2026-07-28 and falls back
+to the `initialize` handshake of older servers; stdio servers are started as
+a process (and again if they exit). It only uses tools: a server cannot
+sample your model or read your files. In criogen/web only `mcp.http` works.
+
+What a server says is data: names are mapped to names models accept (set
+`prefix` to keep two servers apart), schemas and messages are bounded, and
+its readOnlyHint / idempotentHint decide nothing unless `trustAnnotations`.
+Header and env values never appear in an error.
+
+```ts
+import { mcp } from "criogen";
+mcp.stdio
+import {
+  McpServer,
+  McpOptions,
+  StdioOptions,
+  HttpOptions,
+  McpInfo,
+  McpTool,
+} from "criogen";
+```
+
+These are used as `mcp.<name>`. Also exported at the top level: `McpServer`, `McpOptions`, `StdioOptions`, `HttpOptions`, `McpInfo`, `McpTool`.
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`McpServer`](#mcpserver) | class | A connected MCP server: get one with `mcp.stdio` or `mcp.http`. |
+| [`McpOptions`](#mcpoptions) | interface | Options for every MCP server. |
+| [`stdio`](#stdio) | function | Starts `command` with `args` as an MCP server (stdio) and lists its tools. |
+| [`http`](#http) | function | Connects to the MCP server at `url` (Streamable HTTP) and lists its tools. |
+| [`StdioOptions`](#stdiooptions) | interface | A server this app starts (not in the browser). |
+| [`HttpOptions`](#httpoptions) | interface | A server at a URL (Streamable HTTP). |
+| [`McpInfo`](#mcpinfo) | interface | What the server said about itself. |
+| [`McpTool`](#mcptool) | class | One tool of a connected server; put it in an agent's `tools`. |
+
+## McpServer
+
+```ts
+class McpServer {
+  constructor(name: string);
+}
+```
+
+A connected MCP server: get one with `mcp.stdio` or `mcp.http`.
+
+Put the server in an agent's `tools` for all its tools, or pick some with
+`server.tool(name)`. MCP tools work like any other tool: approvals,
+timeouts, limits, hooks and the audit trail apply. Close it with `close()`
+(or `await using`).
+
+**Parameters**
+
+- `name` (`string`): The server's name in errors: `name`, else `prefix`, else the command or URL.
+  The server's name in errors.
+
+**Example**
+
+```ts
+import { Agent, mcp } from "criogen";
+
+// Starts the server as a process (needs Node's npx and network access to fetch it).
+const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."], { prefix: "files" });
+console.log(files.tools.map((t) => t.name)); // e.g. ["files_read_file", ...]
+const agent = new Agent({ model: "openai:gpt-5-mini", tools: [files] });
+console.log((await agent.run("What is in README.md?")).text);
+await files.close();
+```
+
+### McpServer.info
+
+```ts
+info: McpInfo
+```
+
+What the server said about itself when it connected.
+
+### McpServer.tools
+
+```ts
+tools: McpTool[]
+```
+
+Its tools, as the agent sees them (after `only`, `exclude` and `prefix`).
+
+### McpServer.instructions
+
+```ts
+readonly instructions: string | null
+```
+
+The server's instructions for models (not added to any prompt).
+
+### McpServer.tool
+
+```ts
+tool(name: string): McpTool
+```
+
+The tool the agent sees as `name`.
+
+**Parameters**
+
+- `name` (`string`): The tool's name as the agent sees it (with the `prefix`).
+
+**Raises**
+
+- `Error`: The server has no such tool; the message lists its tools.
+
+### McpServer.refresh
+
+```ts
+refresh(): Promise<void>
+```
+
+Lists the tools again (agents already built keep theirs).
+
+### McpServer.call
+
+```ts
+call(name: string, args?: Record<string, unknown>): Promise<unknown>
+```
+
+Calls a tool directly: its text, its JSON value, or its content blocks. Throws ToolError when the tool fails.
+
+**Parameters**
+
+- `name` (`string`): The tool's name as the agent sees it (with the `prefix`).
+- `args` (`Record<string, unknown>`, default `{}`): The tool's arguments.
+
+**Returns:** The tool's text, its JSON value (`structuredContent`), or its content blocks.
+
+**Raises**
+
+- `ToolError`: The tool reported a failure (`isError`); the message is the server's.
+
+**Example**
+
+```ts
+import { mcp } from "criogen";
+
+const server = await mcp.http("https://mcp.example.com/mcp", { headers: { Authorization: `Bearer ${process.env.MCP_TOKEN}` } });
+const answer = await server.call("search_docs", { query: "rate limits" });
+await server.close();
+```
+
+### McpServer.close
+
+```ts
+close(): Promise<void>
+```
+
+Stops the server (a process: stdin closed, killed after 2 s).
+
+## McpOptions
+
+```ts
+interface McpOptions {
+  name?: string;
+  prefix?: string;
+  timeoutSecs?: number;
+  connectTimeoutSecs?: number;
+  maxMessageBytes?: number;
+  trustAnnotations?: boolean;
+  only?: string[];
+  exclude?: string[];
+}
+```
+
+Options for every MCP server.
+
+**Fields**
+
+- `name` (`string`, optional): The server's name in errors (default: the prefix, else the command or host).
+- `prefix` (`string`, optional): The agent sees `<prefix>_<tool>`: keeps two servers' tools apart.
+- `timeoutSecs` (`number`, optional): Seconds one call may take. Default 60.
+- `connectTimeoutSecs` (`number`, optional): Seconds to be ready. Default 30.
+- `maxMessageBytes` (`number`, optional): The largest message read from the server. Default 4 MiB.
+- `trustAnnotations` (`boolean`, optional): Believe the server's readOnlyHint / idempotentHint (they decide retries). Default false.
+- `only` (`string[]`, optional): Only these tools (the server's names).
+- `exclude` (`string[]`, optional): Leave these tools out (the server's names).
+
+## stdio
+
+```ts
+function stdio(command: string, args?: string[], options?: StdioOptions): Promise<McpServer>
+```
+
+Starts `command` with `args` as an MCP server (stdio) and lists its tools. Servers only.
+
+The process inherits this process's environment plus `env`. If it exits,
+the next call starts it again. In the browser (`criogen/web`) this throws
+`unsupported`.
+
+**Parameters**
+
+- `command` (`string`): The program, e.g. `"npx"` or `"python"`.
+- `args` (`string[]`, default `[]`): Its arguments.
+- `options` (`StdioOptions`, default `{}`): Environment, working directory, `prefix`, timeouts, limits and which tools to keep.
+
+**Returns:** The connected server.
+
+**Example**
+
+```ts
+import { mcp } from "criogen";
+
+const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."], {
+  prefix: "files",
+  only: ["read_file", "list_directory"],
+});
+console.log(files.info.name, files.tools.length);
+await files.close();
+```
+
+## http
+
+```ts
+function http(url: string, options?: HttpOptions): Promise<McpServer>
+```
+
+Connects to the MCP server at `url` (Streamable HTTP) and lists its tools. Use https; plain http only to this computer when headers are set.
+
+Works in both engines, the browser included. Pass a token in `headers`;
+header values never appear in an error.
+
+**Parameters**
+
+- `url` (`string`): The server's endpoint, e.g. `"https://mcp.example.com/mcp"`.
+- `options` (`HttpOptions`, default `{}`): Headers, `prefix`, timeouts, limits and which tools to keep.
+
+**Returns:** The connected server.
+
+**Example**
+
+```ts
+import { Agent, mcp } from "criogen";
+
+const docs = await mcp.http("https://mcp.example.com/mcp", {
+  headers: { Authorization: `Bearer ${process.env.MCP_TOKEN}` },
+  prefix: "docs",
+});
+const agent = new Agent({ model: "openai:gpt-5-mini", tools: [docs] });
+```
+
+## StdioOptions
+
+```ts
+interface StdioOptions extends McpOptions {
+  env?: Record<string, string>;
+  cwd?: string;
+}
+```
+
+A server this app starts (not in the browser).
+
+**Fields**
+
+- `env` (`Record<string, string>`, optional): Added to this process's environment.
+- `cwd` (`string`, optional): The server process's working directory; default this process's.
+- `name` (`string`, optional): The server's name in errors (default: the prefix, else the command or host).
+- `prefix` (`string`, optional): The agent sees `<prefix>_<tool>`: keeps two servers' tools apart.
+- `timeoutSecs` (`number`, optional): Seconds one call may take. Default 60.
+- `connectTimeoutSecs` (`number`, optional): Seconds to be ready. Default 30.
+- `maxMessageBytes` (`number`, optional): The largest message read from the server. Default 4 MiB.
+- `trustAnnotations` (`boolean`, optional): Believe the server's readOnlyHint / idempotentHint (they decide retries). Default false.
+- `only` (`string[]`, optional): Only these tools (the server's names).
+- `exclude` (`string[]`, optional): Leave these tools out (the server's names).
+
+## HttpOptions
+
+```ts
+interface HttpOptions extends McpOptions {
+  headers?: Record<string, string>;
+}
+```
+
+A server at a URL (Streamable HTTP).
+
+**Fields**
+
+- `headers` (`Record<string, string>`, optional): Sent with every request, e.g. `{ Authorization: "Bearer …" }`.
+- `name` (`string`, optional): The server's name in errors (default: the prefix, else the command or host).
+- `prefix` (`string`, optional): The agent sees `<prefix>_<tool>`: keeps two servers' tools apart.
+- `timeoutSecs` (`number`, optional): Seconds one call may take. Default 60.
+- `connectTimeoutSecs` (`number`, optional): Seconds to be ready. Default 30.
+- `maxMessageBytes` (`number`, optional): The largest message read from the server. Default 4 MiB.
+- `trustAnnotations` (`boolean`, optional): Believe the server's readOnlyHint / idempotentHint (they decide retries). Default false.
+- `only` (`string[]`, optional): Only these tools (the server's names).
+- `exclude` (`string[]`, optional): Leave these tools out (the server's names).
+
+## McpInfo
+
+```ts
+interface McpInfo {
+  name: string | null;
+  version: string | null;
+  protocolVersion: string;
+  instructions: string | null;
+}
+```
+
+What the server said about itself.
+
+**Fields**
+
+- `name` (`string | null`): The server's name, if it gave one.
+- `version` (`string | null`): The server's version, if it gave one.
+- `protocolVersion` (`string`): The MCP version both sides agreed on, e.g. `"2026-07-28"`.
+- `instructions` (`string | null`): Its instructions for models (not added to any prompt).
+
+## McpTool
+
+```ts
+class McpTool {
+  constructor(server: McpServer, spec: { name: string; description: string; schema: Record<string, unknown>; read_only: boolean; destructive: boolean; idempotent: boolean; });
+}
+```
+
+One tool of a connected server; put it in an agent's `tools`. Get it with `server.tool(name)` or from `server.tools`.
+
+**Parameters**
+
+- `server` (`McpServer`): The server it belongs to.
+- `spec` (`{ name: string; description: string; schema: Record<string, unknown>; read_only: boolean; destructive: boolean; idempotent: boolean; }`): The tool as the engine describes it.
+
+### McpTool.name
+
+```ts
+readonly name: string
+```
+
+The name the agent sees: mapped to what model APIs accept, with the server's `prefix`.
+
+### McpTool.description
+
+```ts
+readonly description: string
+```
+
+The server's description of the tool (cut to 8,000 characters).
+
+### McpTool.schema
+
+```ts
+readonly schema: Record<string, unknown>
+```
+
+The JSON Schema of its arguments.
+
+### McpTool.readOnly
+
+```ts
+readonly readOnly: boolean
+```
+
+The server's readOnlyHint; always `false` unless `trustAnnotations` is set.
+
+### McpTool.destructive
+
+```ts
+readonly destructive: boolean
+```
+
+The server's destructiveHint (kept without `trustAnnotations`: it only makes Criogen more careful).
+
+### McpTool.idempotent
+
+```ts
+readonly idempotent: boolean
+```
+
+The server's idempotentHint (or readOnlyHint); always `false` unless `trustAnnotations` is set. Idempotent tools are retried after a failure.
+
+### McpTool.call
+
+```ts
+call(args?: Record<string, unknown>): Promise<unknown>
+```
+
+Calls it directly (see `McpServer.call`).
+
+**Parameters**
+
+- `args` (`Record<string, unknown>`, default `{}`): The tool's arguments.
+
+**Raises**
+
+- `ToolError`: The tool reported a failure.

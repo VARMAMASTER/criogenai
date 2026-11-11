@@ -1,35 +1,115 @@
 ---
 title: Human approval
-description: Pause before risky tool calls, decide from anywhere, and record who decided.
+description: Pause before risky tool calls, let a person approve, edit, reject or answer them from any process, and record who decided.
 ---
 
-
 Name the tools a person must approve. When the model calls one, the run
-pauses **before any tool of that turn runs** and returns the requests. The
-pause is saved with the thread, so the decision can come minutes or days
-later, from another process, a dashboard or a webhook.
+**pauses before any tool of that turn runs** and returns the waiting calls.
+The pause is saved with the thread, so the decision can come minutes or days
+later, from another process, a dashboard or a webhook. Use approval for
+actions that cost money, reach other people or cannot be undone: refunds,
+emails, orders, prescriptions, deletions.
 
 <Sample name="approvals" />
 
+## What happens, step by step
+
+1. The model replies with one or more tool calls, and at least one of them is
+   in `approve`.
+2. The run stops before running **any** call of that reply, including the
+   ones that need no approval, and saves a `suspended` checkpoint.
+3. `send` returns a reply with `needs_approval` (`needsApproval`) set and
+   `text` empty. `approvals` lists the calls that wait: `call_id`, `tool`,
+   `args` (and, in TypeScript, the decisions `allowed`).
+4. Later, any process with the same storage calls `approve`, `reject` or
+   `decide` on that thread. The decided calls run (or not), the other calls
+   of the turn run, and the loop continues until the model answers or asks
+   for another approval.
+
+Approval needs a thread (`agent.thread(id)`), and a SQLite or Postgres
+`Storage` if the decision may come from another process or after a restart.
+
 ## Decisions
 
-| Decision | What happens |
-|---|---|
-| **approve** | The call runs as the model wrote it |
-| **edit** | The call runs with your arguments (or another tool); the model is told what actually ran |
-| **reject** | The call does not run; the model sees your reason |
-| **respond** | The call does not run; your answer is the tool's result |
+| Decision | What happens | The model sees |
+|---|---|---|
+| **approve** | The call runs as the model wrote it | The tool's result |
+| **edit** | The call runs with your arguments (or as another tool) | The result, with a note saying a reviewer changed the call and what ran |
+| **reject** | The call does not run | `rejected`, with your reason |
+| **respond** | The call does not run | Your text, as the tool's result |
 
-`approve()` and `reject(reason)` answer every pending call; `decide` takes
-one decision per call id. A decision that does not fit (an unknown call id,
-arguments that fail the schema) is refused with `resume_invalid` and the
-thread keeps waiting.
+`approve()` and `reject(reason)` answer every waiting call at once. To decide
+each call on its own, use `decide` with one `Decision` per `call_id`:
+
+<Sample name="approvals" region="decide" only={["python", "typescript"]} />
+
+`decide` must answer **every** waiting call. A decision that does not fit is
+refused with `resume_invalid`, and the thread keeps waiting, unchanged:
+
+- a waiting call has no decision;
+- an unknown `call_id`;
+- edited arguments that fail the tool's schema (the error names the problem).
 
 ## While it waits
 
-- Sending a new message fails with `thread_suspended` until the approval is
-  answered.
-- `reply.approvals` lists what waits: call id, tool, arguments.
-- With the [audit trail](/docs/guides/compliance/) on, the request, the
-  decision and who made it (`actor`) are recorded, and the decision is
-  recorded **before** the call runs.
+- `send` on the thread fails with `thread_suspended` until the approval is
+  answered. Answer first, or `reject` to move on.
+- Nothing about the pause lives in memory: the process can exit, and another
+  one can decide. It needs the same storage and an agent built the same way
+  (the same tools and `approve` list); an agent built differently gets
+  `workflow_mismatch` or `resume_invalid`. Answer waiting approvals before
+  you deploy a change to them.
+- Criogen does not notify anyone. Store the waiting calls where your
+  reviewers look (a table, a queue, a chat message) when `send` returns
+  `needs_approval`, together with the thread id.
+- The thread's `history()` shows the pause as a checkpoint with status
+  `suspended`.
+
+## Who decided
+
+Thread handles carry an `actor`: `agent.thread(id, actor="user:dr-rao")`
+(`{ actor: "user:dr-rao" }`). Use one handle for the customer and another for
+the reviewer, as in the [tutorial](/docs/tutorial/support-agent/). With the
+[audit trail](/docs/guides/compliance/#audit-trail) on, the request, the
+decision and its actor are recorded, and the decision is recorded **before**
+the call runs. Criogen records the actor you give; checking that this person
+may approve is your application's job.
+
+## Streaming the continuation
+
+`stream_approve()`, `stream_reject(reason)` (`streamApprove`,
+`streamReject`, `streamDecide`) continue the run and stream its events, like
+`stream` does for `send`. A stream emits `approval_needed` when a run pauses.
+
+## Approval in workflows
+
+In a [workflow](/docs/guides/workflows/), any node can pause with
+`suspend(payload)` and receive the answer as `ctx.resume`.
+
+An agent used as a workflow node pauses the workflow when it needs approval.
+The interrupt's payload is `{"kind": "agent_approval", "requests": [...]}`;
+resume with that node's decisions, keyed by call id:
+
+```python
+call_id = turn.interrupts[0].payload["requests"][0]["call_id"]
+await app.thread("case-7").resume({"agent": {call_id: Decision.approve()}})
+```
+
+An agent used as a **tool** of another agent (`as_tool`) cannot pause: if it
+needs approval, its call fails. Use it as a workflow node instead.
+
+## Errors
+
+| Code | When |
+|---|---|
+| `thread_suspended` | `send` while an approval waits |
+| `resume_invalid` | A decision that does not fit, or `approve` with nothing waiting |
+| `workflow_mismatch` | The agent deciding was built without the `approve` list the run paused with |
+| `audit_failed` | The audit trail is on and the decision could not be recorded: the call does not run |
+
+## Next
+
+- [Conversations (threads)](/docs/guides/threads/): what a thread guarantees.
+- [Hooks](/docs/guides/hooks/): block or change calls by rule, without a person.
+- [Encryption, audit, retention](/docs/guides/compliance/): the record of who approved what.
+- API: [Python `Thread`](/docs/reference/api/python/agent/), [TypeScript `Thread`](/docs/reference/api/typescript/agent/).

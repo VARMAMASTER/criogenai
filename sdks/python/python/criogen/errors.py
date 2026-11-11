@@ -1,12 +1,36 @@
-"""Errors (design 0011 §3): one class per family, each with the stable
-``code`` the Rust engine uses (design 0003), so checks by code work in
-every language."""
+"""Errors: one exception class per family of failures.
+
+Every exception carries the stable ``code`` the Rust engine uses (for
+example ``model_failed`` or ``thread_busy``), the same in every language;
+the error reference (/docs/reference/errors/) lists them all. Catch a class for a
+family, or compare ``error.code`` for one failure.
+"""
 
 from typing import Any, Dict, Optional
 
 
 class CriogenError(Exception):
-    """Any Criogen failure. ``code`` is stable; ``details`` is JSON."""
+    """Any Criogen failure; the base class of the others.
+
+    The engine raises these; you rarely build one yourself. ``str(error)``
+    is ``"<code>: <message>"``.
+
+    Args:
+        code: The stable snake_case error code, such as ``"model_failed"``.
+        message: What went wrong, for people.
+        details: More about the failure as a JSON-like dict (it may hold the
+            run's ``snapshot``). Default ``{}``.
+
+    Example:
+        from criogen import CriogenError, LimitExceededError
+
+        try:
+            result = agent.run_sync("Plan the week.")
+        except LimitExceededError:
+            print("the run hit a limit")
+        except CriogenError as error:
+            print(error.code, error.message)
+    """
 
     def __init__(self, code: str, message: str, details: Optional[Dict[str, Any]] = None):
         super().__init__(f"{code}: {message}")

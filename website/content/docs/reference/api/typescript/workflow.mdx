@@ -1,0 +1,658 @@
+---
+title: "TypeScript API: Workflows"
+description: "TypeScript API reference, workflows: Workflow, CompiledWorkflow, WorkflowThread, END, NodeContext, Suspend, Goto, suspend, and more."
+---
+
+Graphs of steps and agents: routes, joins, loops, pauses for people, and threads. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/workflow/).
+
+```ts
+import {
+  Workflow,
+  CompiledWorkflow,
+  WorkflowThread,
+  END,
+  NodeContext,
+  Suspend,
+  Goto,
+  suspend,
+  goto,
+  NodeFunction,
+  Router,
+  Interrupt,
+  WorkflowResult,
+  WorkflowRunOptions,
+} from "criogen";
+```
+
+## Contents
+
+| Name | Kind | Summary |
+|---|---|---|
+| [`Workflow`](#workflow) | class | A graph of nodes (functions or agents), compiled by `compile` and run by the Rust engine. |
+| [`CompiledWorkflow`](#compiledworkflow) | class | A checked workflow, ready to run. |
+| [`WorkflowThread`](#workflowthread) | class | One durable conversation with a workflow: each `run` continues from the stored state; a paused run waits in storage for `resume`. |
+| [`END`](#end) | constant | The end of a workflow, as an edge or route target. |
+| [`NodeContext`](#nodecontext) | interface | What a node can know about its execution: the second argument of every node function. |
+| [`Suspend`](#suspend) | interface | A node's request to pause the run for a person (see `suspend`). |
+| [`Goto`](#goto) | interface | A node's choice of the next nodes (see `goto`). |
+| [`suspend`](#suspend-1) | function | Return this from a node to pause the run for a person: `payload` says what is asked; `resume({node: value})` continues it, and the node runs again with `ctx.resume === value`. |
+| [`goto`](#goto-1) | function | Return this from a node to choose the next nodes (declared with `Workflow.goto`). |
+| [`NodeFunction`](#nodefunction) | type | A node: a function of the state (and its context). |
+| [`Router`](#router) | type | A router: chooses a label from the state. |
+| [`Interrupt`](#interrupt) | interface | A paused node and what it asked for. |
+| [`WorkflowResult`](#workflowresult) | interface | What a run produced. |
+| [`WorkflowRunOptions`](#workflowrunoptions) | interface | Limits for one `run` or `resume` call. |
+
+## Workflow
+
+```ts
+class Workflow {
+  constructor(options?: { reducers?: Record<string, "replace" | "append" | "upsertById">; });
+}
+```
+
+A graph of nodes (functions or agents), compiled by `compile` and run by
+the Rust engine. `reducers`: how writes to a key combine when several
+nodes write it ("replace", the default; "append"; "upsertById" for
+message lists).
+
+Each node reads the state and returns the keys it changes. Nodes that are
+ready at the same time run concurrently, in one step. Build the graph with
+`node`, `start`, `edge`, `route`, `join` and `goto`, then `compile` it.
+
+**Parameters**
+
+- `options` (`{ reducers?: Record<string, "replace" | "append" | "upsertById">; }`, default `{}`): `reducers`: one per state key that several nodes write in
+  the same step. `"replace"` (the default for every key): a write replaces
+  the value, and two writes in one step fail with `update_conflict`.
+  `"append"`: the value is a list and each write is a list appended to it.
+  `"upsertById"`: a list of objects with a string `id`; a write with a new
+  id appends, an existing id replaces, `{ id, $remove: true }` removes.
+
+**Example**
+
+```ts
+import { END, Workflow } from "criogen";
+
+const app = new Workflow()
+  .node("clean", (state) => ({ text: String(state.text).trim().toLowerCase() }))
+  .node("count", (state) => ({ words: String(state.text).split(" ").length }))
+  .start("clean")
+  .edge("clean", "count")
+  .edge("count", END)
+  .compile();
+const result = await app.run({ text: "  Hello Big World " });
+console.log(result.state); // { text: "hello big world", words: 3 }
+```
+
+### Workflow.node
+
+```ts
+node(name: string, fn: NodeFunction): Workflow
+```
+
+Adds a function `(state, ctx)` as the node `name`.
+
+**Parameters**
+
+- `name` (`string`): The node's name, unique in the workflow.
+- `fn` (`NodeFunction`): The function. It returns the state keys it changes, nothing, `suspend(...)` or `goto(...)`. What it throws fails the run with `node_failed`, and the error's `cause` is the thrown value.
+
+**Raises**
+
+- `Error`: A node with this name already exists.
+
+### Workflow.addNode
+
+```ts
+addNode(name: string, node: Agent<any> | NodeFunction): Workflow
+```
+
+Adds a function or an `Agent` (it reads and writes the `messages` key).
+
+Give `messages` the `"upsertById"` reducer when an agent is a node, so
+messages merge by id.
+
+**Parameters**
+
+- `name` (`string`): The node's name, unique in the workflow.
+- `node` (`Agent<any> | NodeFunction`): A node function or an `Agent`.
+
+**Raises**
+
+- `Error`: A node with this name already exists.
+- `TypeError`: `node` is neither a function nor an `Agent`.
+
+### Workflow.start
+
+```ts
+start(name: string): Workflow
+```
+
+The node a run starts with.
+
+**Parameters**
+
+- `name` (`string`): A node added with `node` or `addNode`.
+
+### Workflow.edge
+
+```ts
+edge(source: string, target: string): Workflow
+```
+
+After `source`, run `target` (or END).
+
+Several edges from one node run their targets in parallel, in the same step.
+
+**Parameters**
+
+- `source` (`string`): The node that runs first.
+- `target` (`string`): The node to run next, or `END`.
+
+### Workflow.route
+
+```ts
+route(source: string, router: Router, routes: Record<string, string>): Workflow
+```
+
+After `source`, `router(state)` returns a label; run `routes[label]`.
+
+A label missing from `routes` fails the run with `unknown_route`; a router
+that throws fails it with `router_failed`.
+
+**Parameters**
+
+- `source` (`string`): The node after which the router runs.
+- `router` (`Router`): A function of the state (sync or async) that returns a label.
+- `routes` (`Record<string, string>`): Labels and the node (or `END`) each one leads to, e.g. `{ ok: "answer", empty: END }`.
+
+### Workflow.join
+
+```ts
+join(sources: string[], target: string): Workflow
+```
+
+Run `target` once every node in `sources` has finished.
+
+The sources may finish in different steps; `target` runs once all of them
+have finished since it last ran.
+
+**Parameters**
+
+- `sources` (`string[]`): The nodes to wait for.
+- `target` (`string`): The node to run after them.
+
+### Workflow.goto
+
+```ts
+goto(source: string, targets: string[]): Workflow
+```
+
+`source` may choose among `targets` by returning `goto(...)`.
+
+The chosen nodes run in addition to `source`'s edges. A node with goto
+targets and no edges or joins must choose at least one target every time
+it runs (else `missing_goto`).
+
+**Parameters**
+
+- `source` (`string`): The node that chooses.
+- `targets` (`string[]`): Every node (or `END`) it may choose.
+
+### Workflow.compile
+
+```ts
+compile(options?: { storage?: string | Storage; }): CompiledWorkflow
+```
+
+Checks the graph in Rust: every problem at once (ValidationError with `details.issues`).
+
+**Parameters**
+
+- `options` (`{ storage?: string | Storage; }`, default `{}`): `storage`: a `Storage` or a URL where threads keep their
+  runs (`app.thread(id)`). Without it, an in-memory storage is used.
+
+**Returns:** The workflow, ready to run.
+
+**Raises**
+
+- `ValidationError`: The graph is invalid (`invalid_workflow`): `details.issues` lists every problem, such as a missing start node, an edge to an unknown node or a node no path reaches.
+
+## CompiledWorkflow
+
+```ts
+class CompiledWorkflow {
+  constructor(native: NativeWorkflow, storage: Storage, causes: Map<string, unknown>);
+}
+```
+
+A checked workflow, ready to run. Made by `Workflow.compile`.
+
+`run` and `resume` keep nothing between calls: a paused run comes back as a
+`snapshot` to pass to `resume`. For runs saved in storage, use `thread(id)`.
+
+**Parameters**
+
+- `native` (`NativeWorkflow`): The engine's workflow.
+- `storage` (`Storage`): Where this workflow's threads are kept.
+  Where threads are kept.
+- `causes` (`Map<string, unknown>`): What failing nodes threw.
+
+### CompiledWorkflow.run
+
+```ts
+run(input?: State, options?: WorkflowRunOptions): Promise<WorkflowResult>
+```
+
+Runs from the start node with `input` as the state.
+
+**Parameters**
+
+- `input` (`State`, default `{}`): The initial state (an object).
+- `options` (`WorkflowRunOptions`, default `{}`): A step limit, a deadline and an `AbortSignal`.
+
+**Returns:** The final state, or a paused run (`suspended: true`, with `interrupts` and a `snapshot`).
+
+**Raises**
+
+- `CriogenError`: A node threw (`node_failed`; `cause` is what it threw, `details.node` the node), a router failed (`router_failed`, `unknown_route`), or two nodes wrote one key in one step (`update_conflict`).
+- `LimitExceededError`: `maxSteps` or `deadlineMs` was exceeded.
+- `CancelledError`: The signal was aborted.
+
+### CompiledWorkflow.resume
+
+```ts
+resume(snapshot: unknown, values: Record<string, unknown>, options?: WorkflowRunOptions): Promise<WorkflowResult>
+```
+
+Continues a paused run (without storage) from its snapshot: one value per paused node.
+
+The snapshot is plain JSON: it can be stored anywhere and resumed later,
+in this process or another one, by the same workflow.
+
+**Parameters**
+
+- `snapshot` (`unknown`): The `snapshot` of the paused result.
+- `values` (`Record<string, unknown>`): One answer per paused node, by node name; each node runs again with `ctx.resume` set to its value.
+- `options` (`WorkflowRunOptions`, default `{}`): A step limit, a deadline and an `AbortSignal`.
+
+**Raises**
+
+- `ValidationError`: The values do not match the paused nodes (`resume_invalid`), or the snapshot comes from a different workflow (`workflow_mismatch`).
+
+### CompiledWorkflow.thread
+
+```ts
+thread(threadId: string, options?: { actor?: string; }): WorkflowThread
+```
+
+A durable run history in the workflow's storage (created on first use).
+
+**Parameters**
+
+- `threadId` (`string`): The thread's id, e.g. an order or a ticket number.
+- `options` (`{ actor?: string; }`, default `{}`): `actor`: who acts through this handle, recorded in the audit trail (e.g. `"user:u-1"`).
+
+**Example**
+
+```ts
+import { END, Storage, Workflow, suspend } from "criogen";
+
+const app = new Workflow()
+  .node("approve", (state, ctx) =>
+    ctx.resume === undefined ? suspend({ refund: state.amount }) : { approved: ctx.resume === "yes" })
+  .start("approve")
+  .edge("approve", END)
+  .compile({ storage: new Storage() }); // e.g. "sqlite:///data/app.db"
+await app.thread("refund-1").run({ amount: 25 }); // pauses; saved in storage
+// Later, from any handle on the same storage:
+const turn = await app.thread("refund-1", { actor: "user:u-2" }).resume({ approve: "yes" });
+console.log(turn.state.approved); // true
+```
+
+## WorkflowThread
+
+```ts
+class WorkflowThread {
+  constructor(app: CompiledWorkflow, id: string, actor?: string);
+}
+```
+
+One durable conversation with a workflow: each `run` continues from the
+stored state; a paused run waits in storage for `resume`.
+
+Progress is saved after every step. Get one with `compiled.thread(id)`.
+
+**Parameters**
+
+- `app` (`CompiledWorkflow`): The compiled workflow this thread runs.
+  The compiled workflow.
+- `id` (`string`): The thread's id.
+- `actor` (`string`, optional): Who acts through this handle, recorded in the audit trail.
+  Who acts through this handle, for the audit trail.
+
+### WorkflowThread.run
+
+```ts
+run(input?: State, options?: WorkflowRunOptions): Promise<WorkflowResult>
+```
+
+Runs from the start node on the stored state plus `input`.
+
+A key in `input` replaces the stored one.
+
+**Parameters**
+
+- `input` (`State`, default `{}`): State keys to set before the run.
+- `options` (`WorkflowRunOptions`, default `{}`): A step limit, a deadline and an `AbortSignal`.
+
+**Returns:** The run, with the thread's `version` and the `checkpointId` written.
+
+**Raises**
+
+- `ThreadSuspendedError`: Nodes are waiting: answer them with `resume` first.
+- `CriogenError`: The last run did not finish (`thread_interrupted`): continue it with `retry`.
+- `ThreadBusyError`: Another call runs this thread (see `onBusy` in `StorageOptions`).
+
+### WorkflowThread.resume
+
+```ts
+resume(values: Record<string, unknown>, options?: { signal?: any; }): Promise<WorkflowResult>
+```
+
+Answers the paused nodes: one value per node name.
+
+Each node runs again with `ctx.resume` set to its value. Values that do
+not match the waiting nodes are refused before anything runs, and the
+thread keeps waiting.
+
+**Parameters**
+
+- `values` (`Record<string, unknown>`): One answer per paused node, by node name.
+- `options` (`{ signal?: any; }`, default `{}`): `signal`: aborting it cancels the run.
+
+**Raises**
+
+- `ValidationError`: The values do not match the waiting nodes (`resume_invalid`).
+
+### WorkflowThread.retry
+
+```ts
+retry(options?: { signal?: any; }): Promise<WorkflowResult>
+```
+
+Continues a failed or interrupted run; finished nodes do not run again.
+
+**Parameters**
+
+- `options` (`{ signal?: any; }`, default `{}`): `signal`: aborting it cancels the run.
+
+### WorkflowThread.state
+
+```ts
+state(): Promise<State>
+```
+
+The stored state (empty for a new thread).
+
+### WorkflowThread.interrupts
+
+```ts
+interrupts(): Promise<Interrupt[]>
+```
+
+What the paused nodes asked for (empty unless the thread waits).
+
+### WorkflowThread.history
+
+```ts
+history(limit?: number): Promise<Record<string, unknown>[]>
+```
+
+The newest checkpoints first.
+
+Each has `id`, `parent_id`, `version`, `source`, `status`, `run_id`,
+`step` and `created_at_ms`.
+
+**Parameters**
+
+- `limit` (`number`, default `20`): The most checkpoints to return.
+
+### WorkflowThread.rewind
+
+```ts
+rewind(checkpointId: string): Promise<Record<string, unknown>>
+```
+
+Moves the thread back to an earlier checkpoint.
+
+The checkpoint's state becomes current again as a new checkpoint; the
+later ones stay as an abandoned branch (see `dropBranches` in
+`RetentionOptions`).
+
+**Parameters**
+
+- `checkpointId` (`string`): An `id` from `history()`.
+
+**Returns:** The new checkpoint's metadata, as `history()` lists it.
+
+**Raises**
+
+- `StorageError`: The thread has no such checkpoint (`checkpoint_not_found`).
+
+### WorkflowThread.delete
+
+```ts
+delete(): Promise<boolean>
+```
+
+Deletes the thread; `true` if it existed.
+
+## END
+
+```ts
+const END: "__end__"
+```
+
+The end of a workflow, as an edge or route target.
+
+## NodeContext
+
+```ts
+interface NodeContext {
+  runId: string;
+  step: number;
+  node: string;
+  attempt: number;
+  resume?: unknown;
+}
+```
+
+What a node can know about its execution: the second argument of every node function.
+
+**Fields**
+
+- `runId` (`string`): The run's id. A paused run keeps its id when resumed.
+- `step` (`number`): The step this node runs in, counted from 0 at the start of the run. Nodes that run in parallel share a step.
+- `node` (`string`): This node's name.
+- `attempt` (`number`): The attempt number, from 1.
+- `resume` (`unknown`, optional): The value given to `resume` for this node, else `undefined`.
+
+## Suspend
+
+```ts
+interface Suspend {
+  [SUSPEND]: true;
+  payload: unknown;
+  update?: State;
+}
+```
+
+A node's request to pause the run for a person (see `suspend`).
+
+**Fields**
+
+- `payload` (`unknown`): What the node asks for; it appears in the result's `interrupts`.
+- `update` (`State`, optional): State changes saved while the run waits.
+
+## Goto
+
+```ts
+interface Goto {
+  [GOTO]: true;
+  targets: string[];
+  update?: State;
+}
+```
+
+A node's choice of the next nodes (see `goto`).
+
+**Fields**
+
+- `targets` (`string[]`): The nodes (or `END`) to run next, from those declared with `Workflow.goto`.
+- `update` (`State`, optional): State changes, as a node's returned object.
+
+## suspend
+
+```ts
+function suspend(payload: unknown, update?: State): Suspend
+```
+
+Return this from a node to pause the run for a person: `payload` says
+what is asked; `resume({node: value})` continues it, and the node runs
+again with `ctx.resume === value`.
+
+**Parameters**
+
+- `payload` (`unknown`): What the node asks for (any JSON value): shown in `result.interrupts` and `thread.interrupts()`.
+- `update` (`State`, optional): State changes to keep while the run waits, e.g. `{ status: "waiting" }`.
+
+**Example**
+
+```ts
+import { END, Workflow, suspend } from "criogen";
+
+const app = new Workflow()
+  .node("approve", (state, ctx) =>
+    ctx.resume === undefined ? suspend({ refund: state.amount }) : { approved: ctx.resume === "yes" })
+  .start("approve")
+  .edge("approve", END)
+  .compile();
+const paused = await app.run({ amount: 40 });
+console.log(paused.interrupts); // [{ node: "approve", payload: { refund: 40 } }]
+const done = await app.resume(paused.snapshot, { approve: "yes" });
+console.log(done.state.approved); // true
+```
+
+## goto
+
+```ts
+function goto(targets: string | string[], update?: State): Goto
+```
+
+Return this from a node to choose the next nodes (declared with `Workflow.goto`).
+
+**Parameters**
+
+- `targets` (`string | string[]`): One node name (or `END`), or several to run in parallel. Each must be among the targets declared for this node with `Workflow.goto`.
+- `update` (`State`, optional): State changes, as a node's returned object.
+
+**Example**
+
+```ts
+import { END, Workflow, goto } from "criogen";
+
+const app = new Workflow()
+  .node("check", (state) => goto((state.n as number) > 10 ? "big" : "small", { checked: true }))
+  .node("big", () => ({ size: "big" }))
+  .node("small", () => ({ size: "small" }))
+  .start("check")
+  .goto("check", ["big", "small"])
+  .edge("big", END)
+  .edge("small", END)
+  .compile();
+console.log((await app.run({ n: 50 })).state.size); // "big"
+```
+
+## NodeFunction
+
+```ts
+type NodeFunction = (state: State, ctx: NodeContext) => State | void | undefined | Suspend | Goto | Promise<State | void | undefined | Suspend | Goto>;
+```
+
+A node: a function of the state (and its context). It returns the keys it
+changes (an object), nothing, `suspend(...)` or `goto(...)`, or a Promise of
+one of these.
+
+## Router
+
+```ts
+type Router = (state: State) => string | Promise<string>;
+```
+
+A router: chooses a label from the state. The label picks the next node in the table given to `Workflow.route`.
+
+## Interrupt
+
+```ts
+interface Interrupt {
+  node: string;
+  payload: unknown;
+}
+```
+
+A paused node and what it asked for.
+
+**Fields**
+
+- `node` (`string`): The paused node's name: the key to answer in `resume`.
+- `payload` (`unknown`): What the node asked for (the `payload` of its `suspend`).
+
+## WorkflowResult
+
+```ts
+interface WorkflowResult {
+  state: State;
+  steps: number;
+  suspended: boolean;
+  interrupts: Interrupt[];
+  runId: string;
+  snapshot: unknown;
+  checkpointId?: string;
+  version?: number;
+}
+```
+
+What a run produced.
+
+**Fields**
+
+- `state` (`State`): The state when the run finished or paused.
+- `steps` (`number`): How many steps the run took.
+- `suspended` (`boolean`): `true` when nodes wait for a person: answer them with `resume`.
+- `interrupts` (`Interrupt[]`): What the paused nodes asked for; empty unless `suspended`.
+- `runId` (`string`): The run's id.
+- `snapshot` (`unknown`): Pass to `CompiledWorkflow.resume` (runs without storage).
+- `checkpointId` (`string`, optional): Threads only: the checkpoint written, and the thread's version.
+- `version` (`number`, optional): Threads only: the thread's version after this run (it grows with every save).
+
+## WorkflowRunOptions
+
+```ts
+interface WorkflowRunOptions {
+  maxSteps?: number;
+  deadlineMs?: number;
+  signal?: AbortSignal;
+}
+```
+
+Limits for one `run` or `resume` call.
+
+**Fields**
+
+- `maxSteps` (`number`, default `64`): The most steps a run may take, counted from its start across resumes. A
+  run that needs more fails with `step_limit_exceeded` (`LimitExceededError`):
+  a guard against endless loops.
+- `deadlineMs` (`number`, optional): A time limit for this call, in milliseconds. Past it the run fails with `deadline_exceeded` (`LimitExceededError`).
+- `signal` (`any`, optional): Aborting it cancels the run, which fails with `CancelledError`.

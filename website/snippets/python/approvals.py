@@ -30,3 +30,26 @@ async def main() -> None:
     #     await chat.decide({call_id: Decision.edit({"order_id": "A-1001", "amount": 12})})
     # [/show]
     _ = Decision.approve()
+
+
+async def per_call(agent: "Agent") -> None:
+    from criogen import Decision
+
+    chat = agent.thread("ticket-9", actor="user:dr-rao")
+    # [show decide]
+    reply = await chat.send("Refund order A-1001 and email the customer")
+    decisions = {}
+    for request in reply.approvals:
+        if request.tool == "issue_refund" and request.args["amount"] > 100:
+            # Run it with other arguments; the model is told what actually ran.
+            decisions[request.call_id] = Decision.edit({**request.args, "amount": 100})
+        elif request.tool == "send_email":
+            # Do not run it; this text is the tool's result.
+            decisions[request.call_id] = Decision.respond("Not sent: the customer opted out of email.")
+        else:
+            decisions[request.call_id] = Decision.approve()
+    reply = await chat.decide(decisions)  # one decision per pending call, or resume_invalid
+    # [/show decide]
+
+
+from criogen import Agent  # noqa: E402

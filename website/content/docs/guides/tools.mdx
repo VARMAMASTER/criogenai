@@ -1,0 +1,159 @@
+---
+title: Tools
+description: Write tools the model can call - schemas from type hints or JSON Schema, Zod, errors the model sees, retries, timeouts, the tool context, and tools from other agents and MCP servers.
+---
+
+A **tool** is a function the model may call: look an order up, book a visit,
+send a message. You write the function and describe its arguments; the
+engine checks every call against that description before your code runs, runs
+the calls of one turn concurrently, and gives the results back to the model.
+This page covers writing tools well. How tool calls fit into the loop is on
+[Agents and the loop](/docs/concepts/agent-loop/).
+
+## Define a tool
+
+In Python, decorate a function with `@tool`: the type hints become the JSON
+Schema, and the docstring becomes the description. In TypeScript, call
+`tool({...})` with a JSON Schema in `input` (or a Zod schema, below).
+
+<Sample name="tools" region="hints" />
+
+How Python type hints become the schema:
+
+| Type hint | JSON Schema |
+|---|---|
+| `str`, `int`, `float`, `bool` | `string`, `integer`, `number`, `boolean` |
+| `Literal["a", "b"]` | `enum: ["a", "b"]` |
+| `List[str]` / `list[str]` | `array` of `string` |
+| `Dict[...]` / `dict` | `object` |
+| `Optional[X]` | `X` or `null` |
+| A Pydantic model | the model's own JSON Schema; the function receives an instance |
+| a default value | the argument is optional |
+| no hint, or `Any` | anything |
+
+Every schema made from hints forbids extra arguments
+(`additionalProperties: false`). Any other type raises `TypeError` when the
+tool is defined, so a schema problem shows at start-up, not in production.
+`tool.schema` (Python) and `tool.jsonSchema` (TypeScript) show what the model
+will see.
+
+In TypeScript, the type parameter (`tool<{ orderId: string }>`) types `run`'s
+argument. It is not checked against the schema: keep the two in step, or use
+Zod.
+
+### Names and descriptions
+
+- The name is what the model calls: letters, digits, `_` and `-`, at most 64
+  characters. In Python it is the function's name unless you pass `name=`.
+- The description is what the model reads to choose the tool. Say what it
+  does, when to use it, and what the arguments look like ("ids look like
+  LAB-12345"). This matters more than any other wording in your prompt.
+- Constrain arguments in the schema, not in prose: `minimum`, `maximum`,
+  `enum`, `pattern`, `minItems`. The engine enforces them; a model may not.
+
+### Zod and other Standard Schema libraries (TypeScript)
+
+A tool's `input` can be a Zod schema, or any [Standard
+Schema](https://standardschema.dev) (ArkType, Valibot). The engine checks the
+JSON Schema the library makes; then the library checks what JSON Schema
+cannot say (refinements), and its issues go back to the model as invalid
+arguments. `run` receives the library's output, with defaults and transforms
+applied, and its type is inferred. Valibot cannot make a JSON Schema itself:
+pass `jsonSchema: toJsonSchema(schema)` (from `@valibot/to-json-schema`).
+
+<Sample name="agents" region="zod" only={["typescript"]} />
+
+## What a tool returns
+
+Return any JSON value: a dict or object, a list, a string, a number. It goes
+back to the model as the tool's result (Pydantic models are converted to
+JSON). Keep results small and to the point: the model reads all of it, and
+it is stored with the thread. Results longer than 100,000 characters are cut.
+
+Tools may be sync or async in both languages. In Python, async tools run on
+your event loop and sync tools on worker threads, so a slow sync tool does
+not block the others.
+
+## When a tool fails
+
+<Sample name="tools" region="errors" />
+
+| What happens | The model sees | The run |
+|---|---|---|
+| The model's arguments do not match the schema | `invalid_arguments` with the problems; your function is not called | goes on |
+| The model names a tool the agent does not have | `unknown_tool` with the tools it has | goes on |
+| Your tool raises `ToolError(message)` | your message (`tool_error`) | goes on |
+| Your tool raises anything else | depends on `on_tool_exception` (below) | goes on, unless `fail` |
+| Your tool runs past its time limit | a timeout | goes on |
+
+Use `ToolError` for failures the model can act on: "no such order", "that
+slot is taken", "refunds over 200 need a manager". The text goes to the
+model, so do not put secrets or other people's data in it.
+
+An exception you did not expect (a bug, a database outage) follows the
+agent's `on_tool_exception` (`onToolException`):
+
+| Setting | The model sees | Use when |
+|---|---|---|
+| `"return_to_model"` / `"returnToModel"` (default) | The exception's type and message | Development, and tools whose errors hold nothing sensitive |
+| `"return_generic"` / `"returnGeneric"` | Only that the tool failed; the text is kept in the result's `artifact`, stored with the thread but never sent to a model | Exceptions may contain data that must not leave your systems |
+| `"fail"` | Nothing: the run fails with `tool_failed`, your exception as the error's cause | A failed tool means the whole task is wrong; a thread can `retry()` it |
+
+## Retries, timeouts and side effects
+
+<Sample name="tools" region="retry" />
+
+Mark each tool for what it does:
+
+| Flag | Means | Effect |
+|---|---|---|
+| `read_only` / `readOnly` | Reads, changes nothing | Retried after a retryable `ToolError` or a timeout |
+| `idempotent` | Doing it twice is the same as once | Retried the same way |
+| `destructive` | Changes or deletes something | Never retried by the engine; a good candidate for `approve` |
+| (none) | Unknown | Never retried |
+
+The retry policy (`tool_retry` / `toolRetry`) defaults to 3 attempts, waiting
+0.5 s, then 1 s, with jitter. The time limit per call defaults to 60 s.
+
+Retries inside one call are only half the story. On a
+[thread](/docs/guides/threads/), finished tool calls are saved one by one, so
+when a run fails and you `retry()` it, **tools that already finished are not
+run again**. A tool that was running when the process died may run again: for
+anything that sends or pays, use the call id as an idempotency key.
+
+## The tool context
+
+<Sample name="tools" region="context" />
+
+| Field (Python / TypeScript) | Meaning |
+|---|---|
+| `call_id` / `callId` | The model's id for this call; the same on every retry of it |
+| `run_id` / `runId` | The run's id, as in the result, traces and audit records |
+
+In Python, ask for it with a parameter annotated `ToolContext` (it is left out
+of the schema). In TypeScript it is `run`'s second argument.
+
+## Tools that need a person
+
+Put a tool's name in the agent's `approve` list and the run pauses before it
+runs, until someone approves, edits or rejects the call. See
+[Human approval](/docs/guides/approvals/). To block or change calls by rule
+instead (refunds over 500, calls outside working hours), use a `before_tool`
+[hook](/docs/guides/hooks/).
+
+## Other kinds of tools
+
+| Tool | How |
+|---|---|
+| Another agent | `other_agent.as_tool(name, description)` ([Agents](/docs/guides/agents/#agents-inside-agents)) |
+| An MCP server's tools | Pass the server in `tools` ([MCP](/docs/guides/mcp/)) |
+| Search over your documents | `collection.as_tool(...)` ([Collections](/docs/guides/retrieval/)) |
+| Web search and page reading | `criogen.web` ([Patterns](/docs/guides/patterns/#web-search)) |
+| Memory | `remember`, `forget` and `search_memory` come with `memory=` ([Memory](/docs/guides/memory/)) |
+
+## Next
+
+- [Human approval](/docs/guides/approvals/): pause before risky calls.
+- [Hooks](/docs/guides/hooks/): change, block or cache tool calls.
+- [Testing without a model](/docs/guides/testing/): script tool calls with `FakeModel`.
+- API: [Python tools](/docs/reference/api/python/tools/), [TypeScript tools](/docs/reference/api/typescript/tools/).

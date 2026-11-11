@@ -6,6 +6,22 @@
 
 import type { Hook, HookContext } from "./hooks";
 
+/**
+ * A function that removes what must not reach a model provider, for the
+ * agent's `redact` option. It gets each text of the transcript before every
+ * model call (the user's input, earlier replies, tool results and the
+ * strings inside JSON results) and returns the text to keep; it may be async.
+ *
+ * It runs before every hook, and the redacted transcript is what a thread
+ * saves. Tool names, call ids and arguments are not passed through it.
+ *
+ * @example
+ * import { Agent, type Redactor } from "criogen";
+ *
+ * // Replace ids shaped like 123-45-6789 before anything leaves the process.
+ * const redact: Redactor = (text) => text.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[id]");
+ * const agent = new Agent({ model: "openai:gpt-5-mini", redact });
+ */
 export type Redactor = (text: string) => string | Promise<string>;
 
 async function redactValue(value: unknown, redact: Redactor): Promise<unknown> {

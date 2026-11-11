@@ -27,6 +27,17 @@ const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * Parse .env text: NAME=value lines, `export NAME=value`, # comments, and
  * values in single or double quotes. No variable expansion. A malformed line
  * throws an Error naming the line number (never its content: it may be a secret).
+ *
+ * It does not touch `process.env`; `loadEnv` does.
+ *
+ * @param text The content of a .env file.
+ * @returns The variables, by name.
+ * @throws {Error} A line is not `NAME=value`, or a quoted value is not closed.
+ * @example
+ * import { parseEnv } from "criogen";
+ *
+ * parseEnv("# keys\nOPENAI_API_KEY=sk-test\nexport GEMINI_API_KEY='g-test'\n");
+ * // { OPENAI_API_KEY: "sk-test", GEMINI_API_KEY: "g-test" }
  */
 export function parseEnv(text: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -55,6 +66,7 @@ export function parseEnv(text: string): Record<string, string> {
   return out;
 }
 
+/** Options of `loadEnv`. */
 export interface LoadEnvOptions {
   /** Replace variables that are already set (default: keep them). */
   override?: boolean;
@@ -65,6 +77,20 @@ export interface LoadEnvOptions {
 /**
  * Read a .env file into process.env and return the NAMES it set (sorted;
  * never the values). Files over 1 MB are refused. Keep the file out of git.
+ *
+ * Call it before you build a model: model objects and "provider:model"
+ * strings read their key from the environment when they are created.
+ * Node only (a browser has no environment variables).
+ *
+ * @param path The file to read, relative to the current directory.
+ * @param options `override` replaces variables already set; `required` makes a missing file an error.
+ * @returns The names of the variables it set, sorted.
+ * @throws {Error} The file is over 1 MB, a line is malformed, or (with `required`) the file is missing.
+ * @example
+ * import { Agent, loadEnv } from "criogen";
+ *
+ * loadEnv(); // reads ./.env, e.g. OPENAI_API_KEY=...
+ * const agent = new Agent({ model: "openai:gpt-5-mini" });
  */
 export function loadEnv(path = ".env", options: LoadEnvOptions = {}): string[] {
   let size: number;
@@ -86,12 +112,21 @@ export function loadEnv(path = ".env", options: LoadEnvOptions = {}): string[] {
   return loaded.sort();
 }
 
-/** Which providers have a key right now: { openai: true, gemini: false, ... }. Names and yes/no only. */
+/**
+ * Which providers have a key set right now, by provider name.
+ *
+ * Names and yes/no only, never a key: `{ openai: true, gemini: false, ... }`.
+ * Local providers (ollama, lmstudio) need no key and are not listed.
+ */
 export function envStatus(): Record<string, boolean> {
   return Object.fromEntries(Object.entries(KEYS).map(([provider, name]) => [provider, Boolean(process.env[name])]));
 }
 
-/** The environment variable a provider's key comes from ("openai" -> "OPENAI_API_KEY"). */
+/**
+ * The environment variable a provider's key comes from ("openai" -> "OPENAI_API_KEY").
+ * @param provider A provider name, e.g. "openai" or "qwen" (local providers such as "ollama" need no key and are not known here).
+ * @throws {Error} The provider is not one with a key.
+ */
 export function keyName(provider: string): string {
   const name = KEYS[provider];
   if (!name) throw new Error(`unknown provider "${provider}"; known: ${Object.keys(KEYS).sort().join(", ")}`);
