@@ -261,8 +261,7 @@ passed through unchanged; Criogen keeps no list of models.
 Checked against scripted local servers (`tests/presets.rs`, both SDKs'
 provider tests); not yet live against each provider (manual, like
 `tests/live`). Not covered here, each with its own design note when built:
-Amazon Bedrock, Google Vertex AI. The OpenAI Responses API is §16, Azure
-§17.
+Google Vertex AI. The OpenAI Responses API is §16, Azure §17, Bedrock §18.
 
 ## 5. Streaming
 
@@ -789,3 +788,50 @@ or the tenant variables.
 token minting and renewal, the managed-identity request shape, secrets kept
 out of `Debug` and errors, URL forms. Not checked live (no Azure account in
 the project); the status page says so until it is.
+
+## 18. Amazon Bedrock with API keys (2026-11-11)
+
+Why: the largest route to Claude for companies on AWS (research
+providers-2026 §3, gap 4). Hospitals on AWS buy models there for data
+residency and their existing agreement.
+
+**What AWS offers (checked 2026-11-11).** On `bedrock-runtime` (AWS's
+recommended endpoint), an Amazon Bedrock API key works with:
+
+| API | Base URL | Key |
+|---|---|---|
+| Anthropic Messages (Claude) | `https://bedrock-runtime.<region>.amazonaws.com/anthropic/v1` | `x-api-key`, with `anthropic-version: 2023-06-01` |
+| Chat Completions (OpenAI's open-weight models, Llama, Mistral, DeepSeek, Qwen, …) | `https://bedrock-runtime.<region>.amazonaws.com/openai/v1` | `Authorization: Bearer` |
+| Responses (models whose card lists it) | the same `/openai/v1` | `Authorization: Bearer` |
+
+So Bedrock needs no new protocol: it is our `anthropic_messages`,
+`openai_chat` and `openai_responses` with these base URLs. The key's usual
+variable is AWS's own `AWS_BEARER_TOKEN_BEDROCK`; the region comes from
+`AWS_REGION`, else `AWS_DEFAULT_REGION`. There is **no default region**: a
+request must never go to a region the user did not choose (data residency).
+
+**Choosing the API.** `BedrockApi::Auto` (default) picks Messages for model
+ids from Anthropic (`anthropic.…`, or with an inference-profile prefix such as
+`us.anthropic.…`, `eu.anthropic.…`, `global.anthropic.…`) and Chat Completions
+for everything else. That is not guessing the provider: Bedrock's model ids
+name their maker. `Messages`, `Chat` and `Responses` force one.
+
+**Rust.** `bedrock_endpoint(region, model, api_key, api) -> Endpoint` (name
+`bedrock`; the region must be lowercase letters, digits and dashes, so it
+cannot change the host), `BedrockApi`. `Endpoint::with_base_url` reaches
+`bedrock-mantle` or a VPC endpoint; the path stays the caller's choice.
+
+**SDKs and gateway.** `"bedrock:<model id>"`, `Bedrock(...)` / `bedrock(...)`
+with `region`, `api_key`, `api` (`auto`, `messages`, `chat`, `responses`) and
+`base_url`; gateway `provider = "bedrock"` with `region` (or the AWS
+variables) and `api_key_env`.
+
+**Not yet.** AWS SigV4 signing (IAM roles, instance profiles) and the
+Converse API: both need request signing (HMAC-SHA256 over a canonical
+request), its own design note and, by rule 2, no AWS SDK. Short-term keys
+from AWS's token generator work as they are (they are API keys).
+
+**Tests.** Base URLs per API and region, the API choice by model id, the
+headers on a scripted local server (Messages and Chat), a refused region,
+the key kept out of errors. Not checked live (no AWS account in the
+project).

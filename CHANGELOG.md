@@ -9,6 +9,14 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+- **Amazon Bedrock with API keys** (design 0006 §18): `bedrock:<model id>` in both
+  SDKs (`Bedrock(...)` / `bedrock(...)`), `provider = "bedrock"` in the gateway
+  (with `region` and `api`), Rust `bedrock_endpoint` / `bedrock_from_env`. Claude
+  goes over the Anthropic Messages API, other makers' models over Chat
+  Completions (or Responses with `api`), all on `bedrock-runtime` in the region
+  you name: `region`, else `AWS_REGION` / `AWS_DEFAULT_REGION`, never a default.
+  The key comes from `AWS_BEARER_TOKEN_BEDROCK`. IAM roles (SigV4) are not
+  supported yet. Checked against local servers only.
 - **Azure OpenAI and Microsoft Foundry** (design 0006 §17): `azure:<deployment>`
   in both SDKs (`Azure(...)` / `azure(...)`), `provider = "azure"` /
   `"azure_chat"` in the gateway, and Rust `Endpoint::azure` / `azure_chat` and

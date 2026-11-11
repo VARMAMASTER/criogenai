@@ -7,8 +7,8 @@ use std::time::Duration;
 use criogen_agent::{Limits, Memory, OnToolException};
 use criogen_core::RetryPolicy;
 use criogen_providers::{
-    AzureApi, AzureCredential, AzureModel, Embedder, Endpoint, FakeEmbedder, FakeModel, FakeReply,
-    KaggleModel, Model, ProviderEmbedder, ProviderModel, preset,
+    AzureApi, AzureCredential, AzureModel, BedrockApi, Embedder, Endpoint, FakeEmbedder, FakeModel,
+    FakeReply, KaggleModel, Model, ProviderEmbedder, ProviderModel, preset,
 };
 use criogen_storage::{AuditQuery, Namespace, OnBusy, Retention, SearchQuery, Storage};
 use serde_json::{Value, json};
@@ -48,7 +48,35 @@ pub fn model(spec: &Value) -> Result<Arc<dyn Model>> {
     if text(spec, "kind") == Some("azure") {
         return azure_model(spec, name);
     }
+    if text(spec, "kind") == Some("bedrock") {
+        return bedrock_model(spec, name);
+    }
     ProviderModel::new(endpoint(spec)?, name)
+        .map(|m| Arc::new(m) as Arc<dyn Model>)
+        .map_err(|err| failure("model_failed", err.to_string(), None))
+}
+
+/// Amazon Bedrock with an API key (design 0006 §18): `region` (else
+/// AWS_REGION / AWS_DEFAULT_REGION), `apiKey` (else
+/// AWS_BEARER_TOKEN_BEDROCK), `api` (`auto`, `messages`, `chat`,
+/// `responses`), `baseUrl` (bedrock-mantle, a VPC endpoint, tests).
+fn bedrock_model(spec: &Value, name: &str) -> Result<Arc<dyn Model>> {
+    let api = match text(spec, "api") {
+        Some(api) => BedrockApi::parse(api)
+            .ok_or_else(|| bad("`api` must be auto, messages, chat or responses"))?,
+        None => BedrockApi::Auto,
+    };
+    let mut endpoint = criogen_providers::bedrock_from_env(
+        name,
+        text(spec, "region"),
+        text(spec, "apiKey").map(str::to_string),
+        api,
+    )
+    .map_err(|err| failure("model_failed", err.to_string(), None))?;
+    if let Some(base) = text(spec, "baseUrl") {
+        endpoint = endpoint.with_base_url(base);
+    }
+    ProviderModel::new(endpoint, name)
         .map(|m| Arc::new(m) as Arc<dyn Model>)
         .map_err(|err| failure("model_failed", err.to_string(), None))
 }

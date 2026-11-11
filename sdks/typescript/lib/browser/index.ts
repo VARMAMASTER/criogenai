@@ -35,6 +35,7 @@ export {
 } from "../errors";
 export {
   AzureModel,
+  BedrockModel,
   Embedder,
   FakeModel,
   FakeReply,
@@ -44,6 +45,7 @@ export {
   anthropic,
   anthropicCompatible,
   azure,
+  bedrock,
   cerebras,
   deepseek,
   fireworks,
@@ -62,7 +64,7 @@ export {
   xai,
   zai,
 } from "../models";
-export type { AzureOptions, KaggleOptions, Model, ModelAnswer, ModelCall, ModelOptions } from "../models";
+export type { AzureOptions, BedrockOptions, KaggleOptions, Model, ModelAnswer, ModelCall, ModelOptions } from "../models";
 export { ChatStream, Gateway } from "../gateway";
 export type { ChatInput, ChatOptions, ChatReply, Chunk, GatewayOptions } from "../gateway";
 export { ToolResult } from "../hooks";

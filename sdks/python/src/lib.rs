@@ -26,10 +26,10 @@ use criogen_core::{
     node_with_context, router_fn,
 };
 use criogen_providers::{
-    AzureApi, AzureCredential, AzureModel, BlockDelta, BoxFuture, Embedder, Endpoint, FakeEmbedder,
-    FakeModel, FakeReply, KaggleModel, Message, MessageDelta, Model, ModelError, ModelErrorKind,
-    ModelRequest, ModelResponse, OutputSpec, ProviderEmbedder, ProviderModel, Settings,
-    ToolAnnotations, ToolSpec, preset,
+    AzureApi, AzureCredential, AzureModel, BedrockApi, BlockDelta, BoxFuture, Embedder, Endpoint,
+    FakeEmbedder, FakeModel, FakeReply, KaggleModel, Message, MessageDelta, Model, ModelError,
+    ModelErrorKind, ModelRequest, ModelResponse, OutputSpec, ProviderEmbedder, ProviderModel,
+    Settings, ToolAnnotations, ToolSpec, preset,
 };
 use criogen_storage::{
     AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
@@ -307,7 +307,35 @@ fn model(spec: &Value) -> Result<Arc<dyn Model>, Failure> {
     if kind == "azure" {
         return azure_model(spec, name);
     }
+    if kind == "bedrock" {
+        return bedrock_model(spec, name);
+    }
     ProviderModel::new(endpoint(spec)?, name)
+        .map(|m| Arc::new(m) as Arc<dyn Model>)
+        .map_err(|err| Failure::new("model_failed", err.to_string()))
+}
+
+/// Amazon Bedrock with an API key (design 0006 §18): `region` (else
+/// AWS_REGION / AWS_DEFAULT_REGION), `api_key` (else
+/// AWS_BEARER_TOKEN_BEDROCK), `api` (`auto`, `messages`, `chat`,
+/// `responses`), `base_url` (bedrock-mantle, a VPC endpoint, tests).
+fn bedrock_model(spec: &Value, name: &str) -> Result<Arc<dyn Model>, Failure> {
+    let api = match text(spec, "api") {
+        Some(api) => BedrockApi::parse(api)
+            .ok_or_else(|| bad("`api` must be auto, messages, chat or responses"))?,
+        None => BedrockApi::Auto,
+    };
+    let mut endpoint = criogen_providers::bedrock_from_env(
+        name,
+        text(spec, "region"),
+        text(spec, "api_key").map(str::to_string),
+        api,
+    )
+    .map_err(|err| Failure::new("model_failed", err.to_string()))?;
+    if let Some(base) = text(spec, "base_url") {
+        endpoint = endpoint.with_base_url(base);
+    }
+    ProviderModel::new(endpoint, name)
         .map(|m| Arc::new(m) as Arc<dyn Model>)
         .map_err(|err| Failure::new("model_failed", err.to_string()))
 }

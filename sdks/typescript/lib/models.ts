@@ -280,6 +280,48 @@ export class AzureModel {
 /** A deployment on Azure OpenAI or Foundry, e.g. azure("gpt-5-mini", { endpoint: "my-resource" }). */
 export const azure = (model: string, options?: AzureOptions) => new AzureModel(model, options);
 
+/**
+ * Amazon Bedrock with an API key (design 0006 §18). `region` (else AWS_REGION
+ * or AWS_DEFAULT_REGION; there is no default, so data never goes to a region
+ * you did not choose); `apiKey` (else AWS_BEARER_TOKEN_BEDROCK). Claude is
+ * called over the Anthropic Messages API and other makers' models over Chat
+ * Completions; `api` forces one. `baseUrl` reaches bedrock-mantle or a VPC
+ * endpoint. IAM roles (SigV4) are not supported yet.
+ */
+export interface BedrockOptions {
+  region?: string;
+  apiKey?: string;
+  api?: "auto" | "messages" | "chat" | "responses";
+  baseUrl?: string;
+}
+
+export class BedrockModel {
+  readonly kind = "bedrock";
+  /** The Bedrock model id or inference profile. */
+  readonly model: string;
+  readonly #options: BedrockOptions;
+
+  constructor(model: string, options: BedrockOptions = {}) {
+    if (options.api !== undefined && !["auto", "messages", "chat", "responses"].includes(options.api)) {
+      throw new TypeError('api must be "auto", "messages", "chat" or "responses"');
+    }
+    this.model = model;
+    this.#options = options;
+  }
+
+  /** The JSON spec (with any key; never logged). */
+  spec(): Record<string, unknown> {
+    return { kind: this.kind, model: this.model, ...this.#options };
+  }
+
+  toJSON(): Record<string, unknown> {
+    return { kind: this.kind, model: this.model };
+  }
+}
+
+/** A model on Amazon Bedrock, e.g. bedrock("us.anthropic.claude-sonnet-5", { region: "us-east-1" }). */
+export const bedrock = (model: string, options?: BedrockOptions) => new BedrockModel(model, options);
+
 
 /**
  * What a model function receives: the request as the engine sends it to a
@@ -387,19 +429,20 @@ export class FunctionModel {
   }
 }
 
-export type Model = string | ProviderModel | KaggleModel | AzureModel | FakeModel | FunctionModel;
+export type Model = string | ProviderModel | KaggleModel | AzureModel | BedrockModel | FakeModel | FunctionModel;
 
 /** The JSON spec of a model object or "provider:model" string. */
 export function modelSpec(model: Model): Record<string, unknown> {
   if (typeof model === "string") {
     const at = model.indexOf(":");
     const provider = at > 0 ? model.slice(0, at) : "";
-    const known = [...Object.keys(KEYS), ...LOCAL, "kaggle", "azure"];
+    const known = [...Object.keys(KEYS), ...LOCAL, "kaggle", "azure", "bedrock"];
     if (!known.includes(provider)) {
       throw new TypeError(`model "${model}": use "provider:model" with provider one of ${known.join(", ")}`);
     }
     if (provider === "kaggle") return new KaggleModel(model.slice(at + 1)).spec();
     if (provider === "azure") return new AzureModel(model.slice(at + 1)).spec();
+    if (provider === "bedrock") return new BedrockModel(model.slice(at + 1)).spec();
     return new ProviderModel(provider, model.slice(at + 1)).spec();
   }
   if (model && typeof (model as { spec?: unknown }).spec === "function") return model.spec();

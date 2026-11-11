@@ -41,6 +41,7 @@ from .models import (
     Groq,
     Kaggle,
     Azure,
+    Bedrock,
     LMStudio,
     Mistral,
     Moonshot,
@@ -75,7 +76,7 @@ from .workflow import (
 __all__ = [
     "END", "Agent", "Collection", "Document", "Hit", "CriogenError", "AgentTool", "Anthropic", "ApprovalRequest", "CancelledError",
     "ChatReply", "ChatStream", "Chunk", "CompiledWorkflow", "Decision", "Embedder", "Event", "FakeModel",
-    "FakeReply", "Gateway", "Gemini", "HookAction", "HookContext", "Interrupt", "Kaggle", "Azure",
+    "FakeReply", "Gateway", "Gemini", "HookAction", "HookContext", "Interrupt", "Kaggle", "Azure", "Bedrock",
     "LimitExceededError", "Memory", "ModelError", "NodeContext", "Ollama", "OpenAI",
     "OpenAICompatible", "OpenRouter", "Reply", "Retry", "RunResult", "StorageError", "Storage", "Stream",
     "Telemetry", "Thread", "ThreadBusyError", "ThreadSuspendedError", "Tool", "ToolCall", "ToolContext", "ToolError",

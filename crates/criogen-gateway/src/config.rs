@@ -5,7 +5,8 @@
 use std::sync::Arc;
 
 use criogen_providers::{
-    AzureApi, AzureCredential, AzureModel, Endpoint, KaggleModel, Model, ProviderModel, preset,
+    AzureApi, AzureCredential, AzureModel, BedrockApi, Endpoint, KaggleModel, Model, ProviderModel,
+    bedrock_from_env, preset,
 };
 use serde::Deserialize;
 
@@ -79,6 +80,12 @@ pub struct ModelConfig {
     /// Another base URL (required for `openai_compatible`).
     #[serde(default)]
     pub base_url: Option<String>,
+    /// The AWS region (`bedrock`; else AWS_REGION / AWS_DEFAULT_REGION).
+    #[serde(default)]
+    pub region: Option<String>,
+    /// `bedrock`: `auto` (default), `messages`, `chat` or `responses`.
+    #[serde(default)]
+    pub api: Option<String>,
     /// Send the key over plain `http://` to another machine (a vLLM server
     /// on your LAN). Refused by default.
     #[serde(default)]
@@ -166,6 +173,35 @@ impl Config {
                         ))
                     })
                 };
+                if m.provider == "bedrock" {
+                    // Design 0006 §18: a Bedrock API key (`api_key_env`, else
+                    // AWS_BEARER_TOKEN_BEDROCK) and a region; no default region.
+                    let api = match m.api.as_deref() {
+                        Some(name) => BedrockApi::parse(name).ok_or_else(|| {
+                            GatewayError::Config(format!(
+                                "route `{}`: `api` must be auto, messages, chat or responses",
+                                route.name
+                            ))
+                        })?,
+                        None => BedrockApi::Auto,
+                    };
+                    let mut endpoint = bedrock_from_env(
+                        &m.model,
+                        m.region.as_deref(),
+                        key.clone(),
+                        api,
+                    )
+                    .map_err(|err| {
+                        GatewayError::Config(format!("route `{}`: {}", route.name, err.message))
+                    })?;
+                    if let Some(base) = &m.base_url {
+                        endpoint = endpoint.with_base_url(base);
+                    }
+                    let model = ProviderModel::new(endpoint, &m.model)
+                        .map_err(|err| GatewayError::Config(err.message))?;
+                    models.push(Arc::new(model));
+                    continue;
+                }
                 if m.provider == "azure" || m.provider == "azure_chat" {
                     // Design 0006 §17: `base_url` (resource name or URL, else
                     // AZURE_OPENAI_ENDPOINT); the key from `api_key_env`, else
@@ -309,6 +345,7 @@ mod tests {
         models = [
           { provider = "azure", model = "gpt-5-mini", base_url = "my-resource", api_key_env = "TEST_AZURE_KEY" },
           { provider = "azure_chat", model = "DeepSeek-V4", base_url = "my-resource", api_key_env = "TEST_AZURE_KEY" },
+          { provider = "bedrock", model = "eu.anthropic.claude-sonnet-5", region = "eu-west-1", api_key_env = "TEST_AZURE_KEY" },
         ]
 
         [[keys]]
@@ -342,6 +379,7 @@ mod tests {
         let enterprise = &gateway.inner.routes["enterprise"];
         assert_eq!(enterprise[0].provider(), "azure");
         assert_eq!(enterprise[1].model(), "DeepSeek-V4");
+        assert_eq!(enterprise[2].provider(), "bedrock");
         assert_eq!(gateway.spent("team-a"), Some(0));
         // The Debug output names routes, never keys.
         let shown = format!("{gateway:?}");

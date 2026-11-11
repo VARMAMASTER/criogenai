@@ -193,6 +193,44 @@ class Kaggle:
         return f"Kaggle({self.model!r})"
 
 
+class Bedrock:
+    """Amazon Bedrock with an API key (design 0006 §18), e.g.
+    ``Bedrock("us.anthropic.claude-sonnet-5", region="us-east-1")`` or
+    ``"bedrock:us.anthropic.claude-sonnet-5"``. The model name is the
+    Bedrock model id or inference profile.
+
+    ``region`` (else ``AWS_REGION`` or ``AWS_DEFAULT_REGION``; there is no
+    default, so data never goes to a region you did not choose); ``api_key``
+    (else ``AWS_BEARER_TOKEN_BEDROCK``). Claude is called over the Anthropic
+    Messages API and other makers' models over Chat Completions; ``api``
+    forces one (``"messages"``, ``"chat"``, ``"responses"``). ``base_url``
+    reaches bedrock-mantle or a VPC endpoint. IAM roles (SigV4) are not
+    supported yet."""
+
+    kind = "bedrock"
+
+    def __init__(
+        self,
+        model: str,
+        region: Optional[str] = None,
+        api_key: Optional[str] = None,
+        api: str = "auto",
+        base_url: Optional[str] = None,
+    ):
+        if api not in ("auto", "messages", "chat", "responses"):
+            raise ValueError("api must be 'auto', 'messages', 'chat' or 'responses'")
+        self.model = model
+        self._fields = {"region": region, "api_key": api_key, "api": api, "base_url": base_url}
+
+    def spec(self) -> Dict[str, Any]:
+        spec: Dict[str, Any] = {"kind": self.kind, "model": self.model}
+        spec.update({k: v for k, v in self._fields.items() if v})
+        return spec
+
+    def __repr__(self) -> str:  # never shows a key
+        return f"Bedrock({self.model!r})"
+
+
 class Azure:
     """Azure OpenAI or Microsoft Foundry (design 0006 §17): a deployment,
     e.g. ``Azure("gpt-5-mini", endpoint="my-resource")`` or
@@ -376,6 +414,7 @@ def model_spec(model: Any) -> Dict[str, Any]:
             "lmstudio": LMStudio,
             "kaggle": Kaggle,
             "azure": Azure,
+            "bedrock": Bedrock,
         }
         if not sep or provider not in classes:
             raise ValueError(

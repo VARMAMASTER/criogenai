@@ -38,6 +38,8 @@ struct ReadmeDoctests;
 mod anthropic_messages;
 #[cfg(feature = "http")]
 mod azure;
+#[cfg(feature = "http")]
+mod bedrock;
 mod embed;
 mod error;
 mod fake;
@@ -67,6 +69,8 @@ mod transport;
 pub use anthropic_messages::AnthropicOptions;
 #[cfg(feature = "http")]
 pub use azure::{AzureApi, AzureCredential, AzureModel};
+#[cfg(feature = "http")]
+pub use bedrock::{BedrockApi, bedrock_endpoint, bedrock_from_env};
 pub use embed::{Embedder, FAKE_DIMENSIONS, FakeEmbedder};
 pub use error::{
     Dispatch, HttpFailure, MAX_MESSAGE_BYTES, ModelError, ModelErrorKind, classify_http,

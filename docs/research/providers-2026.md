@@ -73,7 +73,8 @@ small, and OpenRouter or `OpenAICompatible` already reach most of them.
    `openai` preset speaks it; reasoning with tools checked live.
 3. **Azure (gap 3):** **done 2026-11-10** (design 0006 §17): API keys, service
    principals and managed identities (no new crypto: client secrets and the metadata
-   service). Then Bedrock with API keys (gap 4).
+   service). Bedrock with API keys (gap 4): **done 2026-11-11** (design 0006 §18);
+   SigV4 for IAM roles still open.
 4. **Vertex (gap 5), Entra ID, SigV4:** the credential-heavy routes, when a user such as
    Axon Health needs them; each needs a short design note on keys and tokens (rule 10).
 
