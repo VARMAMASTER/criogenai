@@ -143,7 +143,7 @@ Python is read from source with `ast` (nothing imported), TypeScript with the co
 (no new dependency); design numbers are removed from the text. `ci-local.sh` (step
 `website`) runs `gen-api.mjs --check`, so the committed pages cannot drift. **Rust**:
 rustdoc for the eight public crates (not `criogen-bench` and `criogen-js`) in its own
-target dir, copied to `public/api/rust` (git-ignored) at build; the `src/` pages are never
+target dir, copied to `public/rustdoc` (git-ignored) at build; the `src/` pages are never
 copied, "Source" links are removed, and the build fails if one is left (the code stays
 private until 10,000 installs). New `/llms-api.txt` carries the Python and TypeScript
 reference for AI assistants; `llms-full.txt` stays the manual. Open: two crate-level Rust

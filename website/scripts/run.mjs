@@ -4,7 +4,7 @@
 //        engine into public/engine (scripts/build-engine.mjs: the engine as
 //        WebAssembly and the code samples on it), generates the API reference
 //        (scripts/gen-api.mjs: Python and TypeScript pages, rustdoc into
-//        public/api/rust), runs `next build` (a static
+//        public/rustdoc), runs `next build` (a static
 //        export into out/), then indexes out/ with Pagefind for the search.
 // dev:   the same copies, then `next dev`.
 // --fixture: the benchmark lab shows fixtures/bench-sample.json (fake
@@ -40,9 +40,9 @@ run(path.join(root, "scripts", "build-engine.mjs"), []);
 
 // The API reference: Python and TypeScript pages from their sources, Rust
 // from rustdoc (scripts/gen-api.mjs). CRIOGEN_SKIP_RUST_DOCS=1 reuses the
-// last public/api/rust (a quick local build).
+// last public/rustdoc (a quick local build).
 run(path.join(root, "scripts", "gen-api.mjs"), []);
-if (!process.env.CRIOGEN_SKIP_RUST_DOCS || !fs.existsSync(path.join(root, "public", "api", "rust"))) {
+if (!process.env.CRIOGEN_SKIP_RUST_DOCS || !fs.existsSync(path.join(root, "public", "rustdoc"))) {
   run(path.join(root, "scripts", "gen-api.mjs"), ["--rust"]);
 }
 

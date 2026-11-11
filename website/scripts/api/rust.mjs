@@ -1,5 +1,5 @@
 // The Rust API reference: rustdoc's own pages for the public crates, copied
-// into public/api/rust (served at /api/rust/…).
+// into public/rustdoc (served at /rustdoc/…).
 //
 // Source stays private until Criogen reaches 10,000 installs, so only the API
 // pages are published: rustdoc's `src/` pages (every crate's source code) are
@@ -47,7 +47,7 @@ export function buildRustDocs(root) {
   if (run.status !== 0) throw new Error("cargo doc failed");
 
   const from = path.join(targetDir, "doc");
-  const to = path.join(root, "public", "api", "rust");
+  const to = path.join(root, "public", "rustdoc");
   fs.rmSync(to, { recursive: true, force: true });
   fs.mkdirSync(to, { recursive: true });
   // Everything but the source pages.
@@ -78,7 +78,7 @@ export function buildRustDocs(root) {
   };
   walk(to);
   assertNoSource(to);
-  console.log(`[api] rust docs in public/api/rust (${stripped} source links removed)`);
+  console.log(`[api] rust docs in public/rustdoc (${stripped} source links removed)`);
   return crates;
 }
 

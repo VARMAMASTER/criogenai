@@ -7,4 +7,4 @@ next-env.d.ts
 public/schemas/
 
 # The Rust API reference: rustdoc output copied before each build (scripts/gen-api.mjs --rust).
-public/api/
+public/rustdoc/

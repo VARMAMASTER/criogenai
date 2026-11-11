@@ -217,7 +217,7 @@ write our own implementation.
   API reference (`/docs/reference/api/`): `website/scripts/gen-api.mjs` writes the
   Python (read with `ast`) and TypeScript (compiler API) pages from the SDK
   sources, committed and checked by `ci-local.sh`; `--rust` builds rustdoc into
-  `public/api/rust` without the `src/` pages (the code stays private). `npm run
+  `public/rustdoc` without the `src/` pages (the code stays private). `npm run
   build` / `npm run preview` (port 4400); checked by `ci-local.sh` step `website`.
   Pattern playground (`/playground/`): 19 agent patterns
   (`website/lib/patterns/`: reasoning, multi-agent, IBM's five agent types),

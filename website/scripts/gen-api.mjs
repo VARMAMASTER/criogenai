@@ -5,7 +5,7 @@
 //                                      overview page and lib/api-nav.ts
 //   node scripts/gen-api.mjs --check   fails if those files are not what the
 //                                      sources produce now (used by CI)
-//   node scripts/gen-api.mjs --rust    builds rustdoc into public/api/rust
+//   node scripts/gen-api.mjs --rust    builds rustdoc into public/rustdoc
 //
 // Python is read from its source with `ast` (scripts/api/python.py), TypeScript
 // with the compiler's symbol table (scripts/api/typescript.mjs), Rust with
@@ -242,7 +242,7 @@ function renderPage(language, page, data) {
 // ---------- the Rust page and the sidebar ----------
 
 function renderRustPage(crates) {
-  const rows = crates.map((c) => `| [\`${c.name}\`](/api/rust/${c.module}/) | ${c.description.replace(/\|/g, "\\|")} |`);
+  const rows = crates.map((c) => `| [\`${c.name}\`](/rustdoc/${c.module}/) | ${c.description.replace(/\|/g, "\\|")} |`);
   return [
     "---",
     'title: "Rust API"',
