@@ -133,6 +133,12 @@ pub fn presets() -> String {
 
 /// Registers a JavaScript model function (design 0021 §7); the handle
 /// names it in model specs.
+/// The engine's version (from 0.1.6 on).
+#[wasm_bindgen(js_name = engineVersion)]
+pub fn engine_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 /// Problems with a value against a JSON Schema (evals, design 0024).
 #[wasm_bindgen(js_name = validateJson)]
 pub fn validate_json(schema: String, value: String) -> Result<String, JsValue> {

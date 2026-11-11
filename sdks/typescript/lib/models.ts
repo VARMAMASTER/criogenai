@@ -269,6 +269,7 @@ export class AzureModel {
 
   /** The JSON spec (with any secret; never logged). */
   spec(): Record<string, unknown> {
+    requireEngine016("Azure OpenAI");
     return { kind: this.kind, model: this.model, ...this.#options };
   }
 
@@ -311,6 +312,7 @@ export class BedrockModel {
 
   /** The JSON spec (with any key; never logged). */
   spec(): Record<string, unknown> {
+    requireEngine016("Amazon Bedrock");
     return { kind: this.kind, model: this.model, ...this.#options };
   }
 
@@ -359,6 +361,7 @@ export class VertexModel {
 
   /** The JSON spec (with any token; never logged). */
   spec(): Record<string, unknown> {
+    requireEngine016("Google Vertex AI");
     return { kind: this.kind, model: this.model, ...this.#options };
   }
 
@@ -416,6 +419,21 @@ export function requireEngine015(what: string): void {
     throw errorFor(
       "unsupported",
       `${what} needs criogen's engine 0.1.5 or newer, and the engine package installed for this system is older: ` +
+        "it comes with the next release for this platform (Windows and the browser, criogen/web, have it now)",
+    );
+  }
+}
+
+/**
+ * Throws `unsupported` when the installed engine predates 0.1.6 (Azure,
+ * Bedrock, Vertex AI): `engineVersion` arrived with it. Linux and macOS engine
+ * packages stay older until they can be built again.
+ */
+export function requireEngine016(what: string): void {
+  if (typeof (native as { engineVersion?: unknown }).engineVersion !== "function") {
+    throw errorFor(
+      "unsupported",
+      `${what} needs criogen's engine 0.1.6 or newer, and the engine package installed for this system is older: ` +
         "it comes with the next release for this platform (Windows and the browser, criogen/web, have it now)",
     );
   }

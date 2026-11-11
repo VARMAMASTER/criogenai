@@ -75,8 +75,8 @@ const lifecycle = [
   },
   {
     state: "running",
-    title: "Any model, including your own",
-    text: "OpenAI, Claude, Gemini, OpenRouter, or models on your own hardware through Ollama and vLLM. A gateway puts all of them behind one OpenAI-compatible endpoint.",
+    title: "Any model, through the cloud you already pay for",
+    text: "OpenAI, Claude and Gemini directly, or through Azure OpenAI, Amazon Bedrock and Google Vertex AI with your company's keys and identities. Open models on your own hardware through Ollama and vLLM. A gateway puts all of them behind one OpenAI-compatible endpoint.",
     href: "/docs/guides/models/",
     link: "Models and the gateway",
   },

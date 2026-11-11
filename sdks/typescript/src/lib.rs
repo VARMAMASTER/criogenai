@@ -81,6 +81,13 @@ pub fn cancel_call(id: u32) {
     criogen_js::cancel_call(id);
 }
 
+/// The engine's version. Present from 0.1.6 on: the TypeScript layer uses
+/// it to tell an older platform engine package from a current one.
+#[napi]
+pub fn engine_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
+
 /// The named providers (design 0006 §4.1) as JSON: `[{"name", "title",
 /// "baseUrl", "keyEnv", "anthropic"}]`. The SDK's own key table is checked
 /// against it in the tests.

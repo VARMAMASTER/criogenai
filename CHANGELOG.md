@@ -9,6 +9,16 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-11-11
+
+- **Packages:** built on Windows again (GitHub Actions cannot run until billing is
+  fixed). npm: `criogen@0.1.6` and the Windows engine `criogen-windows-x64@0.1.6`;
+  `criogen/web` (the browser engine) has everything. Linux and macOS keep the
+  0.1.3 engine until their builds run: there `openai:` still uses Chat
+  Completions, and `azure:`, `bedrock:` and `vertex:` say they need engine 0.1.6
+  (`unsupported`). PyPI: `criogen==0.1.6` as a Windows wheel; pip on Linux and
+  macOS installs 0.1.3. New: the engine reports its version (`engineVersion`).
+
 - **Google Vertex AI** (design 0006 §19): `vertex:<model>` in both SDKs
   (`Vertex(...)` / `vertex(...)`), `provider = "vertex"` in the gateway
   (`project`, `region` as the location), Rust `VertexModel`. Gemini and Google's
