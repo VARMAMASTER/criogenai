@@ -24,6 +24,7 @@ description: OpenAI, Anthropic, Gemini, DeepSeek, Mistral, Groq, xAI, Qwen, Kimi
 | Z.ai (GLM) | `zai:` (pass `base_url` for China keys) | `ZAI_API_KEY` |
 | Azure OpenAI and Microsoft Foundry | `azure:<deployment>` / `Azure(...)` / `azure(...)`: the resource's v1 API, Responses (or `api="chat"` for Foundry's other models); an API key, or Entra ID (service principal, managed identity) with tokens renewed by the engine | `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_API_KEY`, or `AZURE_TENANT_ID` + `AZURE_CLIENT_ID` + `AZURE_CLIENT_SECRET` |
 | Amazon Bedrock | `bedrock:<model id>` / `Bedrock(...)` / `bedrock(...)`: Claude over the Messages API, other makers' models over Chat Completions, on `bedrock-runtime` in your region (there is no default region). API keys only for now; IAM roles (SigV4) are planned | `AWS_BEARER_TOKEN_BEDROCK` + `AWS_REGION` |
+| Google Vertex AI | `vertex:<model>` / `Vertex(...)` / `vertex(...)`: Gemini and Google's hosted models over the OpenAI-compatible endpoint, Claude over `rawPredict`, in your project and location (no defaults). Tokens from `gcloud auth application-default login`, the metadata server on Google Cloud, or a token you pass; service-account key files are planned | `GOOGLE_CLOUD_PROJECT` + `GOOGLE_CLOUD_LOCATION` |
 | Kaggle Model Proxy (prototypes) | OpenAI-compatible; Criogen mints and renews the hourly proxy token | `KAGGLE_API_TOKEN` or `~/.kaggle/access_token` |
 | Ollama, LM Studio | `ollama:`, `lmstudio:`; local, OpenAI-compatible | none |
 | vLLM and any OpenAI-compatible server | Your URL (a key is never sent over plain `http://` to another machine unless you pass `allow_insecure_http` / `allowInsecureHttp`) | optional |
@@ -32,7 +33,7 @@ description: OpenAI, Anthropic, Gemini, DeepSeek, Mistral, Groq, xAI, Qwen, Kimi
 Each name works as a string (`"groq:llama-3.3-70b-versatile"`) or as a class
 (`Groq(...)` in Python, `groq(...)` in TypeScript). Model names go to the
 provider unchanged, so a new model works the day it ships. Not yet built:
-Google Vertex AI, and Bedrock with IAM roles (SigV4).
+Bedrock with IAM roles (SigV4) and Vertex with service-account key files.
 
 ### Azure OpenAI and Foundry
 

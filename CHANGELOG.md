@@ -9,6 +9,15 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+- **Google Vertex AI** (design 0006 §19): `vertex:<model>` in both SDKs
+  (`Vertex(...)` / `vertex(...)`), `provider = "vertex"` in the gateway
+  (`project`, `region` as the location), Rust `VertexModel`. Gemini and Google's
+  other hosted models go over the OpenAI-compatible endpoint, Claude over
+  `rawPredict` / `streamRawPredict` (`AnthropicOptions::vertex`). Tokens come
+  from the file `gcloud auth application-default login` writes, from the
+  metadata server on Google Cloud, or from a token you pass, and are renewed;
+  service-account key files are refused for now (they need RS256 signing).
+  Project and location have no defaults. Checked against local servers only.
 - **Amazon Bedrock with API keys** (design 0006 §18): `bedrock:<model id>` in both
   SDKs (`Bedrock(...)` / `bedrock(...)`), `provider = "bedrock"` in the gateway
   (with `region` and `api`), Rust `bedrock_endpoint` / `bedrock_from_env`. Claude

@@ -6,7 +6,7 @@ use std::sync::Arc;
 
 use criogen_providers::{
     AzureApi, AzureCredential, AzureModel, BedrockApi, Endpoint, KaggleModel, Model, ProviderModel,
-    bedrock_from_env, preset,
+    VertexApi, VertexModel, bedrock_from_env, preset,
 };
 use serde::Deserialize;
 
@@ -80,10 +80,15 @@ pub struct ModelConfig {
     /// Another base URL (required for `openai_compatible`).
     #[serde(default)]
     pub base_url: Option<String>,
-    /// The AWS region (`bedrock`; else AWS_REGION / AWS_DEFAULT_REGION).
+    /// The AWS region (`bedrock`; else AWS_REGION / AWS_DEFAULT_REGION), or
+    /// the Vertex AI location (`vertex`; else GOOGLE_CLOUD_LOCATION).
     #[serde(default)]
     pub region: Option<String>,
-    /// `bedrock`: `auto` (default), `messages`, `chat` or `responses`.
+    /// The Google Cloud project (`vertex`; else GOOGLE_CLOUD_PROJECT).
+    #[serde(default)]
+    pub project: Option<String>,
+    /// `bedrock`: `auto` (default), `messages`, `chat` or `responses`;
+    /// `vertex`: `auto`, `chat` or `claude`.
     #[serde(default)]
     pub api: Option<String>,
     /// Send the key over plain `http://` to another machine (a vLLM server
@@ -173,6 +178,28 @@ impl Config {
                         ))
                     })
                 };
+                if m.provider == "vertex" {
+                    // Design 0006 §19: Google credentials from the environment
+                    // (GOOGLE_APPLICATION_CREDENTIALS, gcloud's file, or the
+                    // metadata server); no default project or location.
+                    let config_error = |message: String| {
+                        GatewayError::Config(format!("route `{}`: {message}", route.name))
+                    };
+                    let mut model = VertexModel::from_parts(
+                        m.project.as_deref(),
+                        m.region.as_deref(),
+                        &m.model,
+                        None,
+                    )
+                    .map_err(|err| config_error(err.message))?;
+                    if let Some(api) = m.api.as_deref() {
+                        model = model.with_api(VertexApi::parse(api).ok_or_else(|| {
+                            config_error("`api` must be auto, chat or claude".into())
+                        })?);
+                    }
+                    models.push(Arc::new(model));
+                    continue;
+                }
                 if m.provider == "bedrock" {
                     // Design 0006 §18: a Bedrock API key (`api_key_env`, else
                     // AWS_BEARER_TOKEN_BEDROCK) and a region; no default region.
@@ -346,6 +373,7 @@ mod tests {
           { provider = "azure", model = "gpt-5-mini", base_url = "my-resource", api_key_env = "TEST_AZURE_KEY" },
           { provider = "azure_chat", model = "DeepSeek-V4", base_url = "my-resource", api_key_env = "TEST_AZURE_KEY" },
           { provider = "bedrock", model = "eu.anthropic.claude-sonnet-5", region = "eu-west-1", api_key_env = "TEST_AZURE_KEY" },
+          { provider = "vertex", model = "claude-sonnet-5", project = "my-project", region = "global" },
         ]
 
         [[keys]]
@@ -380,6 +408,7 @@ mod tests {
         assert_eq!(enterprise[0].provider(), "azure");
         assert_eq!(enterprise[1].model(), "DeepSeek-V4");
         assert_eq!(enterprise[2].provider(), "bedrock");
+        assert_eq!(enterprise[3].provider(), "vertex");
         assert_eq!(gateway.spent("team-a"), Some(0));
         // The Debug output names routes, never keys.
         let shown = format!("{gateway:?}");

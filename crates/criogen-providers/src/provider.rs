@@ -429,7 +429,7 @@ impl ProviderModel {
                     stream,
                     warnings,
                 )?;
-                ("chat/completions", body, Vec::new())
+                ("chat/completions".to_string(), body, Vec::new())
             }
             Protocol::AnthropicMessages(options) => {
                 let wire = anthropic_messages::encode(
@@ -440,7 +440,17 @@ impl ProviderModel {
                     stream,
                     warnings,
                 )?;
-                ("messages", wire.body, wire.betas)
+                let path = if options.vertex {
+                    let verb = if stream {
+                        "streamRawPredict"
+                    } else {
+                        "rawPredict"
+                    };
+                    format!("{}:{verb}", self.model)
+                } else {
+                    "messages".to_string()
+                };
+                (path, wire.body, wire.betas)
             }
             Protocol::OpenAiResponses(options) => {
                 let body = openai_responses::encode(
@@ -451,7 +461,7 @@ impl ProviderModel {
                     stream,
                     warnings,
                 )?;
-                ("responses", body, Vec::new())
+                ("responses".to_string(), body, Vec::new())
             }
         };
         let mut wire = WireRequest::post(
@@ -469,6 +479,14 @@ impl ProviderModel {
                         Some(name) => wire.header(name.clone(), key.clone()),
                         None => wire.header("authorization", format!("Bearer {key}")),
                     };
+                }
+            }
+            Protocol::AnthropicMessages(options) if options.vertex => {
+                if let Some(token) = &endpoint.api_key {
+                    wire = wire.header("authorization", format!("Bearer {token}"));
+                }
+                if !betas.is_empty() {
+                    wire = wire.header("anthropic-beta", betas.join(","));
                 }
             }
             Protocol::AnthropicMessages(options) => {

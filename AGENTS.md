@@ -41,7 +41,8 @@ write our own implementation.
   default), the `openai_chat`, `openai_responses` (0006 §16; the `openai`
   preset since 0.1.6) and `anthropic_messages` protocols, Azure OpenAI
   and Foundry (0006 §17: `Endpoint::azure`, `AzureModel` with Entra ID),
-  Amazon Bedrock with API keys (0006 §18: `bedrock_endpoint`),
+  Amazon Bedrock with API keys (0006 §18: `bedrock_endpoint`), Google
+  Vertex AI (0006 §19: `VertexModel`),
   `Endpoint` presets and `ProviderModel` (OpenAI, OpenRouter, Ollama,
   LM Studio, vLLM, Anthropic, any OpenAI- or Anthropic-compatible server).
 - **Implemented in `criogen-agent` (slice 1):** the agent loop (0004):

@@ -8,7 +8,8 @@ use criogen_agent::{Limits, Memory, OnToolException};
 use criogen_core::RetryPolicy;
 use criogen_providers::{
     AzureApi, AzureCredential, AzureModel, BedrockApi, Embedder, Endpoint, FakeEmbedder, FakeModel,
-    FakeReply, KaggleModel, Model, ProviderEmbedder, ProviderModel, preset,
+    FakeReply, KaggleModel, Model, ProviderEmbedder, ProviderModel, VertexApi, VertexCredential,
+    VertexModel, preset,
 };
 use criogen_storage::{AuditQuery, Namespace, OnBusy, Retention, SearchQuery, Storage};
 use serde_json::{Value, json};
@@ -51,9 +52,53 @@ pub fn model(spec: &Value) -> Result<Arc<dyn Model>> {
     if text(spec, "kind") == Some("bedrock") {
         return bedrock_model(spec, name);
     }
+    if text(spec, "kind") == Some("vertex") {
+        return vertex_model(spec, name);
+    }
     ProviderModel::new(endpoint(spec)?, name)
         .map(|m| Arc::new(m) as Arc<dyn Model>)
         .map_err(|err| failure("model_failed", err.to_string(), None))
+}
+
+/// Google Vertex AI (design 0006 §19): `project` (else GOOGLE_CLOUD_PROJECT),
+/// `location` (else GOOGLE_CLOUD_LOCATION), `token` or `credentialsFile` (else
+/// GOOGLE_APPLICATION_CREDENTIALS, gcloud's file, or the metadata server),
+/// `api` (`auto`, `chat`, `claude`); `host`, `tokenUrl` and `metadataUrl` point
+/// elsewhere (tests).
+fn vertex_model(spec: &Value, name: &str) -> Result<Arc<dyn Model>> {
+    let credential = if let Some(token) = text(spec, "token") {
+        Some(VertexCredential::token(token))
+    } else if let Some(path) = text(spec, "credentialsFile") {
+        Some(
+            VertexCredential::from_file(std::path::Path::new(path))
+                .map_err(|err| failure("model_failed", err.to_string(), None))?
+                .0,
+        )
+    } else {
+        None
+    };
+    let mut model = VertexModel::from_parts(
+        text(spec, "project"),
+        text(spec, "location"),
+        name,
+        credential,
+    )
+    .map_err(|err| failure("model_failed", err.to_string(), None))?;
+    if let Some(api) = text(spec, "api") {
+        model = model.with_api(
+            VertexApi::parse(api).ok_or_else(|| bad("`api` must be auto, chat or claude"))?,
+        );
+    }
+    if let Some(host) = text(spec, "host") {
+        model = model.with_host(host);
+    }
+    if let Some(url) = text(spec, "tokenUrl") {
+        model = model.with_token_url(url);
+    }
+    if let Some(url) = text(spec, "metadataUrl") {
+        model = model.with_metadata_url(url);
+    }
+    Ok(Arc::new(model))
 }
 
 /// Amazon Bedrock with an API key (design 0006 §18): `region` (else

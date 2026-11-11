@@ -25,6 +25,7 @@ export {
   FunctionModel,
   KaggleModel,
   ProviderModel,
+  VertexModel,
   anthropic,
   anthropicCompatible,
   azure,
@@ -44,10 +45,11 @@ export {
   openrouter,
   qwen,
   together,
+  vertex,
   xai,
   zai,
 } from "./models";
-export type { AzureOptions, BedrockOptions, KaggleOptions, Model, ModelAnswer, ModelCall, ModelOptions } from "./models";
+export type { AzureOptions, BedrockOptions, KaggleOptions, VertexOptions, Model, ModelAnswer, ModelCall, ModelOptions } from "./models";
 export { ChatStream, Gateway } from "./gateway";
 export type { ChatInput, ChatOptions, ChatReply, Chunk, GatewayOptions } from "./gateway";
 export { ToolResult } from "./hooks";

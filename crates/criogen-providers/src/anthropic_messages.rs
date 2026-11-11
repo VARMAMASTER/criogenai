@@ -37,6 +37,10 @@ pub struct AnthropicOptions {
     pub default_max_tokens: u32,
     /// `anthropic-beta` flags sent with every request.
     pub betas: Vec<String>,
+    /// Claude on Google Vertex AI (design 0006 §19): the model goes in the
+    /// URL (`<model>:rawPredict`), the body carries `anthropic_version`
+    /// instead of `model`, and the key is a Bearer access token.
+    pub vertex: bool,
 }
 
 impl Default for AnthropicOptions {
@@ -45,6 +49,7 @@ impl Default for AnthropicOptions {
             version: "2023-06-01".into(),
             default_max_tokens: 8192,
             betas: Vec::new(),
+            vertex: false,
         }
     }
 }
@@ -65,6 +70,12 @@ impl AnthropicOptions {
     /// Adds an `anthropic-beta` flag.
     pub fn beta(mut self, flag: impl Into<String>) -> Self {
         self.betas.push(flag.into());
+        self
+    }
+
+    /// Sets [`vertex`](Self::vertex).
+    pub fn vertex(mut self, on: bool) -> Self {
+        self.vertex = on;
         self
     }
 }
@@ -181,7 +192,11 @@ pub(crate) fn encode(
     }
 
     let mut body = Map::new();
-    body.insert("model".into(), json!(model));
+    if options.vertex {
+        body.insert("anthropic_version".into(), json!("vertex-2023-10-16"));
+    } else {
+        body.insert("model".into(), json!(model));
+    }
     if !system.is_empty() {
         body.insert("system".into(), Value::Array(system));
     }

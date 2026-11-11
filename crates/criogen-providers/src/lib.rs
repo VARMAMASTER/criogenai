@@ -64,6 +64,8 @@ mod tool;
 pub mod transcript;
 #[cfg(feature = "http")]
 mod transport;
+#[cfg(feature = "http")]
+mod vertex;
 
 #[cfg(feature = "http")]
 pub use anthropic_messages::AnthropicOptions;
@@ -105,3 +107,5 @@ pub use tool::{
 };
 #[cfg(feature = "http")]
 pub use transport::{Body, Exchange, HttpConfig, Transport, WireRequest};
+#[cfg(feature = "http")]
+pub use vertex::{VertexApi, VertexCredential, VertexModel};

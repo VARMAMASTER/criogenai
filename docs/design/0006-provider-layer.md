@@ -261,7 +261,7 @@ passed through unchanged; Criogen keeps no list of models.
 Checked against scripted local servers (`tests/presets.rs`, both SDKs'
 provider tests); not yet live against each provider (manual, like
 `tests/live`). Not covered here, each with its own design note when built:
-Google Vertex AI. The OpenAI Responses API is §16, Azure §17, Bedrock §18.
+The OpenAI Responses API is §16, Azure §17, Bedrock §18, Vertex AI §19.
 
 ## 5. Streaming
 
@@ -835,3 +835,58 @@ from AWS's token generator work as they are (they are API keys).
 headers on a scripted local server (Messages and Chat), a refused region,
 the key kept out of errors. Not checked live (no AWS account in the
 project).
+
+## 19. Google Vertex AI (2026-11-11)
+
+Why: the third enterprise route (research providers-2026 §3, gap 5), for
+companies on Google Cloud, and Claude for those who buy it there.
+
+**The APIs (checked 2026-11-11).** Both take a Google access token as
+`Authorization: Bearer`.
+
+| Models | API | URL |
+|---|---|---|
+| Gemini and the other models Google hosts (`google/gemini-…`, `zai-org/glm-…`, …) | OpenAI-compatible Chat Completions | `https://<host>/v1/projects/<project>/locations/<location>/endpoints/openapi/chat/completions` |
+| Claude | Anthropic Messages, with the model in the URL | `https://<host>/v1/projects/<project>/locations/<location>/publishers/anthropic/models/<model>:rawPredict` (`:streamRawPredict` when streaming) |
+
+`<host>` is `aiplatform.googleapis.com` for the `global` location, else
+`<location>-aiplatform.googleapis.com`. On Claude's path the body carries
+`anthropic_version: "vertex-2023-10-16"` and no `model`
+(`AnthropicOptions::vertex`); everything else is our `anthropic_messages`.
+
+**Credentials (no new crypto).** `VertexModel` holds one and renews the
+token five minutes before it expires, as `AzureModel` does (§17):
+
+| Credential | How the token is obtained |
+|---|---|
+| `VertexCredential::token(t)` | given (e.g. `gcloud auth print-access-token`); not renewed |
+| `VertexCredential::authorized_user(…)` | the file `gcloud auth application-default login` writes: `POST https://oauth2.googleapis.com/token`, `grant_type=refresh_token` |
+| `VertexCredential::metadata_server()` | on Cloud Run, GKE and Compute Engine: `GET http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/token` with `Metadata-Flavor: Google` (link-local; no credential is sent) |
+
+`VertexCredential::from_env()` reads `GOOGLE_APPLICATION_CREDENTIALS`, else
+the gcloud default file; an `authorized_user` file is used, a
+`service_account` key file is refused with a clear message (it needs RS256
+signing: a later step, with its own note on the dependency). Without a file,
+the metadata server is tried with a short timeout.
+
+**Project and location** come from the arguments, else
+`GOOGLE_CLOUD_PROJECT` and `GOOGLE_CLOUD_LOCATION`. Neither has a default:
+the location decides where data is processed. Both, and Claude model names,
+are checked against the characters they can have, so none can change the
+URL.
+
+**Choosing the API.** `VertexApi::Auto` sends model names that start with
+`claude` to Claude's path and everything else to the OpenAI-compatible one
+(on Vertex, Anthropic's models are the ones named `claude-…`); `Chat` and
+`Claude` force one. Gemini 3 on the OpenAI-compatible endpoint gets the
+thought-signature placeholder as on Google's own (§14).
+
+**SDKs and gateway.** `"vertex:<model>"`, `Vertex(...)` / `vertex(...)` with
+`project`, `location`, `token`, `credentials_file`, `api`; gateway
+`provider = "vertex"` with `project` and `region` (the location).
+
+**Tests.** URLs per location and API, the body on Claude's path, token
+refresh from an `authorized_user` file and from the metadata server against
+local servers, a refused service-account file, refused project and location
+names, no token in `Debug` or errors. Not checked live (no Google Cloud
+project in the repository).

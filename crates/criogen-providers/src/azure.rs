@@ -532,7 +532,7 @@ fn lifetime(reply: &Value, now: SystemTime) -> Option<Duration> {
 }
 
 /// `application/x-www-form-urlencoded` pairs.
-fn form(pairs: &[(&str, &str)]) -> String {
+pub(crate) fn form(pairs: &[(&str, &str)]) -> String {
     pairs
         .iter()
         .map(|(name, value)| format!("{}={}", encode(name), encode(value)))

@@ -75,7 +75,9 @@ small, and OpenRouter or `OpenAICompatible` already reach most of them.
    principals and managed identities (no new crypto: client secrets and the metadata
    service). Bedrock with API keys (gap 4): **done 2026-11-11** (design 0006 §18);
    SigV4 for IAM roles still open.
-4. **Vertex (gap 5), Entra ID, SigV4:** the credential-heavy routes, when a user such as
+4. **Vertex (gap 5):** **done 2026-11-11** (design 0006 §19) with gcloud credentials, the
+   metadata server and tokens; service-account key files (RS256) and SigV4 still open.
+   Originally: **Vertex, Entra ID, SigV4:** the credential-heavy routes, when a user such as
    Axon Health needs them; each needs a short design note on keys and tokens (rule 10).
 
 Each step needs a design update first (rule 1: design 0006 §4 presets, a new protocol

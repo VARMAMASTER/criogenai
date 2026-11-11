@@ -193,6 +193,52 @@ class Kaggle:
         return f"Kaggle({self.model!r})"
 
 
+class Vertex:
+    """Google Vertex AI (design 0006 §19), e.g.
+    ``Vertex("google/gemini-3.6-flash", project="my-project", location="global")``
+    or ``"vertex:claude-sonnet-5"``.
+
+    ``project`` (else ``GOOGLE_CLOUD_PROJECT``) and ``location`` (else
+    ``GOOGLE_CLOUD_LOCATION``; there is no default, it decides where data is
+    processed). Credentials: ``token`` (an access token), ``credentials_file``,
+    else ``GOOGLE_APPLICATION_CREDENTIALS``, the file ``gcloud auth
+    application-default login`` writes, or the metadata server on Google
+    Cloud. Service-account key files are not supported yet. ``claude-…``
+    models go to Claude's endpoint, the rest to the OpenAI-compatible one;
+    ``api`` forces one (``"chat"``, ``"claude"``)."""
+
+    kind = "vertex"
+
+    def __init__(
+        self,
+        model: str,
+        project: Optional[str] = None,
+        location: Optional[str] = None,
+        token: Optional[str] = None,
+        credentials_file: Optional[str] = None,
+        api: str = "auto",
+        host: Optional[str] = None,
+        token_url: Optional[str] = None,
+        metadata_url: Optional[str] = None,
+    ):
+        if api not in ("auto", "chat", "claude"):
+            raise ValueError("api must be 'auto', 'chat' or 'claude'")
+        self.model = model
+        self._fields = {
+            "project": project, "location": location, "token": token,
+            "credentials_file": credentials_file, "api": api, "host": host,
+            "token_url": token_url, "metadata_url": metadata_url,
+        }
+
+    def spec(self) -> Dict[str, Any]:
+        spec: Dict[str, Any] = {"kind": self.kind, "model": self.model}
+        spec.update({k: v for k, v in self._fields.items() if v})
+        return spec
+
+    def __repr__(self) -> str:  # never shows a token
+        return f"Vertex({self.model!r})"
+
+
 class Bedrock:
     """Amazon Bedrock with an API key (design 0006 §18), e.g.
     ``Bedrock("us.anthropic.claude-sonnet-5", region="us-east-1")`` or
@@ -415,6 +461,7 @@ def model_spec(model: Any) -> Dict[str, Any]:
             "kaggle": Kaggle,
             "azure": Azure,
             "bedrock": Bedrock,
+            "vertex": Vertex,
         }
         if not sep or provider not in classes:
             raise ValueError(

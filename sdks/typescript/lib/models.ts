@@ -322,6 +322,54 @@ export class BedrockModel {
 /** A model on Amazon Bedrock, e.g. bedrock("us.anthropic.claude-sonnet-5", { region: "us-east-1" }). */
 export const bedrock = (model: string, options?: BedrockOptions) => new BedrockModel(model, options);
 
+/**
+ * Google Vertex AI (design 0006 §19). `project` (else GOOGLE_CLOUD_PROJECT) and
+ * `location` (else GOOGLE_CLOUD_LOCATION; no default, it decides where data is
+ * processed). Credentials: `token`, `credentialsFile`, else
+ * GOOGLE_APPLICATION_CREDENTIALS, gcloud's application-default file, or the
+ * metadata server on Google Cloud. Service-account key files are not supported
+ * yet. `claude-…` models go to Claude's endpoint, the rest to the
+ * OpenAI-compatible one; `api` forces one.
+ */
+export interface VertexOptions {
+  project?: string;
+  location?: string;
+  token?: string;
+  credentialsFile?: string;
+  api?: "auto" | "chat" | "claude";
+  /** Another API host (a private endpoint; tests). */
+  host?: string;
+  /** Token endpoints elsewhere (tests). */
+  tokenUrl?: string;
+  metadataUrl?: string;
+}
+
+export class VertexModel {
+  readonly kind = "vertex";
+  readonly model: string;
+  readonly #options: VertexOptions;
+
+  constructor(model: string, options: VertexOptions = {}) {
+    if (options.api !== undefined && !["auto", "chat", "claude"].includes(options.api)) {
+      throw new TypeError('api must be "auto", "chat" or "claude"');
+    }
+    this.model = model;
+    this.#options = options;
+  }
+
+  /** The JSON spec (with any token; never logged). */
+  spec(): Record<string, unknown> {
+    return { kind: this.kind, model: this.model, ...this.#options };
+  }
+
+  toJSON(): Record<string, unknown> {
+    return { kind: this.kind, model: this.model };
+  }
+}
+
+/** A model on Google Vertex AI, e.g. vertex("google/gemini-3.6-flash", { project: "p", location: "global" }). */
+export const vertex = (model: string, options?: VertexOptions) => new VertexModel(model, options);
+
 
 /**
  * What a model function receives: the request as the engine sends it to a
@@ -429,20 +477,21 @@ export class FunctionModel {
   }
 }
 
-export type Model = string | ProviderModel | KaggleModel | AzureModel | BedrockModel | FakeModel | FunctionModel;
+export type Model = string | ProviderModel | KaggleModel | AzureModel | BedrockModel | VertexModel | FakeModel | FunctionModel;
 
 /** The JSON spec of a model object or "provider:model" string. */
 export function modelSpec(model: Model): Record<string, unknown> {
   if (typeof model === "string") {
     const at = model.indexOf(":");
     const provider = at > 0 ? model.slice(0, at) : "";
-    const known = [...Object.keys(KEYS), ...LOCAL, "kaggle", "azure", "bedrock"];
+    const known = [...Object.keys(KEYS), ...LOCAL, "kaggle", "azure", "bedrock", "vertex"];
     if (!known.includes(provider)) {
       throw new TypeError(`model "${model}": use "provider:model" with provider one of ${known.join(", ")}`);
     }
     if (provider === "kaggle") return new KaggleModel(model.slice(at + 1)).spec();
     if (provider === "azure") return new AzureModel(model.slice(at + 1)).spec();
     if (provider === "bedrock") return new BedrockModel(model.slice(at + 1)).spec();
+    if (provider === "vertex") return new VertexModel(model.slice(at + 1)).spec();
     return new ProviderModel(provider, model.slice(at + 1)).spec();
   }
   if (model && typeof (model as { spec?: unknown }).spec === "function") return model.spec();
