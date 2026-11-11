@@ -100,7 +100,7 @@ saved, can wait for approval and can be retried.
 **Raises**
 
 - `TypeError`: An item of `tools` is not a tool, or an item of `hooks` has none of the hook methods.
-- `ValueError`: `model` or a fallback is not a known `"provider:model"` string, or its API key is missing.
+- `ValueError`: `model` or a fallback is not a known `"provider:model"` string, or its API key is missing (that one is also a `ValidationError` with code `invalid_value`).
 - `ValidationError`: The configuration is invalid, for example a limit of 0 or an unknown `on_tool_exception`.
 - `ModelError`: A model cannot be built, for example `Bedrock` without an API key.
 
@@ -378,6 +378,28 @@ async def messages() -> List[Dict[str, Any]]
 
 The stored conversation: every message, as dicts.
 
+### Thread.pending_approvals
+
+```python
+async def pending_approvals() -> List[ApprovalRequest]
+```
+
+The tool calls waiting for a decision, read from storage.
+
+Empty when the thread is not waiting. Use it to show a review queue
+without keeping the last `Reply`: for example after a restart, or in
+another process that shares the storage.
+
+**Returns:** One `ApprovalRequest` per waiting call, in call order.
+
+**Example**
+
+```python
+waiting = await agent.thread("ticket-42").pending_approvals()
+for request in waiting:
+    print(request.tool, request.args)
+```
+
 ### Thread.rewind
 
 ```python
@@ -448,6 +470,18 @@ def stream_retry() -> Stream
 ```
 
 `retry`, streaming the continued run's events.
+
+### Thread.stream_decide
+
+```python
+def stream_decide(decisions: Mapping[str, Dict[str, Any]]) -> Stream
+```
+
+`decide`, streaming the continued run's events.
+
+**Parameters**
+
+- `decisions` (`Mapping[str, Dict[str, Any]]`): `{call_id: decision}`, with a `Decision` for every call in `reply.approvals`.
 
 ## Stream
 
@@ -643,6 +677,7 @@ class ApprovalRequest:
     tool: str
     args: Dict[str, Any]
     description: Optional[str] = None
+    allowed: Tuple[str, ...] = ()
 ```
 
 A tool call waiting for a reviewer's decision.
@@ -658,6 +693,7 @@ waiting call in `approvals`. Answer with `Thread.approve`,
 - `tool` (`str`): The name of the tool the model wants to call.
 - `args` (`Dict[str, Any]`): The arguments the model wrote.
 - `description` (`Optional[str]`, default `None`): Text for the reviewer, when the approval rule provides one; usually `None`.
+- `allowed` (`Tuple[str, ...]`, default `()`): The decisions the reviewer may make: `"approve"`, `"edit"`, `"reject"`, `"respond"`.
 
 ## Retry
 
@@ -736,7 +772,8 @@ this type of event does not have raises `AttributeError`. By `type`:
 - `message`: `message`, a whole message added to the transcript.
 - `approval_needed`: `requests`, the calls waiting for a decision
   (as dicts).
-- `other`: `event`, any other engine event as debug text.
+- `other`: `event` (the engine event's name, e.g. `"step_started"`),
+  `node` and `step`; never any content.
 
 **Parameters**
 

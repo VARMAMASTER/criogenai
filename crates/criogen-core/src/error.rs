@@ -107,7 +107,9 @@ pub enum ValidationIssue {
     #[error("workflow has no nodes")]
     NoNodes,
     /// `set_entry` was never called.
-    #[error("no entry node; call set_entry")]
+    #[error(
+        "no entry node: name the node a run starts at (`start` in Python and TypeScript, `set_entry` in Rust)"
+    )]
     MissingEntry,
     /// A node was given an empty name.
     #[error("node names must not be empty")]

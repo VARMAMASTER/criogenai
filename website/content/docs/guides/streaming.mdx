@@ -23,14 +23,14 @@ Each event has a `type`; the other fields depend on it.
 | `tool_call_finished` | `call_id`, `tool`, `status` | `callId`, `tool`, `status` | It ended: `success`, `error`, `rejected`, ... |
 | `message` | `message` | `message` | A complete message (the authoritative version) |
 | `approval_needed` | `requests` | `requests` | The run paused for a person (each request has `call_id`, `tool`, `args`) |
-| `other` | `event` | `event` | Engine events: steps, retries, warnings |
+| `other` | `event`, `node`, `step` | `event`, `node`, `step` | Engine events by name: steps, retries, warnings |
 
 - `text` events are pieces: append them. When the message is complete, a
   `message` event carries all of it; prefer that to your own concatenation
   if you store it.
-- Treat `other` as diagnostics. Its content is not a stable format, and
-  it can include the request sent to the model: do not forward it to a
-  browser.
+- Treat `other` as diagnostics: it has the engine event's name
+  (`event`, e.g. `step_started`), its `node` and `step`, and never any
+  content. Use [tracing](/docs/guides/telemetry/) for the details.
 - In Python, reading a field the event type does not have raises
   `AttributeError`; check `event.type` first.
 

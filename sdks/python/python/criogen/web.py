@@ -15,10 +15,13 @@ networks (a model must not be able to reach your internal services through
 it), does not follow redirects, and refuses pages larger than 500 KB.
 """
 
+import functools
+import http.client
 import ipaddress
 import json
 import os
 import socket
+import ssl
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -65,19 +68,28 @@ class _NoRedirect(urllib.request.HTTPRedirectHandler):
 _OPENER = urllib.request.build_opener(_NoRedirect)
 
 
-def _request(url: str, *, data: Optional[bytes], headers: Dict[str, str], limit: int) -> bytes:
+def _request(
+    url: str,
+    *,
+    data: Optional[bytes],
+    headers: Dict[str, str],
+    limit: int,
+    what: str = "search",
+    opener: Optional[urllib.request.OpenerDirector] = None,
+) -> bytes:
     request = urllib.request.Request(url, data=data, headers=headers)
     try:
-        with _OPENER.open(request, timeout=TIMEOUT) as response:
+        with (opener or _OPENER).open(request, timeout=TIMEOUT) as response:
             body = response.read(limit + 1)
     except urllib.error.HTTPError as error:
         # The status is useful to the model; the response body might echo the request, so it is not shown.
         retryable = error.code in (408, 429) or error.code >= 500
-        raise ToolError(f"search failed: HTTP {error.code}", retryable=retryable) from None
+        moved = " (redirects are not followed)" if 300 <= error.code < 400 else ""
+        raise ToolError(f"{what} failed: HTTP {error.code}{moved}", retryable=retryable) from None
     except (urllib.error.URLError, TimeoutError, OSError) as error:
-        raise ToolError(f"search failed: {type(error).__name__}", retryable=True) from None
+        raise ToolError(f"{what} failed: {type(error).__name__}", retryable=True) from None
     if len(body) > limit:
-        raise ToolError("search failed: the response was too large", retryable=False)
+        raise ToolError(f"{what} failed: the response is larger than {limit // 1000} KB", retryable=False)
     return body
 
 
@@ -270,16 +282,57 @@ class _Text(HTMLParser):
             self.parts.append(data)
 
 
-def _public_address(host: str, allow_private: bool) -> None:
-    """Refuses a host that resolves to a private, loopback or link-local address."""
+def _public_address(host: str, allow_private: bool) -> str:
+    """Refuses a host that resolves to a private, loopback or link-local address; returns the address to use."""
     try:
         infos = socket.getaddrinfo(host, None)
     except OSError:
         raise ToolError(f"could not find the host {host!r}", retryable=False) from None
+    if not infos:
+        raise ToolError(f"could not find the host {host!r}", retryable=False)
     for info in infos:
-        address = ipaddress.ip_address(info[4][0])
+        address = ipaddress.ip_address(str(info[4][0]).split("%")[0])
         if not allow_private and (address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_multicast):
             raise ToolError("that address is on a private network; only public web pages can be read", retryable=False)
+    return str(infos[0][4][0])
+
+
+class _PinnedHTTPConnection(http.client.HTTPConnection):
+    """Connects to the address that was checked, not to a second DNS answer."""
+
+    def __init__(self, *args: Any, pinned: str, **kwargs: Any):
+        super().__init__(*args, **kwargs)
+        self._pinned = pinned
+
+    def connect(self) -> None:
+        self.sock = socket.create_connection((self._pinned, self.port), self.timeout)
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """The same over TLS: the certificate is still checked against the host name."""
+
+    def __init__(self, *args: Any, pinned: str, context: Optional[ssl.SSLContext] = None, **kwargs: Any):
+        self._tls = context or ssl.create_default_context()
+        super().__init__(*args, context=self._tls, **kwargs)
+        self._pinned = pinned
+
+    def connect(self) -> None:
+        sock = socket.create_connection((self._pinned, self.port), self.timeout)
+        self.sock = self._tls.wrap_socket(sock, server_hostname=self.host)
+
+
+def _pinned_opener(address: str) -> urllib.request.OpenerDirector:
+    """An opener that connects only to ``address`` (no proxy, no redirects)."""
+
+    class Http(urllib.request.HTTPHandler):
+        def http_open(self, req: Any) -> Any:
+            return self.do_open(functools.partial(_PinnedHTTPConnection, pinned=address), req)
+
+    class Https(urllib.request.HTTPSHandler):
+        def https_open(self, req: Any) -> Any:
+            return self.do_open(functools.partial(_PinnedHTTPSConnection, pinned=address), req, context=ssl.create_default_context())
+
+    return urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect, Http, Https)
 
 
 def fetch(*, allow_private: bool = False, max_chars: int = MAX_PAGE_CHARS) -> Tool:
@@ -315,8 +368,17 @@ def fetch(*, allow_private: bool = False, max_chars: int = MAX_PAGE_CHARS) -> To
         parts = urllib.parse.urlsplit(url)
         if parts.scheme not in ("http", "https") or not parts.hostname:
             raise ToolError("give a full http or https URL", retryable=False)
-        _public_address(parts.hostname, allow_private)
-        body = _request(url, data=None, headers={"user-agent": "criogen-web/0.1", "accept": "text/html,text/plain"}, limit=MAX_PAGE_BYTES)
+        # The connection goes to the address that was checked: a second DNS
+        # answer (DNS rebinding) cannot send it to a private one.
+        address = _public_address(parts.hostname, allow_private)
+        body = _request(
+            url,
+            data=None,
+            headers={"user-agent": "criogen-web/0.1", "accept": "text/html,text/plain"},
+            limit=MAX_PAGE_BYTES,
+            what="reading the page",
+            opener=_pinned_opener(address),
+        )
         parser = _Text()
         parser.feed(body.decode("utf-8", errors="replace"))
         text = "\n".join(line.strip() for line in "".join(parser.parts).splitlines() if line.strip())

@@ -183,14 +183,10 @@ impl NativeTelemetry {
         let spec = criogen_js::parse(&spec).map_err(to_napi)?;
         let text = |key: &str| spec.get(key).and_then(serde_json::Value::as_str);
         let mut config = match text("kind") {
-            Some("langfuse") => match (text("publicKey"), text("secretKey")) {
-                (Some(public), Some(secret)) => Langfuse::config(
-                    public,
-                    secret,
-                    text("baseUrl").unwrap_or(criogen_telemetry::DEFAULT_BASE_URL),
-                ),
-                _ => Langfuse::from_env().map_err(|err| bad(err.to_string()))?,
-            },
+            Some("langfuse") => {
+                Langfuse::resolve(text("publicKey"), text("secretKey"), text("baseUrl"))
+                    .map_err(|err| bad(err.to_string()))?
+            }
             Some("otlp") => {
                 let mut config =
                     OtlpConfig::new(text("endpoint").ok_or_else(|| bad("otlp needs an endpoint"))?);

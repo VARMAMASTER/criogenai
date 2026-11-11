@@ -121,8 +121,25 @@ def test_every_named_provider_answers_through_its_class(base):
 
 def test_a_missing_key_names_the_variable(monkeypatch):
     monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)
-    with pytest.raises(ValueError, match="DEEPSEEK_API_KEY"):
+    with pytest.raises(ValueError, match="DEEPSEEK_API_KEY") as caught:
         Agent("deepseek:deepseek-chat")
+    # Also a coded error: catchable like every other configuration error.
+    from criogen import ValidationError
+
+    assert isinstance(caught.value, ValidationError) and caught.value.code == "invalid_value"
+    assert caught.value.details == {"provider": "deepseek", "variable": "DEEPSEEK_API_KEY"}
+
+
+def test_an_embedder_without_its_key_fails_when_made(monkeypatch):
+    from criogen import Embedder, ValidationError
+
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    with pytest.raises(ValidationError, match="OPENAI_API_KEY"):
+        Embedder.openai()
+    with pytest.raises(ValueError, match="GEMINI_API_KEY"):
+        Embedder.gemini()
+    assert Embedder.openai(api_key="sk-test-not-real") is not None
     with pytest.raises(ValueError, match="provider one of"):
         Agent("nosuch:gpt-5")
 

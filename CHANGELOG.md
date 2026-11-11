@@ -9,6 +9,38 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+### Fixed
+
+- **Evals with `repeats`** (Python, TypeScript, Rust): one failed run no longer
+  scores 0 for the later runs of the same case, and the facts of an earlier run
+  are no longer reused. The case still keeps the first error and fails.
+  TypeScript: a run that times out is now cancelled, not left running.
+- **Stream events no longer carry content.** `other` events had the engine
+  event as Rust debug text, which included the request sent to the model. Now
+  they have only `event` (its name, e.g. `step_started`), `node` and `step`.
+- **`Telemetry.langfuse`:** passing only one key is now an error (before, both
+  keys silently came from the environment). An explicit `base_url` / `baseUrl`
+  is always used, also with keys from the environment. Rust:
+  `Langfuse::resolve`.
+- **`web.fetch` (`read_page`):** connects to the address it checked, so a
+  second DNS answer cannot reach a private network (DNS rebinding). Its errors
+  say "reading the page failed" (not "search failed"), and a redirect says
+  that redirects are not followed.
+- **Missing API keys** raise `ValidationError` with code `invalid_value` and
+  `details` `{provider, variable}` (in Python still also a `ValueError`).
+  `Embedder.openai()` and `Embedder.gemini()` now check for their key when
+  they are made, like models, instead of failing later inside the engine.
+- `ready(FakeModel(...))` names the model `FakeModel` (it said `model:`).
+- The "no entry node" workflow error names `start` (Python, TypeScript) as well
+  as `set_entry` (Rust).
+
+### Added
+
+- `Thread.pending_approvals()` / `thread.pendingApprovals()`: the calls waiting
+  for a decision, read from storage (for a review queue after a restart or in
+  another process).
+- Python: `Thread.stream_decide(decisions)`, and `ApprovalRequest.allowed`.
+
 ## [0.1.6] - 2026-11-11
 
 - **Packages:** built on Windows again (GitHub Actions cannot run until billing is

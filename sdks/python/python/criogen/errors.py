@@ -72,6 +72,13 @@ class ValidationError(CriogenError):
     """Something given was not accepted (``invalid_*``, ``resume_invalid``)."""
 
 
+class _MissingKey(ValidationError, ValueError):
+    """A provider needs an API key and none was found (``invalid_value``).
+
+    Also a ``ValueError``, as it was before it had a code.
+    """
+
+
 class CancelledError(CriogenError):
     """The run was cancelled (``cancelled``)."""
 

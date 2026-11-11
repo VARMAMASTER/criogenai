@@ -21,9 +21,9 @@ use criogen_agent::{
     validate_arguments,
 };
 use criogen_core::{
-    CancelToken, Node, NodeContext, NodeError, NodeOutput, Reducer, RetryPolicy, Router, RunError,
-    RunErrorKind, RunOptions, RunOutput, Snapshot, State, Update, Workflow, WorkflowBuilder,
-    node_with_context, router_fn,
+    CancelToken, EventKind, Node, NodeContext, NodeError, NodeOutput, Reducer, RetryPolicy, Router,
+    RunError, RunErrorKind, RunOptions, RunOutput, Snapshot, State, Update, Workflow,
+    WorkflowBuilder, node_with_context, router_fn,
 };
 use criogen_providers::{
     AzureApi, AzureCredential, AzureModel, BedrockApi, BlockDelta, BoxFuture, Embedder, Endpoint,
@@ -265,7 +265,17 @@ fn event_json(event: AgentEvent) -> Value {
         AgentEvent::ApprovalNeeded(requests) => {
             json!({"type": "approval_needed", "requests": to_json(&requests)})
         }
-        other => json!({"type": "other", "event": format!("{other:?}")}),
+        // Only the event's name and place: other events (model requests,
+        // node results, custom events) can carry message content, which a
+        // stream forwarded to a browser must not leak. Telemetry has the rest.
+        AgentEvent::Other(event) => {
+            let name = match &event.kind {
+                EventKind::Custom { name, .. } => name.clone(),
+                kind => kind.type_name().to_string(),
+            };
+            json!({"type": "other", "event": name, "node": event.node, "step": event.step})
+        }
+        _ => json!({"type": "other", "event": "unknown"}),
     }
 }
 
@@ -1341,14 +1351,12 @@ impl NativeTelemetry {
         let spec: Value =
             serde_json::from_str(spec).map_err(|e| PyValueError::new_err(e.to_string()))?;
         let mut config = match text(&spec, "kind") {
-            Some("langfuse") => match (text(&spec, "public_key"), text(&spec, "secret_key")) {
-                (Some(public), Some(secret)) => Langfuse::config(
-                    public,
-                    secret,
-                    text(&spec, "base_url").unwrap_or(criogen_telemetry::DEFAULT_BASE_URL),
-                ),
-                _ => Langfuse::from_env().map_err(|err| py_failure(bad(err.to_string())))?,
-            },
+            Some("langfuse") => Langfuse::resolve(
+                text(&spec, "public_key"),
+                text(&spec, "secret_key"),
+                text(&spec, "base_url"),
+            )
+            .map_err(|err| py_failure(bad(err.to_string())))?,
             Some("otlp") => {
                 let mut config = OtlpConfig::new(
                     text(&spec, "endpoint")
@@ -1534,6 +1542,7 @@ async fn thread_operation(thread: Thread, op: String, payload: Value) -> Outcome
             return Ok(to_json(&thread.history(limit).await?));
         }
         "messages" => return Ok(to_json(&thread.messages().await?)),
+        "pending_approvals" => return Ok(to_json(&thread.pending_approvals().await?)),
         "rewind" => {
             let id = text(&payload, "checkpoint_id").unwrap_or_default();
             return Ok(to_json(&thread.rewind(id).await?));

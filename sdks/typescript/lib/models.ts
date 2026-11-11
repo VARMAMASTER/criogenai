@@ -3,7 +3,7 @@
 // "openai:gpt-5-mini" takes its key from OPENAI_API_KEY, "deepseek:deepseek-chat"
 // from DEEPSEEK_API_KEY (every name in KEYS, plus ollama, lmstudio and kaggle).
 
-import { errorFor } from "./errors";
+import { ValidationError, errorFor } from "./errors";
 import { envVar, hasEnv } from "./host-env";
 import { native } from "./native";
 
@@ -63,7 +63,7 @@ export class ProviderModel {
    * @param kind The provider name (as in "provider:model" strings), "openai_compatible" or "anthropic_compatible".
    * @param model The model name, as the provider knows it.
    * @param options `apiKey` and `baseUrl`; for the compatible kinds also `name` (shown as the provider) and `allowInsecureHttp`.
-   * @throws {Error} The provider needs a key, none was given or found in its environment variable, and there is no `baseUrl`.
+   * @throws {ValidationError} The provider needs a key, none was given or found in its environment variable, and there is no `baseUrl` (`invalid_value`).
    */
   constructor(kind: string, model: string, options: ModelOptions & { name?: string; allowInsecureHttp?: boolean } = {}) {
     this.kind = kind;
@@ -71,10 +71,12 @@ export class ProviderModel {
     this.baseUrl = options.baseUrl;
     this.#apiKey = options.apiKey ?? (KEYS[kind] ? envVar(KEYS[kind]) : undefined);
     if (KEYS[kind] && !this.#apiKey && !options.baseUrl) {
-      throw new Error(
+      throw new ValidationError(
+        "invalid_value",
         hasEnv()
           ? `no API key for ${kind}: set ${KEYS[kind]} in the environment or a .env file (loadEnv()), or pass apiKey`
           : `no API key for ${kind}: pass apiKey (a browser has no environment variables)`,
+        { provider: kind, variable: KEYS[kind] },
       );
     }
     this.#name = options.name;
@@ -866,6 +868,16 @@ export class Embedder {
 
   private static provider(kind: string, model: string, options: ModelOptions & { dimensions?: number } = {}): Embedder {
     const apiKey = options.apiKey ?? (KEYS[kind] ? envVar(KEYS[kind]) : undefined);
+    // The same check as models: a missing key fails here, not later inside the engine.
+    if (KEYS[kind] && !apiKey && !options.baseUrl) {
+      throw new ValidationError(
+        "invalid_value",
+        hasEnv()
+          ? `no API key for ${kind} embeddings: set ${KEYS[kind]} in the environment or a .env file (loadEnv()), or pass apiKey`
+          : `no API key for ${kind} embeddings: pass apiKey (a browser has no environment variables)`,
+        { provider: kind, variable: KEYS[kind] },
+      );
+    }
     return new Embedder({ kind, model, apiKey, baseUrl: options.baseUrl, dimensions: options.dimensions });
   }
 
@@ -873,6 +885,7 @@ export class Embedder {
    * OpenAI's /embeddings (key from OPENAI_API_KEY).
    * @param model The embedding model.
    * @param options `apiKey` (else OPENAI_API_KEY) and `dimensions` (shorter vectors, for models that support it).
+   * @throws {ValidationError} No key was given or found in OPENAI_API_KEY (`invalid_value`).
    * @example
    * import { Embedder, Gateway } from "criogen";
    *

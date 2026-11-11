@@ -722,24 +722,36 @@ async def evaluate(
     async def one(case: Case) -> Dict[str, Any]:
         async with gate:
             values: Dict[str, List[Score]] = {n: [] for n in names}
+            # The case's error: the first failed run's (the case then fails).
             error: Optional[str] = None
             output: Any = None
-            facts: Facts = {"tool_calls": [], "model_calls": 0, "tokens": {"input": 0, "output": 0}, "duration_ms": 0, "models": []}
+            empty: Facts = {"tool_calls": [], "model_calls": 0, "tokens": {"input": 0, "output": 0}, "duration_ms": 0, "models": []}
+            facts: Facts = dict(empty)
             durations = []
             for _ in range(repeats):
+                # Each run starts clean: one failed run scores 0 only for itself.
+                run_error: Optional[str] = None
+                run_output: Any = None
+                run_facts: Facts = dict(empty)
+                started_run = time.monotonic()
                 try:
-                    output, facts = await _run_once(target, case, timeout)
+                    run_output, run_facts = await _run_once(target, case, timeout)
                 except asyncio.TimeoutError:
-                    error = f"timed out after {timeout:g} s"
+                    run_error = f"timed out after {timeout:g} s"
                 except Exception as e:  # noqa: BLE001 - a failing case is a result
-                    error = f"{type(e).__name__}: {e}"
-                durations.append(facts.get("duration_ms", 0))
+                    run_error = f"{type(e).__name__}: {e}"
+                if run_error is not None:
+                    run_facts = dict(empty, duration_ms=(time.monotonic() - started_run) * 1000)
+                    error = error or run_error
+                else:
+                    output, facts = run_output, run_facts
+                durations.append(run_facts.get("duration_ms", 0))
                 for s in scorers:
-                    if error is not None:
+                    if run_error is not None:
                         values[s.name].append(Score(0.0, False, "the case failed"))
                         continue
                     try:
-                        values[s.name].append(await s.score(case, output, facts))
+                        values[s.name].append(await s.score(case, run_output, run_facts))
                     except Exception as e:  # noqa: BLE001
                         values[s.name].append(Score(0.0, False, f"the scorer failed: {type(e).__name__}: {e}"))
             scores = {

@@ -21,6 +21,7 @@ def test_ready_reports_the_engine_and_a_model():
     assert bare["ok"] and bare["engine"]["ok"] and "model" not in bare
     with_model = ready_sync(FakeModel(["OK"]))
     assert with_model["ok"] and with_model["model"]["ok"] and with_model["model"]["latency_ms"] >= 0
+    assert with_model["model"]["model"] == "FakeModel"
 
 
 def test_ready_reports_a_model_it_cannot_use_without_raising(monkeypatch, tmp_path):

@@ -59,10 +59,11 @@ the extra index from your pip configuration to silence them.
 
 ## Keys
 
-### "no API key for openai: set OPENAI_API_KEY ..."
+### "invalid_value: no API key for openai: set OPENAI_API_KEY ..."
 
 Building an agent with a hosted model checks for its key at once, and fails
-naming the variable (`ready(model)` reports the same text in its `model.error`
+with a `ValidationError` (code `invalid_value`; in Python also a
+`ValueError`) naming the variable (`ready(model)` reports the same text in its `model.error`
 instead of raising). Set it in the
 environment, or put it in a `.env` file and call `load_env()` / `loadEnv()`
 **before** you build the agent. Each provider has its own variable

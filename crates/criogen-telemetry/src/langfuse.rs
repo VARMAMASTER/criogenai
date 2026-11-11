@@ -15,17 +15,65 @@ impl Langfuse {
     /// `LANGFUSE_BASE_URL` (or the older `LANGFUSE_HOST`; default
     /// [`DEFAULT_BASE_URL`]).
     pub fn from_env() -> Result<OtlpConfig, TelemetryError> {
-        let var = |name: &str| std::env::var(name).ok().filter(|v| !v.trim().is_empty());
-        let public = var("LANGFUSE_PUBLIC_KEY")
-            .ok_or_else(|| TelemetryError::Missing("LANGFUSE_PUBLIC_KEY".into()))?;
-        let secret = var("LANGFUSE_SECRET_KEY")
-            .ok_or_else(|| TelemetryError::Missing("LANGFUSE_SECRET_KEY".into()))?;
-        let base = var("LANGFUSE_BASE_URL")
-            .or_else(|| var("LANGFUSE_HOST"))
-            .unwrap_or_else(|| DEFAULT_BASE_URL.into());
-        Ok(Self::config(public, secret, base))
+        Self::resolve(None, None, None)
     }
 
+    /// A config from settings given in code, with the environment for the
+    /// rest: both keys or neither (then `LANGFUSE_PUBLIC_KEY` and
+    /// `LANGFUSE_SECRET_KEY`); `base_url` when given, else
+    /// `LANGFUSE_BASE_URL` (or `LANGFUSE_HOST`), else [`DEFAULT_BASE_URL`].
+    ///
+    /// # Errors
+    ///
+    /// [`TelemetryError::Missing`] when only one key is given, or neither
+    /// is given and a key variable is not set.
+    pub fn resolve(
+        public_key: Option<&str>,
+        secret_key: Option<&str>,
+        base_url: Option<&str>,
+    ) -> Result<OtlpConfig, TelemetryError> {
+        resolve_with(public_key, secret_key, base_url, |name| {
+            std::env::var(name).ok()
+        })
+    }
+}
+
+/// [`Langfuse::resolve`] with the environment as a function (for tests).
+fn resolve_with(
+    public_key: Option<&str>,
+    secret_key: Option<&str>,
+    base_url: Option<&str>,
+    env: impl Fn(&str) -> Option<String>,
+) -> Result<OtlpConfig, TelemetryError> {
+    let given = |v: Option<&str>| v.map(str::trim).filter(|v| !v.is_empty()).map(String::from);
+    let var = |name: &str| env(name).filter(|v| !v.trim().is_empty());
+    let (public, secret) = match (given(public_key), given(secret_key)) {
+        (Some(public), Some(secret)) => (public, secret),
+        (Some(_), None) => {
+            return Err(TelemetryError::Missing(
+                "secret_key (pass both keys, or neither to read the environment)".into(),
+            ));
+        }
+        (None, Some(_)) => {
+            return Err(TelemetryError::Missing(
+                "public_key (pass both keys, or neither to read the environment)".into(),
+            ));
+        }
+        (None, None) => (
+            var("LANGFUSE_PUBLIC_KEY")
+                .ok_or_else(|| TelemetryError::Missing("LANGFUSE_PUBLIC_KEY".into()))?,
+            var("LANGFUSE_SECRET_KEY")
+                .ok_or_else(|| TelemetryError::Missing("LANGFUSE_SECRET_KEY".into()))?,
+        ),
+    };
+    let base = given(base_url)
+        .or_else(|| var("LANGFUSE_BASE_URL"))
+        .or_else(|| var("LANGFUSE_HOST"))
+        .unwrap_or_else(|| DEFAULT_BASE_URL.into());
+    Ok(Langfuse::config(public, secret, base))
+}
+
+impl Langfuse {
     /// A config for these keys and base URL (e.g.
     /// `https://us.cloud.langfuse.com` or `http://localhost:3000`).
     pub fn config(
@@ -86,6 +134,47 @@ mod tests {
         ] {
             assert_eq!(base64(input.as_bytes()), expected);
         }
+    }
+
+    #[test]
+    fn resolve_takes_both_keys_or_neither_and_prefers_the_given_address() {
+        let env = |name: &str| match name {
+            "LANGFUSE_PUBLIC_KEY" => Some("pk-env".to_string()),
+            "LANGFUSE_SECRET_KEY" => Some("sk-env".to_string()),
+            "LANGFUSE_BASE_URL" => Some("http://env:3000".to_string()),
+            _ => None,
+        };
+        let endpoint = |c: OtlpConfig| c.endpoint;
+        // One key alone is an error, never silently replaced by the environment.
+        assert!(matches!(
+            resolve_with(Some("pk-1"), None, None, env),
+            Err(TelemetryError::Missing(m)) if m.starts_with("secret_key")
+        ));
+        assert!(matches!(
+            resolve_with(None, Some("sk-1"), None, env),
+            Err(TelemetryError::Missing(m)) if m.starts_with("public_key")
+        ));
+        // The given address wins, with given keys or keys from the environment.
+        for (public, secret) in [(Some("pk-1"), Some("sk-1")), (None, None)] {
+            let config = resolve_with(public, secret, Some("http://mine:3000"), env).unwrap();
+            assert_eq!(
+                endpoint(config),
+                "http://mine:3000/api/public/otel/v1/traces"
+            );
+        }
+        // Without one: the environment's address, also with given keys.
+        let config = resolve_with(Some("pk-1"), Some("sk-1"), None, env).unwrap();
+        assert_eq!(
+            endpoint(config),
+            "http://env:3000/api/public/otel/v1/traces"
+        );
+        let config = resolve_with(None, None, None, |_| None);
+        assert!(matches!(config, Err(TelemetryError::Missing(m)) if m == "LANGFUSE_PUBLIC_KEY"));
+        let config = resolve_with(Some("pk"), Some("sk"), None, |_| None).unwrap();
+        assert_eq!(
+            endpoint(config),
+            format!("{DEFAULT_BASE_URL}/api/public/otel/v1/traces")
+        );
     }
 
     #[test]

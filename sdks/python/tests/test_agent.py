@@ -400,6 +400,47 @@ def test_streaming_shows_text_and_approvals_then_the_saved_reply():
     run(scenario())
 
 
+def test_pending_approvals_and_a_streamed_decision():
+    agent = Agent(
+        FakeModel([FakeReply.tool_call("add", {"a": 1, "b": 2}), "Three."]),
+        tools=[add],
+        approve=["add"],
+    )
+
+    async def scenario():
+        chat = agent.thread("p")
+        assert await chat.pending_approvals() == []
+        reply = await chat.send("add")
+        assert reply.needs_approval
+        waiting = await chat.pending_approvals()
+        assert [(r.tool, r.args) for r in waiting] == [("add", {"a": 1, "b": 2})]
+        assert waiting[0] == reply.approvals[0] and "approve" in waiting[0].allowed
+        stream = chat.stream_decide({waiting[0].call_id: Decision.approve()})
+        events = [e async for e in stream]
+        assert any(e.type == "tool_call_finished" and e.status == "success" for e in events)
+        assert (await stream.reply()).text == "Three."
+        assert await chat.pending_approvals() == []
+
+    run(scenario())
+
+
+def test_other_stream_events_carry_no_content():
+    agent = Agent(FakeModel(["SECRET-ANSWER"]))
+
+    async def scenario():
+        stream = agent.thread("o").stream("SECRET-QUESTION")
+        others = [e.data async for e in stream if e.type == "other"]
+        await stream.reply()
+        return others
+
+    others = run(scenario())
+    assert others, "a run has engine events"
+    for event in others:
+        assert set(event) <= {"type", "event", "node", "step"}
+        assert isinstance(event["event"], str) and " " not in event["event"]
+        assert "SECRET" not in repr(event)
+
+
 def test_cancelling_the_python_task_cancels_the_run_and_the_thread_is_saved():
     agent = Agent(FakeModel(["slow answer", "retried"], delay=5.0))
 
@@ -473,6 +514,13 @@ def test_semantic_memory_finds_facts_by_meaning_and_falls_back_to_keywords():
         memory=Memory.shared("facts").semantic(Embedder.fake(failing=True)),
     )
     assert "red car" in str(tool_results(broken.run_sync("search"))[0]["content"])
+
+
+def test_langfuse_with_one_key_is_an_error_not_the_environment():
+    with pytest.raises(ValidationError, match="secret_key"):
+        Telemetry.langfuse(public_key="pk-lf-1")
+    with pytest.raises(ValidationError, match="public_key"):
+        Telemetry.langfuse(secret_key="sk-lf-1")
 
 
 def test_telemetry_exports_runs_without_their_content():

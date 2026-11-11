@@ -35,6 +35,12 @@ fn missing_entry() {
     let mut b = WorkflowBuilder::new();
     b.add_node("a", noop()).add_edge("a", END);
     assert_eq!(issues(&b), vec![ValidationIssue::MissingEntry]);
+    // The message names the method in every language, not only Rust's.
+    let message = ValidationIssue::MissingEntry.to_string();
+    assert!(
+        message.contains("`start`") && message.contains("`set_entry`"),
+        "{message}"
+    );
 }
 
 #[test]

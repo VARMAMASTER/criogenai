@@ -56,10 +56,10 @@ export class Telemetry {
    * LANGFUSE_SECRET_KEY and the address to LANGFUSE_BASE_URL.
    *
    * @param options `publicKey` and `secretKey` (pass both, or neither to read
-   * both from the environment), `baseUrl` (default `https://cloud.langfuse.com`;
-   * used with keys passed here; with keys from the environment the address
-   * comes from `LANGFUSE_BASE_URL`), plus `captureContent` and `serviceName`.
-   * @throws {ValidationError} No keys were passed and the environment variables are not set.
+   * both from the environment), `baseUrl` (when given it is always used; else
+   * `LANGFUSE_BASE_URL` or `LANGFUSE_HOST`, else `https://cloud.langfuse.com`),
+   * plus `captureContent` and `serviceName`.
+   * @throws {ValidationError} Only one key was passed, or none and the environment variables are not set (`invalid_value`).
    *
    * @example
    * import { Agent, Telemetry } from "criogen";

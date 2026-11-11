@@ -11,7 +11,7 @@ use criogen_agent::{
     HookAction, HookContext, HookError, Outcome, Reply, Thread, ThreadStream, ToolCallRequest,
     ToolContext, ToolError, ToolNext, ToolOutput, tool_fn,
 };
-use criogen_core::{CancelToken, RunOptions};
+use criogen_core::{CancelToken, EventKind, RunOptions};
 use criogen_providers::{BoxFuture, Message, ModelErrorKind, ToolAnnotations, ToolSpec};
 use criogen_storage::Storage;
 use serde_json::{Map, Value, json};
@@ -72,7 +72,17 @@ fn event_json(event: AgentEvent) -> String {
         AgentEvent::ApprovalNeeded(requests) => {
             json!({"type": "approval_needed", "requests": to_json(&requests)})
         }
-        other => json!({"type": "other", "event": format!("{other:?}")}),
+        // Only the event's name and place: other events (model requests,
+        // node results, custom events) can carry message content, which a
+        // stream forwarded to a browser must not leak. Telemetry has the rest.
+        AgentEvent::Other(event) => {
+            let name = match &event.kind {
+                EventKind::Custom { name, .. } => name.clone(),
+                kind => kind.type_name().to_string(),
+            };
+            json!({"type": "other", "event": name, "node": event.node, "step": event.step})
+        }
+        _ => json!({"type": "other", "event": "unknown"}),
     }
     .to_string()
 }
@@ -512,6 +522,10 @@ async fn thread_operation(thread: Thread, op: &str, payload: Value) -> Result<St
         "messages" => {
             let messages = thread.messages().await.map_err(agent_error)?;
             return Ok(to_json(&messages).to_string());
+        }
+        "pendingApprovals" => {
+            let pending = thread.pending_approvals().await.map_err(agent_error)?;
+            return Ok(to_json(&pending).to_string());
         }
         "rewind" => {
             let id = text(&payload, "checkpointId").unwrap_or_default();

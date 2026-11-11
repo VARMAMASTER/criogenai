@@ -113,6 +113,23 @@ def test_an_agent_target_and_repeats():
     assert result.pass_rate == 1.0 and result.data["target"] == "agent"
 
 
+def test_a_failed_repeat_does_not_spoil_the_next():
+    calls = {"n": 0}
+
+    async def fails_once(case):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("first run broke")
+        return "yes"
+
+    result = evals.evaluate_sync(fails_once, [{"input": "q", "expected": "yes"}], [evals.exact_match()], repeats=3)
+    case = result.cases[0]
+    # The two good runs score; the case keeps the first error and fails.
+    assert case["scores"]["exact_match"]["value"] == pytest.approx(2 / 3)
+    assert case["error"] == "RuntimeError: first run broke"
+    assert case["output"] == "yes" and not case["pass"]
+
+
 def test_concurrency_is_bounded():
     state = {"now": 0, "most": 0}
 

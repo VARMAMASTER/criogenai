@@ -14,7 +14,8 @@ The named providers' classes (``OpenAI``, ``Anthropic``, ``Gemini``, ...)
 take ``(model, api_key=None, base_url=None)``: ``api_key`` defaults to the
 provider's environment variable, and ``base_url`` replaces the provider's
 URL (a regional endpoint, a proxy). Using a named provider without a key
-(and without ``base_url``) raises ``ValueError``. ``repr()`` of a model
+(and without ``base_url``) raises ``ValidationError`` (``invalid_value``;
+also a ``ValueError``). ``repr()`` of a model
 never shows a key.
 """
 
@@ -52,9 +53,13 @@ class _Model:
     def spec(self) -> Dict[str, Any]:
         name = _KEYS.get(self.kind)
         if name and not self.api_key and not self.base_url:
-            raise ValueError(
+            from .errors import _MissingKey
+
+            raise _MissingKey(
+                "invalid_value",
                 f"no API key for {self.kind}: set {name} in the environment or a .env file "
-                f"(criogen.load_env()), or pass api_key="
+                f"(criogen.load_env()), or pass api_key=",
+                {"provider": self.kind, "variable": name},
             )
         spec = {"kind": self.kind, "model": self.model}
         if self.api_key:
@@ -729,6 +734,17 @@ class Embedder:
     def _provider(kind: str, model: str, api_key: Optional[str], base_url: Optional[str], dimensions: Optional[int]) -> "Embedder":
         spec: Dict[str, Any] = {"kind": kind, "model": model}
         key = api_key if api_key is not None else _env_key(kind)
+        name = _KEYS.get(kind)
+        # The same check as models: a missing key fails here, not later inside the engine.
+        if name and not key and not base_url:
+            from .errors import _MissingKey
+
+            raise _MissingKey(
+                "invalid_value",
+                f"no API key for {kind} embeddings: set {name} in the environment or a .env file "
+                f"(criogen.load_env()), or pass api_key=",
+                {"provider": kind, "variable": name},
+            )
         if key:
             spec["api_key"] = key
         if base_url:
@@ -746,6 +762,10 @@ class Embedder:
             api_key: The key. Default: ``OPENAI_API_KEY``.
             dimensions: Shorter vectors, for models that support it. ``None``
                 keeps the model's size.
+
+        Raises:
+            ValidationError: No key given or found (``invalid_value``; also a
+                ``ValueError``).
         """
         return Embedder._provider("openai", model, api_key, None, dimensions)
 
@@ -756,6 +776,10 @@ class Embedder:
         Args:
             model: The embedding model.
             api_key: The key. Default: ``GEMINI_API_KEY``.
+
+        Raises:
+            ValidationError: No key given or found (``invalid_value``; also a
+                ``ValueError``).
         """
         return Embedder._provider("gemini", model, api_key, None, None)
 

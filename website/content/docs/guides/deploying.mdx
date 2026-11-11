@@ -93,9 +93,9 @@ the generator when the client disconnects, which cancels the run.
 </TabItem>
 </Tabs>
 
-Send only what the page shows (text, tool names, `done`, error codes). Do not
-forward `other` events: they are engine diagnostics and can include the
-request sent to the model.
+Send only what the page shows (text, tool names, `done`, error codes).
+`other` events are engine diagnostics (a name, a node and a step, no
+content); the page rarely needs them.
 
 ## Storage for your deployment
 

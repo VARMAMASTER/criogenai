@@ -128,9 +128,11 @@ test("fetch reads text, skips scripts and refuses private addresses by default",
 test("fetch does not follow redirects and bounds what it reads", async () => {
   const redirected = await call(web.fetch({ allowPrivate: true }), "read_page", { url: `${base}/redirect` });
   assert.equal(redirected.status, "error");
+  assert.ok(JSON.stringify(redirected).includes("reading the page failed: HTTP 302 (redirects are not followed)"));
   const big = await call(web.fetch({ allowPrivate: true }), "read_page", { url: `${base}/big` });
   assert.equal(big.status, "error");
-  assert.ok(JSON.stringify(big).includes("too large"));
+  assert.ok(JSON.stringify(big).includes("reading the page failed: the response is larger than 500 KB"));
+  assert.ok(!JSON.stringify([redirected, big]).includes("search failed"));
 });
 
 test("fetch refuses private IPv4, IPv6 and mapped addresses by name", async () => {

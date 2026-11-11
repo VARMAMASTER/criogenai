@@ -21,7 +21,8 @@ The named providers' classes (`OpenAI`, `Anthropic`, `Gemini`, ...)
 take `(model, api_key=None, base_url=None)`: `api_key` defaults to the
 provider's environment variable, and `base_url` replaces the provider's
 URL (a regional endpoint, a proxy). Using a named provider without a key
-(and without `base_url`) raises `ValueError`. `repr()` of a model
+(and without `base_url`) raises `ValidationError` (`invalid_value`;
+also a `ValueError`). `repr()` of a model
 never shows a key.
 
 ```python
@@ -692,6 +693,10 @@ OpenAI's `/embeddings`.
 - `api_key` (`Optional[str]`, default `None`): The key. Default: `OPENAI_API_KEY`.
 - `dimensions` (`Optional[int]`, default `None`): Shorter vectors, for models that support it. `None` keeps the model's size.
 
+**Raises**
+
+- `ValidationError`: No key given or found (`invalid_value`; also a `ValueError`).
+
 ### Embedder.gemini
 
 ```python
@@ -708,6 +713,10 @@ Gemini's OpenAI-compatible `/embeddings`.
 
 - `model` (`str`, default `'gemini-embedding-001'`): The embedding model.
 - `api_key` (`Optional[str]`, default `None`): The key. Default: `GEMINI_API_KEY`.
+
+**Raises**
+
+- `ValidationError`: No key given or found (`invalid_value`; also a `ValueError`).
 
 ### Embedder.ollama
 

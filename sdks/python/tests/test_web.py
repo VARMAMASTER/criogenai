@@ -123,8 +123,10 @@ def test_fetch_reads_text_skips_scripts_and_refuses_private_addresses_by_default
 def test_fetch_does_not_follow_redirects_and_bounds_what_it_reads(server):
     redirected = call(web.fetch(allow_private=True), "read_page", {"url": f"{server}/redirect"})
     assert redirected["status"] == "error"
+    assert "reading the page failed: HTTP 302 (redirects are not followed)" in json.dumps(redirected)
     big = call(web.fetch(allow_private=True), "read_page", {"url": f"{server}/big"})
-    assert big["status"] == "error" and "too large" in json.dumps(big)
+    assert big["status"] == "error" and "reading the page failed: the response is larger than 500 KB" in json.dumps(big)
+    assert "search failed" not in json.dumps([redirected, big])
 
 
 def test_the_researcher_gets_web_tools_only_when_a_key_is_set(monkeypatch):

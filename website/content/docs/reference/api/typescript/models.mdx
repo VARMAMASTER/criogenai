@@ -306,7 +306,7 @@ The API key is kept private: it is not a property, and `toJSON()` (so
 
 **Raises**
 
-- `Error`: The provider needs a key, none was given or found in its environment variable, and there is no `baseUrl`.
+- `ValidationError`: The provider needs a key, none was given or found in its environment variable, and there is no `baseUrl` (`invalid_value`).
 
 ### ProviderModel.kind
 
@@ -1167,6 +1167,10 @@ OpenAI's /embeddings (key from OPENAI_API_KEY).
 
 - `model` (`string`, default `"text-embedding-3-small"`): The embedding model.
 - `options` (`{ apiKey?: string; dimensions?: number; }`, default `{}`): `apiKey` (else OPENAI_API_KEY) and `dimensions` (shorter vectors, for models that support it).
+
+**Raises**
+
+- `ValidationError`: No key was given or found in OPENAI_API_KEY (`invalid_value`).
 
 **Example**
 

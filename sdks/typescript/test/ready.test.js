@@ -24,6 +24,7 @@ test("ready() reports the engine, and a model that answers", async () => {
   assert.equal(withModel.ok, true);
   assert.equal(withModel.model.ok, true);
   assert.ok(withModel.model.latencyMs >= 0);
+  assert.equal(withModel.model.model, "FakeModel");
 });
 
 test("ready() reports a model it cannot use, and never throws", async () => {

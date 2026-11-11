@@ -190,6 +190,11 @@ test("semantic memory finds facts by meaning and falls back to keywords", async 
   assert.match(JSON.stringify(toolResults(await broken.run("search"))[0].content), /red car/);
 });
 
+test("Langfuse with one key is an error, not the environment", { skip: serverOnly("telemetry export") }, () => {
+  assert.throws(() => Telemetry.langfuse({ publicKey: "pk-lf-1" }), (e) => e instanceof ValidationError && /secretKey|secret_key/.test(e.message));
+  assert.throws(() => Telemetry.langfuse({ secretKey: "sk-lf-1" }), (e) => e instanceof ValidationError && /publicKey|public_key/.test(e.message));
+});
+
 test("telemetry exports runs without their content", { skip: serverOnly("telemetry export") }, async () => {
   const http = require("node:http");
   const received = [];
@@ -503,6 +508,39 @@ test("encrypted storage keeps text unreadable and refuses to open without its ke
     assert.throws(() => new Storage(db.url), (e) => e instanceof StorageError && e.code === "encryption_key_missing");
   } finally {
     db.remove();
+  }
+});
+
+test("pending approvals are read from storage", async () => {
+  const agent = new Agent({
+    model: new FakeModel([FakeReply.toolCall("add", { a: 1, b: 2 }), "Three."]),
+    tools: [add],
+    approve: ["add"],
+  });
+  const chat = agent.thread("p");
+  assert.deepEqual(await chat.pendingApprovals(), []);
+  const reply = await chat.send("add");
+  assert.ok(reply.needsApproval);
+  const waiting = await chat.pendingApprovals();
+  assert.equal(waiting.length, 1);
+  assert.equal(waiting[0].tool, "add");
+  assert.deepEqual(waiting[0].args, { a: 1, b: 2 });
+  assert.equal(waiting[0].call_id, reply.approvals[0].call_id);
+  assert.equal((await chat.approve()).text, "Three.");
+  assert.deepEqual(await chat.pendingApprovals(), []);
+});
+
+test("other stream events carry no content", async () => {
+  const agent = new Agent({ model: new FakeModel(["SECRET-ANSWER"]) });
+  const stream = agent.thread("o").stream("SECRET-QUESTION");
+  const others = [];
+  for await (const event of stream) if (event.type === "other") others.push(event);
+  await stream.reply();
+  assert.ok(others.length > 0, "a run has engine events");
+  for (const event of others) {
+    for (const key of Object.keys(event)) assert.ok(["type", "event", "node", "step"].includes(key), key);
+    assert.match(event.event, /^[a-z_]+$/);
+    assert.ok(!JSON.stringify(event).includes("SECRET"));
   }
 });
 

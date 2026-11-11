@@ -74,7 +74,7 @@ export async function ready(options: ReadyOptions = {}): Promise<ReadyReport> {
   const report: ReadyReport = { ok: engine.ok, engine };
   if (options.model === undefined) return report;
 
-  const name = typeof options.model === "string" ? options.model : `${(options.model as { kind?: string }).kind ?? "model"}:${(options.model as { model?: string }).model ?? ""}`;
+  const name = modelName(options.model);
   const started = Date.now();
   if (!engine.ok) {
     report.model = { ok: false, model: name, latencyMs: 0, error: "the engine is not available" };
@@ -90,4 +90,13 @@ export async function ready(options: ReadyOptions = {}): Promise<ReadyReport> {
   }
   report.ok = report.engine.ok && report.model.ok;
   return report;
+}
+
+/** `"provider:model"` for a string or provider model; else the class name (e.g. "FakeModel"). */
+function modelName(model: unknown): string {
+  if (typeof model === "string") return model;
+  const m = model as { kind?: unknown; model?: unknown; constructor?: { name?: string } } | null | undefined;
+  if (typeof m?.kind === "string" && typeof m.model === "string" && m.model) return `${m.kind}:${m.model}`;
+  if (typeof m?.model === "string" && m.model) return m.model;
+  return m?.constructor?.name || "model";
 }

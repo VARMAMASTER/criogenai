@@ -105,7 +105,19 @@ test("every named provider answers through its factory", async () => {
 test("a missing key names the variable; an unknown provider lists the known ones", () => {
   delete process.env.DEEPSEEK_API_KEY;
   assert.throws(() => new Agent({ model: "deepseek:deepseek-chat" }), /DEEPSEEK_API_KEY/);
+  assert.throws(
+    () => new Agent({ model: "deepseek:deepseek-chat" }),
+    (e) => e instanceof sdk.ValidationError && e.code === "invalid_value" && e.details.variable === "DEEPSEEK_API_KEY",
+  );
   assert.throws(() => new Agent({ model: "nosuch:gpt-5" }), /provider one of/);
+});
+
+test("an embedder without its key fails when made", () => {
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.GEMINI_API_KEY;
+  assert.throws(() => sdk.Embedder.openai(), (e) => e instanceof sdk.ValidationError && /OPENAI_API_KEY/.test(e.message));
+  assert.throws(() => sdk.Embedder.gemini(), /GEMINI_API_KEY/);
+  assert.ok(sdk.Embedder.openai("text-embedding-3-small", { apiKey: "sk-test-not-real" }));
 });
 
 test("status and key names cover the new providers", () => {

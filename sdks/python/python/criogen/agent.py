@@ -10,7 +10,7 @@ import asyncio
 import json
 import time
 from dataclasses import dataclass, field
-from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Sequence, Union
+from typing import Any, AsyncIterator, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 from . import _native
 from .models import model_spec
@@ -37,12 +37,15 @@ class ApprovalRequest:
         args: The arguments the model wrote.
         description: Text for the reviewer, when the approval rule provides
             one; usually ``None``.
+        allowed: The decisions the reviewer may make: ``"approve"``,
+            ``"edit"``, ``"reject"``, ``"respond"``.
     """
 
     call_id: str
     tool: str
     args: Dict[str, Any]
     description: Optional[str] = None
+    allowed: Tuple[str, ...] = ()
 
 
 class Decision:
@@ -175,9 +178,12 @@ class Reply(RunResult):
 
 def _approvals(raw: Dict[str, Any]) -> List[ApprovalRequest]:
     return [
-        ApprovalRequest(r["call_id"], r["tool"], r.get("args") or {}, r.get("description"))
-        for r in raw.get("approvals") or []
+        _approval(r) for r in raw.get("approvals") or []
     ]
+
+
+def _approval(r: Dict[str, Any]) -> ApprovalRequest:
+    return ApprovalRequest(r["call_id"], r["tool"], r.get("args") or {}, r.get("description"), tuple(r.get("allowed") or ()))
 
 
 def _result(
@@ -364,7 +370,8 @@ class Agent:
         TypeError: An item of ``tools`` is not a tool, or an item of
             ``hooks`` has none of the hook methods.
         ValueError: ``model`` or a fallback is not a known
-            ``"provider:model"`` string, or its API key is missing.
+            ``"provider:model"`` string, or its API key is missing (that
+            one is also a ``ValidationError`` with code ``invalid_value``).
         ValidationError: The configuration is invalid, for example a limit
             of 0 or an unknown ``on_tool_exception``.
         ModelError: A model cannot be built, for example ``Bedrock`` without
@@ -573,7 +580,8 @@ class Event:
     - ``message``: ``message``, a whole message added to the transcript.
     - ``approval_needed``: ``requests``, the calls waiting for a decision
       (as dicts).
-    - ``other``: ``event``, any other engine event as debug text.
+    - ``other``: ``event`` (the engine event's name, e.g. ``"step_started"``),
+      ``node`` and ``step``; never any content.
 
     Args:
         data: The event as a dict with a ``type`` key. ``Stream`` makes
@@ -792,6 +800,23 @@ class Thread:
         """The stored conversation: every message, as dicts."""
         return await self._op("messages")
 
+    async def pending_approvals(self) -> List[ApprovalRequest]:
+        """The tool calls waiting for a decision, read from storage.
+
+        Empty when the thread is not waiting. Use it to show a review queue
+        without keeping the last ``Reply``: for example after a restart, or in
+        another process that shares the storage.
+
+        Returns:
+            One ``ApprovalRequest`` per waiting call, in call order.
+
+        Example:
+            waiting = await agent.thread("ticket-42").pending_approvals()
+            for request in waiting:
+                print(request.tool, request.args)
+        """
+        return [_approval(r) for r in await self._op("pending_approvals")]
+
     async def rewind(self, checkpoint_id: str) -> Dict[str, Any]:
         """Makes an older checkpoint current again.
 
@@ -848,3 +873,12 @@ class Thread:
     def stream_retry(self) -> Stream:
         """``retry``, streaming the continued run's events."""
         return self._stream("retry")
+
+    def stream_decide(self, decisions: Mapping[str, Dict[str, Any]]) -> Stream:
+        """``decide``, streaming the continued run's events.
+
+        Args:
+            decisions: ``{call_id: decision}``, with a ``Decision`` for every
+                call in ``reply.approvals``.
+        """
+        return self._stream("decide", decisions=dict(decisions))

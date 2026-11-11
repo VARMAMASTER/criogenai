@@ -514,11 +514,18 @@ function factsOf(result: RunResult, durationMs: number): Facts {
 
 async function runOnce(target: Target, c: Case, timeoutMs: number): Promise<[unknown, Facts]> {
   const started = performance.now();
-  const work = target instanceof Agent ? target.run(c.input, { state: c.state }) : Promise.resolve(target(c));
+  // On a timeout, an agent's run is cancelled (not left running in the background).
+  const abort = new AbortController();
+  const work = target instanceof Agent ? target.run(c.input, { state: c.state, signal: abort.signal }) : Promise.resolve(target(c));
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => reject(new Error(`timed out after ${timeoutMs / 1000} s`)), timeoutMs);
+    timer = setTimeout(() => {
+      abort.abort();
+      reject(new Error(`timed out after ${timeoutMs / 1000} s`));
+    }, timeoutMs);
   });
+  // The cancelled run's own rejection is expected: the timeout is the result.
+  work.catch(() => {});
   try {
     const result = await Promise.race([work, timeout]);
     const durationMs = performance.now() - started;
@@ -642,19 +649,29 @@ export async function evaluate(target: Target, dataset: Dataset | Iterable<Case 
     let facts = emptyFacts();
     const durations: number[] = [];
     for (let r = 0; r < repeats; r++) {
+      // Each run starts clean: a failed run scores 0 only for itself, and the
+      // case keeps the first run's error (so it fails).
+      const startedRun = performance.now();
+      let runError: string | null = null;
+      let runOutput: unknown = null;
+      let runFacts = emptyFacts();
       try {
-        [output, facts] = await runOnce(target, c, timeoutMs);
+        [runOutput, runFacts] = await runOnce(target, c, timeoutMs);
+        output = runOutput;
+        facts = runFacts;
       } catch (e) {
-        error = e instanceof Error ? (e.message.startsWith("timed out") ? e.message : `${e.name}: ${e.message}`) : String(e);
+        runError = e instanceof Error ? (e.message.startsWith("timed out") ? e.message : `${e.name}: ${e.message}`) : String(e);
+        runFacts = { ...emptyFacts(), durationMs: performance.now() - startedRun };
+        error ??= runError;
       }
-      durations.push(facts.durationMs);
+      durations.push(runFacts.durationMs);
       for (const s of scorers) {
-        if (error !== null) {
+        if (runError !== null) {
           values[s.name].push({ value: 0, pass: false, reason: "the case failed" });
           continue;
         }
         try {
-          values[s.name].push(await s.score(c, output, facts));
+          values[s.name].push(await s.score(c, runOutput, runFacts));
         } catch (e) {
           values[s.name].push({ value: 0, pass: false, reason: `the scorer failed: ${e instanceof Error ? `${e.name}: ${e.message}` : String(e)}` });
         }

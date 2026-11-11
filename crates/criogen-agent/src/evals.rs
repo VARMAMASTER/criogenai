@@ -833,21 +833,26 @@ async fn run_case(
     let mut facts = Facts::default();
     let mut durations = Vec::new();
     for _ in 0..options.repeats.max(1) {
+        // Each run starts clean: a failed run scores 0 only for itself, and
+        // the case keeps the first run's error (so it fails).
+        let started = criogen_rt::RealInstant::now();
         match run_once(target, case, options.timeout).await {
             Ok((out, f)) => {
                 output = out;
                 facts = f;
+                durations.push(facts.duration_ms);
+                for (i, s) in scorers.iter().enumerate() {
+                    let score = s.score(case, &output, &mut facts).await;
+                    values[i].push(score);
+                }
             }
-            Err(e) => error = Some(e),
-        }
-        durations.push(facts.duration_ms);
-        for (i, s) in scorers.iter().enumerate() {
-            let score = if error.is_some() {
-                Score::new(0.0, false, Some("the case failed".into()))
-            } else {
-                s.score(case, &output, &mut facts).await
-            };
-            values[i].push(score);
+            Err(e) => {
+                error.get_or_insert(e);
+                durations.push(started.elapsed().as_secs_f64() * 1000.0);
+                for v in values.iter_mut() {
+                    v.push(Score::new(0.0, false, Some("the case failed".into())));
+                }
+            }
         }
     }
     let mut scores = Map::new();

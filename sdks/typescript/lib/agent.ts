@@ -204,8 +204,8 @@ export interface RunOptions extends CallOptions {
  *
  * `text` (a piece of the answer as it is written), `tool_call_started`,
  * `tool_call_finished`, `message` (a finished message of the transcript),
- * `approval_needed`, or `other` (engine events with no fields of their own
- * here).
+ * `approval_needed`, or `other` (any other engine event: its name, e.g.
+ * "step_started", and the node and step; never any content).
  */
 export type StreamEvent =
   | { type: "text"; messageId: string; text: string }
@@ -213,7 +213,7 @@ export type StreamEvent =
   | { type: "tool_call_finished"; callId: string; tool: string; status: string }
   | { type: "message"; message: Record<string, unknown> }
   | { type: "approval_needed"; requests: ApprovalRequest[] }
-  | { type: "other"; event: string };
+  | { type: "other"; event: string; node?: string | null; step?: number | null };
 
 /** Runs `call` with a cancellation id that `signal` fires. */
 /** @internal Runs a native call that an AbortSignal can cancel. */
@@ -269,7 +269,7 @@ export class Agent<Output = unknown> {
   /**
    * @param options The model, instructions, tools and the rest (see `AgentOptions`).
    * @throws {TypeError} An entry of `tools` is not a tool, or a model string names no known provider.
-   * @throws {Error} A model string's provider has no API key in the environment.
+   * @throws {ValidationError} A model string's provider has no API key in the environment (`invalid_value`).
    * @throws {ValidationError} An option the engine does not accept (e.g. an unknown `fallbackOn` kind).
    */
   constructor(options: AgentOptions) {
@@ -578,6 +578,21 @@ export class Thread<Output = unknown> {
   /** The stored conversation. */
   messages(): Promise<Record<string, unknown>[]> {
     return this.op("messages");
+  }
+
+  /**
+   * The tool calls waiting for a decision, read from storage. Empty when the
+   * thread is not waiting. Use it to show a review queue without keeping the
+   * last `Reply`: for example after a restart, or in another process that
+   * shares the storage.
+   * @returns One `ApprovalRequest` per waiting call, in call order.
+   *
+   * @example
+   * const waiting = await agent.thread("ticket-42").pendingApprovals();
+   * for (const request of waiting) console.log(request.tool, request.args);
+   */
+  pendingApprovals(): Promise<ApprovalRequest[]> {
+    return this.op("pendingApprovals");
   }
 
   /**

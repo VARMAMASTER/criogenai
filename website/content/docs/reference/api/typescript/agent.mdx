@@ -66,7 +66,7 @@ pass the matching JSON Schema as the `output` option.
 **Raises**
 
 - `TypeError`: An entry of `tools` is not a tool, or a model string names no known provider.
-- `Error`: A model string's provider has no API key in the environment.
+- `ValidationError`: A model string's provider has no API key in the environment (`invalid_value`).
 - `ValidationError`: An option the engine does not accept (e.g. an unknown `fallbackOn` kind).
 
 **Example**
@@ -390,6 +390,26 @@ messages(): Promise<Record<string, unknown>[]>
 
 The stored conversation.
 
+### Thread.pendingApprovals
+
+```ts
+pendingApprovals(): Promise<ApprovalRequest[]>
+```
+
+The tool calls waiting for a decision, read from storage. Empty when the
+thread is not waiting. Use it to show a review queue without keeping the
+last `Reply`: for example after a restart, or in another process that
+shares the storage.
+
+**Returns:** One `ApprovalRequest` per waiting call, in call order.
+
+**Example**
+
+```ts
+const waiting = await agent.thread("ticket-42").pendingApprovals();
+for (const request of waiting) console.log(request.tool, request.args);
+```
+
 ### Thread.rewind
 
 ```ts
@@ -706,12 +726,12 @@ type StreamEvent =
   | { type: "tool_call_finished"; callId: string; tool: string; status: string }
   | { type: "message"; message: Record<string, unknown> }
   | { type: "approval_needed"; requests: ApprovalRequest[] }
-  | { type: "other"; event: string };
+  | { type: "other"; event: string; node?: string | null; step?: number | null };
 ```
 
 One streamed event.
 
 `text` (a piece of the answer as it is written), `tool_call_started`,
 `tool_call_finished`, `message` (a finished message of the transcript),
-`approval_needed`, or `other` (engine events with no fields of their own
-here).
+`approval_needed`, or `other` (any other engine event: its name, e.g.
+"step_started", and the node and step; never any content).

@@ -56,7 +56,7 @@ async def ready(model: Any = None, timeout: float = 30.0) -> Dict[str, Any]:
         return report
     from .agent import Agent  # here, so importing this module stays cheap
 
-    name = model if isinstance(model, str) else f"{getattr(model, 'kind', 'model')}:{getattr(model, 'model', '')}"
+    name = _model_name(model)
     started = time.monotonic()
     try:
         agent = Agent(model, limits={"model_calls": 1})
@@ -75,6 +75,18 @@ async def ready(model: Any = None, timeout: float = 30.0) -> Dict[str, Any]:
         }
     report["ok"] = report["engine"]["ok"] and report["model"]["ok"]
     return report
+
+
+def _model_name(model: Any) -> str:
+    """``"provider:model"`` for a string or provider model; else the class name (e.g. ``"FakeModel"``)."""
+    if isinstance(model, str):
+        return model
+    kind, name = getattr(model, "kind", None), getattr(model, "model", None)
+    if isinstance(kind, str) and isinstance(name, str) and name:
+        return f"{kind}:{name}"
+    if isinstance(name, str) and name:
+        return name
+    return type(model).__name__
 
 
 def ready_sync(model: Any = None, timeout: float = 30.0) -> Dict[str, Any]:

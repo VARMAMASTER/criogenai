@@ -292,6 +292,37 @@ async fn evaluating_keeps_facts_errors_and_timeouts() {
 }
 
 #[tokio::test]
+async fn a_failed_repeat_does_not_spoil_the_next() {
+    let calls = Arc::new(AtomicUsize::new(0));
+    let c = calls.clone();
+    let fails_once = evals::function(move |_| {
+        let n = c.fetch_add(1, Ordering::SeqCst);
+        async move {
+            if n == 0 {
+                Err("first run broke".to_string())
+            } else {
+                Ok(json!("yes"))
+            }
+        }
+    });
+    let data = Dataset::new([Case::new("q").expected("yes")]).unwrap();
+    let result = evals::evaluate(
+        fails_once,
+        &data,
+        vec![evals::exact_match(false)],
+        EvalOptions::default().repeats(3),
+    )
+    .await
+    .unwrap();
+    let case = &result.cases()[0];
+    let value = case["scores"]["exact_match"]["value"].as_f64().unwrap();
+    assert!((value - 2.0 / 3.0).abs() < 1e-9, "{value}");
+    assert_eq!(case["error"], "first run broke");
+    assert_eq!(case["output"], "yes");
+    assert_eq!(case["pass"], false);
+}
+
+#[tokio::test]
 async fn repeats_and_the_concurrency_bound() {
     let calls = Arc::new(AtomicUsize::new(0));
     let c = calls.clone();

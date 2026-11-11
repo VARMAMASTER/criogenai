@@ -80,6 +80,27 @@ test("evaluating keeps facts, errors and timeouts", async () => {
   assert.deepEqual(JSON.parse(validate(schema, JSON.stringify(result.toJSON()))), []);
 });
 
+test("a failed repeat does not spoil the next, and a timeout cancels the run", async () => {
+  let n = 0;
+  const failsOnce = async () => {
+    if (++n === 1) throw new Error("first run broke");
+    return "yes";
+  };
+  const result = await evals.evaluate(failsOnce, [{ input: "q", expected: "yes" }], [evals.exactMatch()], { repeats: 3 });
+  const c = result.cases[0];
+  assert.ok(Math.abs(c.scores.exact_match.value - 2 / 3) < 1e-9);
+  assert.equal(c.error, "Error: first run broke");
+  assert.equal(c.output, "yes");
+  assert.ok(!c.pass);
+
+  // The model answers after 5 s; a 0.2 s limit times out and cancels the run.
+  const slow = new Agent({ model: new FakeModel(["late"], { delayMs: 5000 }) });
+  const started = Date.now();
+  const r = await evals.evaluate(slow, [{ input: "q" }], [evals.contains("late")], { timeoutSecs: 0.2 });
+  assert.match(r.cases[0].error, /^timed out after 0.2 s/);
+  assert.ok(Date.now() - started < 1500, "the eval did not wait for the run");
+});
+
 test("an agent target, repeats and the concurrency bound", async () => {
   let n = 0;
   const flaky = async () => (++n % 2 ? "yes" : "no");

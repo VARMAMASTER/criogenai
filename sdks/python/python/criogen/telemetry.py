@@ -51,15 +51,17 @@ class Telemetry:
         """Exports to Langfuse (cloud, any region, or self-hosted).
 
         Pass both keys, or neither: then the keys come from the
-        ``LANGFUSE_PUBLIC_KEY`` and ``LANGFUSE_SECRET_KEY`` environment variables
-        and the address from ``LANGFUSE_BASE_URL`` (or ``LANGFUSE_HOST``).
+        ``LANGFUSE_PUBLIC_KEY`` and ``LANGFUSE_SECRET_KEY`` environment
+        variables. The address is ``base_url`` when given, else
+        ``LANGFUSE_BASE_URL`` (or ``LANGFUSE_HOST``), else Langfuse Cloud.
 
         Args:
             public_key: The project's public key (``pk-lf-...``).
             secret_key: The project's secret key (``sk-lf-...``).
-            base_url: Langfuse's address, used with explicit keys, e.g.
-                ``"https://us.cloud.langfuse.com"`` or ``"http://localhost:3000"``.
-                Default ``"https://cloud.langfuse.com"``.
+            base_url: Langfuse's address, e.g. ``"https://us.cloud.langfuse.com"``
+                or ``"http://localhost:3000"``. Always used when given.
+                Default: ``LANGFUSE_BASE_URL``, ``LANGFUSE_HOST``, or
+                ``"https://cloud.langfuse.com"``.
             capture_content: ``True`` also exports messages, tool arguments and
                 results, error messages, and the run's user id, session id and
                 metadata. Default ``False``: names, timings, token usage, status
@@ -71,8 +73,8 @@ class Telemetry:
             The exporter.
 
         Raises:
-            ValidationError: No keys given and a variable is missing
-                (``invalid_value``).
+            ValidationError: Only one key given, or none given and a variable
+                is missing (``invalid_value``).
 
         Example:
             from criogen import Agent, Telemetry

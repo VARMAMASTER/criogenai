@@ -15,6 +15,8 @@
 // not follow redirects, and reads at most 500 KB.
 
 import { lookup } from "node:dns/promises";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { isIP } from "node:net";
 import { Tool, ToolError, tool } from "./tools";
 
@@ -234,7 +236,8 @@ function isPrivateIp(address: string): boolean {
   return v6 === "::" || v6 === "::1" || v6.startsWith("fc") || v6.startsWith("fd") || /^fe[89ab]/.test(v6) || v6.startsWith("ff");
 }
 
-async function checkPublic(host: string, allowPrivate: boolean): Promise<void> {
+/** Refuses a host that resolves to a private address; returns the address to connect to. */
+async function checkPublic(host: string, allowPrivate: boolean): Promise<string> {
   const bare = host.replace(/^\[|\]$/g, "");
   let addresses: string[];
   try {
@@ -242,9 +245,68 @@ async function checkPublic(host: string, allowPrivate: boolean): Promise<void> {
   } catch {
     throw new ToolError(`could not find the host "${host}"`, { retryable: false });
   }
+  if (!addresses.length) throw new ToolError(`could not find the host "${host}"`, { retryable: false });
   if (!allowPrivate && addresses.some(isPrivateIp)) {
     throw new ToolError("that address is on a private network; only public web pages can be read", { retryable: false });
   }
+  return addresses[0];
+}
+
+/**
+ * A GET that connects only to `address` (the one that was checked), so a
+ * second DNS answer cannot send it to a private one (DNS rebinding). TLS still
+ * checks the certificate against the host name. No redirects, a time limit,
+ * and at most `limit` bytes.
+ */
+function pinnedGet(url: URL, address: string, headers: Record<string, string>, limit: number): Promise<Buffer> {
+  const family = isIP(address);
+  const send = url.protocol === "https:" ? httpsRequest : httpRequest;
+  return new Promise<Buffer>((resolve, reject) => {
+    let settled = false;
+    const fail = (error: ToolError) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      req.destroy();
+      reject(error);
+    };
+    const req = send(
+      url,
+      {
+        method: "GET",
+        headers,
+        lookup: ((_host: string, options: { all?: boolean }, callback: (...args: unknown[]) => void) =>
+          options?.all ? callback(null, [{ address, family }]) : callback(null, address, family)) as never,
+      },
+      (response) => {
+        const status = response.statusCode ?? 0;
+        if (status >= 300) {
+          response.resume();
+          const retryable = status === 408 || status === 429 || status >= 500;
+          const moved = status < 400 ? " (redirects are not followed)" : "";
+          fail(new ToolError(`reading the page failed: HTTP ${status}${moved}`, { retryable }));
+          return;
+        }
+        const chunks: Buffer[] = [];
+        let total = 0;
+        response.on("data", (chunk: Buffer) => {
+          total += chunk.length;
+          if (total > limit) fail(new ToolError(`reading the page failed: the response is larger than ${limit / 1000} KB`, { retryable: false }));
+          else chunks.push(chunk);
+        });
+        response.on("end", () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(Buffer.concat(chunks));
+        });
+        response.on("error", (error) => fail(new ToolError(`reading the page failed: ${error.name}`, { retryable: true })));
+      },
+    );
+    const timer = setTimeout(() => fail(new ToolError("reading the page failed: TimeoutError", { retryable: true })), TIMEOUT_MS);
+    req.on("error", (error) => fail(new ToolError(`reading the page failed: ${error.name}`, { retryable: true })));
+    req.end();
+  });
 }
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
@@ -302,8 +364,8 @@ export function fetchPage(options: { allowPrivate?: boolean; maxChars?: number }
         throw new ToolError("give a full http or https URL", { retryable: false });
       }
       if (parts.protocol !== "http:" && parts.protocol !== "https:") throw new ToolError("give a full http or https URL", { retryable: false });
-      await checkPublic(parts.hostname, options.allowPrivate ?? false);
-      const body = await request(url, { headers: { "user-agent": "criogen-web/0.1", accept: "text/html,text/plain" } }, MAX_PAGE_BYTES);
+      const address = await checkPublic(parts.hostname, options.allowPrivate ?? false);
+      const body = await pinnedGet(parts, address, { "user-agent": "criogen-web/0.1", accept: "text/html,text/plain" }, MAX_PAGE_BYTES);
       const text = htmlToText(body.toString("utf8"));
       return { url, text: text.slice(0, cap), truncated: text.length > cap };
     },
