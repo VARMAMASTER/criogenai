@@ -1,0 +1,914 @@
+---
+title: "TypeScript API: Models and the gateway"
+description: "TypeScript API reference for models and the gateway: openai, anthropic, gemini, FakeModel, openaiCompatible, ModelOptions, ProviderModel, openrouter, and more."
+---
+
+Generated from the source of `criogen` 0.1.6 (declarations and doc comments) every time the site is built. Also in [Python](/docs/reference/api/python/models/) and [Rust](/docs/reference/api/rust/). Back to the [API reference](/docs/reference/api/).
+
+## Models
+
+```ts
+import {
+  openai,
+  anthropic,
+  gemini,
+  FakeModel,
+  openaiCompatible,
+  ModelOptions,
+  ProviderModel,
+  openrouter,
+  ollama,
+  lmstudio,
+  deepseek,
+  mistral,
+  xai,
+  groq,
+  cerebras,
+  together,
+  fireworks,
+  qwen,
+  moonshot,
+  zai,
+  anthropicCompatible,
+  FakeReply,
+  KaggleOptions,
+  KaggleModel,
+  kaggle,
+  AzureOptions,
+  AzureModel,
+  azure,
+  BedrockOptions,
+  BedrockModel,
+  bedrock,
+  VertexOptions,
+  VertexModel,
+  vertex,
+  ModelCall,
+  ModelAnswer,
+  FunctionModel,
+  Model,
+  Embedder,
+} from "criogen";
+```
+
+### openai
+
+```ts
+function openai(model: string, options?: ModelOptions): ProviderModel
+```
+
+### anthropic
+
+```ts
+function anthropic(model: string, options?: ModelOptions): ProviderModel
+```
+
+### gemini
+
+```ts
+function gemini(model: string, options?: ModelOptions): ProviderModel
+```
+
+### FakeModel
+
+```ts
+class FakeModel {
+  constructor(replies?: (string | FakeReply)[], options?: { delayMs?: number; failFirst?: number; byTurn?: boolean; name?: string; });
+}
+```
+
+A simulated model for tests: answers with the scripted replies in order (a
+string is a text reply), then echoes. Never a network call.
+
+#### FakeModel.replies
+
+```ts
+readonly replies: FakeReply[]
+```
+
+#### FakeModel.delayMs
+
+```ts
+readonly delayMs: number
+```
+
+#### FakeModel.failFirst
+
+```ts
+readonly failFirst: number
+```
+
+The first n calls fail with `rate_limited` (transient), to test retries.
+
+#### FakeModel.byTurn
+
+```ts
+readonly byTurn: boolean
+```
+
+Choose each reply by the conversation's turn (the first reply for a run's
+first model call, the second for its second, then the last repeats)
+instead of using replies up: one model serves many runs, also at once.
+
+#### FakeModel.name
+
+```ts
+readonly name: string | undefined
+```
+
+The model name in replies ("fake:&lt;name>"), to tell two fake models apart.
+
+#### FakeModel.spec
+
+```ts
+spec(): Record<string, unknown>
+```
+
+### openaiCompatible
+
+```ts
+function openaiCompatible(model: string, options: ModelOptions & { baseUrl: string; name?: string; allowInsecureHttp?: boolean; }): ProviderModel
+```
+
+Any OpenAI-compatible server. `allowInsecureHttp`: send the key over plain
+`http://` to another machine (a vLLM server on your LAN); refused by
+default, because a key sent over http is readable by anyone on the path.
+
+### ModelOptions
+
+```ts
+interface ModelOptions {
+  apiKey?: string;
+  baseUrl?: string;
+}
+```
+
+### ProviderModel
+
+```ts
+class ProviderModel {
+  constructor(kind: string, model: string, options?: ModelOptions & { name?: string; allowInsecureHttp?: boolean; });
+}
+```
+
+A model on a provider's API.
+
+#### ProviderModel.kind
+
+```ts
+readonly kind: string
+```
+
+#### ProviderModel.model
+
+```ts
+readonly model: string
+```
+
+#### ProviderModel.baseUrl
+
+```ts
+readonly baseUrl?: string
+```
+
+#### ProviderModel.spec
+
+```ts
+spec(): Record<string, unknown>
+```
+
+The JSON spec (with the key; never logged).
+
+#### ProviderModel.toJSON
+
+```ts
+toJSON(): Record<string, unknown>
+```
+
+### openrouter
+
+```ts
+function openrouter(model: string, options?: ModelOptions): ProviderModel
+```
+
+### ollama
+
+```ts
+function ollama(model: string, options?: { baseUrl?: string; }): ProviderModel
+```
+
+### lmstudio
+
+```ts
+function lmstudio(model: string, options?: { baseUrl?: string; }): ProviderModel
+```
+
+LM Studio on this machine (or `baseUrl`), no key.
+
+### deepseek
+
+```ts
+function deepseek(model: string, options?: ModelOptions): ProviderModel
+```
+
+DeepSeek (DEEPSEEK_API_KEY), e.g. deepseek("deepseek-chat").
+
+### mistral
+
+```ts
+function mistral(model: string, options?: ModelOptions): ProviderModel
+```
+
+Mistral AI (MISTRAL_API_KEY), e.g. mistral("mistral-large-latest").
+
+### xai
+
+```ts
+function xai(model: string, options?: ModelOptions): ProviderModel
+```
+
+xAI's Grok models (XAI_API_KEY).
+
+### groq
+
+```ts
+function groq(model: string, options?: ModelOptions): ProviderModel
+```
+
+Groq's fast inference for open models (GROQ_API_KEY).
+
+### cerebras
+
+```ts
+function cerebras(model: string, options?: ModelOptions): ProviderModel
+```
+
+Cerebras's fast inference for open models (CEREBRAS_API_KEY).
+
+### together
+
+```ts
+function together(model: string, options?: ModelOptions): ProviderModel
+```
+
+Together AI's open models (TOGETHER_API_KEY).
+
+### fireworks
+
+```ts
+function fireworks(model: string, options?: ModelOptions): ProviderModel
+```
+
+Fireworks AI's open models (FIREWORKS_API_KEY).
+
+### qwen
+
+```ts
+function qwen(model: string, options?: ModelOptions): ProviderModel
+```
+
+Qwen on Alibaba Cloud Model Studio, international endpoint (DASHSCOPE_API_KEY).
+China: `baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1"`.
+
+### moonshot
+
+```ts
+function moonshot(model: string, options?: ModelOptions): ProviderModel
+```
+
+Moonshot AI's Kimi models (MOONSHOT_API_KEY). China keys: `baseUrl: "https://api.moonshot.cn/v1"`.
+
+### zai
+
+```ts
+function zai(model: string, options?: ModelOptions): ProviderModel
+```
+
+Z.ai's GLM models (ZAI_API_KEY). China keys: `baseUrl: "https://open.bigmodel.cn/api/paas/v4"`.
+
+### anthropicCompatible
+
+```ts
+function anthropicCompatible(model: string, options: ModelOptions & { baseUrl: string; name?: string; allowInsecureHttp?: boolean; }): ProviderModel
+```
+
+Any server that speaks Anthropic's Messages API: a self-hosted gateway, or a
+provider's Anthropic-style endpoint (DeepSeek, Z.ai, Qwen and Moonshot offer one).
+
+### FakeReply
+
+```ts
+type FakeReply = { text: string } | { toolCalls: { name: string; args: Record<string, unknown> }[] };
+```
+
+One scripted answer of a FakeModel.
+
+### KaggleOptions
+
+```ts
+interface KaggleOptions {
+  apiToken?: string;
+  proxyUrl?: string;
+  proxyToken?: string;
+  /** Where proxy tokens are minted (tests). */
+  apiBase?: string;
+}
+```
+
+Kaggle's Model Proxy: the hosted models your Kaggle account's
+AI-model allowance pays for. Credentials, in order: `apiToken`; `proxyUrl`
+and `proxyToken`; else MODEL_PROXY_URL and MODEL_PROXY_API_KEY,
+KAGGLE_API_TOKEN, or the `access_token` file in KAGGLE_CONFIG_DIR or
+~/.kaggle. The engine mints the short-lived proxy token and renews it.
+For prototypes and tests, not production traffic.
+
+### KaggleModel
+
+```ts
+class KaggleModel {
+  constructor(model: string, options?: KaggleOptions);
+}
+```
+
+#### KaggleModel.kind
+
+```ts
+readonly kind: "kaggle"
+```
+
+#### KaggleModel.model
+
+```ts
+readonly model: string
+```
+
+#### KaggleModel.spec
+
+```ts
+spec(): Record<string, unknown>
+```
+
+The JSON spec (with any token; never logged).
+
+#### KaggleModel.toJSON
+
+```ts
+toJSON(): Record<string, unknown>
+```
+
+### kaggle
+
+```ts
+function kaggle(model: string, options?: KaggleOptions): KaggleModel
+```
+
+A model on Kaggle's Model Proxy, e.g. kaggle("google/gemini-3.6-flash").
+
+### AzureOptions
+
+```ts
+interface AzureOptions {
+  endpoint?: string;
+  apiKey?: string;
+  token?: string;
+  tenantId?: string;
+  clientId?: string;
+  clientSecret?: string;
+  managedIdentity?: boolean;
+  api?: "responses" | "chat";
+  scope?: string;
+  /** Where Entra ID tokens are issued (sovereign clouds; tests). */
+  authority?: string;
+  /** Another managed-identity endpoint (tests). */
+  identityEndpoint?: string;
+}
+```
+
+Azure OpenAI or Microsoft Foundry. `endpoint` is the
+resource name or URL (else AZURE_OPENAI_ENDPOINT). Credentials, in order:
+`apiKey`; `token` (a bearer token from elsewhere); `clientSecret` with
+`tenantId` and `clientId` (a service principal); `managedIdentity` (with
+`clientId` for a user-assigned identity); else AZURE_OPENAI_API_KEY, or
+AZURE_TENANT_ID + AZURE_CLIENT_ID + AZURE_CLIENT_SECRET, or
+AZURE_USE_MANAGED_IDENTITY=1. The engine obtains and renews Entra ID
+tokens. `api: "chat"` for Foundry's models from other makers.
+
+### AzureModel
+
+```ts
+class AzureModel {
+  constructor(model: string, options?: AzureOptions);
+}
+```
+
+#### AzureModel.kind
+
+```ts
+readonly kind: "azure"
+```
+
+#### AzureModel.model
+
+```ts
+readonly model: string
+```
+
+The deployment name.
+
+#### AzureModel.spec
+
+```ts
+spec(): Record<string, unknown>
+```
+
+The JSON spec (with any secret; never logged).
+
+#### AzureModel.toJSON
+
+```ts
+toJSON(): Record<string, unknown>
+```
+
+### azure
+
+```ts
+function azure(model: string, options?: AzureOptions): AzureModel
+```
+
+A deployment on Azure OpenAI or Foundry, e.g. azure("gpt-5-mini", \{ endpoint: "my-resource" \}).
+
+### BedrockOptions
+
+```ts
+interface BedrockOptions {
+  region?: string;
+  apiKey?: string;
+  api?: "auto" | "messages" | "chat" | "responses";
+  baseUrl?: string;
+}
+```
+
+Amazon Bedrock with an API key. `region` (else AWS_REGION
+or AWS_DEFAULT_REGION; there is no default, so data never goes to a region
+you did not choose); `apiKey` (else AWS_BEARER_TOKEN_BEDROCK). Claude is
+called over the Anthropic Messages API and other makers' models over Chat
+Completions; `api` forces one. `baseUrl` reaches bedrock-mantle or a VPC
+endpoint. IAM roles (SigV4) are not supported yet.
+
+### BedrockModel
+
+```ts
+class BedrockModel {
+  constructor(model: string, options?: BedrockOptions);
+}
+```
+
+#### BedrockModel.kind
+
+```ts
+readonly kind: "bedrock"
+```
+
+#### BedrockModel.model
+
+```ts
+readonly model: string
+```
+
+The Bedrock model id or inference profile.
+
+#### BedrockModel.spec
+
+```ts
+spec(): Record<string, unknown>
+```
+
+The JSON spec (with any key; never logged).
+
+#### BedrockModel.toJSON
+
+```ts
+toJSON(): Record<string, unknown>
+```
+
+### bedrock
+
+```ts
+function bedrock(model: string, options?: BedrockOptions): BedrockModel
+```
+
+A model on Amazon Bedrock, e.g. bedrock("us.anthropic.claude-sonnet-5", \{ region: "us-east-1" \}).
+
+### VertexOptions
+
+```ts
+interface VertexOptions {
+  project?: string;
+  location?: string;
+  token?: string;
+  credentialsFile?: string;
+  api?: "auto" | "chat" | "claude";
+  /** Another API host (a private endpoint; tests). */
+  host?: string;
+  /** Token endpoints elsewhere (tests). */
+  tokenUrl?: string;
+  metadataUrl?: string;
+}
+```
+
+Google Vertex AI. `project` (else GOOGLE_CLOUD_PROJECT) and
+`location` (else GOOGLE_CLOUD_LOCATION; no default, it decides where data is
+processed). Credentials: `token`, `credentialsFile`, else
+GOOGLE_APPLICATION_CREDENTIALS, gcloud's application-default file, or the
+metadata server on Google Cloud. Service-account key files are not supported
+yet. `claude-…` models go to Claude's endpoint, the rest to the
+OpenAI-compatible one; `api` forces one.
+
+### VertexModel
+
+```ts
+class VertexModel {
+  constructor(model: string, options?: VertexOptions);
+}
+```
+
+#### VertexModel.kind
+
+```ts
+readonly kind: "vertex"
+```
+
+#### VertexModel.model
+
+```ts
+readonly model: string
+```
+
+#### VertexModel.spec
+
+```ts
+spec(): Record<string, unknown>
+```
+
+The JSON spec (with any token; never logged).
+
+#### VertexModel.toJSON
+
+```ts
+toJSON(): Record<string, unknown>
+```
+
+### vertex
+
+```ts
+function vertex(model: string, options?: VertexOptions): VertexModel
+```
+
+A model on Google Vertex AI, e.g. vertex("google/gemini-3.6-flash", \{ project: "p", location: "global" \}).
+
+### ModelCall
+
+```ts
+interface ModelCall {
+  messages: Record<string, unknown>[];
+  tools?: Record<string, unknown>[];
+  settings?: Record<string, unknown>;
+  output?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+```
+
+What a model function receives: the request as the engine sends it to a
+provider (`ModelRequest` in schemas/criogen.schema.json): the messages so
+far, the tools it may call, the settings and the output schema.
+
+### ModelAnswer
+
+```ts
+type ModelAnswer = string | FakeReply | { message: Record<string, unknown> } | { error: { kind: string; message: string } };
+```
+
+A model function's answer: text, tool calls (`FakeReply.toolCall`), an
+exact assistant message, or a classified error (`\{ error: \{ kind:
+"rate_limited", message \} \}` is retried as a provider's would be).
+
+### FunctionModel
+
+```ts
+class FunctionModel {
+  constructor(respond: (call: ModelCall) => ModelAnswer | Promise<ModelAnswer>, options?: { name?: string; });
+}
+```
+
+A model written in JavaScript: for each model call the
+engine calls `respond` with the request, and the agent loop (tools,
+approvals, retries, limits) goes on with its answer. For a model that runs
+in the page (WebGPU, a browser's built-in model), your own client, or
+scripted replies chosen by what the request says (tests and demos, where
+several agents share one model). If `respond` throws, the call fails with
+`model_failed`.
+
+#### FunctionModel.kind
+
+```ts
+readonly kind: "function"
+```
+
+#### FunctionModel.name
+
+```ts
+readonly name: string
+```
+
+#### FunctionModel.spec
+
+```ts
+spec(): Record<string, unknown>
+```
+
+The JSON spec: the function is registered with the engine on first use.
+
+#### FunctionModel.toJSON
+
+```ts
+toJSON(): Record<string, unknown>
+```
+
+### Model
+
+```ts
+type Model = string | ProviderModel | KaggleModel | AzureModel | BedrockModel | VertexModel | FakeModel | FunctionModel;
+```
+
+### Embedder
+
+```ts
+class Embedder {
+  constructor(spec: Record<string, unknown>);
+}
+```
+
+Turns text into vectors, for long-term memory searched by meaning
+(`memory.semantic(embedder)`). Built from the same
+providers as models; keys come from the same environment variables.
+
+#### Embedder.openai
+
+```ts
+static openai(model?: string, options?: { apiKey?: string; dimensions?: number; }): Embedder
+```
+
+OpenAI's /embeddings (key from OPENAI_API_KEY).
+
+#### Embedder.gemini
+
+```ts
+static gemini(model?: string, options?: { apiKey?: string; }): Embedder
+```
+
+Gemini's OpenAI-compatible /embeddings (GEMINI_API_KEY).
+
+#### Embedder.ollama
+
+```ts
+static ollama(model?: string, options?: { baseUrl?: string; }): Embedder
+```
+
+Ollama on this machine (or `baseUrl`): nothing leaves your network.
+
+#### Embedder.openaiCompatible
+
+```ts
+static openaiCompatible(model: string, options: { baseUrl: string; apiKey?: string; dimensions?: number; }): Embedder
+```
+
+Any OpenAI-compatible /embeddings (vLLM, a gateway).
+
+#### Embedder.fake
+
+```ts
+static fake(options?: { synonyms?: Record<string, string>; failing?: boolean; }): Embedder
+```
+
+For tests, never a network call: texts sharing words are close;
+`synonyms` makes different words count as the same (`{ car: "automobile" }`);
+`failing` makes every call fail (search then falls back to keywords).
+
+#### Embedder.toJSON
+
+```ts
+toJSON(): Record<string, unknown>
+```
+
+## Gateway
+
+```ts
+import {
+  Gateway,
+  ChatInput,
+  ChatOptions,
+  ChatReply,
+  Chunk,
+  GatewayOptions,
+  ChatStream,
+} from "criogen";
+```
+
+### Gateway
+
+```ts
+class Gateway {
+  constructor(options?: GatewayOptions);
+}
+```
+
+Model calls without an agent: `chat`, `stream` and `embed`, with the agent's retries and fallback models.
+
+#### Gateway.chat
+
+```ts
+chat<Output = unknown>(model: Model, input: ChatInput, options?: ChatOptions): Promise<ChatReply<Output>>
+```
+
+One answer.
+
+#### Gateway.stream
+
+```ts
+stream<Output = unknown>(model: Model, input: ChatInput, options?: ChatOptions): ChatStream<Output>
+```
+
+The answer as it is written: `for await (const chunk of gw.stream(…))`.
+
+#### Gateway.embed
+
+```ts
+embed(embedder: Embedder, texts: string[], options?: { signal?: any; }): Promise<number[][]>
+```
+
+One vector per text, in order.
+
+### ChatInput
+
+```ts
+type ChatInput = string | Record<string, unknown>[];
+```
+
+Text, or messages (the transcript format of `result.messages`; `content` may be a string).
+
+### ChatOptions
+
+```ts
+interface ChatOptions {
+  /** The system message. */
+  instructions?: string;
+  temperature?: number;
+  maxTokens?: number;
+  /** A JSON Schema the answer must match; `reply.output` is then the parsed JSON. */
+  output?: Record<string, unknown>;
+  /**
+   * Tools the model may call (tool specs, as a FunctionModel's `call.tools`):
+   * the reply's `message` then holds its tool calls, for you to run. With
+   * this, a FunctionModel can pass an agent's request on to a real model.
+   */
+  tools?: Record<string, unknown>[];
+  /** Aborting cancels the call (the HTTP request stops). */
+  signal?: AbortSignal;
+}
+```
+
+### ChatReply
+
+```ts
+interface ChatReply<Output = unknown> {
+  /** All text of the answer. */
+  text: string;
+  /** The assistant message. */
+  message: Record<string, unknown>;
+  usage: Record<string, number>;
+  /** Why the model stopped, e.g. "stop" or "length". */
+  stopReason: string | null;
+  /** "provider:model" that answered (a fallback, if the first failed). */
+  model: string;
+  /** The parsed JSON answer, with `output`. */
+  output: Output | null;
+}
+```
+
+A model's answer.
+
+### Chunk
+
+```ts
+interface Chunk {
+  type: "text" | "restart";
+  text: string;
+}
+```
+
+A piece of a streamed answer. `restart`: a retry started the answer over, so drop the text shown so far.
+
+### GatewayOptions
+
+```ts
+interface GatewayOptions {
+  /** Models tried in order when the one asked for fails with a transient error (after its retries). */
+  fallbacks?: Model[];
+  /** Other error kinds that also move on, e.g. "context_overflow". */
+  fallbackOn?: string[];
+  /** How transient errors are retried (default: 3 attempts, backoff from 0.5 s). */
+  retry?: Retry;
+  /** The longest Retry-After that is waited for, in seconds (default 60). */
+  maxRetryAfterSecs?: number;
+}
+```
+
+### ChatStream
+
+```ts
+class ChatStream<Output = unknown> implements AsyncIterable<Chunk> {
+  constructor(nativeStream: NativeChatStream);
+}
+```
+
+A streamed answer: `for await (const chunk of stream)`, then `await stream.reply()`. Leaving the loop early cancels the call.
+
+#### ChatStream.reply
+
+```ts
+reply(): Promise<ChatReply<Output>>
+```
+
+Waits for the call; the whole answer.
+
+#### ChatStream.cancel
+
+```ts
+cancel(): void
+```
+
+Cancels the call.
+
+## Keys and environment
+
+```ts
+import { parseEnv, LoadEnvOptions, loadEnv, envStatus, keyName } from "criogen";
+```
+
+### parseEnv
+
+```ts
+function parseEnv(text: string): Record<string, string>
+```
+
+Parse .env text: NAME=value lines, `export NAME=value`, # comments, and
+values in single or double quotes. No variable expansion. A malformed line
+throws an Error naming the line number (never its content: it may be a secret).
+
+### LoadEnvOptions
+
+```ts
+interface LoadEnvOptions {
+  /** Replace variables that are already set (default: keep them). */
+  override?: boolean;
+  /** Throw if the file is missing (default: a missing file is fine). */
+  required?: boolean;
+}
+```
+
+### loadEnv
+
+```ts
+function loadEnv(path?: string, options?: LoadEnvOptions): string[]
+```
+
+Read a .env file into process.env and return the NAMES it set (sorted;
+never the values). Files over 1 MB are refused. Keep the file out of git.
+
+### envStatus
+
+```ts
+function envStatus(): Record<string, boolean>
+```
+
+Which providers have a key right now: \{ openai: true, gemini: false, ... \}. Names and yes/no only.
+
+### keyName
+
+```ts
+function keyName(provider: string): string
+```
+
+The environment variable a provider's key comes from ("openai" -> "OPENAI_API_KEY").
+
+## Redaction
+
+```ts
+import { Redactor } from "criogen";
+```
+
+### Redactor
+
+```ts
+type Redactor = (text: string) => string | Promise<string>;
+```

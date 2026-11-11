@@ -133,6 +133,22 @@ the domain, a public issue tracker and community.
 
 ## Log
 
+### 2026-11-11: the API reference (website)
+
+`/docs/reference/api/` linked to three generated references that did not exist (404).
+Now `website/scripts/gen-api.mjs` builds them. **Python** and **TypeScript**: one page per
+topic (agents, models, storage, workflows, patterns, observability), 12 pages in the docs
+style (search, themes, outline), written to `content/docs/reference/api/` and committed.
+Python is read from source with `ast` (nothing imported), TypeScript with the compiler API
+(no new dependency); design numbers are removed from the text. `ci-local.sh` (step
+`website`) runs `gen-api.mjs --check`, so the committed pages cannot drift. **Rust**:
+rustdoc for the eight public crates (not `criogen-bench` and `criogen-js`) in its own
+target dir, copied to `public/api/rust` (git-ignored) at build; the `src/` pages are never
+copied, "Source" links are removed, and the build fails if one is left (the code stays
+private until 10,000 installs). New `/llms-api.txt` carries the Python and TypeScript
+reference for AI assistants; `llms-full.txt` stays the manual. Open: two crate-level Rust
+doc comments still say "design 0004" / "design 0008" in plain prose.
+
 ### 2026-11-05: the engine in the browser (design 0021)
 
 The user asked for the playground to run the real engine in the browser, and

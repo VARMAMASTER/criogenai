@@ -1,0 +1,715 @@
+---
+title: "Python API: Models and the gateway"
+description: "Python API reference for models and the gateway: OpenAI, Anthropic, Gemini, FakeModel, OpenAICompatible, OpenRouter, DeepSeek, Mistral, and more."
+---
+
+Generated from the source of `criogen` 0.1.6 (docstrings and type hints) every time the site is built. Also in [TypeScript](/docs/reference/api/typescript/models/) and [Rust](/docs/reference/api/rust/). Back to the [API reference](/docs/reference/api/).
+
+## Models
+
+Models: real providers, and `FakeModel` for tests.
+
+Each turns into a small JSON spec the Rust engine builds the model from.
+Strings work too: `"openai:gpt-5-mini"` takes its key from
+`OPENAI_API_KEY`, `"deepseek:deepseek-chat"` from `DEEPSEEK_API_KEY`
+(every name in `_KEYS`, plus `ollama`, `lmstudio` and `kaggle`).
+
+```python
+from criogen import (
+    OpenAI,
+    Anthropic,
+    Gemini,
+    FakeModel,
+    OpenAICompatible,
+    OpenRouter,
+    DeepSeek,
+    Mistral,
+    XAI,
+    Groq,
+    Cerebras,
+    Together,
+    Fireworks,
+    Qwen,
+    Moonshot,
+    ZAI,
+    Kaggle,
+    Vertex,
+    Bedrock,
+    Azure,
+    Ollama,
+    LMStudio,
+    AnthropicCompatible,
+    FakeReply,
+    Embedder,
+)
+```
+
+### OpenAI
+
+```python
+class OpenAI(_Model)
+```
+
+OpenAI's API (key from `OPENAI_API_KEY` by default).
+
+### Anthropic
+
+```python
+class Anthropic(_Model)
+```
+
+Anthropic's Messages API.
+
+### Gemini
+
+```python
+class Gemini(_Model)
+```
+
+Google Gemini through its OpenAI-compatible endpoint.
+
+### FakeModel
+
+```python
+class FakeModel:
+    def __init__(
+        self,
+        replies: Sequence[Union[str, FakeReply]] = (),
+        delay: float = 0.0,
+        fail_first: int = 0,
+        by_turn: bool = False,
+        name: Optional[str] = None,
+    )
+```
+
+A simulated model for tests: answers with the scripted replies in
+order (a string is a text reply), then echoes. Never a network call.
+`fail_first`: the first n calls fail with `rate_limited` (a
+transient error the agent retries), to test retries. `by_turn`: choose
+each reply by the conversation's turn (the first reply for a run's first
+model call, the second for its second, then the last repeats) instead
+of using replies up, so one model serves many runs, also at once.
+`name`: the model name in replies (`"fake:<name>"`), to tell two
+fake models apart.
+
+#### FakeModel.spec
+
+```python
+def spec() -> Dict[str, Any]
+```
+
+### OpenAICompatible
+
+```python
+class OpenAICompatible(_Model):
+    def __init__(
+        self,
+        model: str,
+        base_url: str,
+        api_key: Optional[str] = None,
+        name: str = 'custom',
+        allow_insecure_http: bool = False,
+    )
+```
+
+Any OpenAI-compatible server (vLLM, a gateway, a provider without a
+name here).
+
+#### OpenAICompatible.spec
+
+```python
+def spec() -> Dict[str, Any]
+```
+
+### OpenRouter
+
+```python
+class OpenRouter(_Model)
+```
+
+OpenRouter.
+
+### DeepSeek
+
+```python
+class DeepSeek(_Model)
+```
+
+DeepSeek (`DEEPSEEK_API_KEY`), e.g. `DeepSeek("deepseek-chat")`.
+
+### Mistral
+
+```python
+class Mistral(_Model)
+```
+
+Mistral AI (`MISTRAL_API_KEY`), e.g. `Mistral("mistral-large-latest")`.
+
+### XAI
+
+```python
+class XAI(_Model)
+```
+
+xAI's Grok models (`XAI_API_KEY`).
+
+### Groq
+
+```python
+class Groq(_Model)
+```
+
+Groq's fast inference for open models (`GROQ_API_KEY`).
+
+### Cerebras
+
+```python
+class Cerebras(_Model)
+```
+
+Cerebras's fast inference for open models (`CEREBRAS_API_KEY`).
+
+### Together
+
+```python
+class Together(_Model)
+```
+
+Together AI's open models (`TOGETHER_API_KEY`).
+
+### Fireworks
+
+```python
+class Fireworks(_Model)
+```
+
+Fireworks AI's open models (`FIREWORKS_API_KEY`).
+
+### Qwen
+
+```python
+class Qwen(_Model)
+```
+
+Qwen on Alibaba Cloud Model Studio, international endpoint
+(`DASHSCOPE_API_KEY`). For the China endpoint pass
+`base_url="https://dashscope.aliyuncs.com/compatible-mode/v1"`.
+
+### Moonshot
+
+```python
+class Moonshot(_Model)
+```
+
+Moonshot AI's Kimi models (`MOONSHOT_API_KEY`). China keys:
+`base_url="https://api.moonshot.cn/v1"`.
+
+### ZAI
+
+```python
+class ZAI(_Model)
+```
+
+Z.ai's GLM models (`ZAI_API_KEY`). China keys:
+`base_url="https://open.bigmodel.cn/api/paas/v4"`.
+
+### Kaggle
+
+```python
+class Kaggle:
+    def __init__(
+        self,
+        model: str,
+        api_token: Optional[str] = None,
+        proxy_url: Optional[str] = None,
+        proxy_token: Optional[str] = None,
+        api_base: Optional[str] = None,
+    )
+```
+
+Kaggle's Model Proxy: the hosted models your Kaggle
+account's AI-model allowance pays for, e.g.
+`Kaggle("google/gemini-3.6-flash")` or `"kaggle:google/gemini-3.6-flash"`.
+
+Credentials, in order: `api_token` (a Kaggle API token); `proxy_url`
+and `proxy_token` (a proxy token minted elsewhere, as in a Kaggle
+notebook); else the environment: `MODEL_PROXY_URL` and
+`MODEL_PROXY_API_KEY`, `KAGGLE_API_TOKEN`, or the `access_token` file
+in `KAGGLE_CONFIG_DIR` or `~/.kaggle`. The engine mints the short-lived
+proxy token and renews it before it expires. For prototypes and tests,
+not production traffic (see the models guide).
+
+#### Kaggle.spec
+
+```python
+def spec() -> Dict[str, Any]
+```
+
+### Vertex
+
+```python
+class Vertex:
+    def __init__(
+        self,
+        model: str,
+        project: Optional[str] = None,
+        location: Optional[str] = None,
+        token: Optional[str] = None,
+        credentials_file: Optional[str] = None,
+        api: str = 'auto',
+        host: Optional[str] = None,
+        token_url: Optional[str] = None,
+        metadata_url: Optional[str] = None,
+    )
+```
+
+Google Vertex AI, e.g.
+`Vertex("google/gemini-3.6-flash", project="my-project", location="global")`
+or `"vertex:claude-sonnet-5"`.
+
+`project` (else `GOOGLE_CLOUD_PROJECT`) and `location` (else
+`GOOGLE_CLOUD_LOCATION`; there is no default, it decides where data is
+processed). Credentials: `token` (an access token), `credentials_file`,
+else `GOOGLE_APPLICATION_CREDENTIALS`, the file `gcloud auth application-default login` writes, or the metadata server on Google
+Cloud. Service-account key files are not supported yet. `claude-…`
+models go to Claude's endpoint, the rest to the OpenAI-compatible one;
+`api` forces one (`"chat"`, `"claude"`).
+
+#### Vertex.spec
+
+```python
+def spec() -> Dict[str, Any]
+```
+
+### Bedrock
+
+```python
+class Bedrock:
+    def __init__(
+        self,
+        model: str,
+        region: Optional[str] = None,
+        api_key: Optional[str] = None,
+        api: str = 'auto',
+        base_url: Optional[str] = None,
+    )
+```
+
+Amazon Bedrock with an API key, e.g.
+`Bedrock("us.anthropic.claude-sonnet-5", region="us-east-1")` or
+`"bedrock:us.anthropic.claude-sonnet-5"`. The model name is the
+Bedrock model id or inference profile.
+
+`region` (else `AWS_REGION` or `AWS_DEFAULT_REGION`; there is no
+default, so data never goes to a region you did not choose); `api_key`
+(else `AWS_BEARER_TOKEN_BEDROCK`). Claude is called over the Anthropic
+Messages API and other makers' models over Chat Completions; `api`
+forces one (`"messages"`, `"chat"`, `"responses"`). `base_url`
+reaches bedrock-mantle or a VPC endpoint. IAM roles (SigV4) are not
+supported yet.
+
+#### Bedrock.spec
+
+```python
+def spec() -> Dict[str, Any]
+```
+
+### Azure
+
+```python
+class Azure:
+    def __init__(
+        self,
+        model: str,
+        endpoint: Optional[str] = None,
+        api_key: Optional[str] = None,
+        token: Optional[str] = None,
+        tenant_id: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None,
+        managed_identity: bool = False,
+        api: str = 'responses',
+        scope: Optional[str] = None,
+        authority: Optional[str] = None,
+        identity_endpoint: Optional[str] = None,
+    )
+```
+
+Azure OpenAI or Microsoft Foundry: a deployment,
+e.g. `Azure("gpt-5-mini", endpoint="my-resource")` or
+`"azure:gpt-5-mini"`. The model name is the deployment name.
+
+`endpoint` is the resource name or URL (else `AZURE_OPENAI_ENDPOINT`).
+Credentials, in order: `api_key`; `token` (a bearer token from
+elsewhere); `client_secret` with `tenant_id` and `client_id` (a
+service principal); `managed_identity=True` (with `client_id` for a
+user-assigned identity); else the environment: `AZURE_OPENAI_API_KEY`,
+or `AZURE_TENANT_ID` + `AZURE_CLIENT_ID` + `AZURE_CLIENT_SECRET`, or
+`AZURE_USE_MANAGED_IDENTITY=1`. Entra ID tokens are obtained and renewed
+by the engine. `api="chat"` for Foundry's models from other makers.
+
+#### Azure.spec
+
+```python
+def spec() -> Dict[str, Any]
+```
+
+### Ollama
+
+```python
+class Ollama(_Model)
+```
+
+Ollama on this machine (or `base_url`), no key.
+
+### LMStudio
+
+```python
+class LMStudio(_Model)
+```
+
+LM Studio on this machine (or `base_url`), no key.
+
+### AnthropicCompatible
+
+```python
+class AnthropicCompatible(OpenAICompatible)
+```
+
+Any server that speaks Anthropic's Messages API: a self-hosted
+gateway, or a provider's Anthropic-style endpoint (DeepSeek, Z.ai,
+Qwen and Moonshot offer one).
+
+### FakeReply
+
+```python
+class FakeReply:
+    def __init__(self, spec: Dict[str, Any])
+```
+
+One scripted answer of a `FakeModel`.
+
+#### FakeReply.text
+
+```python
+@staticmethod
+def text(text: str) -> 'FakeReply'
+```
+
+#### FakeReply.tool_call
+
+```python
+@staticmethod
+def tool_call(name: str, args: Optional[Dict[str, Any]] = None) -> 'FakeReply'
+```
+
+#### FakeReply.tool_calls
+
+```python
+@staticmethod
+def tool_calls(calls: Sequence[Tuple[str, Dict[str, Any]]]) -> 'FakeReply'
+```
+
+### Embedder
+
+```python
+class Embedder:
+    def __init__(self, spec: Dict[str, Any])
+```
+
+Turns text into vectors, for long-term memory searched by meaning
+(`Memory.semantic`). Built from the same providers as
+models; keys come from the same environment variables.
+
+#### Embedder.openai
+
+```python
+@staticmethod
+def openai(
+    model: str = 'text-embedding-3-small',
+    api_key: Optional[str] = None,
+    dimensions: Optional[int] = None,
+) -> 'Embedder'
+```
+
+OpenAI's `/embeddings` (key from `OPENAI_API_KEY`).
+
+#### Embedder.gemini
+
+```python
+@staticmethod
+def gemini(
+    model: str = 'gemini-embedding-001',
+    api_key: Optional[str] = None,
+) -> 'Embedder'
+```
+
+Gemini's OpenAI-compatible `/embeddings` (`GEMINI_API_KEY`).
+
+#### Embedder.ollama
+
+```python
+@staticmethod
+def ollama(
+    model: str = 'nomic-embed-text',
+    base_url: Optional[str] = None,
+) -> 'Embedder'
+```
+
+Ollama on this machine (or `base_url`): nothing leaves your network.
+
+#### Embedder.openai_compatible
+
+```python
+@staticmethod
+def openai_compatible(
+    model: str,
+    base_url: str,
+    api_key: Optional[str] = None,
+    dimensions: Optional[int] = None,
+) -> 'Embedder'
+```
+
+Any OpenAI-compatible `/embeddings` (vLLM, a gateway).
+
+#### Embedder.fake
+
+```python
+@staticmethod
+def fake(synonyms: Optional[Dict[str, str]] = None, failing: bool = False) -> 'Embedder'
+```
+
+For tests, never a network call: texts sharing words are close;
+`synonyms` makes different words count as the same (`{"car": "automobile"}`); `failing` makes every call fail (search then
+falls back to keywords).
+
+## Gateway
+
+Calling a model without an agent: `Gateway`.
+
+```python
+gw = Gateway(fallbacks=["gemini:gemini-2.5-flash"])
+reply = await gw.chat("openai:gpt-5-mini", "Summarize: …", instructions="Be brief.")
+print(reply.text)
+```
+
+Retries and fallback models work as for an agent, in the Rust engine.
+
+```python
+from criogen import Gateway, ChatReply, Chunk, ChatStream
+```
+
+### Gateway
+
+```python
+class Gateway:
+    def __init__(
+        self,
+        *,
+        fallbacks: Sequence[Any] = (),
+        fallback_on: Sequence[str] = (),
+        retry: Optional[Retry] = None,
+        max_retry_after: Optional[float] = None,
+    )
+```
+
+Model calls without an agent: `chat`, `stream` and `embed`,
+with the agent's retries and fallback models.
+
+`fallbacks`: models tried in order when the one asked for fails with a
+transient error (after its retries); `fallback_on`: other error kinds
+that also move on (e.g. `"context_overflow"`); `retry`: how transient
+errors are retried; `max_retry_after`: the longest `Retry-After` that
+is waited for, in seconds.
+
+#### Gateway.chat
+
+```python
+async def chat(
+    model: Any,
+    input: Input,
+    *,
+    instructions: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    output: Any = None,
+) -> ChatReply
+```
+
+One answer. `input`: text, or messages (`content` may be a
+string). `output`: a JSON Schema (or a Pydantic model) the answer
+must match; `reply.output` is then the parsed JSON.
+
+#### Gateway.stream
+
+```python
+def stream(
+    model: Any,
+    input: Input,
+    *,
+    instructions: Optional[str] = None,
+    temperature: Optional[float] = None,
+    max_tokens: Optional[int] = None,
+    output: Any = None,
+) -> ChatStream
+```
+
+The answer as it is written: `async for chunk in gw.stream(…)`.
+
+#### Gateway.embed
+
+```python
+async def embed(embedder: Embedder, texts: Sequence[str]) -> List[List[float]]
+```
+
+One vector per text, in order.
+
+#### Gateway.chat_sync
+
+```python
+def chat_sync(model: Any, input: Input, **options: Any) -> ChatReply
+```
+
+`chat` from code without an event loop.
+
+#### Gateway.embed_sync
+
+```python
+def embed_sync(embedder: Embedder, texts: Sequence[str]) -> List[List[float]]
+```
+
+`embed` from code without an event loop.
+
+### ChatReply
+
+```python
+@dataclass(frozen=True)
+class ChatReply:
+    text: str
+    message: Dict[str, Any]
+    usage: Dict[str, Any]
+    stop_reason: Optional[str]
+    model: str
+    output: Any = None
+```
+
+A model's answer.
+
+### Chunk
+
+```python
+@dataclass(frozen=True)
+class Chunk:
+    text: str
+    restart: bool = False
+```
+
+A piece of a streamed answer. `restart`: a retry started the answer
+over, so drop the text shown so far.
+
+### ChatStream
+
+```python
+class ChatStream:
+    def __init__(self, native: Any)
+```
+
+A streamed answer: `async for chunk in stream`; then `stream.reply`
+holds the whole answer. Leaving the loop early cancels the call.
+
+#### ChatStream.reply
+
+```python
+reply: ChatReply
+```
+
+The whole answer, once the loop has finished.
+
+#### ChatStream.cancel
+
+```python
+def cancel() -> None
+```
+
+Cancels the call.
+
+## Keys and environment
+
+API keys from the environment, and a `.env` file to keep several in.
+
+Each provider reads its key from its usual variable, so you can keep all of
+them side by side and switch models by changing a string:
+
+```python
+OPENAI_API_KEY      `"openai:gpt-5-mini"`
+ANTHROPIC_API_KEY   `"anthropic:claude-sonnet-5-5"`
+GEMINI_API_KEY      `"gemini:gemini-2.5-flash"`
+OPENROUTER_API_KEY  `"openrouter:meta-llama/llama-3.3-70b-instruct"`
+DEEPSEEK_API_KEY    `"deepseek:deepseek-chat"`
+GROQ_API_KEY        `"groq:llama-3.3-70b-versatile"`
+```
+
+and the same for `mistral`, `xai`, `cerebras`, `together`,
+`fireworks`, `qwen` (`DASHSCOPE_API_KEY`), `moonshot` and `zai`
+(`key_name(provider)` gives the variable).
+
+`load_env()` reads a `.env` file into the process environment (call it
+before you build a model). It never prints or returns a value, and never
+replaces a variable that is already set unless you ask.
+
+```python
+from criogen import env
+
+env.parse_env(...)
+from criogen import load_env
+```
+
+These are used as `env.<name>`. Also exported at the top level: `load_env`.
+
+### parse_env
+
+```python
+def parse_env(text: str) -> Dict[str, str]
+```
+
+Parse `.env` text: `NAME=value` lines, `export NAME=value`, `#`
+comments, and values in single or double quotes. No variable expansion.
+A malformed line raises `ValueError` naming the line number (never its
+content: it may be a secret).
+
+### load_env
+
+```python
+def load_env(
+    path: Union[str, 'os.PathLike[str]'] = '.env',
+    *,
+    override: bool = False,
+    required: bool = False,
+) -> List[str]
+```
+
+Read a `.env` file into `os.environ` and return the NAMES it set
+(sorted; never the values).
+
+- A variable that is already set is kept, unless `override=True`.
+- A missing file is fine (returns `[]`), unless `required=True`.
+- Files over 1 MB are refused.
+
+Keep the file out of git (add `.env` to `.gitignore`).
+
+### status
+
+```python
+def status() -> Dict[str, bool]
+```
+
+Which providers have a key right now: `{"openai": True, "gemini": False, ...}`.
+Names and yes/no only, never a key.
+
+### key_name
+
+```python
+def key_name(provider: str) -> str
+```
+
+The environment variable a provider's key comes from (`"openai"` -> `"OPENAI_API_KEY"`).

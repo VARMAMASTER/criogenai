@@ -1,0 +1,649 @@
+---
+title: "TypeScript API: Patterns, specialists, web and MCP"
+description: "TypeScript API reference for patterns, specialists, web and mcp: sequential, parallel, loop, custom, CEILING, Step, PatternResult, Pattern, and more."
+---
+
+Generated from the source of `criogen` 0.1.6 (declarations and doc comments) every time the site is built. Also in [Python](/docs/reference/api/python/patterns/) and [Rust](/docs/reference/api/rust/). Back to the [API reference](/docs/reference/api/).
+
+## Patterns
+
+Design patterns for agentic systems, ready to use.
+
+  &#105;mport \{ patterns \} from "criogen";
+  const flow = patterns.quick("researcher > writer", \{ model: "openai:gpt-5-mini" \});
+  console.log(String(await flow.run("Write about solar panels")));
+
+Steps can be an Agent, a Specialist or its registered name (a string), a
+plain function `text => text` (sync or async), or `[name, step]`. The model
+for specialists comes from `model` or the CRIOGEN_MODEL environment
+variable. Every loop has a cap, so nothing runs forever.
+
+Workflow patterns return a Pattern: `run` for the answer, `compile(storage)`
+for durable threads, approvals and an audit trail, `workflow` to extend the
+graph. `react`, `coordinator` and `hierarchical` return an Agent, so they
+nest as steps of other patterns.
+
+```ts
+import { patterns } from "criogen";
+patterns.sequential
+```
+
+These are used as `patterns.<name>`.
+
+### sequential
+
+```ts
+function sequential(steps: Step[], options?: { model?: Model; }): Pattern
+```
+
+Runs the steps in a fixed order; each one's output is the next one's input. `quick("researcher > writer")` is the one-liner.
+
+### parallel
+
+```ts
+function parallel(branches: Step[] | Record<string, Step>, options?: { synthesizer?: Step; model?: Model; }): Pattern
+```
+
+Runs the branches at the same time on the same input, then combines them:
+with a `synthesizer` step (it receives the input and every branch's answer),
+or as a titled list in branch order.
+
+### loop
+
+```ts
+function loop(steps: Step[], until: (text: string, round: number) => boolean, options?: { maxIterations?: number; model?: Model; }): Pattern
+```
+
+Repeats the steps (a chain) until `until(text, round)` is true or
+`maxIterations` is reached (default 5, at most 50). `stopReason` says which.
+
+### custom
+
+```ts
+function custom(workflow: Workflow, options?: { name?: string; maxSteps?: number; }): Pattern
+```
+
+Custom logic: any Workflow, with the same `run` / `compile` as the ready-made patterns. Start state `{ input }`; the answer is `state.output`.
+
+### CEILING
+
+```ts
+const CEILING: 50
+```
+
+No loop runs more often than this, whatever the caller asks for.
+
+### Step
+
+```ts
+type Step = Agent<any> | specialists.Specialist | string | ((text: string) => unknown) | [string, Step];
+```
+
+### PatternResult
+
+```ts
+class PatternResult {
+  constructor(output: string | null, trace: Entry[], state: State, stopReason: string, suspended: boolean, waitingFor: unknown, raw: WorkflowResult);
+}
+```
+
+What a pattern produced. `String(result)` is the output; `result.explain()` shows each step.
+
+#### PatternResult.toString
+
+```ts
+toString(): string
+```
+
+#### PatternResult.explain
+
+```ts
+explain(): string
+```
+
+Each step on its own line: which step, what it returned (shortened).
+
+### Pattern
+
+```ts
+class Pattern {
+  constructor(name: string, workflow: Workflow, budget: number);
+}
+```
+
+A workflow pattern: run it, compile it for durability, or extend it.
+
+#### Pattern.compile
+
+```ts
+compile(storage?: string | Storage): CompiledWorkflow
+```
+
+The checked, durable form: `compile(storage).thread(id).run({ input })`, with approvals, resume and an audit trail.
+
+#### Pattern.run
+
+```ts
+run(text: string, options?: { maxSteps?: number; signal?: any; }): Promise<PatternResult>
+```
+
+Runs once. A `humanReview` pattern returns `suspended: true`; continue with `resume`.
+
+#### Pattern.resume
+
+```ts
+resume(paused: PatternResult, decision: unknown): Promise<PatternResult>
+```
+
+Continues a `humanReview` run: "approve", `{ decision: "edit", text }` or `{ decision: "reject" }`.
+
+### iterativeRefinement
+
+```ts
+function iterativeRefinement(refine: Step, score: (text: string) => number, options?: { threshold?: number; maxIterations?: number; model?: Model; }): Pattern
+```
+
+Improves a result step by step: `refine` gets the current text and returns a better one; stops when `score(text) >= threshold` or after `maxIterations`.
+
+### reviewAndCritique
+
+```ts
+function reviewAndCritique(generator: Step, critic: Step, options?: { maxRounds?: number; approved?: ((reply: string) => boolean); model?: Model; }): Pattern
+```
+
+A generator writes, a critic reviews. The critic approves (its reply starts
+with APPROVED, or `approved(reply)` is true) or returns feedback; the
+generator revises. Ends on approval or after `maxRounds` (default 3, at most
+50) with the last draft. `stopReason` is "approved" or "max_rounds".
+
+### swarm
+
+```ts
+function swarm(agents: Record<string, Step>, options?: { start?: Step; maxHandoffs?: number; model?: Model; }): Pattern
+```
+
+Agents hand the work to each other with no central coordinator. Each agent is
+told who it can hand off to and ends its reply with `HANDOFF: <name>` to pass
+the work on or `FINAL` when the answer is ready. `start` names the first agent
+(or is a dispatcher step that replies with a name); default: the first. Ends
+on FINAL or after `maxHandoffs` (default 6, at most 50); a hand-off to an
+unknown name ends the run with stopReason "unknown_handoff".
+
+### humanReview
+
+```ts
+function humanReview(step: Step, options?: { model?: Model; }): Pattern
+```
+
+Runs a step, then pauses for a person to look at its draft. Resume with
+"approve", `{ decision: "edit", text }` or `{ decision: "reject" }`. With
+`compile(storage)` the pause is durable: another process can resume it days later.
+
+### quick
+
+```ts
+function quick(spec: string, options?: { model?: Model; }): Pattern
+```
+
+A pattern from one line of registered specialist names (plug and play):
+
+  quick("researcher > writer")   one after the other
+  quick("sentiment | keywords")  at the same time
+  quick("writer &lt;-> critic")     write, review, revise until approved
+  quick("summarizer")            a single specialist
+
+One kind of connector per line (combine patterns with the functions above).
+
+### react
+
+```ts
+function react(model: Model, tools: (AgentTool | Tool<any>)[], options?: AgentExtras & { maxSteps?: number; instructions?: string; }): Agent<any>
+```
+
+A single agent in a reason-act loop with a hard cap on model calls (default 8, at most 50).
+
+### coordinator
+
+```ts
+function coordinator(model: Model, team: Record<string, string | Agent<any> | Specialist | [string | Agent<any> | Specialist, string]>, options?: AgentExtras & { instructions?: string; }): Agent<any>
+```
+
+An agent that reads each request and hands it to the right specialist, which
+it calls as a tool. `specialists`: `{ name: Agent | Specialist | "registered-name" | [Agent, "when to use it"] }`.
+A model decides the routing (more flexible than a fixed workflow, and more model calls).
+
+### hierarchical
+
+```ts
+function hierarchical(model: Model, tree: Record<string, TreeNode>, options?: AgentExtras & { instructions?: string; }): Agent<any>
+```
+
+A coordinator of coordinators: the root splits the work, each level hands it
+further down, workers do it. `tree` maps names to a worker (as for
+`coordinator`) or to a nested object, which becomes a sub-coordinator
+(describe it with a `_description` key).
+
+## Specialist agents
+
+Specialist agents: default recipes for common jobs that you configure,
+extend or replace.
+
+  &#105;mport \{ specialists \} from "criogen";
+  const agent = specialists.researcher.build("openai:gpt-5-mini", \{ tools: [search] \});
+  const careful = specialists.researcher.extend("careful-researcher", \{ add: "Always give two sources." \});
+  specialists.register(careful);
+
+A Specialist is a recipe, not an agent: a name, a description (what a
+coordinator reads to decide when to use it), instructions and default agent
+options. `build` makes the agent. The built-in ones are prompts and sensible
+defaults; tools come from you, and no claim is made about their quality on
+your data.
+
+```ts
+import { specialists } from "criogen";
+specialists.SpecialistSettings
+```
+
+These are used as `specialists.<name>`.
+
+### SpecialistSettings
+
+```ts
+type SpecialistSettings = Omit<AgentOptions, "model" | "instructions"> & {
+  /** Called when `build` gets no tools of its own: e.g. web search when a key is set. */
+  defaultTools?: () => Tool<any>[];
+};
+```
+
+Agent options a recipe may carry (everything but the model).
+
+### ExtendOptions
+
+```ts
+interface ExtendOptions extends SpecialistSettings {
+  /** Appended to the instructions. */
+  add?: string;
+  /** Replaces the instructions. */
+  instructions?: string;
+  description?: string;
+}
+```
+
+### Specialist
+
+```ts
+class Specialist {
+  constructor(name: string, description: string, instructions: string, settings?: SpecialistSettings);
+}
+```
+
+A recipe for an agent.
+
+#### Specialist.settings
+
+```ts
+readonly settings: SpecialistSettings
+```
+
+#### Specialist.build
+
+```ts
+build(model: Model, overrides?: Omit<AgentOptions, "model" | "instructions"> & { defaultTools?: (() => Tool<any>[]); } & { instructions?: string; }): Agent<any>
+```
+
+The agent. `overrides` win over the recipe's settings; `instructions`
+replaces the instructions and `tools` replaces the tools (use `extend` to add).
+
+#### Specialist.extend
+
+```ts
+extend(name?: string, options?: ExtendOptions): Specialist
+```
+
+A new recipe from this one: `add` appends to the instructions,
+`instructions` replaces them, `tools` are added to the existing ones, other
+options override settings. This recipe is unchanged.
+
+#### Specialist.toString
+
+```ts
+toString(): string
+```
+
+### register
+
+```ts
+function register(specialist: Specialist, options?: { replace?: boolean; }): Specialist
+```
+
+Keeps a recipe under its name, so workflows and configuration can refer to it by name. A taken name throws unless `replace`.
+
+### unregister
+
+```ts
+function unregister(name: string): void
+```
+
+Forgets a registered recipe (the built-in ones stay available as module exports).
+
+### get
+
+```ts
+function get(name: string): Specialist
+```
+
+The recipe registered under `name` (throws, listing the names).
+
+### available
+
+```ts
+function available(): string[]
+```
+
+Registered names, sorted.
+
+## Web search and page reading
+
+Internet tools for agents: web search (Tavily or Brave) and reading a page.
+
+  &#105;mport \{ Agent, web \} from "criogen";
+  const agent = new Agent(\{ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] \});
+
+`web.search()` needs no arguments: it uses TAVILY_API_KEY if set, else
+BRAVE_API_KEY, and says what to set if neither is. The key is read from the
+environment (or passed in), sent only in a request header over https, and
+never appears in an error, a log or a tool result.
+
+Results are data for the model, so they are bounded: a few results, short
+snippets, pages cut to a fixed size. `fetch` refuses addresses on private
+networks (a model must not reach your internal services through it), does
+not follow redirects, and reads at most 500 KB.
+
+```ts
+import { web } from "criogen";
+web.tavilySearch
+```
+
+These are used as `web.<name>`.
+
+### tavilySearch
+
+```ts
+function tavilySearch(options?: { apiKey?: string; maxResults?: number; depth?: "basic" | "advanced"; baseUrl?: string; }): Tool<{ query: string; }>
+```
+
+A `web_search` tool backed by Tavily (TAVILY_API_KEY). `depth`: "basic" or "advanced".
+
+### braveSearch
+
+```ts
+function braveSearch(options?: { apiKey?: string; maxResults?: number; baseUrl?: string; }): Tool<{ query: string; }>
+```
+
+A `web_search` tool backed by Brave Search (BRAVE_API_KEY).
+
+### search
+
+```ts
+function search(options?: { apiKey?: string; provider?: "tavily" | "brave"; maxResults?: number; }): Tool<{ query: string; }>
+```
+
+A web search tool with no setup: Tavily if TAVILY_API_KEY is set, else Brave
+if BRAVE_API_KEY is. `provider: "tavily" | "brave"` chooses explicitly.
+
+### defaultTools
+
+```ts
+function defaultTools(): Tool<any>[]
+```
+
+What a researcher gets when you give it no tools: web search if a key is set, else nothing.
+
+### fetchPage
+
+```ts
+function fetchPage(options?: { allowPrivate?: boolean; maxChars?: number; }): Tool<{ url: string; }>
+```
+
+A `read_page` tool: fetches a public web page and returns its text (cut to
+`maxChars`). Private-network addresses are refused unless `allowPrivate`
+(tests, or on purpose).
+
+### fetch
+
+```ts
+function fetch(options?: { allowPrivate?: boolean; maxChars?: number; }): Tool<{ url: string; }>
+```
+
+A `read_page` tool: fetches a public web page and returns its text (cut to
+`maxChars`). Private-network addresses are refused unless `allowPrivate`
+(tests, or on purpose).
+
+## MCP servers
+
+Tools from MCP servers.
+
+  &#105;mport \{ Agent, mcp \} from "criogen";
+  const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."]);
+  const agent = new Agent(\{ model, tools: [files] \});          // all its tools
+  // or tools: [files.tool("read_file")]
+  await files.close();
+
+The client runs in the Rust engine: it speaks MCP 2026-07-28 and falls back
+to the `initialize` handshake of older servers; stdio servers are started as
+a process (and again if they exit). It only uses tools: a server cannot
+sample your model or read your files. In criogen/web only `mcp.http` works.
+
+What a server says is data: names are mapped to names models accept (set
+`prefix` to keep two servers apart), schemas and messages are bounded, and
+its readOnlyHint / idempotentHint decide nothing unless `trustAnnotations`.
+Header and env values never appear in an error.
+
+```ts
+import { mcp } from "criogen";
+mcp.stdio
+import {
+  McpServer,
+  McpOptions,
+  StdioOptions,
+  HttpOptions,
+  McpInfo,
+  McpTool,
+} from "criogen";
+```
+
+These are used as `mcp.<name>`. Also exported at the top level: `McpServer`, `McpOptions`, `StdioOptions`, `HttpOptions`, `McpInfo`, `McpTool`.
+
+### McpServer
+
+```ts
+class McpServer {
+  constructor(name: string);
+}
+```
+
+A connected MCP server: get one with `mcp.stdio` or `mcp.http`.
+
+#### McpServer.info
+
+```ts
+info: McpInfo
+```
+
+#### McpServer.tools
+
+```ts
+tools: McpTool[]
+```
+
+#### McpServer.instructions
+
+```ts
+readonly instructions: string | null
+```
+
+The server's instructions for models (not added to any prompt).
+
+#### McpServer.tool
+
+```ts
+tool(name: string): McpTool
+```
+
+The tool the agent sees as `name`.
+
+#### McpServer.refresh
+
+```ts
+refresh(): Promise<void>
+```
+
+Lists the tools again (agents already built keep theirs).
+
+#### McpServer.call
+
+```ts
+call(name: string, args?: Record<string, unknown>): Promise<unknown>
+```
+
+Calls a tool directly: its text, its JSON value, or its content blocks. Throws ToolError when the tool fails.
+
+#### McpServer.close
+
+```ts
+close(): Promise<void>
+```
+
+Stops the server (a process: stdin closed, killed after 2 s).
+
+### McpOptions
+
+```ts
+interface McpOptions {
+  /** The server's name in errors (default: the prefix, else the command or host). */
+  name?: string;
+  /** The agent sees `<prefix>_<tool>`: keeps two servers' tools apart. */
+  prefix?: string;
+  /** Seconds one call may take. Default 60. */
+  timeoutSecs?: number;
+  /** Seconds to be ready. Default 30. */
+  connectTimeoutSecs?: number;
+  /** The largest message read from the server. Default 4 MiB. */
+  maxMessageBytes?: number;
+  /** Believe the server's readOnlyHint / idempotentHint (they decide retries). Default false. */
+  trustAnnotations?: boolean;
+  /** Only these tools (the server's names). */
+  only?: string[];
+  /** Leave these tools out (the server's names). */
+  exclude?: string[];
+}
+```
+
+Options for every MCP server.
+
+### stdio
+
+```ts
+function stdio(command: string, args?: string[], options?: StdioOptions): Promise<McpServer>
+```
+
+Starts `command` with `args` as an MCP server (stdio) and lists its tools. Servers only.
+
+### http
+
+```ts
+function http(url: string, options?: HttpOptions): Promise<McpServer>
+```
+
+Connects to the MCP server at `url` (Streamable HTTP) and lists its tools. Use https; plain http only to this computer when headers are set.
+
+### StdioOptions
+
+```ts
+interface StdioOptions extends McpOptions {
+  /** Added to this process's environment. */
+  env?: Record<string, string>;
+  cwd?: string;
+}
+```
+
+A server this app starts (not in the browser).
+
+### HttpOptions
+
+```ts
+interface HttpOptions extends McpOptions {
+  /** Sent with every request, e.g. `{ Authorization: "Bearer …" }`. */
+  headers?: Record<string, string>;
+}
+```
+
+A server at a URL (Streamable HTTP).
+
+### McpInfo
+
+```ts
+interface McpInfo {
+  name: string | null;
+  version: string | null;
+  protocolVersion: string;
+  /** Its instructions for models (not added to any prompt). */
+  instructions: string | null;
+}
+```
+
+What the server said about itself.
+
+### McpTool
+
+```ts
+class McpTool {
+  constructor(server: McpServer, spec: { name: string; description: string; schema: Record<string, unknown>; read_only: boolean; destructive: boolean; idempotent: boolean; });
+}
+```
+
+One tool of a connected server; put it in an agent's `tools`.
+
+#### McpTool.name
+
+```ts
+readonly name: string
+```
+
+#### McpTool.description
+
+```ts
+readonly description: string
+```
+
+#### McpTool.schema
+
+```ts
+readonly schema: Record<string, unknown>
+```
+
+#### McpTool.readOnly
+
+```ts
+readonly readOnly: boolean
+```
+
+#### McpTool.destructive
+
+```ts
+readonly destructive: boolean
+```
+
+#### McpTool.idempotent
+
+```ts
+readonly idempotent: boolean
+```
+
+#### McpTool.call
+
+```ts
+call(args?: Record<string, unknown>): Promise<unknown>
+```
+
+Calls it directly (see `McpServer.call`).

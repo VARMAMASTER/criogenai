@@ -1,0 +1,295 @@
+---
+title: "Python API: Storage, memory and collections"
+description: "Python API reference for storage, memory and collections: Storage, Memory, Collection, Document, Hit."
+---
+
+Generated from the source of `criogen` 0.1.6 (docstrings and type hints) every time the site is built. Also in [TypeScript](/docs/reference/api/typescript/storage/) and [Rust](/docs/reference/api/rust/). Back to the [API reference](/docs/reference/api/).
+
+## Storage and memory
+
+Storage and memory: where threads, long-term memory and
+the audit trail live. The Rust engine does the work; this holds the
+settings.
+
+```python
+from criogen import Storage, Memory
+```
+
+### Storage
+
+```python
+class Storage:
+    def __init__(
+        self,
+        url: Optional[str] = None,
+        *,
+        encryption_keys: Optional[str] = None,
+        audit: bool = False,
+        retention: Optional[Dict[str, Any]] = None,
+        on_busy: Optional[str] = None,
+        busy_timeout: Optional[float] = None,
+    )
+```
+
+Threads, memory and the audit trail. `url`: `None` (process
+memory), `"sqlite://path.db"` or `"postgres://…"`.
+
+`encryption_keys`: `"k2:<64 hex>,k1:<64 hex>"` (the first is
+active) encrypts content at rest. `audit=True` records who did what.
+`retention`: `{"thread_ttl_secs": …, "keep_checkpoints": …}`,
+applied by `prune`. Agents built with the same `Storage`
+share it.
+
+#### Storage.close
+
+```python
+async def close() -> None
+```
+
+Closes the database's connections (SQLite releases the file).
+Later calls fail with `StorageError` (`storage_unavailable`).
+
+#### Storage.remember
+
+```python
+async def remember(
+    namespace: str,
+    key: str,
+    value: Any,
+    ttl: Optional[float] = None,
+) -> None
+```
+
+Saves a fact under `namespace` (e.g. `"users/42"`).
+
+#### Storage.recall
+
+```python
+async def recall(namespace: str, key: str) -> Optional[Dict[str, Any]]
+```
+
+The item, or `None`.
+
+#### Storage.search
+
+```python
+async def search(
+    namespace: str,
+    text: Optional[str] = None,
+    limit: int = 10,
+) -> List[Dict[str, Any]]
+```
+
+Items in `namespace` and below matching `text` (keywords).
+
+#### Storage.forget_all
+
+```python
+async def forget_all(namespace: str) -> int
+```
+
+Deletes everything in `namespace` and below (e.g. one patient).
+
+#### Storage.prune
+
+```python
+async def prune() -> Dict[str, int]
+```
+
+Applies the retention rules once.
+
+#### Storage.audit_records
+
+```python
+async def audit_records(
+    thread_id: Optional[str] = None,
+    action: Optional[str] = None,
+    after_seq: Optional[int] = None,
+    limit: int = 100,
+) -> List[Dict[str, Any]]
+```
+
+Audit records, oldest first (needs `audit=True`).
+
+#### Storage.verify_audit
+
+```python
+async def verify_audit() -> Dict[str, Any]
+```
+
+Checks the audit trail's hash chain.
+
+### Memory
+
+```python
+class Memory:
+    def __init__(self, spec: Dict[str, Any])
+```
+
+Long-term memory for an agent: recalled before each model call, and
+`remember` / `forget` / `search_memory` tools for the model.
+
+#### Memory.by_state
+
+```python
+@staticmethod
+def by_state(
+    key: str,
+    prefix: str,
+    recall: int = 5,
+    tools: bool = True,
+    ttl: Optional[float] = None,
+) -> 'Memory'
+```
+
+One namespace per value of the run's `key` (e.g. per user):
+`prefix/<value>`. Pass the value with `run(..., key=value)`.
+
+#### Memory.shared
+
+```python
+@staticmethod
+def shared(namespace: str, recall: int = 5, tools: bool = True) -> 'Memory'
+```
+
+One namespace for every run.
+
+#### Memory.semantic
+
+```python
+def semantic(embedder: Any) -> 'Memory'
+```
+
+Searches by meaning with `embedder` (an `Embedder`): recall and
+`search_memory` find facts that say the same thing in other words.
+If the embedder fails, search falls back to keywords.
+
+## Collections
+
+Collections: documents searched by meaning.
+
+```python
+from criogen import Agent, Collection, Embedder
+
+docs = await Collection.open("handbook", embedder=Embedder.openai(), storage=storage)
+await docs.add([{"id": "leave", "text": "Annual leave is 25 days.", "metadata": {"section": "hr"}}])
+hits = await docs.search("How many vacation days?", k=5)
+agent = Agent("openai:gpt-5-mini", tools=[docs.as_tool("search_handbook", "Search the staff handbook.")])
+```
+
+Documents are kept in the storage (encrypted when it is) and indexed in
+memory when the collection opens. The index is exact by default; pass
+`index="hnsw"` for very large collections (faster queries, approximate,
+slower to open).
+
+```python
+from criogen import Collection, Document, Hit
+```
+
+### Collection
+
+```python
+class Collection:
+    def __init__(self, name: str)
+```
+
+Documents searched by meaning. Open one with `open`.
+
+#### Collection.open
+
+```python
+@staticmethod
+async def open(
+    name: str,
+    *,
+    embedder: Any,
+    storage: Any = None,
+    index: str = 'flat',
+    ef_search: Optional[int] = None,
+) -> 'Collection'
+```
+
+Opens collection `name` in `storage` (a Storage or a URL; in
+memory without one), building its index from the stored vectors.
+`embedder`: an `criogen.Embedder`. `index`: `"flat"`
+(exact, the default) or `"hnsw"`.
+
+#### Collection.add
+
+```python
+async def add(documents: Iterable[Union[Document, Mapping[str, Any]]]) -> int
+```
+
+Embeds, stores and indexes documents (an existing id is replaced).
+Returns how many the collection holds.
+
+#### Collection.search
+
+```python
+async def search(
+    query: str,
+    k: int = 5,
+    where: Optional[Mapping[str, Any]] = None,
+) -> List[Hit]
+```
+
+The `k` documents closest in meaning to `query`, best first;
+`where` keeps only those whose metadata has these values.
+
+#### Collection.remove
+
+```python
+async def remove(id: str) -> bool
+```
+
+Removes a document; `True` if it was there.
+
+#### Collection.reload
+
+```python
+async def reload() -> int
+```
+
+Rebuilds the index from storage (another process added documents).
+
+#### Collection.count
+
+```python
+async def count() -> int
+```
+
+Documents in the index.
+
+#### Collection.as_tool
+
+```python
+def as_tool(name: str, description: str) -> CollectionTool
+```
+
+This collection as an agent tool: the model gives a `query` (and
+optionally `k`, up to 20) and gets the hits.
+
+### Document
+
+```python
+@dataclass
+class Document:
+    id: str
+    text: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
+```
+
+A text to search, with an id and metadata.
+
+### Hit
+
+```python
+@dataclass
+class Hit:
+    id: str
+    text: str
+    metadata: Dict[str, Any]
+    score: float
+```
+
+A search result: the document and its cosine similarity to the query.

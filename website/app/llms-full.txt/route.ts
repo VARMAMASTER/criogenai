@@ -30,7 +30,8 @@ function plain(body: string): string {
 }
 
 export function GET() {
-  const parts = docSources().map((d) => {
+  // The generated API pages are in /llms-api.txt: together they would double this file.
+  const parts = docSources().filter((d) => !d.slug.startsWith("reference/api/")).map((d) => {
     const url = `${SITE.url}/docs/${d.slug ? `${d.slug}/` : ""}`;
     return `# ${d.title}\n\nSource: ${url}\n${d.description ? `\n> ${d.description}\n` : ""}\n${plain(d.body)}\n`;
   });

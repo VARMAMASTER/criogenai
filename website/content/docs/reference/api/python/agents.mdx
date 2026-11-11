@@ -1,0 +1,653 @@
+---
+title: "Python API: Agents, tools and errors"
+description: "Python API reference for agents, tools and errors: Agent, Thread, Stream, Reply, RunResult, Decision, ApprovalRequest, Retry, and more."
+---
+
+Generated from the source of `criogen` 0.1.6 (docstrings and type hints) every time the site is built. Also in [TypeScript](/docs/reference/api/typescript/agents/) and [Rust](/docs/reference/api/rust/). Back to the [API reference](/docs/reference/api/).
+
+## Agents
+
+Agents and threads over the Rust engine.
+
+```python
+from criogen import (
+    Agent,
+    Thread,
+    Stream,
+    Reply,
+    RunResult,
+    Decision,
+    ApprovalRequest,
+    Retry,
+    AgentTool,
+    Event,
+)
+```
+
+### Agent
+
+```python
+class Agent:
+    def __init__(
+        self,
+        model: Any,
+        *,
+        instructions: Optional[str] = None,
+        tools: Sequence[Any] = (),
+        approve: Sequence[str] = (),
+        output: Any = None,
+        limits: Optional[Dict[str, Any]] = None,
+        storage: Union[None, str, Storage] = None,
+        memory: Optional[Memory] = None,
+        on_tool_exception: Optional[str] = None,
+        fallbacks: Sequence[Any] = (),
+        fallback_on: Sequence[str] = (),
+        model_retry: Optional[Retry] = None,
+        tool_retry: Optional[Retry] = None,
+        max_retry_after: Optional[float] = None,
+        telemetry: Any = None,
+        hooks: Sequence[Any] = (),
+        redact: Any = None,
+    )
+```
+
+A model with tools, instructions and (optionally) approval, typed
+output, storage and memory. The loop runs in Rust.
+
+`on_tool_exception`: what happens when a tool raises an exception it
+did not handle (`ToolError` always goes to the model):
+`"return_to_model"` (default; the model sees the exception's type and
+message, the run goes on), `"return_generic"` (the model only learns
+that the tool failed; the text stays in the result's `artifact`) or
+`"fail"` (the run fails with `ToolExecutionError`, the exception as
+its `__cause__`).
+
+#### Agent.run
+
+```python
+async def run(input: str, **state: Any) -> RunResult
+```
+
+Runs once (no thread). Keyword arguments set state keys (e.g. the
+user a memory belongs to).
+
+#### Agent.run_sync
+
+```python
+def run_sync(input: str, **state: Any) -> RunResult
+```
+
+`run` for scripts (not inside an event loop).
+
+#### Agent.as_tool
+
+```python
+def as_tool(name: str, description: str) -> AgentTool
+```
+
+This agent as a tool of another agent: the tool takes `input`
+(text), runs this agent, and returns its answer. How deep agents may
+call agents is bounded by the `nesting` limit (default 8).
+
+#### Agent.thread
+
+```python
+def thread(thread_id: str, actor: Optional[str] = None) -> 'Thread'
+```
+
+The conversation `thread_id` (created on first use). `actor`
+names who acts, for the audit trail.
+
+### Thread
+
+```python
+class Thread:
+    def __init__(self, agent: Agent, thread_id: str, actor: Optional[str])
+```
+
+One conversation, kept in the agent's storage.
+
+#### Thread.send
+
+```python
+async def send(input: str, **state: Any) -> Reply
+```
+
+Runs one turn: the stored conversation plus `input`.
+
+#### Thread.send_sync
+
+```python
+def send_sync(input: str, **state: Any) -> Reply
+```
+
+`send` for scripts (not inside an event loop).
+
+#### Thread.approve
+
+```python
+async def approve() -> Reply
+```
+
+Approves every pending call and continues.
+
+#### Thread.reject
+
+```python
+async def reject(message: str = 'rejected') -> Reply
+```
+
+Rejects every pending call (the model sees `message`).
+
+#### Thread.decide
+
+```python
+async def decide(decisions: Mapping[str, Dict[str, Any]]) -> Reply
+```
+
+One `Decision` per pending call, by `call_id`.
+
+#### Thread.retry
+
+```python
+async def retry() -> Reply
+```
+
+Continues a failed or interrupted run.
+
+#### Thread.history
+
+```python
+async def history(limit: int = 20) -> List[Dict[str, Any]]
+```
+
+Checkpoints, newest first.
+
+#### Thread.messages
+
+```python
+async def messages() -> List[Dict[str, Any]]
+```
+
+The stored conversation.
+
+#### Thread.rewind
+
+```python
+async def rewind(checkpoint_id: str) -> Dict[str, Any]
+```
+
+Makes an older checkpoint current again.
+
+#### Thread.delete
+
+```python
+async def delete() -> bool
+```
+
+Deletes the thread. `True` if it existed.
+
+#### Thread.stream
+
+```python
+def stream(input: str, **state: Any) -> Stream
+```
+
+`send`, streaming its events (call inside a running loop).
+
+#### Thread.stream_approve
+
+```python
+def stream_approve() -> Stream
+```
+
+#### Thread.stream_reject
+
+```python
+def stream_reject(message: str = 'rejected') -> Stream
+```
+
+#### Thread.stream_retry
+
+```python
+def stream_retry() -> Stream
+```
+
+### Stream
+
+```python
+class Stream:
+    def __init__(self, native: Any, output_model: Any)
+```
+
+A streamed thread call: `async for event in stream`, then
+`await stream.reply()`. Leaving early cancels the run (it is still
+saved, and `retry` continues it).
+
+#### Stream.reply
+
+```python
+async def reply() -> Reply
+```
+
+Waits for the call; its saved reply.
+
+#### Stream.cancel
+
+```python
+def cancel() -> None
+```
+
+Cancels the run.
+
+### Reply
+
+```python
+@dataclass
+class Reply(RunResult):
+    version: int = 0
+    checkpoint_id: str = ''
+```
+
+A thread call's result, saved as the thread's new head.
+
+### RunResult
+
+```python
+@dataclass
+class RunResult:
+    text: Optional[str]
+    output: Any
+    messages: List[Dict[str, Any]]
+    usage: Dict[str, Any]
+    stop_reason: Optional[str]
+    needs_approval: bool
+    approvals: List[ApprovalRequest]
+    model_calls: int
+    tool_calls: int
+    run_id: str
+    raw: Dict[str, Any] = field(repr=False, default_factory=dict)
+    duration_ms: int = 0
+    answered_by: Optional[Dict[str, str]] = None
+    models: List[Dict[str, Any]] = field(default_factory=list)
+```
+
+What a run produced.
+
+### Decision
+
+```python
+class Decision
+```
+
+A reviewer's answer to one call (see `Thread.decide`).
+
+#### Decision.approve
+
+```python
+@staticmethod
+def approve() -> Dict[str, Any]
+```
+
+#### Decision.reject
+
+```python
+@staticmethod
+def reject(message: Optional[str] = None) -> Dict[str, Any]
+```
+
+#### Decision.edit
+
+```python
+@staticmethod
+def edit(args: Dict[str, Any], name: Optional[str] = None) -> Dict[str, Any]
+```
+
+#### Decision.respond
+
+```python
+@staticmethod
+def respond(message: str) -> Dict[str, Any]
+```
+
+### ApprovalRequest
+
+```python
+@dataclass(frozen=True)
+class ApprovalRequest:
+    call_id: str
+    tool: str
+    args: Dict[str, Any]
+    description: Optional[str] = None
+```
+
+A tool call waiting for a decision.
+
+### Retry
+
+```python
+@dataclass(frozen=True)
+class Retry:
+    max_attempts: int = 3
+    initial_backoff: float = 0.5
+    factor: float = 2.0
+    max_backoff: float = 20.0
+    jitter: bool = True
+```
+
+How often and how patiently to retry: attempts in
+total (including the first), and an exponential backoff in seconds.
+
+### AgentTool
+
+```python
+class AgentTool:
+    def __init__(self, agent: 'Agent', name: str, description: str)
+```
+
+An agent as a tool of another agent (`Agent.as_tool`): it takes
+`{"input": text}` and returns the sub-agent's answer.
+
+### Event
+
+```python
+class Event:
+    type: str
+    data: Dict[str, Any]
+    def __init__(self, data: Dict[str, Any])
+```
+
+One streamed event: `type` is `text`, `tool_call_started`,
+`tool_call_finished`, `message`, `approval_needed` or `other`;
+the rest are attributes (`text`, `tool`, `call_id`, `status`,
+`requests`, … by type).
+
+## Tools
+
+Tools: Python functions the engine calls.
+
+The schema comes from the type hints; the Rust engine validates the
+model's arguments against it before the function runs.
+
+```python
+from criogen import tool, Tool, ToolError, ToolContext
+```
+
+### tool
+
+```python
+def tool(
+    func: Optional[Callable[..., Any]] = None,
+    *,
+    name: Optional[str] = None,
+    description: Optional[str] = None,
+    read_only: bool = False,
+    destructive: bool = False,
+    idempotent: bool = False,
+) -> Any
+```
+
+Makes a function a tool: `@tool` or `@tool(destructive=True)`.
+The docstring is the description; type hints are the schema.
+
+### Tool
+
+```python
+class Tool:
+    def __init__(
+        self,
+        func: Callable[..., Any],
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        read_only: bool = False,
+        destructive: bool = False,
+        idempotent: bool = False,
+    )
+```
+
+A function the model can call. Made by `@tool`.
+
+#### Tool.spec
+
+```python
+def spec() -> Dict[str, Any]
+```
+
+#### Tool.adapter
+
+```python
+def adapter() -> Tuple[Callable[[str, str], Any], bool]
+```
+
+What the engine calls: `(args_json, ctx_json)` → a JSON
+envelope (or, for async tools, a coroutine that gives one).
+
+### ToolError
+
+```python
+class ToolError(Exception):
+    def __init__(self, message: str, retryable: bool = False)
+```
+
+A failure the model should see (and may recover from). Any other
+exception counts as the tool crashing: see `Agent(on_tool_exception=…)`.
+
+### ToolContext
+
+```python
+@dataclass(frozen=True)
+class ToolContext:
+    call_id: str
+    run_id: str
+```
+
+What a tool can know about its call. Ask for it with a parameter
+annotated `ToolContext`.
+
+## Hooks
+
+Hooks: code that runs around the agent loop, in order.
+
+A hook is any object with some of these methods (each sync or async):
+
+- `on_start(ctx)`: once per run segment; may return `HookAction(state=…)`.
+- `before_model(ctx)`: before each model call; may replace the
+  transcript (`HookAction(messages=[…])`) or end the run.
+- `after_model(ctx)`: after each model reply (`ctx.messages` ends with
+  it); may replace it (`HookAction(message={…})`) or end the run.
+- `before_tool(call)`: before each tool call; may return a changed
+  `ToolCall`, a `ToolResult` to skip the tool, or raise `ToolError`.
+- `after_tool(call, result)`: after each tool call; may return a
+  replacement result.
+- `on_end(ctx, outcome)`: always, once per segment (`"completed"`,
+  `"suspended"` or `"failed"`); cannot change the outcome.
+
+`on_start`, `before_model` and `before_tool` run in list order, the
+others in reverse. An exception in `on_start`, `before_model` or
+`after_model` fails the run with `hook_failed` (the exception is its
+`__cause__`); one in `before_tool` / `after_tool` counts as the tool's
+(see `on_tool_exception`). Hook methods run on your event loop: keep sync
+ones quick.
+
+```python
+from criogen import HookContext, HookAction, ToolCall, ToolResult
+```
+
+### HookContext
+
+```python
+@dataclass
+class HookContext:
+    run_id: str
+    messages: List[Dict[str, Any]]
+    model_calls: int
+    hook_state: Any
+    state: Dict[str, Any]
+```
+
+What a hook sees.
+
+### HookAction
+
+```python
+@dataclass
+class HookAction:
+    state: Any = _UNSET
+    messages: Optional[List[Dict[str, Any]]] = None
+    message: Optional[Dict[str, Any]] = None
+    end: bool = False
+    output: Any = None
+```
+
+What a hook wants: save its `state`; replace the transcript
+(`messages`, `before_model`) or the new reply (`message`,
+`after_model`); or `end` the run, with `output`.
+
+### ToolCall
+
+```python
+@dataclass
+class ToolCall:
+    call_id: str
+    name: str
+    args: Dict[str, Any] = field(default_factory=dict)
+```
+
+A tool call going through `before_tool` (change `name` or
+`args` and return it).
+
+### ToolResult
+
+```python
+@dataclass
+class ToolResult:
+    value: Any
+```
+
+Returned by `before_tool`: use `value` as the result and skip the
+tool (e.g. a cached answer).
+
+## Usage and cost
+
+What a run cost: which models answered, with their calls and tokens (from
+the engine's per-message metadata), the call's wall time, and a cost estimate
+from prices the caller supplies (they change too often to ship).
+
+```python
+from criogen import estimate_cost
+```
+
+### estimate_cost
+
+```python
+def estimate_cost(
+    result: Any,
+    prices: Mapping[str, Mapping[str, float]],
+) -> Optional[float]
+```
+
+The cost of a run in USD from your prices (USD per million tokens:
+`{"input": .., "output": .., "cache_read": ..}`), keyed by
+`"provider:model"` or by model name. `None` when a model that was used
+has no price. Reasoning tokens count as output tokens.
+
+## Errors
+
+Errors: one class per family, each with the stable
+`code` the Rust engine uses, so checks by code work in
+every language.
+
+```python
+from criogen import (
+    CriogenError,
+    ModelError,
+    ToolExecutionError,
+    LimitExceededError,
+    ThreadBusyError,
+    ThreadSuspendedError,
+    StorageError,
+    ValidationError,
+    CancelledError,
+)
+```
+
+### CriogenError
+
+```python
+class CriogenError(Exception):
+    def __init__(self, code: str, message: str, details: Optional[Dict[str, Any]] = None)
+```
+
+Any Criogen failure. `code` is stable; `details` is JSON.
+
+#### CriogenError.snapshot
+
+```python
+snapshot: Optional[Dict[str, Any]]
+```
+
+The run's snapshot, if the error carries one.
+
+### ModelError
+
+```python
+class ModelError(CriogenError)
+```
+
+The model failed after retries (`model_failed`).
+
+### ToolExecutionError
+
+```python
+class ToolExecutionError(CriogenError)
+```
+
+A tool crashed (`tool_failed`); `__cause__` is the exception.
+
+### LimitExceededError
+
+```python
+class LimitExceededError(CriogenError)
+```
+
+A run limit was reached (`limit_exceeded`).
+
+### ThreadBusyError
+
+```python
+class ThreadBusyError(CriogenError)
+```
+
+Another run holds the thread (`thread_busy`).
+
+### ThreadSuspendedError
+
+```python
+class ThreadSuspendedError(CriogenError)
+```
+
+The thread waits for approval (`thread_suspended`).
+
+### StorageError
+
+```python
+class StorageError(CriogenError)
+```
+
+Storage failed (`storage_*`, `encryption_*`, `audit_failed`).
+
+### ValidationError
+
+```python
+class ValidationError(CriogenError)
+```
+
+Something given was not accepted (`invalid_*`, `resume_invalid`).
+
+### CancelledError
+
+```python
+class CancelledError(CriogenError)
+```
+
+The run was cancelled (`cancelled`).

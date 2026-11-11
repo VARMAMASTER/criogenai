@@ -2,7 +2,9 @@
 //
 // build: copies ../schemas into public/schemas, builds the playground's
 //        engine into public/engine (scripts/build-engine.mjs: the engine as
-//        WebAssembly and the code samples on it), runs `next build` (a static
+//        WebAssembly and the code samples on it), generates the API reference
+//        (scripts/gen-api.mjs: Python and TypeScript pages, rustdoc into
+//        public/api/rust), runs `next build` (a static
 //        export into out/), then indexes out/ with Pagefind for the search.
 // dev:   the same copies, then `next dev`.
 // --fixture: the benchmark lab shows fixtures/bench-sample.json (fake
@@ -35,6 +37,14 @@ for (const f of fs.readdirSync(schemas).filter((f) => f.endsWith(".json"))) {
 
 // The playground runs its code samples on the engine in the browser (design 0021).
 run(path.join(root, "scripts", "build-engine.mjs"), []);
+
+// The API reference: Python and TypeScript pages from their sources, Rust
+// from rustdoc (scripts/gen-api.mjs). CRIOGEN_SKIP_RUST_DOCS=1 reuses the
+// last public/api/rust (a quick local build).
+run(path.join(root, "scripts", "gen-api.mjs"), []);
+if (!process.env.CRIOGEN_SKIP_RUST_DOCS || !fs.existsSync(path.join(root, "public", "api", "rust"))) {
+  run(path.join(root, "scripts", "gen-api.mjs"), ["--rust"]);
+}
 
 const env = { BENCH_FIXTURE: fixture ? "1" : "" };
 if (fixture) console.warn("\n[criogen] FIXTURE MODE: the benchmark lab shows fake numbers. Do not deploy this build.\n");

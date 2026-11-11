@@ -1,5 +1,6 @@
 // The docs sidebar: the same groups, labels and order as the Astro site
 // (website/astro.config.mjs). Slugs are paths under /docs/ ("" is /docs/).
+import { API_NAV } from "./api-nav";
 
 export interface NavItem {
   label: string;
@@ -65,6 +66,8 @@ export const SIDEBAR: NavGroup[] = [
       { label: "Benchmarks", slug: "reference/benchmarks" },
     ],
   },
+  // The Python, TypeScript and Rust API pages: generated (scripts/gen-api.mjs).
+  ...API_NAV,
 ];
 
 export const ALL_PAGES: NavItem[] = SIDEBAR.flatMap((g) => g.items);

@@ -1,0 +1,302 @@
+---
+title: "Python API: Workflows"
+description: "Python API reference for workflows: Workflow, CompiledWorkflow, WorkflowThread, END, NodeContext, suspend, goto, Interrupt, and more."
+---
+
+Generated from the source of `criogen` 0.1.6 (docstrings and type hints) every time the site is built. Also in [TypeScript](/docs/reference/api/typescript/workflows/) and [Rust](/docs/reference/api/rust/). Back to the [API reference](/docs/reference/api/).
+
+## Workflows
+
+Workflows: a graph of Python functions and agents, run
+by the Rust engine (scheduling, joins, reducers, validation, pauses).
+
+```python
+from criogen import (
+    Workflow,
+    CompiledWorkflow,
+    WorkflowThread,
+    END,
+    NodeContext,
+    suspend,
+    goto,
+    Interrupt,
+    WorkflowResult,
+)
+```
+
+### Workflow
+
+```python
+class Workflow:
+    def __init__(self, reducers: Optional[Mapping[str, str]] = None)
+```
+
+A graph of nodes (Python functions or agents), compiled by
+`compile` and run by the Rust engine.
+
+`reducers`: how writes to a key combine when several nodes write it
+(`"replace"`, the default; `"append"`; `"upsert_by_id"` for
+message lists).
+
+#### Workflow.node
+
+```python
+def node(
+    func: Optional[Callable[..., Any]] = None,
+    *,
+    name: Optional[str] = None,
+) -> Any
+```
+
+Decorator: `@wf.node` adds a function as a node named after it.
+
+#### Workflow.add_node
+
+```python
+def add_node(name: str, node: Union[Callable[..., Any], Agent]) -> 'Workflow'
+```
+
+Adds a function `(state)` / `(state, ctx)` or an `Agent` (it
+reads and writes the `messages` key).
+
+#### Workflow.start
+
+```python
+def start(name: str) -> 'Workflow'
+```
+
+The node a run starts with.
+
+#### Workflow.edge
+
+```python
+def edge(source: str, target: str) -> 'Workflow'
+```
+
+After `source`, run `target` (or `END`).
+
+#### Workflow.route
+
+```python
+def route(
+    source: str,
+    router: Callable[[Dict[str, Any]], str],
+    routes: Mapping[str, str],
+) -> 'Workflow'
+```
+
+After `source`, `router(state)` returns a label; run
+`routes[label]`.
+
+#### Workflow.join
+
+```python
+def join(sources: Sequence[str], target: str) -> 'Workflow'
+```
+
+Run `target` once every node in `sources` has finished.
+
+#### Workflow.goto
+
+```python
+def goto(source: str, targets: Sequence[str]) -> 'Workflow'
+```
+
+`source` may choose among `targets` by returning `goto(...)`.
+
+#### Workflow.compile
+
+```python
+def compile(storage: Union[None, str, Storage] = None) -> 'CompiledWorkflow'
+```
+
+Checks the graph in Rust (every problem at once:
+`ValidationError` with `details["issues"]`).
+
+### CompiledWorkflow
+
+```python
+class CompiledWorkflow:
+    def __init__(self, native: Any, storage: Optional[Storage])
+```
+
+A checked workflow, ready to run.
+
+#### CompiledWorkflow.run
+
+```python
+async def run(
+    input: Optional[Mapping[str, Any]] = None,
+    *,
+    max_steps: Optional[int] = None,
+    deadline: Optional[float] = None,
+) -> WorkflowResult
+```
+
+Runs from the start node with `input` as the state.
+
+#### CompiledWorkflow.run_sync
+
+```python
+def run_sync(
+    input: Optional[Mapping[str, Any]] = None,
+    **options: Any,
+) -> WorkflowResult
+```
+
+`run` for scripts (not inside an event loop).
+
+#### CompiledWorkflow.resume
+
+```python
+async def resume(snapshot: Dict[str, Any], values: Mapping[str, Any]) -> WorkflowResult
+```
+
+Continues a paused run (without storage) from its `snapshot`:
+one value per paused node.
+
+#### CompiledWorkflow.thread
+
+```python
+def thread(thread_id: str, actor: Optional[str] = None) -> 'WorkflowThread'
+```
+
+A durable run history in the workflow's storage (created on
+first use).
+
+### WorkflowThread
+
+```python
+class WorkflowThread:
+    def __init__(self, app: CompiledWorkflow, thread_id: str, actor: Optional[str])
+```
+
+One durable conversation with a workflow: each `run` continues
+from the stored state; a paused run waits in storage for `resume`.
+
+#### WorkflowThread.run
+
+```python
+async def run(
+    input: Optional[Mapping[str, Any]] = None,
+    **options: Any,
+) -> WorkflowResult
+```
+
+Runs from the start node on the stored state plus `input`.
+
+#### WorkflowThread.resume
+
+```python
+async def resume(values: Mapping[str, Any]) -> WorkflowResult
+```
+
+Answers the paused nodes: one value per node name.
+
+#### WorkflowThread.retry
+
+```python
+async def retry() -> WorkflowResult
+```
+
+Continues a failed or interrupted run; finished nodes do not run again.
+
+#### WorkflowThread.state
+
+```python
+async def state() -> Dict[str, Any]
+```
+
+#### WorkflowThread.interrupts
+
+```python
+async def interrupts() -> List[Interrupt]
+```
+
+#### WorkflowThread.history
+
+```python
+async def history(limit: int = 20) -> List[Dict[str, Any]]
+```
+
+#### WorkflowThread.rewind
+
+```python
+async def rewind(checkpoint_id: str) -> Dict[str, Any]
+```
+
+#### WorkflowThread.delete
+
+```python
+async def delete() -> bool
+```
+
+### END
+
+```python
+END = '__end__'
+```
+
+### NodeContext
+
+```python
+@dataclass(frozen=True)
+class NodeContext:
+    run_id: str
+    step: int
+    node: str
+    attempt: int
+    resume: Any = None
+```
+
+What a node can know about its execution.
+
+### suspend
+
+```python
+def suspend(payload: Any, update: Optional[Dict[str, Any]] = None) -> Any
+```
+
+Return this from a node to pause the run for a person: `payload`
+says what is asked; `resume({node: value})` continues it, and the
+node runs again with `ctx.resume == value`.
+
+### goto
+
+```python
+def goto(
+    targets: Union[str, Sequence[str]],
+    update: Optional[Dict[str, Any]] = None,
+) -> Any
+```
+
+Return this from a node to choose the next nodes (declared with
+`Workflow.goto`).
+
+### Interrupt
+
+```python
+@dataclass(frozen=True)
+class Interrupt:
+    node: str
+    payload: Any
+```
+
+A paused node and what it asked for.
+
+### WorkflowResult
+
+```python
+@dataclass
+class WorkflowResult:
+    state: Dict[str, Any]
+    steps: int
+    suspended: bool
+    interrupts: List[Interrupt]
+    run_id: str
+    snapshot: Optional[Dict[str, Any]] = field(repr=False, default=None)
+    checkpoint_id: str = ''
+    version: int = 0
+```
+
+What a run produced.

@@ -192,6 +192,8 @@ step_website() {
   fi
   [[ -d website/node_modules ]] || run npm --prefix website ci --ignore-scripts
   run npm --prefix website run check
+  # The committed Python and TypeScript API pages match the sources (website/scripts/gen-api.mjs).
+  run node website/scripts/gen-api.mjs --check
   run bash website/scripts/check-snippets.sh
   run npm --prefix website run build
   run node website/scripts/test-playground.mjs

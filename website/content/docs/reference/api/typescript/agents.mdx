@@ -1,0 +1,813 @@
+---
+title: "TypeScript API: Agents, tools and errors"
+description: "TypeScript API reference for agents, tools and errors: Agent, AgentOptions, Thread, Stream, Reply, RunResult, RunOptions, CallOptions, and more."
+---
+
+Generated from the source of `criogen` 0.1.6 (declarations and doc comments) every time the site is built. Also in [Python](/docs/reference/api/python/agents/) and [Rust](/docs/reference/api/rust/). Back to the [API reference](/docs/reference/api/).
+
+## Agents
+
+```ts
+import {
+  Agent,
+  AgentOptions,
+  Thread,
+  Stream,
+  Reply,
+  RunResult,
+  RunOptions,
+  CallOptions,
+  Decision,
+  ApprovalRequest,
+  Retry,
+  AgentTool,
+  StreamEvent,
+} from "criogen";
+```
+
+### Agent
+
+```ts
+class Agent<Output = unknown> {
+  constructor(options: AgentOptions);
+}
+```
+
+A model with tools, instructions and (optionally) approval, typed output, storage and memory. The loop runs in Rust.
+
+#### Agent.storage
+
+```ts
+readonly storage: Storage
+```
+
+#### Agent.run
+
+```ts
+run(input: string, options?: RunOptions): Promise<RunResult<Output>>
+```
+
+Runs once (no thread).
+
+#### Agent.asTool
+
+```ts
+asTool(name: string, description: string): AgentTool
+```
+
+This agent as a tool of another agent: the tool takes `input` (text),
+runs this agent, and returns its answer. How deep agents may call agents
+is bounded by the nesting limit (default 8).
+
+#### Agent.thread
+
+```ts
+thread(threadId: string, options?: { actor?: string; }): Thread<Output>
+```
+
+The conversation `threadId` (created on first use); `actor` names who acts, for the audit trail.
+
+### AgentOptions
+
+```ts
+interface AgentOptions {
+  model: Model;
+  instructions?: string;
+  /** Tools: `tool({...})`, `agent.asTool(...)`, an MCP server (all its tools) or one of its tools. */
+  tools?: (Tool<any> | AgentTool | McpServer | McpTool | CollectionTool)[];
+  /** Tools that need human approval before they run. */
+  approve?: string[];
+  /** JSON Schema of the final answer (`result.output`). */
+  output?: JsonSchema;
+  limits?: { modelCalls?: number; toolCalls?: number; tokens?: number; toolTimeoutSecs?: number };
+  /**
+   * When a tool throws an exception that is not a ToolError: "returnToModel"
+   * (default; the model sees its name and message, the run goes on),
+   * "returnGeneric" (the model only learns that the tool failed; the text
+   * stays in the result's `artifact`) or "fail" (the run fails with
+   * ToolExecutionError, the exception as its `cause`).
+   */
+  onToolException?: "returnToModel" | "returnGeneric" | "fail";
+  /** A Storage, a URL ("sqlite://x.db", "postgres://…"), or in memory. */
+  storage?: Storage | string;
+  memory?: Memory;
+  /** Models tried in order when the previous one fails with a transient error (after its retries). */
+  fallbacks?: Model[];
+  /** Other error kinds that also move to the next model, e.g. "context_overflow". */
+  fallbackOn?: string[];
+  /** Retries of transient model errors (default: 3 attempts, backoff from 0.5 s). */
+  modelRetry?: Retry;
+  /** Retries of tools marked readOnly or idempotent (default: 3 attempts). */
+  toolRetry?: Retry;
+  /** The longest Retry-After the agent waits, in seconds (default 60). */
+  maxRetryAfterSecs?: number;
+  /** Exports every run of this agent (`Telemetry.langfuse()`, `Telemetry.otlp(url)`). */
+  telemetry?: { readonly native: { readonly handle: number } };
+  /** Code around the loop (see `Hook`): `onStart`, `beforeModel`, `afterModel`, `beforeTool`, `afterTool`, `onEnd`. */
+  hooks?: Hook[];
+  /**
+   * Applied to every text before each model call (input, replies, tool
+   * results), ahead of all hooks: e.g. strip patient identifiers before
+   * anything reaches a provider. The redacted transcript is what is saved.
+   */
+  redact?: Redactor;
+}
+```
+
+### Thread
+
+```ts
+class Thread<Output = unknown> {
+  constructor(agent: Agent<Output>, id: string, actor?: string);
+}
+```
+
+One conversation, kept in the agent's storage.
+
+#### Thread.send
+
+```ts
+send(input: string, options?: RunOptions): Promise<Reply<Output>>
+```
+
+Runs one turn: the stored conversation plus `input`.
+
+#### Thread.approve
+
+```ts
+approve(options?: CallOptions): Promise<Reply<Output>>
+```
+
+Approves every pending call and continues.
+
+#### Thread.reject
+
+```ts
+reject(message?: string, options?: CallOptions): Promise<Reply<Output>>
+```
+
+Rejects every pending call (the model sees `message`).
+
+#### Thread.decide
+
+```ts
+decide(decisions: Record<string, Decision>, options?: CallOptions): Promise<Reply<Output>>
+```
+
+One Decision per pending call, by call id.
+
+#### Thread.retry
+
+```ts
+retry(options?: CallOptions): Promise<Reply<Output>>
+```
+
+Continues a failed or interrupted run.
+
+#### Thread.history
+
+```ts
+history(limit?: number): Promise<Record<string, unknown>[]>
+```
+
+Checkpoints, newest first.
+
+#### Thread.messages
+
+```ts
+messages(): Promise<Record<string, unknown>[]>
+```
+
+The stored conversation.
+
+#### Thread.rewind
+
+```ts
+rewind(checkpointId: string): Promise<Record<string, unknown>>
+```
+
+Makes an older checkpoint current again.
+
+#### Thread.delete
+
+```ts
+delete(): Promise<boolean>
+```
+
+Deletes the thread. `true` if it existed.
+
+#### Thread.stream
+
+```ts
+stream(input: string, options?: { state?: Record<string, unknown>; }): Stream<Output>
+```
+
+`send`, streaming its events.
+
+#### Thread.streamApprove
+
+```ts
+streamApprove(): Stream<Output>
+```
+
+#### Thread.streamReject
+
+```ts
+streamReject(message?: string): Stream<Output>
+```
+
+#### Thread.streamDecide
+
+```ts
+streamDecide(decisions: Record<string, Decision>): Stream<Output>
+```
+
+#### Thread.streamRetry
+
+```ts
+streamRetry(): Stream<Output>
+```
+
+### Stream
+
+```ts
+class Stream<Output = unknown> implements AsyncIterable<StreamEvent> {
+  constructor(nativeStream: NativeStream, agent: Agent<Output>);
+}
+```
+
+A streamed thread call: `for await (const event of stream)`, then
+`await stream.reply()`. Leaving the loop early cancels the run (it is
+still saved, and retry continues it).
+
+#### Stream.reply
+
+```ts
+reply(): Promise<Reply<Output>>
+```
+
+Waits for the call; its saved reply.
+
+#### Stream.cancel
+
+```ts
+cancel(): void
+```
+
+Cancels the run.
+
+### Reply
+
+```ts
+interface Reply<Output = unknown> extends RunResult<Output> {
+  version: number;
+  checkpointId: string;
+}
+```
+
+A thread call's result, saved as the thread's new head.
+
+### RunResult
+
+```ts
+interface RunResult<Output = unknown> extends RunFacts {
+  text: string | null;
+  output: Output | null;
+  messages: Record<string, unknown>[];
+  usage: Record<string, number>;
+  stopReason: string | null;
+  needsApproval: boolean;
+  approvals: ApprovalRequest[];
+  modelCalls: number;
+  toolCalls: number;
+  runId: string;
+}
+```
+
+What a run produced; `durationMs`, `answeredBy` and `models` say which models answered and how long it took.
+
+### RunOptions
+
+```ts
+interface RunOptions extends CallOptions {
+  /** Run state (e.g. `{ user_id: "ada" }` for per-user memory). */
+  state?: Record<string, unknown>;
+}
+```
+
+### CallOptions
+
+```ts
+interface CallOptions {
+  /** Aborting cancels the run (a thread is still saved, and retry continues it). */
+  signal?: AbortSignal;
+}
+```
+
+### Decision
+
+```ts
+type Decision =
+  | { type: "approve" }
+  | { type: "reject"; message?: string }
+  | { type: "edit"; args: Record<string, unknown>; name?: string }
+  | { type: "respond"; message: string };
+```
+
+A reviewer's answer to one call (see `Thread.decide`).
+
+### ApprovalRequest
+
+```ts
+interface ApprovalRequest {
+  call_id: string;
+  tool: string;
+  args: Record<string, unknown>;
+  description?: string;
+  allowed?: string[];
+}
+```
+
+### Retry
+
+```ts
+interface Retry {
+  /** Attempts in total, including the first. Default 3. */
+  maxAttempts?: number;
+  /** Backoff before the second attempt, in seconds. Default 0.5. */
+  initialBackoffSecs?: number;
+  /** Multiplier for each further attempt. Default 2. */
+  factor?: number;
+  /** Upper bound on any backoff, in seconds. Default 20. */
+  maxBackoffSecs?: number;
+  /** Wait a random part of the backoff. Default true. */
+  jitter?: boolean;
+}
+```
+
+How often and how patiently to retry; missing fields keep the defaults.
+
+### AgentTool
+
+```ts
+class AgentTool {
+  constructor(agent: Agent<any>, name: string, description: string);
+}
+```
+
+An agent as a tool of another agent (`agent.asTool`): it takes `{ input }` and returns the sub-agent's answer.
+
+### StreamEvent
+
+```ts
+type StreamEvent =
+  | { type: "text"; messageId: string; text: string }
+  | { type: "tool_call_started"; callId: string; tool: string; args: Record<string, unknown> }
+  | { type: "tool_call_finished"; callId: string; tool: string; status: string }
+  | { type: "message"; message: Record<string, unknown> }
+  | { type: "approval_needed"; requests: ApprovalRequest[] }
+  | { type: "other"; event: string };
+```
+
+One streamed event.
+
+## Tools
+
+```ts
+import {
+  tool,
+  Tool,
+  ToolDefinition,
+  ToolError,
+  ToolContext,
+  JsonSchema,
+  StandardIssue,
+  StandardResult,
+  StandardSchema,
+} from "criogen";
+```
+
+### tool
+
+```ts
+function tool<Args = Record<string, unknown>>(definition: ToolDefinition<Args>): Tool<Args>
+```
+
+Defines a tool. With a Standard Schema `input`, `Args` is what it outputs.
+
+### Tool
+
+```ts
+class Tool<Args = Record<string, unknown>> {
+  constructor(definition: ToolDefinition<Args>);
+}
+```
+
+A function the model can call. Made by `tool({...})`.
+
+#### Tool.definition
+
+```ts
+readonly definition: ToolDefinition<Args>
+```
+
+#### Tool.jsonSchema
+
+```ts
+readonly jsonSchema: JsonSchema
+```
+
+The JSON Schema of the arguments, as the model and the engine see it.
+
+#### Tool.name
+
+```ts
+readonly name: string
+```
+
+#### Tool.spec
+
+```ts
+spec(): Record<string, unknown>
+```
+
+#### Tool.adapter
+
+```ts
+adapter(crashes: Map<string, unknown> | null): (request: string) => Promise<string>
+```
+
+What the engine calls: request JSON in, envelope JSON out. A crash (an
+exception other than ToolError) is recorded in `crashes` by call id when
+the agent fails runs on crashes, so its `tool_failed` error can carry it
+as `cause`; otherwise the engine returns it to the model.
+
+### ToolDefinition
+
+```ts
+interface ToolDefinition<Args = Record<string, unknown>> {
+  name: string;
+  description: string;
+  /**
+   * The arguments: a JSON Schema (an object schema), or a Standard Schema
+   * (e.g. a Zod object). With a Standard Schema, `run` receives what it
+   * outputs (defaults, transforms), and its issues go back to the model.
+   */
+  input: JsonSchema | StandardSchema<any, Args>;
+  /**
+   * The JSON Schema the model sees, for a Standard Schema whose library
+   * cannot produce one itself (Valibot: `toJsonSchema` from
+   * `@valibot/to-json-schema`). Zod 4 and ArkType produce their own.
+   */
+  jsonSchema?: JsonSchema;
+  run: (args: Args, ctx: ToolContext) => unknown | Promise<unknown>;
+  readOnly?: boolean;
+  destructive?: boolean;
+  idempotent?: boolean;
+}
+```
+
+### ToolError
+
+```ts
+class ToolError extends Error {
+  constructor(message: string, options?: { retryable?: boolean; });
+}
+```
+
+A failure the model should see (and may recover from), unlike a crash.
+
+#### ToolError.retryable
+
+```ts
+readonly retryable: boolean
+```
+
+### ToolContext
+
+```ts
+interface ToolContext {
+  callId: string;
+  runId: string;
+}
+```
+
+What a tool can know about its call.
+
+### JsonSchema
+
+```ts
+type JsonSchema = Record<string, unknown>;
+```
+
+### StandardIssue
+
+```ts
+interface StandardIssue {
+  readonly message: string;
+  readonly path?: ReadonlyArray<PropertyKey | { readonly key: PropertyKey }> | undefined;
+}
+```
+
+One problem a Standard Schema found.
+
+### StandardResult
+
+```ts
+type StandardResult<Output> =
+  | { readonly value: Output; readonly issues?: undefined }
+  | { readonly issues: ReadonlyArray<StandardIssue> };
+```
+
+What a Standard Schema's `validate` returns.
+
+### StandardSchema
+
+```ts
+interface StandardSchema<Input = unknown, Output = Input> {
+  readonly "~standard": {
+    readonly version: 1;
+    readonly vendor: string;
+    readonly validate: (value: unknown) => StandardResult<Output> | Promise<StandardResult<Output>>;
+    readonly types?: { readonly input: Input; readonly output: Output } | undefined;
+  };
+}
+```
+
+A schema from a library that implements Standard Schema v1
+(standardschema.dev): Zod 4, Valibot, ArkType and others.
+
+## Hooks
+
+```ts
+import { HookContext, HookAction, ToolCall, ToolResult, Hook } from "criogen";
+```
+
+### HookContext
+
+```ts
+interface HookContext {
+  runId: string;
+  /** The transcript so far (as in `result.messages`). */
+  messages: Record<string, unknown>[];
+  modelCalls: number;
+  /** What this hook saved with `{ state }`, if anything. */
+  hookState: unknown;
+  /** The whole run state, read-only. */
+  state: Record<string, unknown>;
+}
+```
+
+What a hook sees.
+
+### HookAction
+
+```ts
+interface HookAction {
+  state?: unknown;
+  messages?: Record<string, unknown>[];
+  message?: Record<string, unknown>;
+  end?: boolean;
+  output?: unknown;
+}
+```
+
+What a hook wants: save its `state`; replace the transcript (`messages`,
+`beforeModel`) or the new reply (`message`, `afterModel`); or `end` the
+run, with `output`.
+
+### ToolCall
+
+```ts
+interface ToolCall {
+  callId: string;
+  name: string;
+  args: Record<string, unknown>;
+}
+```
+
+A tool call going through `beforeTool` (change `name` or `args` and return it).
+
+### ToolResult
+
+```ts
+class ToolResult {
+  constructor(value: unknown);
+}
+```
+
+Returned by `beforeTool`: use `value` as the result and skip the tool (e.g. a cached answer).
+
+### Hook
+
+```ts
+interface Hook {
+  /** Shown in errors and audit records; defaults to the class name. */
+  name?: string;
+  onStart?(ctx: HookContext): Maybe<HookAction>;
+  beforeModel?(ctx: HookContext): Maybe<HookAction>;
+  afterModel?(ctx: HookContext): Maybe<HookAction>;
+  beforeTool?(call: ToolCall): Maybe<ToolCall | ToolResult>;
+  afterTool?(call: ToolCall, result: unknown): unknown;
+  onEnd?(ctx: HookContext, outcome: "completed" | "suspended" | "failed"): void | Promise<void>;
+}
+```
+
+## Usage and cost
+
+```ts
+import { ModelUse, RunFacts, Price, estimateCost } from "criogen";
+```
+
+### ModelUse
+
+```ts
+interface ModelUse {
+  provider: string;
+  model: string;
+  /** Model calls this run made to it. */
+  calls: number;
+  /** Tokens: input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens. */
+  usage: Record<string, number>;
+}
+```
+
+One model used in a run.
+
+### RunFacts
+
+```ts
+interface RunFacts {
+  /** Wall time of the call, in milliseconds. */
+  durationMs: number;
+  /** The provider and model that wrote the last answer (a fallback shows here). */
+  answeredBy: { provider: string; model: string } | null;
+  /** Each model this run called, in first-use order. */
+  models: ModelUse[];
+}
+```
+
+Facts added to every result.
+
+### Price
+
+```ts
+interface Price {
+  input: number;
+  output: number;
+  /** Cached input tokens (default: the input price). */
+  cacheRead?: number;
+}
+```
+
+USD per million tokens.
+
+### estimateCost
+
+```ts
+function estimateCost(result: Pick<RunFacts, "models">, prices: Record<string, Price>): number | null
+```
+
+The cost of a run in USD from your prices, keyed by `"provider:model"` or by
+model name. `null` when a model that was used has no price. Reasoning tokens
+are counted as output tokens.
+
+## Errors
+
+```ts
+import {
+  CriogenError,
+  NativeUnavailableError,
+  ModelError,
+  ToolExecutionError,
+  LimitExceededError,
+  ThreadBusyError,
+  ThreadSuspendedError,
+  StorageError,
+  ValidationError,
+  CancelledError,
+  isCriogenError,
+} from "criogen";
+```
+
+### CriogenError
+
+```ts
+class CriogenError extends Error {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+Any Criogen failure. `code` is stable across languages.
+
+#### CriogenError.code
+
+```ts
+readonly code: string
+```
+
+#### CriogenError.details
+
+```ts
+readonly details: Record<string, unknown>
+```
+
+### NativeUnavailableError
+
+```ts
+class NativeUnavailableError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+The native engine cannot be loaded on this system (`native_unavailable`).
+Thrown on first use, never at import: `details` names the platform, the
+architecture, the C library and the package that was tried.
+
+### ModelError
+
+```ts
+class ModelError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+The model failed after retries (`model_failed`).
+
+### ToolExecutionError
+
+```ts
+class ToolExecutionError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+A tool crashed (`tool_failed`); `cause` is the thrown value.
+
+### LimitExceededError
+
+```ts
+class LimitExceededError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+A run limit was reached (`limit_exceeded`).
+
+### ThreadBusyError
+
+```ts
+class ThreadBusyError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+Another run holds the thread (`thread_busy`).
+
+### ThreadSuspendedError
+
+```ts
+class ThreadSuspendedError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+The thread waits for approval (`thread_suspended`).
+
+### StorageError
+
+```ts
+class StorageError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+Storage failed (`storage_*`, `encryption_*`, `audit_failed`).
+
+### ValidationError
+
+```ts
+class ValidationError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+Something given was not accepted (`invalid_*`, `resume_invalid`).
+
+### CancelledError
+
+```ts
+class CancelledError extends CriogenError {
+  constructor(code: string, message: string, details?: Record<string, unknown> | null, cause?: unknown);
+}
+```
+
+The run was cancelled (`cancelled`), e.g. by an `AbortSignal`.
+
+### isCriogenError
+
+```ts
+function isCriogenError(error: unknown, code?: string): boolean
+```
+
+`true` if `error` is an Criogen error, with `code` if given.

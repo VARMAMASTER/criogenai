@@ -1,18 +1,32 @@
 ---
 title: API reference
-description: Every class, function and type, generated from the code, for Python, TypeScript and Rust.
+description: Every public class, function and type of Criogen, for Python, TypeScript and Rust, generated from the code.
 ---
 
-
-Generated from the source on every build of this site, so it always matches
-the code: Python from docstrings and type hints, TypeScript from the type
-declarations, Rust from its doc comments.
+This reference is generated from the source every time the site is built, so
+it matches the code: Python from its docstrings and type hints, TypeScript
+from its declarations and doc comments, Rust from rustdoc.
 
 <CardGrid>
-  <LinkCard title="Python" description="The criogen package: Agent, tool, Thread, Storage, Memory, errors." href="/api/python/criogen.html" />
-  <LinkCard title="TypeScript" description="criogen: Agent, tool, Thread, Stream, Storage, Memory, errors." href="/api/typescript/" />
-  <LinkCard title="Rust" description="All crates: core, providers, agent, storage, telemetry, gateway." href="/api/rust/criogen_agent/" />
+  <LinkCard title="Python" description="The criogen package: Agent, tool, Thread, Storage, Memory, models, workflows, errors." href="/docs/reference/api/python/agents/" />
+  <LinkCard title="TypeScript" description="criogen: Agent, tool, Thread, Storage, Memory, models, workflows, errors." href="/docs/reference/api/typescript/agents/" />
+  <LinkCard title="Rust" description="The crates: core, providers, agent, storage, telemetry, gateway, trace." href="/docs/reference/api/rust/" />
 </CardGrid>
+
+## Pages
+
+Python and TypeScript have the same pages, one per topic. Use the search box to find a name.
+
+| Topic | Python | TypeScript |
+|---|---|---|
+| Agents, tools, hooks and errors | [Python](/docs/reference/api/python/agents/) | [TypeScript](/docs/reference/api/typescript/agents/) |
+| Models and the gateway | [Python](/docs/reference/api/python/models/) | [TypeScript](/docs/reference/api/typescript/models/) |
+| Storage, memory and collections | [Python](/docs/reference/api/python/storage/) | [TypeScript](/docs/reference/api/typescript/storage/) |
+| Workflows | [Python](/docs/reference/api/python/workflows/) | [TypeScript](/docs/reference/api/typescript/workflows/) |
+| Patterns, specialists, web and MCP | [Python](/docs/reference/api/python/patterns/) | [TypeScript](/docs/reference/api/typescript/patterns/) |
+| Tracing, evals and checks | [Python](/docs/reference/api/python/observability/) | [TypeScript](/docs/reference/api/typescript/observability/) |
+
+The Rust reference is rustdoc's own, one page per crate: see [Rust API](/docs/reference/api/rust/).
 
 ## Where to start in each
 
@@ -22,12 +36,16 @@ declarations, Rust from its doc comments.
 | A tool | `@tool`, `ToolError`, `ToolContext` | `tool()`, `ToolDefinition`, `ToolError` | `tool_fn`, `ToolSpec`, `ToolError` |
 | A conversation | `Thread`, `Reply` | `Thread`, `Reply`, `Stream` | `Thread`, `Reply`, `ThreadStream` |
 | Storage | `Storage`, `Memory` | `Storage`, `Memory` | `criogen_storage::Storage`, `Memory` |
-| Models | `OpenAI`, `Anthropic`, `Gemini`, `Ollama`, `OpenAICompatible`, `FakeModel` | `openai()`, `anthropic()`, `gemini()`, `ollama()`, `FakeModel` | `ProviderModel`, `Endpoint`, `FakeModel` |
+| Models | `OpenAI`, `Anthropic`, `Gemini`, `Azure`, `Bedrock`, `Vertex`, `Ollama`, `OpenAICompatible`, `FakeModel` | `openai()`, `anthropic()`, `gemini()`, `azure()`, `bedrock()`, `vertex()`, `ollama()`, `FakeModel` | `ProviderModel`, `Endpoint`, `AzureModel`, `VertexModel`, `FakeModel` |
 | Errors | `CriogenError` and subclasses | `CriogenError`, `isCriogenError` | `AgentError`, `RunError`, `StorageError` |
 | Workflows | `Workflow`, `CompiledWorkflow`, `WorkflowThread` | `Workflow`, `CompiledWorkflow`, `WorkflowThread` | `criogen_core::WorkflowBuilder`, `Storage::workflow_thread` |
 | Patterns and specialists | `criogen.patterns`, `criogen.specialists` | `patterns`, `specialists` | `criogen_agent::patterns`, `criogen_agent::specialists` |
 | Web search and page reading | `criogen.web` | `web` | `criogen_agent::web` (feature `web`) |
+| Tools from MCP servers | `criogen.mcp` | `mcp` | `criogen_agent::mcp` (feature `mcp`) |
+| Documents searched by meaning | `Collection` | `Collection` | `criogen_agent::retrieval` |
+| Evals | `criogen.evals` | `evals` | `criogen_agent::evals` |
+| The local trace viewer | `criogen.trace` | `serveTraces` | `criogen_trace` |
 | Gateway | `Gateway` | `Gateway` | `criogen_gateway::Gateway`, `Config` |
 
-Once the crates are on crates.io, the Rust reference is also on
+Once the crates are on crates.io, the Rust reference will also be on
 [docs.rs](https://docs.rs).

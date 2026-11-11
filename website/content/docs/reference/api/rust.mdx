@@ -1,0 +1,21 @@
+---
+title: "Rust API"
+description: "Rust API reference: every public item of the Criogen crates, with documentation, signatures and examples, from rustdoc."
+---
+
+The Rust reference is rustdoc's own: every public item of the crates below, with its documentation, signatures and examples, built from the doc comments every time the site is built. Back to the [API reference](/docs/reference/api/).
+
+| Crate | What it is |
+|---|---|
+| [`criogen-agent`](/api/rust/criogen_agent/) | Agents for Criogen: the model and tools loop on the workflow engine |
+| [`criogen-core`](/api/rust/criogen_core/) | Execution engine for Criogen workflows |
+| [`criogen-providers`](/api/rust/criogen_providers/) | Model provider layer for Criogen: messages, tools, model errors, protocols |
+| [`criogen-storage`](/api/rust/criogen_storage/) | Threads, checkpoints and storage backends for Criogen |
+| [`criogen-telemetry`](/api/rust/criogen_telemetry/) | OpenTelemetry and Langfuse export for Criogen runs |
+| [`criogen-gateway`](/api/rust/criogen_gateway/) | An OpenAI-compatible LLM gateway on Criogen's provider layer |
+| [`criogen-trace`](/api/rust/criogen_trace/) | A local trace viewer for Criogen runs: an OTLP receiver with a page |
+| [`criogen-rt`](/api/rust/criogen_rt/) | Tasks and timers for Criogen: Tokio on servers, the JavaScript event loop in the browser |
+
+Start with `criogen_agent` (agents and tools) and `criogen_core` (the workflow engine). The crates are not on crates.io yet, so these pages are the reference for their public API; the source is not published. Use the search box on any of these pages to find a type or function.
+
+Python and TypeScript have the same features: [Python API](/docs/reference/api/python/agents/), [TypeScript API](/docs/reference/api/typescript/agents/).

@@ -36,6 +36,7 @@ export function GET() {
     "## Optional",
     "",
     `- [Every doc in one file](${SITE.url}/llms-full.txt)`,
+    `- [The Python and TypeScript API reference in one file](${SITE.url}/llms-api.txt)`,
     `- [Benchmark lab](${SITE.url}/benchmarks/): Criogen, LangGraph and CrewAI on the same work`,
     `- [Benchmark lab, live comparison](${SITE.url}/benchmarks/#live): Criogen and LangChain side by side on one job`,
     `- [Pattern playground](${SITE.url}/playground/): every common agent pattern (ReAct, Reflexion, ReWOO, supervisor, swarm, IBM's agent types…), runnable in the browser, with the Criogen code`,

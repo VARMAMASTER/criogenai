@@ -5,3 +5,6 @@ next-env.d.ts
 *.tsbuildinfo
 # Generated before each build (scripts/run.mjs): copies from ../schemas.
 public/schemas/
+
+# The Rust API reference: rustdoc output copied before each build (scripts/gen-api.mjs --rust).
+public/api/
