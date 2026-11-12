@@ -1,10 +1,8 @@
 // The Rust API reference: rustdoc's own pages for the public crates, copied
 // into public/rustdoc (served at /rustdoc/…).
 //
-// Source stays private until CriogenAI reaches 10,000 installs, so only the API
-// pages are published: rustdoc's `src/` pages (every crate's source code) are
-// never copied, the "Source" links are removed, and the build fails if a link
-// to them is left. Documentation comments and signatures are the API itself.
+// CriogenAI is open source, so rustdoc's source pages (`src/`) and its
+// "Source" links are published with the API pages.
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
@@ -33,9 +31,6 @@ function cargo() {
   return found.status === 0 ? exe : home;
 }
 
-/** Links to rustdoc's source pages. */
-const SOURCE_LINK = /<a\b[^>]*\bhref="[^"]*\/?src\/[^"]*"[^>]*>[^<]*<\/a>/g;
-
 export function buildRustDocs(root) {
   const repo = path.resolve(root, "..");
   const crates = rustCrates(repo);
@@ -51,13 +46,12 @@ export function buildRustDocs(root) {
   fs.rmSync(to, { recursive: true, force: true });
   fs.mkdirSync(to, { recursive: true });
   // Everything but the source pages.
-  const skip = new Set(["src", "src-files.js", ".lock"]);
+  const skip = new Set([".lock"]);
   for (const entry of fs.readdirSync(from, { withFileTypes: true })) {
     if (skip.has(entry.name)) continue;
     fs.cpSync(path.join(from, entry.name), path.join(to, entry.name), { recursive: true });
   }
 
-  let stripped = 0;
   const walk = (dir) => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const full = path.join(dir, entry.name);
@@ -65,10 +59,6 @@ export function buildRustDocs(root) {
       else if (entry.name.endsWith(".html")) {
         const html = fs.readFileSync(full, "utf8");
         const cleaned = html
-          .replace(SOURCE_LINK, () => {
-            stripped += 1;
-            return "";
-          })
           // "(design 0004 §6)": numbers from the repository's own notes, not for readers.
           .replace(/\s*\((?:designs?)\s[^)<]*\)/gi, "")
           .replace(/,\s*\bdesigns?\s+\d{4}(?:\s*§\s*[\d.]+)?(?:,\s*\d{4})*/gi, "");
@@ -77,26 +67,7 @@ export function buildRustDocs(root) {
     }
   };
   walk(to);
-  assertNoSource(to);
-  console.log(`[api] rust docs in public/rustdoc (${stripped} source links removed)`);
+  console.log("[api] rust docs in public/rustdoc");
   return crates;
 }
 
-/** Fails if any source page, or a link to one, is in `dir`. */
-export function assertNoSource(dir) {
-  const problems = [];
-  if (fs.existsSync(path.join(dir, "src"))) problems.push("a src/ directory");
-  const walk = (d) => {
-    for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
-      const full = path.join(d, entry.name);
-      if (entry.isDirectory()) walk(full);
-      else if (entry.name.endsWith(".html") && /href="[^"]*\/?src\/[^"]*\.rs\.html/.test(fs.readFileSync(full, "utf8"))) {
-        problems.push(path.relative(dir, full));
-      }
-    }
-  };
-  walk(dir);
-  if (problems.length) {
-    throw new Error(`published Rust docs must not contain source: ${problems.slice(0, 5).join(", ")}`);
-  }
-}

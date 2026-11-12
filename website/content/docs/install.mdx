@@ -10,8 +10,9 @@ The Python and TypeScript packages are on PyPI and npm as `criogenai` (until
 x64 and the browser (`criogenai/web`); the Linux and macOS engines follow with
 the next build, planned for 16 November. Until then, on Linux and macOS, use
 the old package (`pip install criogen` / `npm install criogen`, `import
-criogen`), which runs the 0.1.3 engine (0.1.2 on Intel Macs). The Rust crates
-are published when CriogenAI's code opens, at 10,000 installs.
+criogen`), which runs the 0.1.3 engine (0.1.2 on Intel Macs). CriogenAI is
+open source (MIT or Apache-2.0); Rust projects use the crates from
+[the repository](https://github.com/VARMAMASTER/criogenai) until they are on crates.io.
 </Aside>
 
 ## Supported platforms
@@ -20,7 +21,7 @@ are published when CriogenAI's code opens, at 10,000 installs.
 |---|---|---|---|---|---|
 | Python 3.9+ (one wheel per platform) | yes | yes | yes | yes | yes |
 | Node.js 18+ (a prebuilt addon per platform) | yes | yes | yes | yes | yes |
-| Rust 1.88+ (crates published when the code opens) | later | later | later | later | later |
+| Rust 1.88+ (crates from the GitHub repository) | yes | yes | yes | yes | yes |
 | `criogenai` engine on the registry (Python / Node.js) | from 16 Nov | from 16 Nov | from 16 Nov | from 16 Nov | 0.1.7 / 0.1.7 |
 | Until then: the old `criogen` package | 0.1.3 / 0.1.3 | 0.1.3 / 0.1.3 | 0.1.3 / 0.1.3 | 0.1.2 / 0.1.3 | – |
 
@@ -59,16 +60,15 @@ TypeScript and JavaScript, as CommonJS or ES modules.
 </TabItem>
 <TabItem label="Rust">
 
-The Rust crates are published when CriogenAI's code opens, at 10,000
-installs (a Rust crate ships its source). Until then, use the Python or
-TypeScript package; they run the same Rust engine. This is what you will
-add then:
+The crates are not on crates.io yet. Add them from the GitHub repository
+(Cargo builds them from source; pin a commit with `rev = "..."` for
+repeatable builds):
 
 ```toml
 [dependencies]
-criogenai-agent = { version = "0.1", features = ["sqlite"] }
-criogenai-providers = "0.1"
-criogenai-storage = { version = "0.1", features = ["sqlite"] }
+criogenai-agent = { git = "https://github.com/VARMAMASTER/criogenai", features = ["sqlite"] }
+criogenai-providers = { git = "https://github.com/VARMAMASTER/criogenai" }
+criogenai-storage = { git = "https://github.com/VARMAMASTER/criogenai", features = ["sqlite"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```

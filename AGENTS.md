@@ -200,14 +200,14 @@ write our own implementation.
   `.github/workflows/sdk-packages.yml` (wheels and npm addons for Linux
   x64/arm64, macOS arm64/x64, Windows x64, tested per platform; manual,
   never run yet), the TS loader for `criogenai-<platform>-<arch>`.
-  Decided (2026-10-22): the code stays private until 10,000 installs
-  (then MIT or Apache-2.0); until then the Python and npm packages are
-  free to use under the CriogenAI Free Licence (`sdks/*/LICENSE`, a
-  draft to review); Python and TypeScript first, Rust crates when the
-  code opens; no GitHub links on the website; a live install counter on
-  the home page. Waiting for the user: running the GitHub workflows (paid
-  minutes while private), registry accounts (see RELEASING.md), a legal
-  review of the licence. The user will build their
+  Decided (2026-11-12, replacing the 2026-10-22 plan to stay private
+  until 10,000 installs): **open source** under MIT OR Apache-2.0 at
+  https://github.com/VARMAMASTER/criogenai (the SDK packages carry the same
+  licence files from the next release; the draft Free Licence is gone).
+  Rust crates are used from the repository until they are on crates.io.
+  The website links GitHub and shows the install count; rustdoc publishes
+  its source pages. The user is applying to Anthropic's open source
+  program. The user will build their
   hospital product (Axon Health OS) on CriogenAI: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
@@ -219,7 +219,7 @@ write our own implementation.
   sources (an overview and one page per module; Google-style docstrings and JSDoc
   `@param`/`@example`), committed and checked by `ci-local.sh`, which also fails on
   new undocumented public API (`website/scripts/api/undocumented.json`); `--rust` builds rustdoc into
-  `public/rustdoc` without the `src/` pages (the code stays private). `npm run
+  `public/rustdoc` (with its source pages). `npm run
   build` / `npm run preview` (port 4400); checked by `ci-local.sh` step `website`.
   Pattern playground (`/playground/`): 19 agent patterns
   (`website/lib/patterns/`: reasoning, multi-agent, IBM's five agent types),

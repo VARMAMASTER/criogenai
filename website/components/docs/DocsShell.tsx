@@ -67,7 +67,7 @@ export default function DocsShell({
               </div>
             ))}
           </div>
-          <p className="d-license">CriogenAI is free to use. Its code opens at 10,000 installs.</p>
+          <p className="d-license">CriogenAI is open source under MIT or Apache-2.0. <a href="https://github.com/VARMAMASTER/criogenai">Source on GitHub</a>.</p>
         </footer>
       </main>
       <aside className="d-toc" aria-label="Table of contents">

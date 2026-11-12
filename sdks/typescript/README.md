@@ -226,4 +226,4 @@ Needs Rust 1.88+ and Node 18+: `npm install`, `npm run build:native`, `npm run b
 
 ## Licence
 
-Free to use, also commercially, under the CriogenAI Free Licence (see `LICENSE`).
+Open source under MIT or Apache-2.0, at your option (see `LICENSE-MIT` and `LICENSE-APACHE`). Source: https://github.com/VARMAMASTER/criogenai

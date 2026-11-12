@@ -171,7 +171,7 @@ deploy to a Linux server.
 `criogenai-gateway` is a separate server that speaks the OpenAI and Anthropic
 APIs in front of any provider, with virtual keys, rate limits, token budgets
 and usage records ([The LLM gateway](/docs/guides/gateway/)). It is part of
-the Rust crates, which are published when CriogenAI's code opens; from Python
+the Rust crates (`cargo run -p criogenai-gateway` from [the repository](https://github.com/VARMAMASTER/criogenai)); from Python
 and TypeScript today, the `Gateway` class gives the same routing, retries and
 fallbacks inside your process
 ([Models: call a model directly](/docs/guides/models/#call-a-model-directly)).

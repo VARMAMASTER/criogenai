@@ -29,8 +29,8 @@ export const metadata: Metadata = pageMeta({
   path: "/",
 });
 
-// Python and TypeScript are published first; the Rust crates come when
-// the code opens.
+// Python and TypeScript are on the registries; Rust is used from the
+// repository until the crates are on crates.io.
 const install: Partial<Record<Lang, string>> = {
   python: "pip install criogenai",
   typescript: "npm install criogenai",
@@ -158,7 +158,7 @@ const faq = [
   },
   {
     q: "What does it cost?",
-    a: "Nothing: CriogenAI is free to use, also commercially. You pay your model provider, if you use one. The source code opens (MIT or Apache-2.0) once CriogenAI reaches 10,000 installs.",
+    a: "Nothing: CriogenAI is open source under MIT or Apache-2.0, free to use, also commercially. You pay your model provider, if you use one.",
   },
 ];
 

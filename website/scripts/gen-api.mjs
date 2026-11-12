@@ -404,7 +404,7 @@ function renderRustPage(crates) {
     "|---|---|",
     ...rows,
     "",
-    "Start with `criogenai_agent` (agents and tools) and `criogenai_core` (the workflow engine). The crates are not on crates.io yet, so these pages are the reference for their public API; the source is not published. Use the search box on any of these pages to find a type or function.",
+    "Start with `criogenai_agent` (agents and tools) and `criogenai_core` (the workflow engine). The crates are not on crates.io yet: use them from [the GitHub repository](https://github.com/VARMAMASTER/criogenai), where the source is. Every page links to its source. Use the search box on any of these pages to find a type or function.",
     "",
     "Python and TypeScript have the same features: [Python API](/docs/reference/api/python/), [TypeScript API](/docs/reference/api/typescript/).",
     "",

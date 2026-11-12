@@ -8,8 +8,8 @@ version = "0.1.7"
 description = "The fast AI agent framework for Python, a LangChain and LangGraph alternative on a Rust engine: tool calling, multi-agent workflows, human approval, durable threads, memory"
 readme = "README.md"
 requires-python = ">=3.9"
-license = "LicenseRef-CriogenAI-Free"
-license-files = ["LICENSE"]
+license = "MIT OR Apache-2.0"
+license-files = ["LICENSE-MIT", "LICENSE-APACHE"]
 keywords = ["ai", "ai-agents", "agent-framework", "llm", "llm-agents", "multi-agent", "agentic", "agent-orchestration", "workflow", "tool-calling", "function-calling", "langchain-alternative", "langgraph-alternative", "openai", "anthropic", "gemini", "rust", "asyncio"]
 classifiers = [
     "Development Status :: 3 - Alpha",

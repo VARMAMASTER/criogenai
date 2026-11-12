@@ -1,4 +1,4 @@
-// Installs so far, toward the 10,000 at which CriogenAI's code opens.
+// Installs so far, shown on the home page.
 // Read at build time from the public download statistics: npm's
 // downloads API and pypistats.org (without mirrors), for both names: the
 // packages were called `criogen` until 0.1.6 and `criogenai` from 0.1.7;
@@ -8,7 +8,6 @@
 // is that old, switch PyPI to an all-time source (pepy.tech's API or
 // Google BigQuery's PyPI dataset).
 
-export const GOAL = 10_000;
 const FIRST_DAY = "2026-10-01";
 /** Every name the packages have had. */
 const NAMES = ["criogen", "criogenai"];

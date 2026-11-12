@@ -106,16 +106,16 @@ jobs:
           out="platform/${{ matrix.platform }}"
           mkdir -p "$out"
           cp sdks/typescript/native/criogenai.node "$out/criogenai.node"
-          cp sdks/typescript/LICENSE "$out/"
+          cp sdks/typescript/LICENSE-MIT sdks/typescript/LICENSE-APACHE "$out/"
           os="${{ matrix.platform }}"; os="${os%-*}"; cpu="${{ matrix.platform }}"; cpu="${cpu#*-}"
           cat > "$out/package.json" <<EOF
           {
             "name": "${{ matrix.platform == 'win32-x64' && 'criogenai-windows-x64' || format('criogenai-{0}', matrix.platform) }}",
             "version": "$version",
             "description": "The native addon of criogenai for ${{ matrix.platform }}",
-            "license": "SEE LICENSE IN LICENSE",
+            "license": "MIT OR Apache-2.0",
             "main": "criogenai.node",
-            "files": ["criogenai.node", "LICENSE"],
+            "files": ["criogenai.node", "LICENSE-MIT", "LICENSE-APACHE"],
             "os": ["$os"],
             "cpu": ["$cpu"]
           }

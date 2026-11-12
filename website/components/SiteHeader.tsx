@@ -29,6 +29,9 @@ export default function SiteHeader({ current }: { current?: "benchmarks" | "play
           <Link href="/blog/" aria-current={current === "blog" ? "page" : undefined}>
             Blog
           </Link>
+          <a href="https://github.com/VARMAMASTER/criogenai" rel="noopener">
+            GitHub
+          </a>
         </nav>
         <ThemeToggle compact />
       </div>
@@ -122,8 +125,11 @@ export function SiteFooter() {
         ))}
       </div>
       <div className="bottom-fine">
-        <p>Free to use, also commercially. The source code opens under MIT or Apache-2.0 at 10,000 installs.</p>
+        <p>Open source under MIT or Apache-2.0. Free to use, also commercially.</p>
         <nav aria-label="Packages">
+          <a href="https://github.com/VARMAMASTER/criogenai" rel="noopener">
+            GitHub
+          </a>
           <a href="https://www.npmjs.com/package/criogenai" rel="noopener">
             npm
           </a>

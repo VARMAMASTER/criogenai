@@ -222,4 +222,4 @@ The same engine and the same features for TypeScript and Node.js:
 
 ## Licence
 
-Free to use, also commercially, under the CriogenAI Free Licence (see `LICENSE`).
+Open source under MIT or Apache-2.0, at your option (see `LICENSE-MIT` and `LICENSE-APACHE`). Source: https://github.com/VARMAMASTER/criogenai
