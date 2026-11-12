@@ -1,6 +1,6 @@
 # criogen-rt
 
-Tasks and timers for [Criogen](https://criogen.vercel.app)'s engine, on every
+Tasks and timers for [Criogen](https://criogenai.com)'s engine, on every
 platform it runs on (design 0021).
 
 - **Servers** (any target with an operating system): this crate is Tokio.

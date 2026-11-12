@@ -1,6 +1,6 @@
 # criogen-js
 
-The bridge between [Criogen](https://criogen.vercel.app)'s Rust engine and
+The bridge between [Criogen](https://criogenai.com)'s Rust engine and
 JavaScript (design 0021), shared by the TypeScript SDK's two engines:
 
 - the Node addon (`sdks/typescript`, napi-rs) on servers, and

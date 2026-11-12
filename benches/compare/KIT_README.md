@@ -1,7 +1,7 @@
 # Criogen, LangGraph and CrewAI: the comparison kit
 
 This is the exact benchmark behind the numbers on
-https://criogen.vercel.app/benchmarks/ . Run it on your own machine and
+https://criogenai.com/benchmarks/ . Run it on your own machine and
 compare your results with ours.
 
 What it does: the same agents, workflows, loads and injected faults run on
@@ -21,7 +21,7 @@ python run.py        # everything, about 25 minutes; writes bench/results/<date>
 python run.py quick  # a short smoke test (not for comparing)
 ```
 
-Then open https://criogen.vercel.app/benchmarks/ and drop the results
+Then open https://criogenai.com/benchmarks/ and drop the results
 file into "Check it on your machine": your numbers appear next to ours.
 Nothing is uploaded; the page reads the file in your browser.
 

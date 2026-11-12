@@ -85,7 +85,7 @@ export default function KeyPanel() {
       </form>
       <ul className="sb-promise">
         <li>Your key stays in this tab&apos;s memory: not saved, not in cookies or the address bar. Reload or close the tab and it is gone.</li>
-        <li>Your browser calls {info.label} directly. Nothing passes through criogen.vercel.app, and nothing is logged.</li>
+        <li>Your browser calls {info.label} directly. Nothing passes through criogenai.com, and nothing is logged.</li>
         <li>Each run makes at most 16 short model calls, billed to your account. Tools, data and side effects are simulated.</li>
       </ul>
     </details>

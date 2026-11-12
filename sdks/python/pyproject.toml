@@ -32,9 +32,9 @@ classifiers = [
 ]
 
 [project.urls]
-Homepage = "https://criogen.vercel.app"
-Documentation = "https://criogen.vercel.app/docs/"
-Benchmarks = "https://criogen.vercel.app/benchmarks/"
+Homepage = "https://criogenai.com"
+Documentation = "https://criogenai.com/docs/"
+Benchmarks = "https://criogenai.com/benchmarks/"
 
 [project.optional-dependencies]
 pydantic = ["pydantic>=2"]

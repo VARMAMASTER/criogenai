@@ -13,7 +13,7 @@ export interface NavGroup {
 
 export const SITE = {
   title: "Criogen",
-  url: "https://criogen.vercel.app",
+  url: "https://criogenai.com",
   description:
     "A fast AI agent framework and LangChain alternative: agents and workflows on a Rust engine, used from Python, TypeScript or Rust, with tools, approvals, durable threads, memory, an audit trail and an LLM gateway.",
 };

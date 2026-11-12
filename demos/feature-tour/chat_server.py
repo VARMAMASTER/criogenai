@@ -26,7 +26,7 @@ from criogen import Agent, Decision, Gemini, Memory, OpenAI, OpenRouter, Retry, 
 
 PORT = int(os.environ.get("PORT", "4700"))
 ALLOWED_ORIGINS = {
-    "http://localhost:4400", "http://127.0.0.1:4400", "https://criogen.vercel.app",
+    "http://localhost:4400", "http://127.0.0.1:4400", "https://criogen.vercel.app", "https://criogenai.com", "https://www.criogenai.com",
     *filter(None, os.environ.get("PLAYGROUND_ORIGINS", "").split(",")),
 }
 

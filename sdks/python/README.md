@@ -12,10 +12,10 @@ pip install criogen
 Python 3.9+ · Linux (x64, ARM64) · macOS (Apple Silicon, Intel) · Windows (x64) ·
 free to use, also commercially
 
-[Website](https://criogen.vercel.app) ·
-[Docs](https://criogen.vercel.app/docs/) ·
-[Quickstart](https://criogen.vercel.app/docs/quickstart/) ·
-[Benchmarks](https://criogen.vercel.app/benchmarks/) ·
+[Website](https://criogenai.com) ·
+[Docs](https://criogenai.com/docs/) ·
+[Quickstart](https://criogenai.com/docs/quickstart/) ·
+[Benchmarks](https://criogenai.com/benchmarks/) ·
 [npm package](https://www.npmjs.com/package/criogen)
 
 ## Why Criogen
@@ -39,7 +39,7 @@ counted:
 
 With one agent and a real model, the model's own time dominates and the frameworks
 are close. The difference shows with many steps, many tool calls and many users at
-once. The [benchmark page](https://criogen.vercel.app/benchmarks/) has every
+once. The [benchmark page](https://criogenai.com/benchmarks/) has every
 scenario and a kit to rerun them on your machine.
 
 ## Quickstart

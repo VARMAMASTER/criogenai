@@ -286,7 +286,7 @@ write our own implementation.
   fireworks, qwen, moonshot, zai, lmstudio) and `AnthropicCompatible`; all six npm packages and
   PyPI wheels for Linux x64/ARM64, macOS ARM64 and Windows x64. The macOS Intel wheel is missing
   (GitHub never gave the `macos-15-intel` job a runner), so pip on Intel Macs installs 0.1.2.
-  Check a release with `scripts/smoke-registry.sh <version>`. Site: https://criogen.vercel.app.
+  Check a release with `scripts/smoke-registry.sh <version>`. Site: https://criogenai.com.
 - **Implemented: MCP client (0022).** `criogen_agent::mcp` (feature `mcp`:
   Streamable HTTP over the providers' `Transport`, also in the browser;
   `mcp-stdio`: servers started as a process): `McpServer::stdio/http/

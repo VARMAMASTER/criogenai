@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://criogen.vercel.app/schemas/criogen.schema.json",
+  "$id": "https://criogenai.com/schemas/criogen.schema.json",
   "title": "Criogen data contracts",
   "description": "The JSON every Criogen language and service exchanges (design 0013 §3). Each type is under $defs; refer to one as criogen.schema.json#/$defs/<Type>. Checked against values serialized by the Rust engine.",
   "$defs": {

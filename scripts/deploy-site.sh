@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploys the built website (website/out) to Vercel production: project
-# `criogen`, team `varmamasters-projects`, https://criogen.vercel.app.
+# `criogen`, team `varmamasters-projects`, https://criogenai.com.
 #
 #   bash scripts/deploy-site.sh          # builds first if out/ is missing
 #

@@ -12,10 +12,10 @@ npm install criogen        # or: pnpm add criogen · yarn add criogen · bun add
 Node 18+ · Linux (x64, ARM64) · macOS (Apple Silicon, Intel) · Windows (x64) ·
 serverless (Vercel, AWS Lambda) · free to use, also commercially
 
-[Website](https://criogen.vercel.app) ·
-[Docs](https://criogen.vercel.app/docs/) ·
-[Quickstart](https://criogen.vercel.app/docs/quickstart/) ·
-[Benchmarks](https://criogen.vercel.app/benchmarks/) ·
+[Website](https://criogenai.com) ·
+[Docs](https://criogenai.com/docs/) ·
+[Quickstart](https://criogenai.com/docs/quickstart/) ·
+[Benchmarks](https://criogenai.com/benchmarks/) ·
 [PyPI package](https://pypi.org/project/criogen/)
 
 ## Why Criogen
@@ -36,7 +36,7 @@ so only framework cost is counted:
 
 With one agent and a real model, the model's own time dominates and the frameworks
 are close. The difference shows with many steps, many tool calls and many users at
-once. The [benchmark page](https://criogen.vercel.app/benchmarks/) has every
+once. The [benchmark page](https://criogenai.com/benchmarks/) has every
 scenario and a kit to rerun them.
 
 ## Quickstart
@@ -213,7 +213,7 @@ export and web tools need a server (they fail with `unsupported`). A key in
 a page is visible to whoever uses it: in a product, point models at your own
 server or a Criogen gateway. `FunctionModel` plugs in a model written in
 JavaScript, such as one running in the page.
-[Guide](https://criogen.vercel.app/docs/guides/browser/).
+[Guide](https://criogenai.com/docs/guides/browser/).
 
 ## Also on PyPI
 

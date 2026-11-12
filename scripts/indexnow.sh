@@ -8,8 +8,8 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-site="https://criogen.vercel.app"
-host="criogen.vercel.app"
+site="https://criogenai.com"
+host="criogenai.com"
 keyfile="$(ls "$root"/website/public/*.txt 2>/dev/null | grep -E '/[0-9a-f]{32}\.txt$' | head -1 || true)"
 if [[ -z $keyfile ]]; then
   echo "indexnow: no key file (website/public/<32 hex>.txt); skipped" >&2

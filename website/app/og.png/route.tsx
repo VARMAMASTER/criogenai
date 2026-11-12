@@ -41,7 +41,7 @@ export function GET() {
             </div>
           ))}
         </div>
-        <div style={{ marginTop: "auto", fontSize: 24, color: "#9aa0a6" }}>criogen.vercel.app · npm install criogen</div>
+        <div style={{ marginTop: "auto", fontSize: 24, color: "#9aa0a6" }}>criogenai.com · npm install criogen</div>
       </div>
     ),
     size,

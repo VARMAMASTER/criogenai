@@ -267,7 +267,7 @@ def machine() -> dict:
 # (same origin, no header), the website in development and the deployed site.
 # Anything else (another site's script) gets 403 before a run can start.
 ALLOWED_ORIGINS = {
-    "http://localhost:4400", "http://127.0.0.1:4400", "https://criogen.vercel.app",
+    "http://localhost:4400", "http://127.0.0.1:4400", "https://criogen.vercel.app", "https://criogenai.com", "https://www.criogenai.com",
     *filter(None, os.environ.get("PLAYGROUND_ORIGINS", "").split(",")),
 }
 
