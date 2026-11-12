@@ -1,22 +1,22 @@
 type Error = Box<dyn std::error::Error>;
-use criogen_providers::{Endpoint, ProviderModel};
+use criogenai_providers::{Endpoint, ProviderModel};
 
 pub async fn approvals() -> Result<(), Error> {
     let model = ProviderModel::new(
         Endpoint::openai(std::env::var("OPENAI_API_KEY")?),
         "gpt-5-mini",
     )?;
-    let refund = criogen_agent::tool_fn(
-        criogen_providers::ToolSpec::new(
+    let refund = criogenai_agent::tool_fn(
+        criogenai_providers::ToolSpec::new(
             "issue_refund",
             "Refund an order.",
             serde_json::json!({"type": "object"}),
         ),
-        |_args, _ctx| async { Ok::<_, criogen_agent::ToolError>("refunded") },
+        |_args, _ctx| async { Ok::<_, criogenai_agent::ToolError>("refunded") },
     );
     // [show]
-    use criogen_agent::{Agent, Approval};
-    use criogen_storage::Storage;
+    use criogenai_agent::{Agent, Approval};
+    use criogenai_storage::Storage;
 
     let agent = Agent::builder(model)
         .tool(refund)

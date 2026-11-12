@@ -1,7 +1,7 @@
 # Docs: guides/testing. Checked with mypy; every block runs with pytest.
 import asyncio
 
-from criogen import Agent, FakeModel, FakeReply, Retry, Storage, tool
+from criogenai import Agent, FakeModel, FakeReply, Retry, Storage, tool
 
 
 @tool

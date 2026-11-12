@@ -1,4 +1,4 @@
-// The landing page's animated scenes: what Criogen does, as runs you can
+// The landing page's animated scenes: what CriogenAI does, as runs you can
 // watch. Each one shows behaviour the framework has today (see the guides
 // linked next to them); the names are examples.
 import type { Beat, SceneEdge, SceneNode } from "./scene-types";

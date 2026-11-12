@@ -2,8 +2,8 @@ type Error = Box<dyn std::error::Error>;
 
 pub async fn mcp() -> Result<(), Error> {
     // [show]
-    use criogen_agent::{Agent, mcp::McpServer};
-    use criogen_providers::{Endpoint, ProviderModel};
+    use criogenai_agent::{Agent, mcp::McpServer};
+    use criogenai_providers::{Endpoint, ProviderModel};
 
     // A server this app starts (stdio): any MCP server, in any language.
     let files = McpServer::stdio(

@@ -12,10 +12,10 @@ and to agree on a fix and disclosure date with you.
 
 ## Supported versions
 
-Criogen is in early development (0.x). Security fixes go into the latest
+CriogenAI is in early development (0.x). Security fixes go into the latest
 release only.
 
-## What Criogen does to protect data
+## What CriogenAI does to protect data
 
 These are design commitments; a bug in any of them is a security issue.
 
@@ -33,7 +33,7 @@ These are design commitments; a bug in any of them is a security issue.
 - **Storage is plain JSON**, never a serialized language object: loading a
   checkpoint cannot run code.
 
-## How Criogen is built and released
+## How CriogenAI is built and released
 
 LiteLLM was compromised twice in 2026 (March and October) through its release
 pipeline, not its code. What we do against the same attacks, checked on every

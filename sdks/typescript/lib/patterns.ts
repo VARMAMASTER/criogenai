@@ -1,6 +1,6 @@
 // Design patterns for agentic systems, ready to use (design 0019).
 //
-//     import { patterns } from "criogen";
+//     import { patterns } from "criogenai";
 //     const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
 //     console.log(String(await flow.run("Write about solar panels")));
 //
@@ -228,7 +228,7 @@ function toResult(raw: WorkflowResult): PatternResult {
  * @param options `name` (default `"custom"`) and `maxSteps`, the step limit for `run` (default 64).
  *
  * @example
- * import { END, Workflow, patterns } from "criogen";
+ * import { END, Workflow, patterns } from "criogenai";
  *
  * const wf = new Workflow()
  *   .node("shout", (state) => ({ output: String(state.input).toUpperCase() }))
@@ -265,7 +265,7 @@ function stepNode(name: string, run: Run) {
  * @throws {TypeError} A step is not an Agent, a Specialist (or its name) or a function.
  *
  * @example
- * import { patterns } from "criogen";
+ * import { patterns } from "criogenai";
  *
  * const flow = patterns.sequential([
  *   ["trim", (text: string) => text.trim()],
@@ -299,7 +299,7 @@ export function sequential(steps: Step[], options: { model?: Model } = {}): Patt
  * @throws {Error} No branches.
  *
  * @example
- * import { patterns } from "criogen";
+ * import { patterns } from "criogenai";
  *
  * const flow = patterns.parallel({
  *   words: (text: string) => `${text.split(" ").length} words`,
@@ -347,7 +347,7 @@ export function parallel(branches: Step[] | Record<string, Step>, options: { syn
  * @throws {RangeError} `maxIterations` is not a whole number of at least 1.
  *
  * @example
- * import { patterns } from "criogen";
+ * import { patterns } from "criogenai";
  *
  * const flow = patterns.loop([(text: string) => text + "!"], (text) => text.endsWith("!!!"), { maxIterations: 10 });
  * const result = await flow.run("go");
@@ -387,7 +387,7 @@ export function loop(
  * @param options `threshold` (default 0.8), `maxIterations` (default 5, at most 50) and `model` for a specialist step.
  *
  * @example
- * import { patterns } from "criogen";
+ * import { patterns } from "criogenai";
  *
  * const flow = patterns.iterativeRefinement(
  *   (text: string) => text + " More detail.",
@@ -416,7 +416,7 @@ export function iterativeRefinement(
  * @throws {RangeError} `maxRounds` is not a whole number of at least 1.
  *
  * @example
- * import { Agent, FakeModel, patterns } from "criogen";
+ * import { Agent, FakeModel, patterns } from "criogenai";
  *
  * const writer = new Agent({ model: new FakeModel(["Draft one.", "Draft two, with sources."]) });
  * const critic = new Agent({ model: new FakeModel(["Add sources.", "APPROVED"]) });
@@ -470,7 +470,7 @@ export function reviewAndCritique(
  * @throws {RangeError} `maxHandoffs` is not a whole number of at least 1.
  *
  * @example
- * import { Agent, FakeModel, patterns } from "criogen";
+ * import { Agent, FakeModel, patterns } from "criogenai";
  *
  * const triage = new Agent({ model: new FakeModel(["This is a billing question.\nHANDOFF: billing"]) });
  * const billing = new Agent({ model: new FakeModel(["Your invoice was sent on Monday.\nFINAL"]) });
@@ -536,7 +536,7 @@ export function swarm(
  * @param options `model` for a specialist step.
  *
  * @example
- * import { patterns } from "criogen";
+ * import { patterns } from "criogenai";
  *
  * const flow = patterns.humanReview((text: string) => `Reply: ${text}`);
  * const paused = await flow.run("Thanks for your order.");
@@ -583,7 +583,7 @@ export function humanReview(step: Step, options: { model?: Model } = {}): Patter
  * @throws {Error} The line is empty, mixes connectors, has an empty name, or uses `<->` with other than two names; a name is not registered; or there is no model.
  *
  * @example
- * import { patterns } from "criogen";
+ * import { patterns } from "criogenai";
  *
  * // Needs OPENAI_API_KEY.
  * const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
@@ -626,7 +626,7 @@ type AgentExtras = Omit<AgentOptions, "model" | "tools" | "instructions">;
  * @throws {RangeError} `maxSteps` is not a whole number of at least 1.
  *
  * @example
- * import { FakeModel, FakeReply, patterns, tool } from "criogen";
+ * import { FakeModel, FakeReply, patterns, tool } from "criogenai";
  *
  * const lookup = tool({
  *   name: "order_status",
@@ -662,7 +662,7 @@ export function react(
  * @throws {TypeError} A team member is not an Agent, a Specialist or its name.
  *
  * @example
- * import { Agent, FakeModel, FakeReply, patterns } from "criogen";
+ * import { Agent, FakeModel, FakeReply, patterns } from "criogenai";
  *
  * const billing = new Agent({ model: new FakeModel(["Your invoice was sent on Monday."]) });
  * const lead = patterns.coordinator(
@@ -716,7 +716,7 @@ type TreeNode = Agent<any> | specialists.Specialist | string | [Agent<any>, stri
  * @param options Any other `Agent` option for the root, plus its `instructions`.
  *
  * @example
- * import { patterns } from "criogen";
+ * import { patterns } from "criogenai";
  *
  * // Needs OPENAI_API_KEY; "researcher" and "writer" are registered specialists.
  * const lead = patterns.hierarchical("openai:gpt-5-mini", {

@@ -22,7 +22,7 @@ function restore() {
   }
 }
 function tmpEnv(text) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "criogen-env-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "criogenai-env-"));
   const file = path.join(dir, ".env");
   fs.writeFileSync(file, text);
   return file;
@@ -74,7 +74,7 @@ test("loadEnv sets missing variables and returns only names", () => {
 });
 
 test("a missing file is fine unless required; a huge file is refused", () => {
-  const missing = path.join(os.tmpdir(), "criogen-nope", ".env");
+  const missing = path.join(os.tmpdir(), "criogenai-nope", ".env");
   assert.deepEqual(loadEnv(missing), []);
   assert.throws(() => loadEnv(missing, { required: true }), /ENOENT/);
   const big = tmpEnv("A=" + "x".repeat(1_100_000));

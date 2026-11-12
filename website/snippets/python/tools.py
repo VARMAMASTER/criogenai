@@ -4,7 +4,7 @@ from typing import List, Literal, Optional
 from pydantic import BaseModel
 
 # [show hints]
-from criogen import tool
+from criogenai import tool
 
 
 class Address(BaseModel):
@@ -31,7 +31,7 @@ print(schedule_visit.schema)  # the JSON Schema the model sees
 
 
 # [show errors]
-from criogen import ToolError
+from criogenai import ToolError
 
 
 @tool(read_only=True)
@@ -53,12 +53,12 @@ def lab_system_is_down() -> bool:
 
 
 # [show context]
-from criogen import ToolContext
+from criogenai import ToolContext
 
 
 @tool(name="send_message", description="Send a message to the care team.", destructive=True)
 async def send(text: str, ctx: ToolContext) -> str:
-    # ctx is filled by Criogen and is not part of the schema the model sees.
+    # ctx is filled by CriogenAI and is not part of the schema the model sees.
     # call_id is stable across retries of the same call: use it as an idempotency key.
     await outbox_put(key=ctx.call_id, text=text)
     return "sent"
@@ -70,7 +70,7 @@ async def outbox_put(key: str, text: str) -> None:
 
 
 # [show retry]
-from criogen import Agent, Retry
+from criogenai import Agent, Retry
 
 agent = Agent(
     "openai:gpt-5-mini",

@@ -1,5 +1,5 @@
 // [show]
-import { Agent, ToolError, tool } from "criogen";
+import { Agent, ToolError, tool } from "criogenai";
 
 const getOrder = tool({
   name: "get_order",

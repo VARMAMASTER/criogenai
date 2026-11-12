@@ -1,7 +1,8 @@
-// Installs so far, toward the 10,000 at which Criogen's code opens.
+// Installs so far, toward the 10,000 at which CriogenAI's code opens.
 // Read at build time from the public download statistics: npm's
-// downloads API for criogen (its platform addons are not counted
-// again) and pypistats.org for criogen (without mirrors).
+// downloads API and pypistats.org (without mirrors), for both names: the
+// packages were called `criogen` until 0.1.6 and `criogenai` from 0.1.7;
+// installs of either count (platform addons are not counted again).
 //
 // Limit: pypistats keeps the last 180 days only. Before the first release
 // is that old, switch PyPI to an all-time source (pepy.tech's API or
@@ -9,9 +10,8 @@
 
 export const GOAL = 10_000;
 const FIRST_DAY = "2026-10-01";
-const NPM = "criogen";
-// Ours is criogen.
-const PYPI: string | null = "criogen";
+/** Every name the packages have had. */
+const NAMES = ["criogen", "criogenai"];
 
 export type Installs =
   | { status: "counted"; total: number; npm: number; pypi: number; asOf: string }
@@ -28,7 +28,7 @@ async function getJson(url: string): Promise<{ status: number; body: unknown }> 
 
 const day = (d: Date) => d.toISOString().slice(0, 10);
 
-async function npmDownloads(): Promise<Count> {
+async function npmDownloadsOf(NPM: string): Promise<Count> {
   // The range API allows at most 18 months per request.
   let total = 0;
   let from = new Date(`${FIRST_DAY}T00:00:00Z`);
@@ -47,14 +47,23 @@ async function npmDownloads(): Promise<Count> {
   return total;
 }
 
-async function pypiDownloads(): Promise<Count> {
-  if (PYPI === null) return "missing";
+async function pypiDownloadsOf(PYPI: string): Promise<Count> {
   const { status, body } = await getJson(`https://pypistats.org/api/packages/${PYPI}/overall?mirrors=false`);
   if (status === 404) return "missing";
   if (status !== 200) throw new Error(`pypistats: HTTP ${status}`);
   const rows = (body as { data?: { category: string; downloads: number }[] }).data ?? [];
   return rows.filter((r) => r.category === "without_mirrors").reduce((sum, r) => sum + r.downloads, 0);
 }
+
+/** The sum over all names; "missing" only when no name was ever published. */
+async function sum(get: (name: string) => Promise<Count>): Promise<Count> {
+  const counts = await Promise.all(NAMES.map(get));
+  const found = counts.filter((c): c is number => c !== "missing");
+  return found.length ? found.reduce((a, b) => a + b, 0) : "missing";
+}
+
+const npmDownloads = () => sum(npmDownloadsOf);
+const pypiDownloads = () => sum(pypiDownloadsOf);
 
 let cached: Promise<Installs> | null = null;
 

@@ -24,7 +24,7 @@ wheels="$root/target/wheels"
 rm -rf "$wheels"
 "$(bin_of "$build")/maturin" build --release --quiet \
   --manifest-path "$root/sdks/python/Cargo.toml" --out "$wheels"
-wheel="$(ls "$wheels"/criogen-*.whl | head -1)"
+wheel="$(ls "$wheels"/criogenai-*.whl | head -1)"
 echo "built $(basename "$wheel")"
 
 work="$(mktemp -d)"
@@ -39,6 +39,6 @@ cp -r "$root/sdks/python/tests" "$work/tests"
 cd "$work"
 "$venv_python" "$root/sdks/python/examples/consumer.py"
 # The package is typed (py.typed, stubs): its code and a user's both check.
-"$venv_python" -m mypy -p criogen
+"$venv_python" -m mypy -p criogenai
 "$venv_python" -m mypy "$root/sdks/python/examples/consumer.py"
 CRIOGEN_ERROR_CATALOG="$root/schemas/error-codes.json" "$venv_python" -m pytest -q -p no:cacheprovider tests

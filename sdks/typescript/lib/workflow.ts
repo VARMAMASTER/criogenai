@@ -55,7 +55,7 @@ export interface Goto {
  * @param update State changes to keep while the run waits, e.g. `{ status: "waiting" }`.
  *
  * @example
- * import { END, Workflow, suspend } from "criogen";
+ * import { END, Workflow, suspend } from "criogenai";
  *
  * const app = new Workflow()
  *   .node("approve", (state, ctx) =>
@@ -79,7 +79,7 @@ export function suspend(payload: unknown, update?: State): Suspend {
  * @param update State changes, as a node's returned object.
  *
  * @example
- * import { END, Workflow, goto } from "criogen";
+ * import { END, Workflow, goto } from "criogenai";
  *
  * const app = new Workflow()
  *   .node("check", (state) => goto((state.n as number) > 10 ? "big" : "small", { checked: true }))
@@ -207,7 +207,7 @@ function routerAdapter(router: Router, causes: Map<string, unknown>): (request: 
  * `node`, `start`, `edge`, `route`, `join` and `goto`, then `compile` it.
  *
  * @example
- * import { END, Workflow } from "criogen";
+ * import { END, Workflow } from "criogenai";
  *
  * const app = new Workflow()
  *   .node("clean", (state) => ({ text: String(state.text).trim().toLowerCase() }))
@@ -444,7 +444,7 @@ export class CompiledWorkflow {
    * @param options `actor`: who acts through this handle, recorded in the audit trail (e.g. `"user:u-1"`).
    *
    * @example
-   * import { END, Storage, Workflow, suspend } from "criogen";
+   * import { END, Storage, Workflow, suspend } from "criogenai";
    *
    * const app = new Workflow()
    *   .node("approve", (state, ctx) =>

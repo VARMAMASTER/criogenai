@@ -163,13 +163,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "criogen-agent"
+name = "criogenai-agent"
 version = "0.1.0"
 dependencies = [
- "criogen-core",
- "criogen-providers",
- "criogen-rt",
- "criogen-storage",
+ "criogenai-core",
+ "criogenai-providers",
+ "criogenai-rt",
+ "criogenai-storage",
  "serde",
  "serde_json",
  "thiserror",
@@ -177,10 +177,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "criogen-core"
+name = "criogenai-core"
 version = "0.1.0"
 dependencies = [
- "criogen-rt",
+ "criogenai-rt",
  "serde",
  "serde_json",
  "thiserror",
@@ -189,23 +189,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "criogen-js"
+name = "criogenai-js"
 version = "0.1.0"
 dependencies = [
- "criogen-agent",
- "criogen-core",
- "criogen-providers",
- "criogen-storage",
+ "criogenai-agent",
+ "criogenai-core",
+ "criogenai-providers",
+ "criogenai-storage",
  "serde",
  "serde_json",
  "tokio",
 ]
 
 [[package]]
-name = "criogen-providers"
+name = "criogenai-providers"
 version = "0.1.0"
 dependencies = [
- "criogen-rt",
+ "criogenai-rt",
  "js-sys",
  "reqwest",
  "serde",
@@ -218,7 +218,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "criogen-rt"
+name = "criogenai-rt"
 version = "0.1.0"
 dependencies = [
  "js-sys",
@@ -229,11 +229,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "criogen-storage"
+name = "criogenai-storage"
 version = "0.1.0"
 dependencies = [
- "criogen-core",
- "criogen-rt",
+ "criogenai-core",
+ "criogenai-rt",
  "serde",
  "serde_json",
  "sha2",
@@ -243,15 +243,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "criogen-web"
-version = "0.1.6"
+name = "criogenai-web"
+version = "0.1.7"
 dependencies = [
- "criogen-agent",
- "criogen-core",
- "criogen-js",
- "criogen-providers",
- "criogen-rt",
- "criogen-storage",
+ "criogenai-agent",
+ "criogenai-core",
+ "criogenai-js",
+ "criogenai-providers",
+ "criogenai-rt",
+ "criogenai-storage",
  "js-sys",
  "serde_json",
  "wasm-bindgen",

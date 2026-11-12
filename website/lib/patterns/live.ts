@@ -1,4 +1,4 @@
-// Runs a pattern's code sample on the Criogen engine in the browser (design
+// Runs a pattern's code sample on the CriogenAI engine in the browser (design
 // 0021): the TypeScript function in snippets/typescript/patterns.ts, as shown
 // on the page, compiled to public/engine/playground.js beside the engine
 // (WebAssembly). The playground swaps in the model (MODEL in the samples):
@@ -153,7 +153,7 @@ type Span = { kind: "model" | "tool" | "wait"; s: number; e: number };
 /**
  * Splits [start, end] by what was happening, by wall clock: parallel calls
  * overlap and are not counted twice. A model answering wins, then a tool
- * running, then the playground pausing; the rest is Criogen and the page.
+ * running, then the playground pausing; the rest is CriogenAI and the page.
  */
 function breakdown(spans: Span[], start: number, end: number): Pick<Timing, "model" | "tool" | "wait" | "engine"> {
   const points = [...new Set([start, end, ...spans.flatMap((x) => [x.s, x.e])])].filter((t) => t >= start && t <= end).sort((a, b) => a - b);
@@ -217,7 +217,7 @@ export async function runOnEngine(
   let calls = 0;
   let toolCalls = 0;
   // Where the time goes: model calls, tool runs, and the playground's own
-  // pauses (to tell the story, or waiting for you); the rest is Criogen.
+  // pauses (to tell the story, or waiting for you); the rest is CriogenAI.
   const spans: Span[] = [];
   const timed = async <T>(kind: Span["kind"], work: () => Promise<T>): Promise<T> => {
     const s = performance.now();

@@ -1,9 +1,9 @@
 // The engine for the playground (design 0021), in public/engine:
 //
-//   criogen.js, criogen_bg.wasm   the TypeScript SDK's browser build
+//   criogenai.js, criogenai_bg.wasm   the TypeScript SDK's browser build
 //                                 (sdks/typescript/dist-web), copied;
 //   playground.js                 the code samples (snippets/typescript)
-//                                 bundled with esbuild, where "criogen" is
+//                                 bundled with esbuild, where "criogenai" is
 //                                 engine/runtime.js: the same engine, plus a
 //                                 report of what the samples do.
 //
@@ -21,7 +21,7 @@ const sdk = path.join(site, "..", "sdks", "typescript");
 const dist = path.join(sdk, "dist-web");
 const out = path.join(site, "public", "engine");
 
-if (!fs.existsSync(path.join(dist, "criogen.js")) || process.argv.includes("--rebuild")) {
+if (!fs.existsSync(path.join(dist, "criogenai.js")) || process.argv.includes("--rebuild")) {
   console.log("[engine] building the SDK's browser build (sdks/typescript/scripts/build-web.mjs)");
   const r = spawnSync(process.execPath, [path.join(sdk, "scripts", "build-web.mjs")], { cwd: sdk, stdio: "inherit" });
   if (r.status !== 0) process.exit(r.status ?? 1);
@@ -29,7 +29,7 @@ if (!fs.existsSync(path.join(dist, "criogen.js")) || process.argv.includes("--re
 
 fs.rmSync(out, { recursive: true, force: true });
 fs.mkdirSync(out, { recursive: true });
-for (const file of ["criogen.js", "criogen_bg.wasm"]) fs.copyFileSync(path.join(dist, file), path.join(out, file));
+for (const file of ["criogenai.js", "criogenai_bg.wasm"]) fs.copyFileSync(path.join(dist, file), path.join(out, file));
 
 const esbuild = createRequire(path.join(sdk, "package.json"))("esbuild");
 await esbuild.build({
@@ -40,15 +40,15 @@ await esbuild.build({
   target: "es2022",
   outfile: path.join(out, "playground.js"),
   // The engine is loaded beside this bundle at run time, once for both.
-  external: ["./criogen.js"],
+  external: ["./criogenai.js"],
   minify: true,
   legalComments: "none",
   logLevel: "warning",
   plugins: [
     {
-      name: "criogen-is-the-runtime",
+      name: "criogenai-is-the-runtime",
       setup(build) {
-        build.onResolve({ filter: /^criogen$/ }, () => ({ path: path.join(site, "engine", "runtime.js") }));
+        build.onResolve({ filter: /^criogenai$/ }, () => ({ path: path.join(site, "engine", "runtime.js") }));
         // zod (the samples' tool schemas) is the SDK's pinned one, never a
         // copy higher up the folder tree (a stray node_modules in a home folder).
         build.onResolve({ filter: /^zod(\/.*)?$/ }, (args) =>
@@ -59,4 +59,4 @@ await esbuild.build({
   ],
 });
 const kib = (f) => `${(fs.statSync(path.join(out, f)).size / 1024).toFixed(0)} KiB`;
-console.log(`[engine] public/engine: criogen_bg.wasm ${kib("criogen_bg.wasm")}, criogen.js ${kib("criogen.js")}, playground.js ${kib("playground.js")}`);
+console.log(`[engine] public/engine: criogenai_bg.wasm ${kib("criogenai_bg.wasm")}, criogenai.js ${kib("criogenai.js")}, playground.js ${kib("playground.js")}`);

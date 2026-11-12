@@ -1,5 +1,5 @@
 // Docs: concepts/errors-and-retries. Type-checked against the SDK.
-import { Agent } from "criogen";
+import { Agent } from "criogenai";
 
 declare const agent: Agent;
 
@@ -11,7 +11,7 @@ import {
   ModelError,
   ThreadBusyError,
   ThreadSuspendedError,
-} from "criogen";
+} from "criogenai";
 
 const chat = agent.thread("ticket-7");
 try {

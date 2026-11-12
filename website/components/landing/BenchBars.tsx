@@ -30,7 +30,7 @@ export default function BenchBars({ rows }: { rows: Bench[] }) {
           <div className="bars-group" key={row.label}>
             <h3>{row.label}</h3>
             <div className="bar-row">
-              <span className="bar-name">Criogen</span>
+              <span className="bar-name">CriogenAI</span>
               <div className="bar-track">
                 <motion.span
                   className="bar bar-ours"

@@ -2,7 +2,7 @@
 // tutorial's test (support_test.ts) runs it with a FakeModel.
 
 // [show tools]
-import { ToolError, tool } from "criogen";
+import { ToolError, tool } from "criogenai";
 
 // A stand-in for your order database.
 const ORDERS: Record<string, { status: string; total: number }> = {
@@ -50,7 +50,7 @@ export const issueRefund = tool<{ orderId: string; amount: number; reason: strin
 // [/show tools]
 
 // [show agent]
-import { Agent, Memory, Storage, type Model } from "criogen";
+import { Agent, Memory, Storage, type Model } from "criogenai";
 
 const INSTRUCTIONS = `You are the support assistant of an online shop.
 Look an order up before you answer a question about it.

@@ -1,5 +1,5 @@
 "use client";
-// Try it: a chat with a support agent built on the real Criogen SDK. The
+// Try it: a chat with a support agent built on the real CriogenAI SDK. The
 // agent runs in demos/feature-tour/chat_server.py on this computer (it needs
 // no account here and keeps model keys out of the browser); the panel beside
 // the chat shows what the SDK did: tool calls, the approval gate, memory and
@@ -53,10 +53,10 @@ const uid = () => Math.random().toString(36).slice(2, 10);
 
 function visitorId(): string {
   try {
-    const saved = localStorage.getItem("criogen-demo-visitor");
+    const saved = localStorage.getItem("criogenai-demo-visitor");
     if (saved) return saved;
     const fresh = uid();
-    localStorage.setItem("criogen-demo-visitor", fresh);
+    localStorage.setItem("criogenai-demo-visitor", fresh);
     return fresh;
   } catch {
     return uid();
@@ -188,7 +188,7 @@ export default function Chat() {
     return (
       <div>
         <p className="lab-muted">
-          The chat runs a real Criogen agent, so it needs the demo server on your computer (it keeps your model keys out of the browser). Start it, then
+          The chat runs a real CriogenAI agent, so it needs the demo server on your computer (it keeps your model keys out of the browser). Start it, then
           reload this page:
         </p>
         <pre className="demo-cmd">python demos/feature-tour/chat_server.py   # http://127.0.0.1:4700</pre>
@@ -301,7 +301,7 @@ export default function Chat() {
         {usage && <p className="lab-muted pg-small">{usage}</p>}
       </div>
 
-      <aside className="chat-side" aria-label="What Criogen did">
+      <aside className="chat-side" aria-label="What CriogenAI did">
         <h3>Under the hood</h3>
         <section>
           <h4>Approval gate</h4>

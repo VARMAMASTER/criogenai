@@ -1,20 +1,20 @@
-# Live check: every Criogen feature against real model APIs. Manual
+# Live check: every CriogenAI feature against real model APIs. Manual
 # only (needs API keys, costs a few cents); never run in CI. Not a workspace
 # member. See README.md.
 [package]
-name = "criogen-live-check"
+name = "criogenai-live-check"
 version = "0.0.0"
 edition = "2024"
 publish = false
 
 [dependencies]
-criogen-core = { path = "../../crates/criogen-core" }
-criogen-providers = { path = "../../crates/criogen-providers" }
-criogen-storage = { path = "../../crates/criogen-storage", features = ["sqlite"] }
-criogen-agent = { path = "../../crates/criogen-agent", features = ["sqlite"] }
-criogen-telemetry = { path = "../../crates/criogen-telemetry" }
+criogenai-core = { path = "../../crates/criogenai-core" }
+criogenai-providers = { path = "../../crates/criogenai-providers" }
+criogenai-storage = { path = "../../crates/criogenai-storage", features = ["sqlite"] }
+criogenai-agent = { path = "../../crates/criogenai-agent", features = ["sqlite"] }
+criogenai-telemetry = { path = "../../crates/criogenai-telemetry" }
 serde_json = "1"
 tokio = { version = "1.45", features = ["macros", "rt-multi-thread", "net", "io-util", "time", "sync"] }
 
-# Stand-alone: never part of the Criogen workspace.
+# Stand-alone: never part of the CriogenAI workspace.
 [workspace]

@@ -96,7 +96,7 @@ and continues from the stored snapshot.
 ### 2.3 Long-term memory
 
 ```python
-from criogen import Memory
+from criogenai import Memory
 
 agent = Agent(
     model=…, tools=[…], storage="postgres://…",
@@ -303,7 +303,7 @@ threads and memory items are removed by a background sweep, or by calling
 
 Built-in backends version their tables (`schema_migrations`). The default is to
 migrate automatically on first use. `storage.migrate(dry_run=True)` and the CLI
-`criogen storage migrate` exist for teams that run migrations in CI.
+`criogenai storage migrate` exist for teams that run migrations in CI.
 
 ---
 
@@ -331,7 +331,7 @@ about 12 methods with sync and async twins
 ([research](../research/langgraph.md) §5.2). Backends receive whole
 checkpoints. A custom backend may store them as they are; the built-in SQL
 backends encode deltas and keyframes internally with the public
-`criogen_storage::delta` helpers (as built: §12). Encryption is
+`criogenai_storage::delta` helpers (as built: §12). Encryption is
 inside the SQL backends, after encoding (deltas need the plain state);
 retention adds two methods (§15.1). Python and TS can implement the
 same interfaces (async methods); the bridge adapts them.
@@ -387,8 +387,8 @@ even if the database was down.
 
 ## 11. Step 1 as built
 
-Crate `criogen-storage` (depends on `criogen-core` only) holds the
-storage contract and the in-memory backend; `criogen-agent` adds the
+Crate `criogenai-storage` (depends on `criogenai-core` only) holds the
+storage contract and the in-memory backend; `criogenai-agent` adds the
 `Thread` API on top. SQL backends will be features of the storage crate.
 
 **Checkpoints.** A `Checkpoint` is plain JSON: `id` (UUIDv7), `thread_id`,
@@ -456,7 +456,7 @@ Durability `step` (§5.1), crash recovery (§5.5) and the SQLite backend
 (§4). Not yet: durability `async`, history across branches, `fork`,
 `update`, `on_mismatch`, retention, encryption (later steps).
 
-**Core: `Persister`.** `criogen-core` gained one trait so the engine can
+**Core: `Persister`.** `criogenai-core` gained one trait so the engine can
 save a run while it executes without knowing about storage.
 `RunOptions::persist(Arc<dyn Persister>)` turns it on:
 
@@ -485,7 +485,7 @@ method (§7). It merges a task write into that checkpoint's
 checkpoints with a snapshot accept writes (`checkpoint_not_found`
 otherwise).
 
-**`ThreadWriter`** (in `criogen-storage`) is the `Persister` for one
+**`ThreadWriter`** (in `criogenai-storage`) is the `Persister` for one
 thread. It holds the head it last wrote: the first checkpoint of a call is
 source `input`, later ones `step`, each with `expected` = the previous
 version (compare-and-set). Task writes go to its latest checkpoint.
@@ -503,14 +503,14 @@ head; `retry` continues a `failed` or `in_progress` head. Finished tool
 calls are not repeated, including calls finished just before a crash. A
 call interrupted mid-flight runs again (§5.5's honest limit).
 
-**Deltas** (`criogen_storage::delta`, public so custom backends can
+**Deltas** (`criogenai_storage::delta`, public so custom backends can
 reuse it). `diff(old, new)` gives `set`, `append` (a list that only grew:
 just the new elements) and `remove` operations, in key order; `apply`
 replays them (`storage_corrupt` if an append hits a non-list). It works on
 plain state, so it needs no reducers and stays correct for any reducer.
 
-**SQLite** (feature `sqlite` of `criogen-storage`, forwarded by
-`criogen-agent`; `sqlx` 0.8 without macros, SQLite bundled).
+**SQLite** (feature `sqlite` of `criogenai-storage`, forwarded by
+`criogenai-agent`; `sqlx` 0.8 without macros, SQLite bundled).
 `SqliteCheckpointer::connect(url)` / `open(path)`, or
 `Storage::connect("sqlite://file.db")` (`"memory:"` and `sqlite::memory:`
 also work). WAL journal, 5 s busy timeout, up to 8 connections (one for
@@ -551,8 +551,8 @@ assertion, not a benchmark.
 
 ## 13. Step 3 as built
 
-Long-term memory (§2.3): a memory store in `criogen-storage`, and
-`Memory` for agents in `criogen-agent`. Not yet: vector search, a
+Long-term memory (§2.3): a memory store in `criogenai-storage`, and
+`Memory` for agents in `criogenai-agent`. Not yet: vector search, a
 background sweep of expired items, encryption (step 5).
 
 **Namespaces.** `Namespace` is a list of segments (`["users", "42"]`,
@@ -647,8 +647,8 @@ is part of the model node.
 
 ## 14. Step 4 as built
 
-Postgres: feature `postgres` of `criogen-storage` (forwarded by
-`criogen-agent`), with `PostgresCheckpointer`, `PostgresMemoryStore`
+Postgres: feature `postgres` of `criogenai-storage` (forwarded by
+`criogenai-agent`), with `PostgresCheckpointer`, `PostgresMemoryStore`
 and `PostgresThreadLocks`. `Storage::connect("postgres://…")` (or
 `postgresql://`) sets up all three on one database. Tested on
 PostgreSQL 13 and 18.
@@ -677,7 +677,7 @@ first, which migrates; the rest find nothing to do (tested with four at
 once).
 
 **Thread locks across processes (§5.2).** A new trait in
-`criogen-storage`:
+`criogenai-storage`:
 
 ```rust
 trait ThreadLocks {
@@ -841,8 +841,8 @@ let keys = Keyring::from_env("CRIOGEN_ENCRYPTION_KEYS")?; // the first is active
 let storage = Storage::connect_encrypted(url, keys).await?;
 ```
 
-Feature `encryption` of `criogen-storage` (forwarded by
-`criogen-agent`). For the SQL backends; the in-memory ones keep
+Feature `encryption` of `criogenai-storage` (forwarded by
+`criogenai-agent`). For the SQL backends; the in-memory ones keep
 nothing at rest, so `connect_encrypted("memory:", …)` is allowed and
 encrypts nothing.
 
@@ -954,7 +954,7 @@ Keyword search (§13) finds "penicillin" only when the item says
 avoid?": items and queries are turned into vectors by an embedding model,
 and items are ranked by how close their vector is to the query's.
 
-### 16.1 Embedding models (`criogen-providers`)
+### 16.1 Embedding models (`criogenai-providers`)
 
 ```rust
 trait Embedder: Send + Sync {
@@ -977,7 +977,7 @@ trait Embedder: Send + Sync {
   a model; `failing()` fails every call. It records the texts it was
   given.
 
-### 16.2 Vectors in the memory store (`criogen-storage`)
+### 16.2 Vectors in the memory store (`criogenai-storage`)
 
 ```rust
 store.put_embedded(&ns, "allergy", json!("Severe penicillin allergy"), None,
@@ -1004,7 +1004,7 @@ store.search(&prefix, &SearchQuery::new().similar_to(query_embedding).limit(5)).
   encryption (§15.2) it is encrypted like the value (embeddings can be
   inverted into text), and `reencrypt` rewrites it.
 
-### 16.3 Agents (`criogen-agent`)
+### 16.3 Agents (`criogenai-agent`)
 
 `Memory::by_state("patient", patients).semantic(embedder)`:
 
@@ -1018,7 +1018,7 @@ store.search(&prefix, &SearchQuery::new().similar_to(query_embedding).limit(5)).
 - **`search_memory`** searches by meaning, falling back to keywords if
   the embedder fails.
 - Facts an app saves itself are found by meaning only if saved with a
-  vector: `criogen_agent::put_embedded(store, embedder, ns, key, value,
+  vector: `criogenai_agent::put_embedded(store, embedder, ns, key, value,
   ttl)` embeds `memory_text(key, value)`, the same text `remember`
   embeds.
 
@@ -1125,7 +1125,7 @@ Errors are a `ThreadError`: `Run` (the core's `RunError`, with its
 snapshot), `Storage`, or `State` (`thread_suspended`,
 `thread_interrupted`, `resume_invalid`); `code()` gives the catalog code.
 
-The module lives in `criogen-storage` (which already depends on the
+The module lives in `criogenai-storage` (which already depends on the
 core), not in the agent crate: workflows without agents need no agent
 dependency. Agent threads keep their own type, since a `Reply` carries
 agent results (text, approvals); both use the same leases, writer and

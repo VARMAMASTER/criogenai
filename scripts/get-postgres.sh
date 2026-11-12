@@ -11,7 +11,7 @@
 # Source: the zonky "embedded-postgres-binaries" builds of PostgreSQL on
 # Maven Central, checked against Maven Central's SHA-256. PostgreSQL is
 # under the PostgreSQL License; nothing downloaded here is committed or
-# shipped with Criogen.
+# shipped with CriogenAI.
 set -euo pipefail
 
 version="${PG_VERSION:-18.6.0}"

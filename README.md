@@ -1,8 +1,8 @@
-# Criogen
+# CriogenAI
 
 An AI agent orchestration framework with a Rust execution runtime.
 
-Today Criogen is a set of **Rust crates** for building AI agents and
+Today CriogenAI is a set of **Rust crates** for building AI agents and
 workflows: a workflow engine, a model layer (OpenAI-compatible servers,
 Anthropic, Gemini, Ollama and other self-hosted models), agents with tools
 and human approval, conversations stored in memory, SQLite or Postgres
@@ -37,20 +37,20 @@ with the last good run and fail CI on a drop (design 0024; guide:
 `website/content/docs/guides/evals.mdx`). In the next release.
 
 **Local trace viewer:** every run on a page, on your own computer
-(`python -m criogen.trace`, `npx criogen trace`, `criogen-trace`): each
+(`python -m criogenai.trace`, `npx criogenai trace`, `criogenai-trace`): each
 run's steps on a time axis with durations, tokens, cost and failures (design
-0023; crate `crates/criogen-trace`). In the next release.
+0023; crate `crates/criogenai-trace`). In the next release.
 
 **In the browser:** the same engine compiled to WebAssembly, behind the same
-TypeScript API (`criogen/web`): agents run in a page or a Web Worker, tested
+TypeScript API (`criogenai/web`): agents run in a page or a Web Worker, tested
 in Chromium, Firefox and WebKit (design 0021; guide:
-`website/content/docs/guides/browser.mdx`). On npm from `criogen@0.1.4`.
+`website/content/docs/guides/browser.mdx`). On npm from `criogenai@0.1.4`.
 
-**LLM gateway:** a first slice in [`crates/criogen-gateway`](crates/criogen-gateway):
-any OpenAI client in front of any provider Criogen speaks, with
+**LLM gateway:** a first slice in [`crates/criogenai-gateway`](crates/criogenai-gateway):
+any OpenAI client in front of any provider CriogenAI speaks, with
 fallback, keys and usage records.
 
-**Website:** docs, a benchmark lab, a pattern playground (every common agent pattern, its code sample running on the engine in the visitor's browser), a live comparison that runs Criogen and
+**Website:** docs, a benchmark lab, a pattern playground (every common agent pattern, its code sample running on the engine in the visitor's browser), a live comparison that runs CriogenAI and
 LangChain side by side, and a demo page (`website/`).
 
 Measured costs (per step, per tool call, gateway overhead, SDK bridges,
@@ -63,7 +63,7 @@ with the machine and method.
 
 ## What works today
 
-The `criogen-core` crate runs workflow graphs:
+The `criogenai-core` crate runs workflow graphs:
 
 - named async nodes that read a JSON state and return partial updates
 - static edges, fan-out, and fan-in
@@ -85,7 +85,7 @@ The `criogen-core` crate runs workflow graphs:
 - graph validation that reports every issue at once
 - structured errors with stable codes; failed steps are rolled back
 
-The `criogen-providers` crate holds the language-neutral data contracts
+The `criogenai-providers` crate holds the language-neutral data contracts
 for agents (design 0002): messages with ordered content blocks, tool
 definitions, the model request and response, classified model errors (rate
 limits, overload, context overflow, ... from any provider's HTTP error), and
@@ -97,7 +97,7 @@ trip). A `FakeModel` simulates a model for tests.
 
 Terms and naming conventions: [docs/glossary.md](docs/glossary.md).
 
-The `criogen-agent` crate runs agents: a model with tools, as a
+The `criogenai-agent` crate runs agents: a model with tools, as a
 `model` ⇄ `tools` loop on the workflow engine. Tool arguments are validated
 against their schemas, calls run concurrently with limits and timeouts, and a
 failed run can be retried without repeating tool calls that already ran.
@@ -111,7 +111,7 @@ and can fall back to other models. An agent can be one node of a larger
 workflow, or a tool of another agent, and `agent.stream()` gives a UI the
 answer and tool calls as they happen.
 
-Agents keep conversations in **threads** (`criogen-storage`):
+Agents keep conversations in **threads** (`criogenai-storage`):
 `agent.thread("user-42").send("...")` remembers earlier messages, a pending
 approval waits in storage until any agent instance calls `approve()`, a
 failed run can be retried, and history can be listed and rewound. Commits
@@ -133,7 +133,7 @@ or any namespace) across conversations, in the same storage.
 model call and gives the model `remember` / `forget` / `search_memory`
 tools. Search is by keywords for now; semantic search is planned.
 
-The `criogen-telemetry` crate sends every run to
+The `criogenai-telemetry` crate sends every run to
 [Langfuse](https://langfuse.com) or any OpenTelemetry backend: runs are
 traces, model calls are generations with token usage, tool calls are tool
 observations. It never slows or breaks a run, and content capture can be
@@ -148,14 +148,14 @@ Requires Rust 1.88+ ([rustup](https://rustup.rs)).
 
 ```sh
 cargo test
-cargo run -p criogen-core --example basic_workflow -- "Hello world"
-cargo run -p criogen-core --example approval_workflow -- yes
-cargo run -p criogen-core --example llm_workflow -- "remote work"   # simulated LLM calls, 2–3 s each
-cargo run -p criogen-core --example retry_workflow                  # retries and timeouts
-cargo run -p criogen-core --example recover_workflow                # retry a failed run, no repeats
-cargo run -p criogen-agent --example approval_agent -- edit         # a doctor edits an order before it runs
-cargo run -p criogen-agent --example thread_agent                   # a conversation and an approval kept in a thread
-cargo run -p criogen-agent --features sqlite --example durable_agent # a run killed mid-step, continued from SQLite
+cargo run -p criogenai-core --example basic_workflow -- "Hello world"
+cargo run -p criogenai-core --example approval_workflow -- yes
+cargo run -p criogenai-core --example llm_workflow -- "remote work"   # simulated LLM calls, 2–3 s each
+cargo run -p criogenai-core --example retry_workflow                  # retries and timeouts
+cargo run -p criogenai-core --example recover_workflow                # retry a failed run, no repeats
+cargo run -p criogenai-agent --example approval_agent -- edit         # a doctor edits an order before it runs
+cargo run -p criogenai-agent --example thread_agent                   # a conversation and an approval kept in a thread
+cargo run -p criogenai-agent --features sqlite --example durable_agent # a run killed mid-step, continued from SQLite
 ```
 
 A complete demo app, [demos/support-chat](demos/support-chat): a support agent
@@ -167,13 +167,13 @@ so it is run by hand:
 cd demos/support-chat/server && cargo run      # keys from ~/.criogen-keys.env
 cd demos/support-chat/web && npm install && npm run dev
 bash scripts/test-package.sh                                           # test the packaged crates as dependencies
-cargo run -p criogen-providers --example chat -- "hi"               # real model via Ollama (or CRIOGEN_BASE_URL)
+cargo run -p criogenai-providers --example chat -- "hi"               # real model via Ollama (or CRIOGEN_BASE_URL)
 ```
 
 The example is `Input → Transform → Conditional Branch → Output`:
 
 ```rust
-use criogen_core::{END, NodeError, State, Update, WorkflowBuilder, node_fn, router_fn};
+use criogenai_core::{END, NodeError, State, Update, WorkflowBuilder, node_fn, router_fn};
 
 let mut builder = WorkflowBuilder::new();
 builder
@@ -219,11 +219,11 @@ let output = workflow.run(State::new().with("text", "Hello world")).await?;
 ## Layout
 
 ```
-crates/criogen-core/        Rust execution engine
-crates/criogen-providers/   Model types, protocols and HTTP providers
-crates/criogen-agent/       Agents: the model ⇄ tools loop, threads
-crates/criogen-storage/     Threads, checkpoints, storage backends
-crates/criogen-telemetry/   OpenTelemetry and Langfuse export
+crates/criogenai-core/        Rust execution engine
+crates/criogenai-providers/   Model types, protocols and HTTP providers
+crates/criogenai-agent/       Agents: the model ⇄ tools loop, threads
+crates/criogenai-storage/     Threads, checkpoints, storage backends
+crates/criogenai-telemetry/   OpenTelemetry and Langfuse export
 docs/design/                   Design decisions and contracts
 docs/research/                 Studies of existing frameworks
 demos/support-chat/            Demo app: Rust server + Next.js UI (real models, manual)

@@ -1,5 +1,5 @@
 // [show]
-import { Storage } from "criogen";
+import { Storage } from "criogenai";
 
 const storage = new Storage({
   url: "postgres://app:secret@db.internal/agents",

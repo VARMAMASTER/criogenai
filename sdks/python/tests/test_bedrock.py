@@ -7,8 +7,8 @@ import threading
 
 import pytest
 
-from criogen import Agent, Bedrock
-from criogen.models import model_spec
+from criogenai import Agent, Bedrock
+from criogenai.models import model_spec
 
 TEXT = "Hi from Bedrock"
 KEY = "bedrock-python-key"

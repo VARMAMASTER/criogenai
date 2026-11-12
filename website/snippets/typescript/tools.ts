@@ -1,7 +1,7 @@
 // Docs: guides/tools. Type-checked against the SDK's declarations.
 
 // [show hints]
-import { tool } from "criogen";
+import { tool } from "criogenai";
 
 const scheduleVisit = tool<{
   patientRef: string;
@@ -30,7 +30,7 @@ const scheduleVisit = tool<{
 // [/show hints]
 
 // [show errors]
-import { ToolError } from "criogen";
+import { ToolError } from "criogenai";
 
 const getLabResult = tool<{ testId: string }>({
   name: "get_lab_result",
@@ -59,7 +59,7 @@ const sendMessage = tool<{ text: string }>({
   description: "Send a message to the care team.",
   destructive: true,
   input: { type: "object", properties: { text: { type: "string" } }, required: ["text"] },
-  // The second argument is filled by Criogen. callId is stable across
+  // The second argument is filled by CriogenAI. callId is stable across
   // retries of the same call: use it as an idempotency key.
   run: async ({ text }, ctx) => {
     await outboxPut(ctx.callId, text);
@@ -69,7 +69,7 @@ const sendMessage = tool<{ text: string }>({
 // [/show context]
 
 // [show retry]
-import { Agent } from "criogen";
+import { Agent } from "criogenai";
 
 const agent = new Agent({
   model: "openai:gpt-5-mini",

@@ -1,9 +1,9 @@
-from criogen import Agent
+from criogenai import Agent
 
 
 async def main(agent: Agent) -> None:
     # [show]
-    from criogen import evals
+    from criogenai import evals
 
     data = evals.Dataset.load("cases.jsonl")  # {"input": "...", "expected": "..."} per line
     result = await evals.evaluate(

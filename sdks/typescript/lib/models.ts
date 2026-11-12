@@ -107,7 +107,7 @@ export class ProviderModel {
  * @param options `apiKey` (else OPENAI_API_KEY) and `baseUrl`.
  * @throws {Error} No key given and OPENAI_API_KEY is not set.
  * @example
- * import { Agent, openai } from "criogen";
+ * import { Agent, openai } from "criogenai";
  *
  * const agent = new Agent({ model: openai("gpt-5-mini"), instructions: "Answer in one sentence." });
  */
@@ -125,7 +125,7 @@ export const gemini = (model: string, options?: ModelOptions) => new ProviderMod
  * @param options `apiKey` (else ANTHROPIC_API_KEY) and `baseUrl`.
  * @throws {Error} No key given and ANTHROPIC_API_KEY is not set.
  * @example
- * import { Agent, anthropic, openai } from "criogen";
+ * import { Agent, anthropic, openai } from "criogenai";
  *
  * // Claude first; OpenAI when Claude fails with a transient error after its retries.
  * const agent = new Agent({ model: anthropic("claude-sonnet-5-5"), fallbacks: [openai("gpt-5-mini")] });
@@ -143,7 +143,7 @@ export const openrouter = (model: string, options?: ModelOptions) => new Provide
  * @param model The model name, as `ollama list` shows it.
  * @param options `baseUrl`: another Ollama server.
  * @example
- * import { Agent, ollama } from "criogen";
+ * import { Agent, ollama } from "criogenai";
  *
  * const agent = new Agent({ model: ollama("llama3.2") }); // `ollama pull llama3.2` first
  */
@@ -223,7 +223,7 @@ export const zai = (model: string, options?: ModelOptions) => new ProviderModel(
  * @param model The model name the server expects.
  * @param options `baseUrl` (required: the API root, usually ending in /v1), `apiKey` if the server wants one, `name` (shown as the provider; default "custom") and `allowInsecureHttp`.
  * @example
- * import { Agent, openaiCompatible } from "criogen";
+ * import { Agent, openaiCompatible } from "criogenai";
  *
  * const agent = new Agent({
  *   model: openaiCompatible("meta-llama/Llama-3.3-70B-Instruct", { baseUrl: "http://localhost:8000/v1", name: "vllm" }),
@@ -266,7 +266,7 @@ export const FakeReply = {
  * Usage is counted, and replies name the model "fake".
  *
  * @example
- * import { Agent, FakeModel, FakeReply } from "criogen";
+ * import { Agent, FakeModel, FakeReply } from "criogenai";
  *
  * const model = new FakeModel([FakeReply.toolCall("lookup", { orderId: "A-1" }), "Order A-1 shipped."]);
  * // A model that fails twice with rate_limited, then answers: tests retries.
@@ -344,7 +344,7 @@ export interface KaggleOptions {
  * The token is not a property, and `toJSON()` leaves it out.
  *
  * @example
- * import { Agent, kaggle } from "criogen";
+ * import { Agent, kaggle } from "criogenai";
  *
  * // KAGGLE_API_TOKEN set, or ~/.kaggle/access_token present
  * const agent = new Agent({ model: kaggle("google/gemini-3.6-flash") });
@@ -442,7 +442,7 @@ export interface AzureOptions {
  * code `unsupported`.
  *
  * @example
- * import { Agent, AzureModel } from "criogen";
+ * import { Agent, AzureModel } from "criogenai";
  *
  * // A service principal; the engine fetches and renews Entra ID tokens.
  * const model = new AzureModel("gpt-5-mini", {
@@ -490,7 +490,7 @@ export class AzureModel {
  * @param model The deployment name.
  * @param options The endpoint, credentials and API (see `AzureOptions`); without them, the environment.
  * @example
- * import { Agent, azure } from "criogen";
+ * import { Agent, azure } from "criogenai";
  *
  * // AZURE_OPENAI_API_KEY set; a Foundry model from another maker goes over Chat Completions.
  * const agent = new Agent({ model: azure("my-llama-deployment", { endpoint: "my-resource", api: "chat" }) });
@@ -568,7 +568,7 @@ export class BedrockModel {
  * @param model The Bedrock model id or inference profile.
  * @param options Region, key, API and endpoint (see `BedrockOptions`); without them, the environment.
  * @example
- * import { Agent, bedrock } from "criogen";
+ * import { Agent, bedrock } from "criogenai";
  *
  * // AWS_BEARER_TOKEN_BEDROCK set; the region is always chosen explicitly.
  * const agent = new Agent({ model: bedrock("us.anthropic.claude-sonnet-5", { region: "us-east-1" }) });
@@ -655,7 +655,7 @@ export class VertexModel {
  * @param model The model name.
  * @param options Project, location, credentials and API (see `VertexOptions`); without them, the environment.
  * @example
- * import { Agent, vertex } from "criogen";
+ * import { Agent, vertex } from "criogenai";
  *
  * // Credentials from GOOGLE_APPLICATION_CREDENTIALS, gcloud, or the metadata server.
  * const agent = new Agent({ model: vertex("google/gemini-3.6-flash", { project: "my-project", location: "global" }) });
@@ -667,7 +667,7 @@ export const vertex =(model: string, options?: VertexOptions) => new VertexModel
  * What a model function receives: the request the engine would send to a provider.
  *
  * It has the messages so far, the tools the model may call, the settings
- * and any output schema (`ModelRequest` in schemas/criogen.schema.json).
+ * and any output schema (`ModelRequest` in schemas/criogenai.schema.json).
  */
 export interface ModelCall {
   /** The conversation so far, system message first, in the transcript format of `result.messages`. */
@@ -703,8 +703,8 @@ export function requireFunctions(what: string): void {
   if (typeof (native as { registerFunction?: unknown }).registerFunction !== "function") {
     throw errorFor(
       "unsupported",
-      `${what} needs criogen's engine 0.1.4 or newer, and the engine package installed for this system is older: ` +
-        "it comes with the next release for this platform (Windows and the browser, criogen/web, have it now)",
+      `${what} needs criogenai's engine 0.1.4 or newer, and the engine package installed for this system is older: ` +
+        "it comes with the next release for this platform (Windows and the browser, criogenai/web, have it now)",
     );
   }
 }
@@ -718,8 +718,8 @@ export function requireEngine015(what: string): void {
   if (typeof (native as { validateJson?: unknown }).validateJson !== "function") {
     throw errorFor(
       "unsupported",
-      `${what} needs criogen's engine 0.1.5 or newer, and the engine package installed for this system is older: ` +
-        "it comes with the next release for this platform (Windows and the browser, criogen/web, have it now)",
+      `${what} needs criogenai's engine 0.1.5 or newer, and the engine package installed for this system is older: ` +
+        "it comes with the next release for this platform (Windows and the browser, criogenai/web, have it now)",
     );
   }
 }
@@ -733,8 +733,8 @@ export function requireEngine016(what: string): void {
   if (typeof (native as { engineVersion?: unknown }).engineVersion !== "function") {
     throw errorFor(
       "unsupported",
-      `${what} needs criogen's engine 0.1.6 or newer, and the engine package installed for this system is older: ` +
-        "it comes with the next release for this platform (Windows and the browser, criogen/web, have it now)",
+      `${what} needs criogenai's engine 0.1.6 or newer, and the engine package installed for this system is older: ` +
+        "it comes with the next release for this platform (Windows and the browser, criogenai/web, have it now)",
     );
   }
 }
@@ -764,7 +764,7 @@ const releaseHandle =
  * using the model throws an error with code `unsupported`.
  *
  * @example
- * import { Agent, FakeReply, FunctionModel } from "criogen";
+ * import { Agent, FakeReply, FunctionModel } from "criogenai";
  *
  * // Ask for the weather tool once, then answer with what it returned.
  * const model = new FunctionModel((call) => {
@@ -887,7 +887,7 @@ export class Embedder {
    * @param options `apiKey` (else OPENAI_API_KEY) and `dimensions` (shorter vectors, for models that support it).
    * @throws {ValidationError} No key was given or found in OPENAI_API_KEY (`invalid_value`).
    * @example
-   * import { Embedder, Gateway } from "criogen";
+   * import { Embedder, Gateway } from "criogenai";
    *
    * const vectors = await new Gateway().embed(Embedder.openai(), ["refund policy", "shipping times"]);
    */

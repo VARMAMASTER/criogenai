@@ -1,4 +1,4 @@
-// Criogen for TypeScript: agents with tools, approvals, durable threads and
+// CriogenAI for TypeScript: agents with tools, approvals, durable threads and
 // memory, on a Rust engine (design 0012).
 
 export { Agent, AgentTool, Decision, Stream, Thread } from "./agent";

@@ -1,5 +1,5 @@
 // The retrieval guide's samples (content/docs/guides/retrieval.mdx), design 0025.
-import { Agent, Collection, Embedder, Storage, openai } from "criogen";
+import { Agent, Collection, Embedder, Storage, openai } from "criogenai";
 
 export async function basics(storage: Storage) {
   // [show]

@@ -18,7 +18,7 @@ list, or build them in code. `state` sets run state (a `user_id`, say). Ids
 default to the position and must be unique: comparisons match cases by id.
 
 The target is an agent, or any function from a case to an output (a
-workflow, a pipeline, your own code). For an agent, Criogen keeps what the
+workflow, a pipeline, your own code). For an agent, CriogenAI keeps what the
 run did: its tool calls, model calls, tokens and time.
 
 ## Scorers
@@ -28,7 +28,7 @@ run did: its tool calls, model calls, tokens and time.
 | `exact_match` | the output equals `expected` (trimmed; optionally ignoring case) |
 | `contains` | the output contains every expected string (score = share found) |
 | `regex`, `one_of` | it matches a pattern, or is one of a list |
-| `json_valid`, `json_schema`, `json_equals` | it is JSON, matches a schema (Criogen's validator), or a field equals `expected` |
+| `json_valid`, `json_schema`, `json_equals` | it is JSON, matches a schema (CriogenAI's validator), or a field equals `expected` |
 | `tool_called`, `tool_not_called` | the agent did (or never did) call a tool |
 | `max_tool_calls`, `max_model_calls`, `max_latency`, `max_tokens`, `max_cost` | it stayed within a budget |
 | `judge` | a model grades it against your rubric (0 to 1, with a reason) |
@@ -61,8 +61,8 @@ scores 0 with its error kept; the eval goes on.
 - `result.check(...)` fails (`eval_failed`) when a pass rate or a scorer's
   mean is below your bar, when a mean fell more than `tolerance` (0.02)
   against the baseline, or when cases regressed.
-- From a shell: `python -m criogen.evals compare base.json new.json
-  --fail-on-regression` or `npx criogen eval compare …` exits 1 on a drop.
+- From a shell: `python -m criogenai.evals compare base.json new.json
+  --fail-on-regression` or `npx criogenai eval compare …` exits 1 on a drop.
 
 Evals call real models when your agent does: run them where your keys are,
 and keep the result files with your tests.

@@ -1,5 +1,5 @@
 # [show]
-from criogen import Agent, Anthropic, AnthropicCompatible, Gemini, Groq, Ollama, OpenAI, OpenAICompatible, Qwen, Retry
+from criogenai import Agent, Anthropic, AnthropicCompatible, Gemini, Groq, Ollama, OpenAI, OpenAICompatible, Qwen, Retry
 
 Agent("openai:gpt-5-mini")  # key from OPENAI_API_KEY
 Agent(Anthropic("claude-sonnet-5-5"))  # ANTHROPIC_API_KEY
@@ -24,7 +24,7 @@ Agent("openai:gpt-5-mini", fallbacks=[Ollama("llama3.2")], model_retry=Retry(max
 
 async def direct() -> None:
     # [show direct]
-    from criogen import Embedder, Gateway, Ollama
+    from criogenai import Embedder, Gateway, Ollama
 
     gw = Gateway(fallbacks=[Ollama("llama3.2")])  # retries and fallbacks as for an agent
     reply = await gw.chat("openai:gpt-5-mini", "Summarize: …", instructions="Two sentences.")

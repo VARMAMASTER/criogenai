@@ -1,7 +1,7 @@
 # 0020: Kaggle Model Proxy as a provider
 
 Status: approved by the user's request (2026-11-01). Built in Rust
-(`criogen-providers`), exposed in Python, TypeScript and the gateway config.
+(`criogenai-providers`), exposed in Python, TypeScript and the gateway config.
 
 ## Why
 
@@ -19,7 +19,7 @@ able to use it like any other provider: `"kaggle:google/gemini-3.6-flash"`.
   <proxy token>` speaks the OpenAI Chat Completions format: streaming with
   usage, tool calls, `max_tokens` and `max_completion_tokens` all work.
   `temperature` is refused by some models (Claude Sonnet 5), accepted by
-  others; Criogen only sends it when asked.
+  others; CriogenAI only sends it when asked.
 - A model the account may not use answers `404 not_found_error`, uncharged.
   There is no model-list endpoint.
 - `GetModelProxyQuotas` (same auth as minting) reports the daily and monthly

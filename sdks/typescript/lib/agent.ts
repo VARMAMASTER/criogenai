@@ -242,7 +242,7 @@ export async function cancellable<T>(signal: AbortSignal | undefined, call: (can
  * pass the matching JSON Schema as the `output` option.
  *
  * @example
- * import { Agent, FakeModel, FakeReply, tool } from "criogen";
+ * import { Agent, FakeModel, FakeReply, tool } from "criogenai";
  *
  * const add = tool<{ a: number; b: number }>({
  *   name: "add",
@@ -357,7 +357,7 @@ export class Agent<Output = unknown> {
    * @param name The tool name the calling model sees (letters, digits, `_` and `-`).
    * @param description What this agent does, so the calling model knows when to use it.
    * @example
-   * import { Agent, FakeModel, FakeReply } from "criogen";
+   * import { Agent, FakeModel, FakeReply } from "criogenai";
    *
    * const researcher = new Agent({ model: new FakeModel(["The order shipped on Monday."]), instructions: "Find facts." });
    * const lead = new Agent({
@@ -378,7 +378,7 @@ export class Agent<Output = unknown> {
    * @param threadId Any string that names the conversation in this agent's storage.
    * @param options `actor`: who makes the calls (a user or service id), recorded in audit records.
    * @example
-   * import { Agent, FakeModel } from "criogen";
+   * import { Agent, FakeModel } from "criogenai";
    *
    * const agent = new Agent({ model: new FakeModel(["Hi Sam.", "Your name is Sam."]) });
    * const thread = agent.thread("support-42");
@@ -399,7 +399,7 @@ export class Agent<Output = unknown> {
  * Made by `thread.stream(...)` and the other `thread.stream*` methods.
  *
  * @example
- * import { Agent, FakeModel } from "criogen";
+ * import { Agent, FakeModel } from "criogenai";
  *
  * const agent = new Agent({ model: new FakeModel(["Hello there."]) });
  * const stream = agent.thread("chat-1").stream("Hello");
@@ -467,7 +467,7 @@ export class Stream<Output = unknown> implements AsyncIterable<StreamEvent> {
  * is saved too, and `retry` continues it.
  *
  * @example
- * import { Agent, FakeModel, FakeReply, tool } from "criogen";
+ * import { Agent, FakeModel, FakeReply, tool } from "criogenai";
  *
  * const refund = tool<{ orderId: string }>({
  *   name: "refund",
@@ -548,7 +548,7 @@ export class Thread<Output = unknown> {
    * @param decisions A `Decision` for each pending call, keyed by its `call_id` (from `reply.approvals`).
    * @param options `signal` cancels the run.
    * @example
-   * import { Decision } from "criogen";
+   * import { Decision } from "criogenai";
    *
    * const [request] = first.approvals; // first: the reply that needed approval
    * const done = await thread.decide({ [request.call_id]: Decision.reject("Refunds need a manager.") });

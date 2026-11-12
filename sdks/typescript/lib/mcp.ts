@@ -1,6 +1,6 @@
 // Tools from MCP servers (design 0022).
 //
-//     import { Agent, mcp } from "criogen";
+//     import { Agent, mcp } from "criogenai";
 //     const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."]);
 //     const agent = new Agent({ model, tools: [files] });          // all its tools
 //     // or tools: [files.tool("read_file")]
@@ -9,7 +9,7 @@
 // The client runs in the Rust engine: it speaks MCP 2026-07-28 and falls back
 // to the `initialize` handshake of older servers; stdio servers are started as
 // a process (and again if they exit). It only uses tools: a server cannot
-// sample your model or read your files. In criogen/web only `mcp.http` works.
+// sample your model or read your files. In criogenai/web only `mcp.http` works.
 //
 // What a server says is data: names are mapped to names models accept (set
 // `prefix` to keep two servers apart), schemas and messages are bounded, and
@@ -84,7 +84,7 @@ function engine(): McpAddon {
   if (typeof addon.mcpConnect !== "function") {
     throw errorFor(
       "unsupported",
-      "MCP needs criogen's engine 0.1.5 or newer, and the engine package installed for this system is older",
+      "MCP needs criogenai's engine 0.1.5 or newer, and the engine package installed for this system is older",
     );
   }
   return addon as McpAddon;
@@ -100,7 +100,7 @@ export class McpTool {
   readonly schema: Record<string, unknown>;
   /** The server's readOnlyHint; always `false` unless `trustAnnotations` is set. */
   readonly readOnly: boolean;
-  /** The server's destructiveHint (kept without `trustAnnotations`: it only makes Criogen more careful). */
+  /** The server's destructiveHint (kept without `trustAnnotations`: it only makes CriogenAI more careful). */
   readonly destructive: boolean;
   /** The server's idempotentHint (or readOnlyHint); always `false` unless `trustAnnotations` is set. Idempotent tools are retried after a failure. */
   readonly idempotent: boolean;
@@ -143,7 +143,7 @@ export class McpTool {
  * (or `await using`).
  *
  * @example
- * import { Agent, mcp } from "criogen";
+ * import { Agent, mcp } from "criogenai";
  *
  * // Starts the server as a process (needs Node's npx and network access to fetch it).
  * const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."], { prefix: "files" });
@@ -214,7 +214,7 @@ export class McpServer {
    * @throws {ToolError} The tool reported a failure (`isError`); the message is the server's.
    *
    * @example
-   * import { mcp } from "criogen";
+   * import { mcp } from "criogenai";
    *
    * const server = await mcp.http("https://mcp.example.com/mcp", { headers: { Authorization: `Bearer ${process.env.MCP_TOKEN}` } });
    * const answer = await server.call("search_docs", { query: "rate limits" });
@@ -271,7 +271,7 @@ async function connect(name: string, spec: string): Promise<McpServer> {
  * Starts `command` with `args` as an MCP server (stdio) and lists its tools. Servers only.
  *
  * The process inherits this process's environment plus `env`. If it exits,
- * the next call starts it again. In the browser (`criogen/web`) this throws
+ * the next call starts it again. In the browser (`criogenai/web`) this throws
  * `unsupported`.
  *
  * @param command The program, e.g. `"npx"` or `"python"`.
@@ -280,7 +280,7 @@ async function connect(name: string, spec: string): Promise<McpServer> {
  * @returns The connected server.
  *
  * @example
- * import { mcp } from "criogen";
+ * import { mcp } from "criogenai";
  *
  * const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."], {
  *   prefix: "files",
@@ -305,7 +305,7 @@ export function stdio(command: string, args: string[] = [], options: StdioOption
  * @returns The connected server.
  *
  * @example
- * import { Agent, mcp } from "criogen";
+ * import { Agent, mcp } from "criogenai";
  *
  * const docs = await mcp.http("https://mcp.example.com/mcp", {
  *   headers: { Authorization: `Bearer ${process.env.MCP_TOKEN}` },

@@ -3,10 +3,16 @@ title: "TypeScript API: Collections"
 description: "TypeScript API reference, collections: Collection, CollectionOptions, Document, Hit, CollectionTool."
 ---
 
-Documents to search by meaning, and a retrieval tool for agents. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/collections/).
+Documents to search by meaning, and a retrieval tool for agents. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/collections/).
 
 ```ts
-import { Collection, CollectionOptions, Document, Hit, CollectionTool } from "criogen";
+import {
+  Collection,
+  CollectionOptions,
+  Document,
+  Hit,
+  CollectionTool,
+} from "criogenai";
 ```
 
 ## Contents
@@ -43,7 +49,7 @@ collection opens. Give it to an agent with `asTool`.
 **Example**
 
 ```ts
-import { Collection, Embedder } from "criogen";
+import { Collection, Embedder } from "criogenai";
 
 const docs = await Collection.open("handbook", { embedder: Embedder.fake() });
 await docs.add([
@@ -165,7 +171,7 @@ The tool is read-only; each hit's text is cut to 2,000 characters.
 **Example**
 
 ```ts
-import { Agent, Collection, Embedder, FakeModel } from "criogen";
+import { Agent, Collection, Embedder, FakeModel } from "criogenai";
 
 const docs = await Collection.open("handbook", { embedder: Embedder.fake() });
 await docs.add([{ id: "leave", text: "Annual leave is 25 days a year." }]);

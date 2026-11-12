@@ -3,12 +3,12 @@ title: "TypeScript API: Web search and page reading"
 description: "TypeScript API reference, web search and page reading: TAVILY_URL, BRAVE_URL, tavilySearch, braveSearch, search, defaultTools, fetchPage, fetch."
 ---
 
-Web search (Tavily, Brave) and safe page reading tools. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/web/).
+Web search (Tavily, Brave) and safe page reading tools. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/web/).
 
 Internet tools for agents: web search (Tavily or Brave) and reading a page.
 
 ```ts
-import { Agent, web } from "criogen";
+import { Agent, web } from "criogenai";
 const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
 ```
 
@@ -23,7 +23,7 @@ networks (a model must not reach your internal services through it), does
 not follow redirects, and reads at most 500 KB.
 
 ```ts
-import { web } from "criogen";
+import { web } from "criogenai";
 web.TAVILY_URL
 ```
 
@@ -82,7 +82,7 @@ with a `ToolError` that says what to set.
 **Example**
 
 ```ts
-import { Agent, web } from "criogen";
+import { Agent, web } from "criogenai";
 
 // Needs TAVILY_API_KEY and OPENAI_API_KEY.
 const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.tavilySearch({ maxResults: 3, depth: "advanced" })] });
@@ -129,7 +129,7 @@ if BRAVE_API_KEY is. `provider: "tavily" | "brave"` chooses explicitly.
 **Example**
 
 ```ts
-import { Agent, web } from "criogen";
+import { Agent, web } from "criogenai";
 
 // Needs TAVILY_API_KEY or BRAVE_API_KEY, and OPENAI_API_KEY.
 const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
@@ -165,7 +165,7 @@ not followed, at most 500 KB is read, and a request times out after 20 s.
 **Example**
 
 ```ts
-import { Agent, web } from "criogen";
+import { Agent, web } from "criogenai";
 
 // Needs OPENAI_API_KEY; reading the page needs no key.
 const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.fetchPage({ maxChars: 4000 })] });
@@ -193,7 +193,7 @@ not followed, at most 500 KB is read, and a request times out after 20 s.
 **Example**
 
 ```ts
-import { Agent, web } from "criogen";
+import { Agent, web } from "criogenai";
 
 // Needs OPENAI_API_KEY; reading the page needs no key.
 const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.fetchPage({ maxChars: 4000 })] });

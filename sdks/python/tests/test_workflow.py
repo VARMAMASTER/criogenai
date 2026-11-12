@@ -5,7 +5,7 @@ import asyncio
 
 import pytest
 
-from criogen import (
+from criogenai import (
     END,
     Agent,
     CriogenError,

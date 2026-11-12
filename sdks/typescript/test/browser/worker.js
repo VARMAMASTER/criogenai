@@ -1,6 +1,6 @@
 // A module Web Worker running an agent (design 0021): the engine loads and
 // runs off the page's main thread too.
-import { Agent, FakeModel, FakeReply, ready, tool } from "/criogen.js";
+import { Agent, FakeModel, FakeReply, ready, tool } from "/criogenai.js";
 
 self.onmessage = async () => {
   try {

@@ -7,7 +7,7 @@ import threading
 
 import pytest
 
-from criogen import Agent, Kaggle, tool
+from criogenai import Agent, Kaggle, tool
 
 API_TOKEN = "KGAT_python_test_token"
 

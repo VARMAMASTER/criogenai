@@ -74,8 +74,8 @@ step_rust() {
   run cargo clippy --all-targets -- -D warnings
   run cargo test --all-targets --all-features
   run cargo test --doc --workspace --all-features
-  run cargo test -p criogen-providers --no-default-features
-  run cargo test -p criogen-agent --no-default-features
+  run cargo test -p criogenai-providers --no-default-features
+  run cargo test -p criogenai-agent --no-default-features
 }
 
 # A server for the Postgres tests: given, or startable by with-postgres.sh.
@@ -92,7 +92,7 @@ step_postgres() {
   fi
   # REQUIRE: the tests fail instead of skipping if the server is missing.
   CRIOGEN_REQUIRE_POSTGRES=1 run bash scripts/with-postgres.sh \
-    cargo test -p criogen-storage -p criogen-agent --all-features \
+    cargo test -p criogenai-storage -p criogenai-agent --all-features \
     --test postgres --test memory_store --test durable --test encryption --test retention --test audit
 }
 
@@ -132,15 +132,15 @@ step_package() {
     run bash scripts/test-package.sh
   fi
   # The benchmarks keep working (debug build; numbers not recorded).
-  run cargo run -p criogen-bench -- quick
-  run cargo run -p criogen-core --example basic_workflow -- "Hello world"
-  run cargo run -p criogen-core --example approval_workflow -- yes
-  run cargo run -p criogen-core --example llm_workflow -- "remote work"
-  run cargo run -p criogen-core --example retry_workflow
-  run cargo run -p criogen-core --example recover_workflow
-  run cargo run -p criogen-agent --example approval_agent -- edit
-  run cargo run -p criogen-agent --example thread_agent
-  run cargo run -p criogen-agent --features sqlite --example durable_agent
+  run cargo run -p criogenai-bench -- quick
+  run cargo run -p criogenai-core --example basic_workflow -- "Hello world"
+  run cargo run -p criogenai-core --example approval_workflow -- yes
+  run cargo run -p criogenai-core --example llm_workflow -- "remote work"
+  run cargo run -p criogenai-core --example retry_workflow
+  run cargo run -p criogenai-core --example recover_workflow
+  run cargo run -p criogenai-agent --example approval_agent -- edit
+  run cargo run -p criogenai-agent --example thread_agent
+  run cargo run -p criogenai-agent --features sqlite --example durable_agent
 }
 
 step_python() {
@@ -179,8 +179,8 @@ step_web() {
   fi
   local manifest=sdks/typescript/web/Cargo.toml
   run cargo fmt --manifest-path "$manifest" --check
-  run cargo clippy -p criogen-rt -p criogen-core -p criogen-providers -p criogen-storage -p criogen-agent -p criogen-js --target wasm32-unknown-unknown -- -D warnings
-  run cargo clippy -p criogen-rt --target wasm32-unknown-unknown --tests -- -D warnings
+  run cargo clippy -p criogenai-rt -p criogenai-core -p criogenai-providers -p criogenai-storage -p criogenai-agent -p criogenai-js --target wasm32-unknown-unknown -- -D warnings
+  run cargo clippy -p criogenai-rt --target wasm32-unknown-unknown --tests -- -D warnings
   run cargo clippy --manifest-path "$manifest" --target wasm32-unknown-unknown -- -D warnings
   run bash scripts/test-web.sh
 }

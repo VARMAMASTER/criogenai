@@ -9,7 +9,7 @@ with `_` (like this one) are never published.
 title: "The title, in quotes if it has a colon"
 description: One or two sentences for the post list, search results, link cards and RSS.
 date: 2026-11-09
-author: The Criogen team
+author: The CriogenAI team
 tags: release, mcp, evals
 draft: true
 ---
@@ -20,7 +20,7 @@ The post, in Markdown (tables, task lists and footnotes work).
 ```
 
 - `title` and `date` (YYYY-MM-DD) are required. The build fails without them.
-- `author` defaults to "The Criogen team". `tags` is a comma list.
+- `author` defaults to "The CriogenAI team". `tags` is a comma list.
 - `draft: true` keeps a post off the site until you remove the line.
 - Posts are newest first. The list, RSS feed (`/blog/rss.xml`), sitemap and
   `llms.txt` update themselves when the site is built.

@@ -278,13 +278,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "217698eaf96b4a3f0bc4f3662aaa55bdf913cd54d7204591faa790070c6d0853"
 
 [[package]]
-name = "criogen-agent"
+name = "criogenai-agent"
 version = "0.1.0"
 dependencies = [
- "criogen-core",
- "criogen-providers",
- "criogen-rt",
- "criogen-storage",
+ "criogenai-core",
+ "criogenai-providers",
+ "criogenai-rt",
+ "criogenai-storage",
  "reqwest",
  "serde",
  "serde_json",
@@ -293,25 +293,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "criogen-bench"
+name = "criogenai-bench"
 version = "0.1.0"
 dependencies = [
  "axum",
- "criogen-agent",
- "criogen-core",
- "criogen-gateway",
- "criogen-providers",
- "criogen-storage",
+ "criogenai-agent",
+ "criogenai-core",
+ "criogenai-gateway",
+ "criogenai-providers",
+ "criogenai-storage",
  "reqwest",
  "serde_json",
  "tokio",
 ]
 
 [[package]]
-name = "criogen-core"
+name = "criogenai-core"
 version = "0.1.0"
 dependencies = [
- "criogen-rt",
+ "criogenai-rt",
  "serde",
  "serde_json",
  "thiserror",
@@ -320,12 +320,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "criogen-gateway"
+name = "criogenai-gateway"
 version = "0.1.0"
 dependencies = [
  "axum",
- "criogen-agent",
- "criogen-providers",
+ "criogenai-agent",
+ "criogenai-providers",
  "futures-util",
  "reqwest",
  "serde",
@@ -338,23 +338,23 @@ dependencies = [
 ]
 
 [[package]]
-name = "criogen-js"
+name = "criogenai-js"
 version = "0.1.0"
 dependencies = [
- "criogen-agent",
- "criogen-core",
- "criogen-providers",
- "criogen-storage",
+ "criogenai-agent",
+ "criogenai-core",
+ "criogenai-providers",
+ "criogenai-storage",
  "serde",
  "serde_json",
  "tokio",
 ]
 
 [[package]]
-name = "criogen-providers"
+name = "criogenai-providers"
 version = "0.1.0"
 dependencies = [
- "criogen-rt",
+ "criogenai-rt",
  "js-sys",
  "reqwest",
  "serde",
@@ -368,7 +368,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "criogen-rt"
+name = "criogenai-rt"
 version = "0.1.0"
 dependencies = [
  "js-sys",
@@ -380,13 +380,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "criogen-storage"
+name = "criogenai-storage"
 version = "0.1.0"
 dependencies = [
  "aws-lc-rs",
  "base64 0.22.1",
- "criogen-core",
- "criogen-rt",
+ "criogenai-core",
+ "criogenai-rt",
  "serde",
  "serde_json",
  "sha2",
@@ -397,12 +397,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "criogen-telemetry"
+name = "criogenai-telemetry"
 version = "0.1.0"
 dependencies = [
- "criogen-agent",
- "criogen-core",
- "criogen-providers",
+ "criogenai-agent",
+ "criogenai-core",
+ "criogenai-providers",
  "reqwest",
  "serde_json",
  "thiserror",
@@ -410,14 +410,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "criogen-trace"
+name = "criogenai-trace"
 version = "0.1.0"
 dependencies = [
  "axum",
- "criogen-agent",
- "criogen-core",
- "criogen-providers",
- "criogen-telemetry",
+ "criogenai-agent",
+ "criogenai-core",
+ "criogenai-providers",
+ "criogenai-telemetry",
  "reqwest",
  "serde",
  "serde_json",

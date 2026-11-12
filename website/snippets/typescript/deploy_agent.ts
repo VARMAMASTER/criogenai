@@ -1,7 +1,7 @@
 // Docs: guides/deploying (lib/agent.ts in a Next.js app).
 // [show]
 // lib/agent.ts
-import { Storage, type Agent } from "criogen";
+import { Storage, type Agent } from "criogenai";
 import { buildAgent } from "@/lib/support_agent";
 
 // One Storage and one Agent per process, made on first use and shared by every

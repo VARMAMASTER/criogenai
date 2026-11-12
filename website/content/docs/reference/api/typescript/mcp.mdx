@@ -3,12 +3,12 @@ title: "TypeScript API: MCP servers"
 description: "TypeScript API reference, mcp servers: McpServer, McpOptions, stdio, http, StdioOptions, HttpOptions, McpInfo, McpTool."
 ---
 
-Tools from Model Context Protocol servers, over HTTP or a local process. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/mcp/).
+Tools from Model Context Protocol servers, over HTTP or a local process. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/mcp/).
 
 Tools from MCP servers.
 
 ```ts
-import { Agent, mcp } from "criogen";
+import { Agent, mcp } from "criogenai";
 const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."]);
 const agent = new Agent({ model, tools: [files] });          // all its tools
 // or tools: [files.tool("read_file")]
@@ -18,7 +18,7 @@ await files.close();
 The client runs in the Rust engine: it speaks MCP 2026-07-28 and falls back
 to the `initialize` handshake of older servers; stdio servers are started as
 a process (and again if they exit). It only uses tools: a server cannot
-sample your model or read your files. In criogen/web only `mcp.http` works.
+sample your model or read your files. In criogenai/web only `mcp.http` works.
 
 What a server says is data: names are mapped to names models accept (set
 `prefix` to keep two servers apart), schemas and messages are bounded, and
@@ -26,7 +26,7 @@ its readOnlyHint / idempotentHint decide nothing unless `trustAnnotations`.
 Header and env values never appear in an error.
 
 ```ts
-import { mcp } from "criogen";
+import { mcp } from "criogenai";
 mcp.stdio
 import {
   McpServer,
@@ -35,7 +35,7 @@ import {
   HttpOptions,
   McpInfo,
   McpTool,
-} from "criogen";
+} from "criogenai";
 ```
 
 These are used as `mcp.<name>`. Also exported at the top level: `McpServer`, `McpOptions`, `StdioOptions`, `HttpOptions`, `McpInfo`, `McpTool`.
@@ -76,7 +76,7 @@ timeouts, limits, hooks and the audit trail apply. Close it with `close()`
 **Example**
 
 ```ts
-import { Agent, mcp } from "criogen";
+import { Agent, mcp } from "criogenai";
 
 // Starts the server as a process (needs Node's npx and network access to fetch it).
 const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."], { prefix: "files" });
@@ -156,7 +156,7 @@ Calls a tool directly: its text, its JSON value, or its content blocks. Throws T
 **Example**
 
 ```ts
-import { mcp } from "criogen";
+import { mcp } from "criogenai";
 
 const server = await mcp.http("https://mcp.example.com/mcp", { headers: { Authorization: `Bearer ${process.env.MCP_TOKEN}` } });
 const answer = await server.call("search_docs", { query: "rate limits" });
@@ -208,7 +208,7 @@ function stdio(command: string, args?: string[], options?: StdioOptions): Promis
 Starts `command` with `args` as an MCP server (stdio) and lists its tools. Servers only.
 
 The process inherits this process's environment plus `env`. If it exits,
-the next call starts it again. In the browser (`criogen/web`) this throws
+the next call starts it again. In the browser (`criogenai/web`) this throws
 `unsupported`.
 
 **Parameters**
@@ -222,7 +222,7 @@ the next call starts it again. In the browser (`criogen/web`) this throws
 **Example**
 
 ```ts
-import { mcp } from "criogen";
+import { mcp } from "criogenai";
 
 const files = await mcp.stdio("npx", ["-y", "@modelcontextprotocol/server-filesystem", "."], {
   prefix: "files",
@@ -253,7 +253,7 @@ header values never appear in an error.
 **Example**
 
 ```ts
-import { Agent, mcp } from "criogen";
+import { Agent, mcp } from "criogenai";
 
 const docs = await mcp.http("https://mcp.example.com/mcp", {
   headers: { Authorization: `Bearer ${process.env.MCP_TOKEN}` },
@@ -381,7 +381,7 @@ The server's readOnlyHint; always `false` unless `trustAnnotations` is set.
 readonly destructive: boolean
 ```
 
-The server's destructiveHint (kept without `trustAnnotations`: it only makes Criogen more careful).
+The server's destructiveHint (kept without `trustAnnotations`: it only makes CriogenAI more careful).
 
 ### McpTool.idempotent
 

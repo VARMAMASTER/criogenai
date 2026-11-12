@@ -1,0 +1,26 @@
+# An example gateway config (design 0006 §12). Secrets are never written
+# here: each `*_env` names the environment variable that holds one.
+#
+#   OPENAI_API_KEY=… GEMINI_API_KEY=… GATEWAY_KEY_TEAM_A=… \
+#     cargo run -p criogenai-gateway -- --config crates/criogenai-gateway/examples/gateway.toml
+
+[[routes]]
+name = "support"
+models = [
+  { provider = "openai", model = "gpt-5-mini", api_key_env = "OPENAI_API_KEY" },
+  # Used when OpenAI is rate limited, overloaded or down.
+  { provider = "gemini", model = "gemini-2.5-flash", api_key_env = "GEMINI_API_KEY" },
+]
+
+[[routes]]
+name = "local"
+models = [{ provider = "ollama", model = "llama3.2" }]
+
+[[keys]]
+name = "team-a"
+key_env = "GATEWAY_KEY_TEAM_A"
+routes = ["support", "local"]
+# Optional limits (design 0006 §13), counted in memory.
+requests_per_minute = 60
+tokens_per_minute = 100000
+budget = { tokens = 5000000, period = "month" }

@@ -17,7 +17,7 @@ const react: PatternDef = {
   avoid: ["The steps are always the same (a fixed workflow is cheaper)", "Many independent lookups (ReWOO or parallel calls do them at once)"],
   task: "Is this weekend good for a picnic in Lisbon?",
   usesModel: true,
-  criogen: { kind: "helper", api: "patterns.react" },
+  criogenai: { kind: "helper", api: "patterns.react" },
   graph: {
     w: 640,
     h: 240,
@@ -54,7 +54,7 @@ const cot: PatternDef = {
   avoid: ["The answer needs fresh facts (use tools: ReAct)", "Many plausible approaches (Tree of Thoughts explores them)"],
   task: "A café sells coffee for $3 and muffins for $2. Ana buys 4 items and pays $10. How many coffees did she buy?",
   usesModel: true,
-  criogen: { kind: "helper", api: "Agent (instructions)" },
+  criogenai: { kind: "helper", api: "Agent (instructions)" },
   graph: {
     w: 640,
     h: 200,
@@ -85,7 +85,7 @@ const tot: PatternDef = {
   avoid: ["One obvious approach (Chain of Thought is enough)", "Tight latency or cost budgets: every branch is extra calls"],
   task: "Name a coffee shop for software developers.",
   usesModel: true,
-  criogen: { kind: "primitives", api: "Workflow: fan-out, join, route" },
+  criogenai: { kind: "primitives", api: "Workflow: fan-out, join, route" },
   graph: {
     w: 640,
     h: 240,
@@ -126,7 +126,7 @@ const planSolve: PatternDef = {
   avoid: ["Each step depends on surprises from the last (ReAct adapts as it goes)", "Very short tasks: the plan costs a call"],
   task: "Write a short brief: is a heat pump a good idea for a 1970s house?",
   usesModel: true,
-  criogen: { kind: "primitives", api: "Workflow + Agent nodes (or patterns.sequential)" },
+  criogenai: { kind: "primitives", api: "Workflow + Agent nodes (or patterns.sequential)" },
   graph: {
     w: 640,
     h: 220,
@@ -164,7 +164,7 @@ const rewoo: PatternDef = {
   avoid: ["The next step depends on what a tool returns (ReAct)", "Tools that often fail: the plan cannot adapt mid-way"],
   task: "Which has more people: the capital of France or the capital of Japan, and by how much?",
   usesModel: true,
-  criogen: { kind: "primitives", api: "Workflow: planner node, tool nodes, solver node" },
+  criogenai: { kind: "primitives", api: "Workflow: planner node, tool nodes, solver node" },
   graph: {
     w: 640,
     h: 240,
@@ -202,7 +202,7 @@ const reflexion: PatternDef = {
   avoid: ["No reliable check exists (the loop just guesses)", "One attempt is usually right"],
   task: "Write a launch tweet for our $49 noise-cancelling headphones, SoundVeil.",
   usesModel: true,
-  criogen: { kind: "helper", api: "patterns.loop (or review_and_critique)" },
+  criogenai: { kind: "helper", api: "patterns.loop (or review_and_critique)" },
   graph: {
     w: 640,
     h: 240,

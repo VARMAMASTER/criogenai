@@ -3,7 +3,7 @@ title: "TypeScript API: Errors"
 description: "TypeScript API reference, errors: CriogenError, NativeUnavailableError, ModelError, ToolExecutionError, LimitExceededError, ThreadBusyError, ThreadSuspendedError, StorageError, and more."
 ---
 
-Every error class, one per stable error code. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/errors/).
+Every error class, one per stable error code. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/errors/).
 
 ```ts
 import {
@@ -18,14 +18,14 @@ import {
   ValidationError,
   CancelledError,
   isCriogenError,
-} from "criogen";
+} from "criogenai";
 ```
 
 ## Contents
 
 | Name | Kind | Summary |
 |---|---|---|
-| [`CriogenError`](#criogenerror) | class | Any Criogen failure. |
+| [`CriogenError`](#criogenerror) | class | Any CriogenAI failure. |
 | [`NativeUnavailableError`](#nativeunavailableerror) | class | The native engine cannot be loaded on this system (`native_unavailable`). |
 | [`ModelError`](#modelerror) | class | The model failed after retries (`model_failed`). |
 | [`ToolExecutionError`](#toolexecutionerror) | class | A tool crashed (`tool_failed`); `cause` is the thrown value. |
@@ -35,7 +35,7 @@ import {
 | [`StorageError`](#storageerror) | class | Storage failed (`storage_*`, `encryption_*`, `audit_failed`). |
 | [`ValidationError`](#validationerror) | class | Something given was not accepted (`invalid_*`, `resume_invalid`). |
 | [`CancelledError`](#cancellederror) | class | The run was cancelled (`cancelled`), e.g. by an `AbortSignal`. |
-| [`isCriogenError`](#iscriogenerror) | function | `true` if `error` is a Criogen error, with `code` if given. |
+| [`isCriogenError`](#iscriogenerror) | function | `true` if `error` is a CriogenAI error, with `code` if given. |
 
 ## CriogenError
 
@@ -45,7 +45,7 @@ class CriogenError extends Error {
 }
 ```
 
-Any Criogen failure. `code` is stable across languages.
+Any CriogenAI failure. `code` is stable across languages.
 
 Every error the engine raises is a `CriogenError` or one of its
 subclasses, chosen by `code`. The message starts with the code
@@ -62,7 +62,7 @@ message text.
 **Example**
 
 ```ts
-import { Agent, FakeModel, FakeReply, LimitExceededError, tool } from "criogen";
+import { Agent, FakeModel, FakeReply, LimitExceededError, tool } from "criogenai";
 
 const ping = tool({ name: "ping", description: "Ping.", input: { type: "object" }, run: () => "pong" });
 const agent = new Agent({ model: new FakeModel([FakeReply.toolCall("ping")]), tools: [ping], limits: { modelCalls: 1 } });
@@ -251,7 +251,7 @@ The run was cancelled (`cancelled`), e.g. by an `AbortSignal`.
 function isCriogenError(error: unknown, code?: string): boolean
 ```
 
-`true` if `error` is a Criogen error, with `code` if given.
+`true` if `error` is a CriogenAI error, with `code` if given.
 
 **Parameters**
 
@@ -261,7 +261,7 @@ function isCriogenError(error: unknown, code?: string): boolean
 **Example**
 
 ```ts
-import { isCriogenError } from "criogen";
+import { isCriogenError } from "criogenai";
 
 try {
   await thread.send("Hello");

@@ -139,7 +139,7 @@ test("a baseline from any language compares and gates", async () => {
   baseline.check({ minPassRate: 0.6, minScores: { "tool_called:lookup_order": 1 } });
   assert.throws(() => baseline.check({ minPassRate: 0.9 }));
 
-  const file = path.join(os.tmpdir(), `criogen-eval-${process.pid}.json`);
+  const file = path.join(os.tmpdir(), `criogenai-eval-${process.pid}.json`);
   await current.save(file, { content: false });
   const saved = JSON.parse(fs.readFileSync(file, "utf8"));
   assert.equal(saved.cases[0].input, null);
@@ -147,7 +147,7 @@ test("a baseline from any language compares and gates", async () => {
 });
 
 test("datasets load and refuse bad lines", async () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "criogen-ds-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "criogenai-ds-"));
   fs.writeFileSync(path.join(dir, "a.jsonl"), '{"input": "a", "expected": "b"}\n\n{"id": "x", "input": "c"}\n');
   const data = await evals.Dataset.load(path.join(dir, "a.jsonl"));
   assert.deepEqual(data.cases.map((c) => c.id), ["1", "x"]);

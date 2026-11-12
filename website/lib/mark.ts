@@ -1,4 +1,4 @@
-// The Criogen mark: a rocket whose body is a hexagonal ice-crystal cell
+// The CriogenAI mark: a rocket whose body is a hexagonal ice-crystal cell
 // (cryogenic fuel, the name's root), an amber window that is a run's core,
 // and an amber flame. Line duotone: green outline over a faint green fill.
 // One source for the header logo, the watermark, the favicon and the card.

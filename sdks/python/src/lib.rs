@@ -1,4 +1,4 @@
-//! The Python SDK's native module `criogen._native` (design 0011): a
+//! The Python SDK's native module `criogenai._native` (design 0011): a
 //! bridge from asyncio to the Rust engine. Python builds the configuration
 //! (as JSON) and holds the user's tools; the agent loop, validation,
 //! storage and approvals run here.
@@ -13,29 +13,29 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 use std::time::Duration;
 
-use criogen_agent::mcp::{McpClient, McpError, McpServer};
-use criogen_agent::{
+use criogenai_agent::mcp::{McpClient, McpError, McpServer};
+use criogenai_agent::{
     Agent, AgentError, AgentEvent, AgentInput, AgentResult, Approval, Decision, Hook, HookAction,
     HookContext, HookError, Limits, Memory, OnToolException, Reply, ResilientModel, Thread,
     ThreadStream, ToolCallRequest, ToolContext, ToolError, ToolNext, ToolOutput, tool_fn,
     validate_arguments,
 };
-use criogen_core::{
+use criogenai_core::{
     CancelToken, EventKind, Node, NodeContext, NodeError, NodeOutput, Reducer, RetryPolicy, Router,
     RunError, RunErrorKind, RunOptions, RunOutput, Snapshot, State, Update, Workflow,
     WorkflowBuilder, node_with_context, router_fn,
 };
-use criogen_providers::{
+use criogenai_providers::{
     AzureApi, AzureCredential, AzureModel, BedrockApi, BlockDelta, BoxFuture, Embedder, Endpoint,
     FakeEmbedder, FakeModel, FakeReply, KaggleModel, Message, MessageDelta, Model, ModelError,
     ModelErrorKind, ModelRequest, ModelResponse, OutputSpec, ProviderEmbedder, ProviderModel,
     Settings, ToolAnnotations, ToolSpec, VertexApi, VertexCredential, VertexModel, preset,
 };
-use criogen_storage::{
+use criogenai_storage::{
     AuditQuery, Keyring, Namespace, OnBusy, Retention, SearchQuery, Storage, ThreadError, Turn,
     WorkflowThread,
 };
-use criogen_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
+use criogenai_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyCFunction, PyDict, PyTuple};
@@ -52,9 +52,9 @@ fn runtime() -> &'static tokio::runtime::Runtime {
     RUNTIME.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
-            .thread_name("criogen")
+            .thread_name("criogenai")
             .build()
-            .expect("the criogen Tokio runtime starts")
+            .expect("the criogenai Tokio runtime starts")
     })
 }
 
@@ -128,8 +128,8 @@ impl From<AgentError> for Failure {
     }
 }
 
-impl From<criogen_storage::StorageError> for Failure {
-    fn from(error: criogen_storage::StorageError) -> Self {
+impl From<criogenai_storage::StorageError> for Failure {
+    fn from(error: criogenai_storage::StorageError) -> Self {
         Self::new(error.code(), error.message)
     }
 }
@@ -181,7 +181,7 @@ fn deliver(
     future: &Py<PyAny>,
     outcome: Outcome,
 ) -> PyResult<()> {
-    let bridge = py.import("criogen._bridge")?;
+    let bridge = py.import("criogenai._bridge")?;
     match outcome {
         Ok(value) => {
             event_loop.call_method1(
@@ -379,7 +379,7 @@ fn bedrock_model(spec: &Value, name: &str) -> Result<Arc<dyn Model>, Failure> {
             .ok_or_else(|| bad("`api` must be auto, messages, chat or responses"))?,
         None => BedrockApi::Auto,
     };
-    let mut endpoint = criogen_providers::bedrock_from_env(
+    let mut endpoint = criogenai_providers::bedrock_from_env(
         name,
         text(spec, "region"),
         text(spec, "api_key").map(str::to_string),
@@ -480,7 +480,7 @@ fn endpoint(spec: &Value) -> Result<Endpoint, Failure> {
                 .ok_or_else(|| bad("`anthropic_compatible` needs a `base_url`"))?,
             key.clone(),
         ),
-        // Every named provider (design 0006 §4.1): one table in criogen-providers.
+        // Every named provider (design 0006 §4.1): one table in criogenai-providers.
         named => match preset(named) {
             Some(p) => p.endpoint(key.clone()).map_err(|err| bad(err.message))?,
             None => return Err(bad(format!("unknown model kind `{named}`"))),
@@ -1000,15 +1000,15 @@ impl Hook for PyHook {
     fn on_end<'a>(
         &'a self,
         ctx: &'a HookContext,
-        outcome: criogen_agent::Outcome,
+        outcome: criogenai_agent::Outcome,
     ) -> BoxFuture<'a, ()> {
         Box::pin(async move {
             if !self.has("on_end") {
                 return;
             }
             let outcome = match outcome {
-                criogen_agent::Outcome::Completed => "completed",
-                criogen_agent::Outcome::Suspended => "suspended",
+                criogenai_agent::Outcome::Completed => "completed",
+                criogenai_agent::Outcome::Suspended => "suspended",
                 _ => "failed",
             };
             let mut payload: Value = serde_json::from_str(&hook_ctx_json(ctx)).unwrap_or_default();
@@ -1627,7 +1627,7 @@ async fn storage_operation(storage: Storage, op: String, payload: Value) -> Outc
     }
 }
 
-fn prune_json(report: criogen_storage::PruneReport) -> Value {
+fn prune_json(report: criogenai_storage::PruneReport) -> Value {
     json!({
         "threads_deleted": report.threads_deleted,
         "threads_busy": report.threads_busy,
@@ -1640,7 +1640,7 @@ fn py_failure(failure: Failure) -> PyErr {
     let details = failure.details.map(|d| d.to_string());
     Python::attach(|py| {
         match py
-            .import("criogen._bridge")
+            .import("criogenai._bridge")
             .and_then(|b| b.getattr("make_error"))
             .and_then(|f| f.call1((failure.code.clone(), failure.message.clone(), details)))
         {
@@ -2281,22 +2281,22 @@ impl NativeStream {
 
 // ---------- collections (design 0025) ----------
 
-fn from_retrieval(error: criogen_agent::retrieval::RetrievalError) -> Failure {
+fn from_retrieval(error: criogenai_agent::retrieval::RetrievalError) -> Failure {
     Failure::new(error.code(), error.to_string())
 }
 
-fn hit_json(hit: &criogen_agent::retrieval::Hit) -> Value {
+fn hit_json(hit: &criogenai_agent::retrieval::Hit) -> Value {
     json!({ "id": hit.id, "text": hit.text, "metadata": hit.metadata, "score": hit.score })
 }
 
 /// Documents searched by meaning. Made empty, filled by `open`.
 #[pyclass(frozen)]
 struct NativeCollection {
-    collection: Arc<Mutex<Option<criogen_agent::retrieval::Collection>>>,
+    collection: Arc<Mutex<Option<criogenai_agent::retrieval::Collection>>>,
 }
 
 impl NativeCollection {
-    fn get(&self) -> Result<criogen_agent::retrieval::Collection, Failure> {
+    fn get(&self) -> Result<criogenai_agent::retrieval::Collection, Failure> {
         lock(&self.collection)
             .clone()
             .ok_or_else(|| bad("the collection is not open"))
@@ -2327,18 +2327,18 @@ impl NativeCollection {
         let embedder = embedder(&spec["embedder"]).map_err(py_failure)?;
         let kind = match text(&spec, "index") {
             Some("hnsw") => {
-                let mut config = criogen_storage::vector::HnswConfig::default();
+                let mut config = criogenai_storage::vector::HnswConfig::default();
                 if let Some(ef) = spec["ef_search"].as_u64() {
                     config = config.ef_search(usize::try_from(ef).unwrap_or(usize::MAX));
                 }
-                criogen_agent::retrieval::IndexKind::Hnsw(config)
+                criogenai_agent::retrieval::IndexKind::Hnsw(config)
             }
-            _ => criogen_agent::retrieval::IndexKind::Flat,
+            _ => criogenai_agent::retrieval::IndexKind::Flat,
         };
         let name = text(&spec, "name").unwrap_or_default().to_string();
         let slot = self.collection.clone();
         spawn(py, event_loop, None, async move {
-            let collection = criogen_agent::retrieval::Collection::open_with(
+            let collection = criogenai_agent::retrieval::Collection::open_with(
                 store.memory().clone(),
                 &name,
                 embedder,
@@ -2363,7 +2363,7 @@ impl NativeCollection {
             serde_json::from_str(documents).map_err(|e| PyValueError::new_err(e.to_string()))?;
         let mut docs = Vec::with_capacity(raw.len());
         for d in raw {
-            let mut doc = criogen_agent::retrieval::Document::new(
+            let mut doc = criogenai_agent::retrieval::Document::new(
                 text(&d, "id").unwrap_or_default(),
                 text(&d, "text").unwrap_or_default(),
             );
@@ -2432,14 +2432,14 @@ impl NativeCollection {
 /// The local trace viewer, serving in the background.
 #[pyclass(frozen)]
 struct NativeTraceViewer {
-    running: Arc<Mutex<Option<criogen_trace::RunningViewer>>>,
+    running: Arc<Mutex<Option<criogenai_trace::RunningViewer>>>,
     url: String,
 }
 
 #[pymethods]
 impl NativeTraceViewer {
     /// Starts serving (blocking briefly, without the GIL): spec as
-    /// `criogen_trace::ViewerBuilder::from_spec`.
+    /// `criogenai_trace::ViewerBuilder::from_spec`.
     #[new]
     fn new(py: Python<'_>, spec: &str) -> PyResult<Self> {
         let spec: Value =
@@ -2447,8 +2447,8 @@ impl NativeTraceViewer {
         let running = py
             .detach(|| {
                 runtime().block_on(async {
-                    let (builder, address) = criogen_trace::ViewerBuilder::from_spec(&spec)?;
-                    criogen_trace::start(builder, address).await
+                    let (builder, address) = criogenai_trace::ViewerBuilder::from_spec(&spec)?;
+                    criogenai_trace::start(builder, address).await
                 })
             })
             .map_err(|e| py_failure(bad(e.to_string())))?;
@@ -2596,7 +2596,7 @@ impl NativeMcp {
 /// "base_url", "key_env", "anthropic"}]`. The SDK's own key table is
 /// checked against it in the tests.
 fn presets_json() -> String {
-    let all: Vec<Value> = criogen_providers::PRESETS
+    let all: Vec<Value> = criogenai_providers::PRESETS
         .iter()
         .map(|p| {
             serde_json::json!({"name": p.name, "title": p.title, "base_url": p.base_url,

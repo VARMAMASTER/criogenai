@@ -1,11 +1,11 @@
 // Two slow bands under the hero, moving in opposite directions: the providers
-// Criogen calls by name (their icons), and models Criogen agents could call
+// CriogenAI calls by name (their icons), and models CriogenAI agents could call
 // on 2026-11-01 (through OpenRouter's public list, or tested on Kaggle's
 // allowance). Pure CSS: they pause on hover and stand still (wrapped) for
 // visitors who ask for reduced motion.
 import BrandIcon from "./BrandIcon";
 
-/** Named providers (criogen_providers::PRESETS, plus Kaggle): [icon slug, name]. */
+/** Named providers (criogenai_providers::PRESETS, plus Kaggle): [icon slug, name]. */
 const PROVIDERS: [slug: string | undefined, name: string][] = [
   [undefined, "OpenAI"],
   ["anthropic", "Anthropic"],
@@ -76,7 +76,7 @@ function ModelTrack({ hidden }: { hidden?: boolean }) {
 
 export default function ModelMarquee() {
   return (
-    <section className="marquee" aria-label="Providers and some of the models Criogen agents can call">
+    <section className="marquee" aria-label="Providers and some of the models CriogenAI agents can call">
       <p className="marquee-caption">One agent API for 450+ models, from every major provider or your own servers</p>
       <div className="marquee-window">
         <div className="marquee-track marquee-rtl">

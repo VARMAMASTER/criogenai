@@ -2,10 +2,10 @@
 // like the docs (same Markdown, same components). A post's front matter:
 //
 //   ---
-//   title: Criogen 0.1.5
+//   title: CriogenAI 0.1.5
 //   description: One or two sentences for the list, search results and link cards.
 //   date: 2026-11-09
-//   author: The Criogen team
+//   author: The CriogenAI team
 //   tags: release, mcp, evals
 //   draft: false
 //   ---
@@ -52,7 +52,7 @@ function read(file: string): { meta: PostMeta; body: string; draft: boolean } {
       title: data.title,
       description: data.description ?? "",
       date: data.date,
-      author: data.author || "The Criogen team",
+      author: data.author || "The CriogenAI team",
       tags: (data.tags ?? "")
         .split(",")
         .map((t) => t.trim())

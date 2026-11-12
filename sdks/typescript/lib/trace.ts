@@ -1,5 +1,5 @@
 // The local trace viewer (design 0023): every run on a page, on your own
-// computer. `npx criogen trace`, or from code:
+// computer. `npx criogenai trace`, or from code:
 //
 //   const viewer = await serveTraces();               // http://127.0.0.1:4318
 //   const agent = new Agent({ model, telemetry: Telemetry.local() });
@@ -54,7 +54,7 @@ interface TraceAddon {
  *
  * It receives traces over OTLP/HTTP (`Telemetry.local()` sends there) and
  * shows each run on a page at `viewer.url`. Node only; the same viewer runs
- * from the command line with `npx criogen trace`.
+ * from the command line with `npx criogenai trace`.
  *
  * @param options Port, host, database, retention, prices and token.
  * @returns The running viewer: its `url` and `stop()`.
@@ -62,7 +62,7 @@ interface TraceAddon {
  * @throws {CriogenError} The engine has no trace viewer (`unsupported`, e.g. in the browser).
  *
  * @example
- * import { Agent, FakeModel, Telemetry, serveTraces } from "criogen";
+ * import { Agent, FakeModel, Telemetry, serveTraces } from "criogenai";
  *
  * const viewer = await serveTraces({ port: 0, db: ":memory:" });
  * const telemetry = Telemetry.local({ url: viewer.url });
@@ -75,7 +75,7 @@ interface TraceAddon {
 export async function serveTraces(options: TraceViewerOptions = {}): Promise<TraceViewer> {
   const addon = native as unknown as Partial<TraceAddon>;
   if (typeof addon.traceStart !== "function") {
-    throw errorFor("unsupported", "the trace viewer needs criogen's engine 0.1.5 or newer, on a server (not in the browser)");
+    throw errorFor("unsupported", "the trace viewer needs criogenai's engine 0.1.5 or newer, on a server (not in the browser)");
   }
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 4318;

@@ -1,5 +1,5 @@
 {
-  "$comment": "Every stable Criogen error code (design 0013 §2). Codes may be added, never renamed or removed before 1.0. Checked against the Rust sources, docs/errors.md and both SDKs by tests.",
+  "$comment": "Every stable CriogenAI error code (design 0013 §2). Codes may be added, never renamed or removed before 1.0. Checked against the Rust sources, docs/errors.md and both SDKs by tests.",
   "version": 1,
   "codes": [
     {"code": "node_failed", "layers": ["run"], "category": "developer", "retryable": false, "family": "other", "description": "A workflow node returned an error."},
@@ -61,7 +61,7 @@
     {"code": "invalid_workflow", "layers": ["build"], "category": "developer", "retryable": false, "family": "validation", "description": "An SDK workflow that does not validate (`details.issues` lists the problems)."},
     {"code": "unsupported", "layers": ["build"], "category": "developer", "retryable": false, "family": "other", "description": "The feature needs a server, and here the engine runs as WebAssembly in a JavaScript host (the browser, design 0021): databases (SQLite, Postgres), encryption at rest, telemetry export, web tools."},
     {"code": "mcp_connect", "layers": ["build"], "category": "developer", "retryable": false, "family": "other", "description": "An MCP server could not be started or reached, or refused the credentials (design 0022)."},
-    {"code": "mcp_protocol", "layers": ["build"], "category": "developer", "retryable": false, "family": "other", "description": "An MCP server answered something the client cannot use: a malformed message, an error, or a protocol version Criogen does not speak."},
+    {"code": "mcp_protocol", "layers": ["build"], "category": "developer", "retryable": false, "family": "other", "description": "An MCP server answered something the client cannot use: a malformed message, an error, or a protocol version CriogenAI does not speak."},
     {"code": "mcp_tool_name", "layers": ["build"], "category": "developer", "retryable": false, "family": "other", "description": "Two of an MCP server's tools map to the same name, or a name maps to nothing: set a prefix or leave one out with `except`."},
     {"code": "mcp_tool_schema", "layers": ["build"], "category": "developer", "retryable": false, "family": "other", "description": "An MCP tool's input schema is not an object schema, or is too large or too deep: leave the tool out with `except`."},
     {"code": "mcp_timeout", "layers": ["build"], "category": "transient", "retryable": true, "family": "other", "description": "An MCP server was not ready within the connect timeout."},

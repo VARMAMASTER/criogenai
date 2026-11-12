@@ -1,6 +1,6 @@
 ---
 title: In the browser (WebAssembly)
-description: Run Criogen agents in a web page or a Web Worker, on the same Rust engine compiled to WebAssembly, with the same TypeScript API.
+description: Run CriogenAI agents in a web page or a Web Worker, on the same Rust engine compiled to WebAssembly, with the same TypeScript API.
 ---
 
 The TypeScript package also runs **in the browser**: the same Rust engine,
@@ -13,12 +13,12 @@ servers nothing. The [playground](/playground/) runs its code samples this way.
 
 <Sample name="browser" only={["typescript"]} />
 
-- Import from **`criogen/web`** (an ES module; bundlers pick it up like any
+- Import from **`criogenai/web`** (an ES module; bundlers pick it up like any
   other). Call **`await ready()`** once first: it fetches and compiles the
   engine, about 550 KB compressed, cached by the browser after.
-- The engine file (`criogen_bg.wasm`) is loaded from next to the script.
+- The engine file (`criogenai_bg.wasm`) is loaded from next to the script.
   Vite and webpack copy it for you; with a bundler that does not, copy it
-  from `node_modules/criogen/dist-web/` or say where it is:
+  from `node_modules/criogenai/dist-web/` or say where it is:
 
 <Sample name="browser" region="locate" only={["typescript"]} />
 
@@ -31,11 +31,11 @@ A browser has no environment variables: pass `apiKey`. **A key in a page is
 visible to whoever uses the page.** That is fine for a person's own key in
 their own tab (the playground does this: the key goes from the tab to the
 provider and nowhere else). In a product, do not ship your key: point the
-model at your own server, or at a [Criogen gateway](/docs/guides/gateway/)
+model at your own server, or at a [CriogenAI gateway](/docs/guides/gateway/)
 with a virtual key per user and its limits.
 
 The provider must accept calls from a browser page (CORS). OpenAI, Anthropic
-(Criogen adds the header Anthropic asks browser callers for), Gemini's
+(CriogenAI adds the header Anthropic asks browser callers for), Gemini's
 OpenAI-compatible endpoint and OpenRouter do; a local Ollama needs
 `OLLAMA_ORIGINS`. When a call is refused, the error says it may be CORS. The
 usual rules still hold: redirects are never followed, a key never goes over
@@ -75,7 +75,7 @@ These fail with the error code `unsupported` in the browser:
 - **Background tabs.** Browsers slow timers in background tabs, and phones
   may pause them: short, interactive runs fit best. Long or durable runs
   belong on a server.
-- **Speed.** Criogen's own work is a fraction of a millisecond per run on a
+- **Speed.** CriogenAI's own work is a fraction of a millisecond per run on a
   server, and a model call takes seconds; WebAssembly is somewhat slower
   than native, which matters little next to the model. What a visitor can
   feel is the network: each model call travels from their connection.

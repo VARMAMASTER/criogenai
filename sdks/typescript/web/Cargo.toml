@@ -3,8 +3,8 @@
 # runtimes). Not a workspace member: it builds for wasm32-unknown-unknown
 # (scripts/build-web.mjs runs cargo, wasm-bindgen and the bundler).
 [package]
-name = "criogen-web"
-version = "0.1.6"
+name = "criogenai-web"
+version = "0.1.7"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
@@ -14,12 +14,12 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-criogen-core = { path = "../../../crates/criogen-core" }
-criogen-providers = { path = "../../../crates/criogen-providers" }
-criogen-storage = { path = "../../../crates/criogen-storage" }
-criogen-agent = { path = "../../../crates/criogen-agent" }
-criogen-js = { path = "../../../crates/criogen-js" }
-criogen-rt = { path = "../../../crates/criogen-rt" }
+criogenai-core = { path = "../../../crates/criogenai-core" }
+criogenai-providers = { path = "../../../crates/criogenai-providers" }
+criogenai-storage = { path = "../../../crates/criogenai-storage" }
+criogenai-agent = { path = "../../../crates/criogenai-agent" }
+criogenai-js = { path = "../../../crates/criogenai-js" }
+criogenai-rt = { path = "../../../crates/criogenai-rt" }
 serde_json = "1"
 # Exact: the glue tool (wasm-bindgen-cli) must be the same version as the
 # crate, and these match the workspace's lockfile.
@@ -28,7 +28,7 @@ wasm-bindgen-futures = "=0.4.79"
 js-sys = "=0.3.106"
 web-sys = "=0.3.106"
 
-# Stand-alone: never part of the Criogen workspace.
+# Stand-alone: never part of the CriogenAI workspace.
 [workspace]
 
 # Small to download: optimised for size, one codegen unit, whole-program LTO.

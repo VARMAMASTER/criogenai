@@ -72,14 +72,14 @@ export interface Price {
  * model name. `null` when a model that was used has no price. Reasoning tokens
  * are counted as output tokens.
  *
- * Criogen ships no price list: prices change too often. Put in your
+ * CriogenAI ships no price list: prices change too often. Put in your
  * provider's current prices.
  *
  * @param result A run result or reply (anything with `models`).
  * @param prices USD per million tokens, keyed by "provider:model" (checked first) or by model name.
  * @returns The estimated cost in USD, or `null` if a used model has no price.
  * @example
- * import { Agent, estimateCost } from "criogen";
+ * import { Agent, estimateCost } from "criogenai";
  *
  * const result = await new Agent({ model: "openai:gpt-5-mini" }).run("Hello");
  * // Example prices: use your provider's current ones.

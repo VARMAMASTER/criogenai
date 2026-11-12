@@ -1,9 +1,9 @@
 type Error = Box<dyn std::error::Error>;
-use criogen_agent::Agent;
+use criogenai_agent::Agent;
 
 pub async fn streaming(agent: Agent) -> Result<(), Error> {
     // [show]
-    use criogen_agent::AgentEvent;
+    use criogenai_agent::AgentEvent;
 
     let mut stream = agent.thread("user-42").stream("Summarise my last order");
     while let Some(event) = stream.next().await {

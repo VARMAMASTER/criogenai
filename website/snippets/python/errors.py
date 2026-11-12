@@ -1,10 +1,10 @@
 # Docs: concepts/errors-and-retries. Checked with mypy against the SDK.
-from criogen import Agent
+from criogenai import Agent
 
 
 async def handle(agent: Agent) -> None:
     # [show catch]
-    from criogen import (
+    from criogenai import (
         CancelledError,
         CriogenError,
         LimitExceededError,
@@ -27,7 +27,7 @@ async def handle(agent: Agent) -> None:
         if kind in ("rate_limited", "overloaded", "server", "timeout", "network"):
             reply = await chat.retry()  # transient: continue from the failed step
     except CancelledError:
-        ...  # criogen.CancelledError (not asyncio's): the run was cancelled, retry() continues it
+        ...  # criogenai.CancelledError (not asyncio's): the run was cancelled, retry() continues it
     except CriogenError as error:
         # Every other failure: decide by the stable code, never by the message.
         if error.code == "thread_interrupted":
@@ -39,7 +39,7 @@ async def handle(agent: Agent) -> None:
 
 def resilience() -> None:
     # [show retry]
-    from criogen import Agent, Retry
+    from criogenai import Agent, Retry
 
     agent = Agent(
         "openai:gpt-5-mini",

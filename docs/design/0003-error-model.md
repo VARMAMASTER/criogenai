@@ -15,7 +15,7 @@ opposite of what we want:
 - Interrupts are exceptions that every `except Exception` must remember to
   re-raise.
 
-Criogen's rule:
+CriogenAI's rule:
 
 > **Every failure has exactly one category, one stable code, one documented
 > default action, and leaves behind a valid transcript and an exact account of
@@ -71,7 +71,7 @@ code keeps working.
 | **policy** | Configuration | model-call limit, tool-call limit, step limit, deadline, nesting limit | Fail with a `limit_exceeded`-family code, or end gracefully if configured (0004 §5) |
 | **human** | A reviewer | rejected tool call | Send it to the model as `status: rejected`; continue |
 | **cancellation** | The caller | `cancel()`, abort signal, parent cancelled | Stop; outcome `cancelled` |
-| **internal** | Criogen maintainers | Rust panic in the runtime, broken invariant | Fail with code `internal`; bug report requested |
+| **internal** | CriogenAI maintainers | Rust panic in the runtime, broken invariant | Fail with code `internal`; bug report requested |
 
 ---
 
@@ -80,7 +80,7 @@ code keeps working.
 Adapters must map every provider failure to a `ModelError.kind`. Retry logic is
 then generic and identical for all providers.
 
-Status: **implemented** in `criogen-providers` (`ModelErrorKind`,
+Status: **implemented** in `criogenai-providers` (`ModelErrorKind`,
 `ModelError`, `classify_http` for HTTP failures in the shapes of OpenAI,
 Anthropic, Ollama, vLLM, llama.cpp and Google (Gemini), `Retry-After` in all three forms,
 message sanitization). Transport failures (`network`, `timeout`,
@@ -150,7 +150,7 @@ behave identically.
   and in `metadata.attempts`.
 
 Status (2026-10-12): **implemented** for agent model calls in
-`criogen-agent` (`resilience.rs`): retries of transient kinds with the
+`criogenai-agent` (`resilience.rs`): retries of transient kinds with the
 node's `RetryPolicy` backoff, `Retry-After` honored up to
 `max_retry_after` (default 60 s, longer waits fail or fall back at once),
 `not_sent` retried immediately, fallback models (at once on

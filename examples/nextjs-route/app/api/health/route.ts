@@ -1,5 +1,5 @@
 // Health check: the engine loads, and (with ?model=1) the model answers.
-import { kaggle, ready } from "criogen";
+import { kaggle, ready } from "criogenai";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";

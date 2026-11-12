@@ -1,14 +1,14 @@
 ---
-title: "Criogen 0.1.6: your models through Azure, Bedrock and Vertex AI"
+title: "CriogenAI 0.1.6: your models through Azure, Bedrock and Vertex AI"
 description: Agents can now reach models through the cloud your company already uses, with its own keys and identities. And OpenAI models reason while they use tools.
 date: 2026-11-11
-author: The Criogen team
+author: The CriogenAI team
 tags: release, providers, azure, bedrock, vertex, openai
 ---
 
 Most companies do not buy models from the model makers directly. They buy
 them through their cloud: Azure, AWS or Google Cloud. The reasons are data
-residency, the agreements they already have, and one bill. Criogen 0.1.6
+residency, the agreements they already have, and one bill. CriogenAI 0.1.6
 reaches models that way, in Python, TypeScript and Rust:
 
 - **Azure OpenAI and Microsoft Foundry**;
@@ -19,8 +19,8 @@ It also moves OpenAI's own models to OpenAI's newer API, so they can reason
 while they call tools.
 
 ```sh
-pip install -U criogen
-npm install criogen@latest
+pip install -U criogenai
+npm install criogenai@latest
 ```
 
 ## Azure OpenAI and Foundry
@@ -28,7 +28,7 @@ npm install criogen@latest
 The model name is your deployment's name. The endpoint is your resource.
 
 ```python
-from criogen import Agent, Azure
+from criogenai import Agent, Azure
 
 agent = Agent(Azure("gpt-5-mini", endpoint="my-resource", managed_identity=True))
 ```
@@ -41,14 +41,14 @@ You can sign in four ways:
   key to store at all;
 - a token from somewhere else.
 
-Criogen gets the sign-in tokens and renews them before they run out. Foundry's
+CriogenAI gets the sign-in tokens and renews them before they run out. Foundry's
 models from other makers (DeepSeek, Llama, Mistral, Grok) work too, with
 `api="chat"`.
 
 ## Amazon Bedrock
 
 ```python
-from criogen import Agent, Bedrock
+from criogenai import Agent, Bedrock
 
 agent = Agent(Bedrock("us.anthropic.claude-sonnet-5", region="us-east-1"))
 ```
@@ -63,12 +63,12 @@ name, because the region decides where your data is processed.
 ## Google Vertex AI
 
 ```python
-from criogen import Agent, Vertex
+from criogenai import Agent, Vertex
 
 agent = Agent(Vertex("claude-sonnet-5", project="my-project", location="europe-west4"))
 ```
 
-Gemini and Google's other hosted models work, and so does Claude. Criogen
+Gemini and Google's other hosted models work, and so does Claude. CriogenAI
 signs in with:
 
 - your `gcloud auth application-default login` credentials;
@@ -83,7 +83,7 @@ As with Bedrock, project and location have no defaults.
 models: OpenAI's older Chat Completions API does not let them reason while
 they use tools.
 
-Criogen also asks OpenAI to store nothing. The model's reasoning comes back
+CriogenAI also asks OpenAI to store nothing. The model's reasoning comes back
 encrypted and is sent along with the conversation, so it keeps its train of
 thought across tool calls. We checked all of this against OpenAI's live API.
 

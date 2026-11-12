@@ -220,7 +220,7 @@ export default function Page() {
           <span className="logo">☕</span>
           <div>
             <strong>Mugshot Support</strong>
-            <small>Criogen demo</small>
+            <small>CriogenAI demo</small>
           </div>
         </div>
         <button className="primary wide" onClick={newChat}>

@@ -62,7 +62,7 @@ const double = tool({
 const toolResults = (result) => result.messages.filter((m) => m.role === "tool");
 
 function tempDb(name) {
-  const file = path.join(os.tmpdir(), `criogen-ts-${name}-${crypto.randomUUID()}.db`);
+  const file = path.join(os.tmpdir(), `criogenai-ts-${name}-${crypto.randomUUID()}.db`);
   return {
     url: `sqlite:///${file}`,
     file,

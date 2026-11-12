@@ -1,5 +1,5 @@
 // [show]
-import { Agent, Telemetry } from "criogen";
+import { Agent, Telemetry } from "criogenai";
 
 // LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL
 const langfuse = Telemetry.langfuse();
@@ -14,7 +14,7 @@ await langfuse.flush(); // before the script ends
 
 export async function local() {
   // [show local]
-  // In a terminal: npx criogen trace   (then open http://127.0.0.1:4318)
+  // In a terminal: npx criogenai trace   (then open http://127.0.0.1:4318)
   const traces = Telemetry.local(); // { captureContent: true } to see prompts and outputs too
   const agent = new Agent({ model: "openai:gpt-5-mini", telemetry: traces });
   await agent.run("Where is order A-1001?");

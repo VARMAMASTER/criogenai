@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict
 
 from pydantic import BaseModel
 
-from criogen import END, Agent, NodeContext, Workflow, goto, patterns, suspend, tool
+from criogenai import END, Agent, NodeContext, Workflow, goto, patterns, suspend, tool
 
 MODEL = "openai:gpt-5-mini"
 
@@ -434,7 +434,7 @@ async def learning() -> None:
     # [show learning]
     import random
 
-    from criogen import Storage
+    from criogenai import Storage
 
     storage = Storage("sqlite://learning.db")  # what the agent has learned survives restarts
     styles = ["short", "detailed", "friendly + steps"]

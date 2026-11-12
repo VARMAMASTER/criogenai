@@ -87,8 +87,8 @@ const LEAD = {
 };
 
 const LANGUAGES = {
-  python: { label: "Python", fence: "python", package: "criogen", install: "pip install criogen", source: "docstrings and type hints" },
-  typescript: { label: "TypeScript", fence: "ts", package: "criogen", install: "npm install criogen", source: "declarations and doc comments" },
+  python: { label: "Python", fence: "python", package: "criogenai", install: "pip install criogenai", source: "docstrings and type hints" },
+  typescript: { label: "TypeScript", fence: "ts", package: "criogenai", install: "npm install criogenai", source: "declarations and doc comments" },
 };
 
 const pageHref = (language, id) => `/docs/reference/api/${language}/${id}/`;
@@ -252,7 +252,7 @@ const KIND_LABEL = {
 
 // ---------- the pages ----------
 
-const isTopLevel = (item) => item.access.startsWith("from criogen import") || item.access.startsWith("import {");
+const isTopLevel = (item) => item.access.startsWith("from criogenai import") || item.access.startsWith("import {");
 
 /** A module's items as shown: tuning constants that only live in a namespace and say nothing are left out. */
 function shownItems(module, id) {
@@ -271,17 +271,17 @@ function importBlock(language, id, module, items) {
   const lines = [];
   if (language === "python") {
     if (module.namespace) {
-      lines.push(`from criogen import ${id}`, "", ...(items.filter((i) => !isTopLevel(i)).slice(0, 1).map((i) => `${id}.${i.name}(...)`)));
+      lines.push(`from criogenai import ${id}`, "", ...(items.filter((i) => !isTopLevel(i)).slice(0, 1).map((i) => `${id}.${i.name}(...)`)));
     }
     if (names.length) {
-      const one = `from criogen import ${names.join(", ")}`;
-      lines.push(one.length <= 88 ? one : `from criogen import (\n${names.map((n) => `    ${n},`).join("\n")}\n)`);
+      const one = `from criogenai import ${names.join(", ")}`;
+      lines.push(one.length <= 88 ? one : `from criogenai import (\n${names.map((n) => `    ${n},`).join("\n")}\n)`);
     }
   } else {
-    if (module.namespace) lines.push(`import { ${id} } from "criogen";`, `${id}.${items.find((i) => !isTopLevel(i))?.name ?? "…"}`);
+    if (module.namespace) lines.push(`import { ${id} } from "criogenai";`, `${id}.${items.find((i) => !isTopLevel(i))?.name ?? "…"}`);
     if (names.length) {
-      const one = `import { ${names.join(", ")} } from "criogen";`;
-      lines.push(one.length <= 88 ? one : `import {\n${names.map((n) => `  ${n},`).join("\n")}\n} from "criogen";`);
+      const one = `import { ${names.join(", ")} } from "criogenai";`;
+      lines.push(one.length <= 88 ? one : `import {\n${names.map((n) => `  ${n},`).join("\n")}\n} from "criogenai";`);
     }
   }
   return lines.filter((l, i, a) => !(l === "" && (i === 0 || i === a.length - 1))).join("\n");
@@ -364,12 +364,12 @@ function renderLanguagePage(language, data) {
   const body = [
     "---",
     `title: "${lang.label} API"`,
-    `description: "The ${lang.label} API reference of Criogen, one page per module: agents, tools, models, storage, workflows, patterns, MCP, telemetry and evals."`,
+    `description: "The ${lang.label} API reference of CriogenAI, one page per module: agents, tools, models, storage, workflows, patterns, MCP, telemetry and evals."`,
     "---",
     "",
     `Every public class, function and type of the \`${lang.package}\` ${lang.label} package (${data.version}), one page per module, generated from its ${lang.source} every time the site is built. Install it with \`${lang.install}\`. The same API in [${LANGUAGES[other].label}](/docs/reference/api/${other}/) and [Rust](/docs/reference/api/rust/).`,
     "",
-    "New to Criogen? Start with the [quickstart](/docs/quickstart/) and the [agents guide](/docs/guides/agents/); come here for the exact names, parameters and defaults.",
+    "New to CriogenAI? Start with the [quickstart](/docs/quickstart/) and the [agents guide](/docs/guides/agents/); come here for the exact names, parameters and defaults.",
     "",
   ];
   let group = null;
@@ -395,7 +395,7 @@ function renderRustPage(crates) {
   return [
     "---",
     'title: "Rust API"',
-    'description: "Rust API reference: every public item of the Criogen crates, with documentation, signatures and examples, from rustdoc."',
+    'description: "Rust API reference: every public item of the CriogenAI crates, with documentation, signatures and examples, from rustdoc."',
     "---",
     "",
     "The Rust reference is rustdoc's own: every public item of the crates below, with its documentation, signatures and examples, built from the doc comments every time the site is built. Back to the [API reference](/docs/reference/api/).",
@@ -404,7 +404,7 @@ function renderRustPage(crates) {
     "|---|---|",
     ...rows,
     "",
-    "Start with `criogen_agent` (agents and tools) and `criogen_core` (the workflow engine). The crates are not on crates.io yet, so these pages are the reference for their public API; the source is not published. Use the search box on any of these pages to find a type or function.",
+    "Start with `criogenai_agent` (agents and tools) and `criogenai_core` (the workflow engine). The crates are not on crates.io yet, so these pages are the reference for their public API; the source is not published. Use the search box on any of these pages to find a type or function.",
     "",
     "Python and TypeScript have the same features: [Python API](/docs/reference/api/python/), [TypeScript API](/docs/reference/api/typescript/).",
     "",

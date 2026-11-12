@@ -12,7 +12,7 @@ export interface NavGroup {
 }
 
 export const SITE = {
-  title: "Criogen",
+  title: "CriogenAI",
   url: "https://criogenai.com",
   description:
     "A fast AI agent framework and LangChain alternative: agents and workflows on a Rust engine, used from Python, TypeScript or Rust, with tools, approvals, durable threads, memory, an audit trail and an LLM gateway.",
@@ -22,7 +22,7 @@ export const SIDEBAR: NavGroup[] = [
   {
     label: "Get started",
     items: [
-      { label: "What Criogen is", slug: "" },
+      { label: "What CriogenAI is", slug: "" },
       { label: "Install", slug: "install" },
       { label: "Quickstart", slug: "quickstart" },
       { label: "Status: built and planned", slug: "status" },
@@ -82,7 +82,7 @@ export const SIDEBAR: NavGroup[] = [
   {
     label: "Production and compliance",
     items: [
-      { label: "Using Criogen in your app", slug: "guides/production" },
+      { label: "Using CriogenAI in your app", slug: "guides/production" },
       { label: "Deploying", slug: "guides/deploying" },
       { label: "Encryption, audit, retention", slug: "guides/compliance" },
       { label: "Tracing (Langfuse, OpenTelemetry)", slug: "guides/telemetry" },

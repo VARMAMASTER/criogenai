@@ -3,7 +3,7 @@ title: "TypeScript API: Agents"
 description: "TypeScript API reference, agents: Agent, AgentOptions, Thread, Stream, Reply, RunResult, RunOptions, CallOptions, and more."
 ---
 
-The agent: a model, tools and instructions; runs, threads, streams and approvals. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/agent/).
+The agent: a model, tools and instructions; runs, threads, streams and approvals. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/agent/).
 
 ```ts
 import {
@@ -20,7 +20,7 @@ import {
   Retry,
   AgentTool,
   StreamEvent,
-} from "criogen";
+} from "criogenai";
 ```
 
 ## Contents
@@ -72,7 +72,7 @@ pass the matching JSON Schema as the `output` option.
 **Example**
 
 ```ts
-import { Agent, FakeModel, FakeReply, tool } from "criogen";
+import { Agent, FakeModel, FakeReply, tool } from "criogenai";
 
 const add = tool<{ a: number; b: number }>({
   name: "add",
@@ -138,7 +138,7 @@ is bounded by the nesting limit (default 8).
 **Example**
 
 ```ts
-import { Agent, FakeModel, FakeReply } from "criogen";
+import { Agent, FakeModel, FakeReply } from "criogenai";
 
 const researcher = new Agent({ model: new FakeModel(["The order shipped on Monday."]), instructions: "Find facts." });
 const lead = new Agent({
@@ -166,7 +166,7 @@ Nothing is read or written until you call a method of the thread.
 **Example**
 
 ```ts
-import { Agent, FakeModel } from "criogen";
+import { Agent, FakeModel } from "criogenai";
 
 const agent = new Agent({ model: new FakeModel(["Hi Sam.", "Your name is Sam."]) });
 const thread = agent.thread("support-42");
@@ -265,7 +265,7 @@ is saved too, and `retry` continues it.
 **Example**
 
 ```ts
-import { Agent, FakeModel, FakeReply, tool } from "criogen";
+import { Agent, FakeModel, FakeReply, tool } from "criogenai";
 
 const refund = tool<{ orderId: string }>({
   name: "refund",
@@ -349,7 +349,7 @@ One Decision per pending call, by call id.
 **Example**
 
 ```ts
-import { Decision } from "criogen";
+import { Decision } from "criogenai";
 
 const [request] = first.approvals; // first: the reply that needed approval
 const done = await thread.decide({ [request.call_id]: Decision.reject("Refunds need a manager.") });
@@ -510,7 +510,7 @@ Made by `thread.stream(...)` and the other `thread.stream*` methods.
 **Example**
 
 ```ts
-import { Agent, FakeModel } from "criogen";
+import { Agent, FakeModel } from "criogenai";
 
 const agent = new Agent({ model: new FakeModel(["Hello there."]) });
 const stream = agent.thread("chat-1").stream("Hello");

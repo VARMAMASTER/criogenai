@@ -117,7 +117,7 @@ export class ChatStream<Output = unknown> implements AsyncIterable<Chunk> {
  * any model; each call names its model, and the provider clients are reused.
  *
  * @example
- * import { FakeModel, Gateway } from "criogen";
+ * import { FakeModel, Gateway } from "criogenai";
  *
  * const gateway = new Gateway({ retry: { maxAttempts: 2 } });
  * const reply = await gateway.chat(new FakeModel(["pong"]), "ping"); // or "openai:gpt-5-mini"
@@ -162,7 +162,7 @@ export class Gateway {
    * @throws {CriogenError} With `output`: the answer is not JSON matching the schema (code `output_invalid`).
    * @throws {CancelledError} `signal` was aborted.
    * @example
-   * import { Gateway } from "criogen";
+   * import { Gateway } from "criogenai";
    *
    * const gateway = new Gateway();
    * const reply = await gateway.chat<{ label: string }>("openai:gpt-5-mini", "The package arrived broken.", {
@@ -190,7 +190,7 @@ export class Gateway {
    * @param input Text (one user message) or a list of messages.
    * @param options As for `chat`; aborting `signal` cancels the stream.
    * @example
-   * import { FakeModel, Gateway } from "criogen";
+   * import { FakeModel, Gateway } from "criogenai";
    *
    * const stream = new Gateway().stream(new FakeModel(["Hello there."]), "Say hello.");
    * let shown = "";
@@ -221,7 +221,7 @@ export class Gateway {
    * @param options `signal` cancels the call.
    * @throws {ModelError} The provider call failed.
    * @example
-   * import { Embedder, Gateway } from "criogen";
+   * import { Embedder, Gateway } from "criogenai";
    *
    * const vectors = await new Gateway().embed(Embedder.fake(), ["red car", "blue car"]); // or Embedder.openai()
    * console.log(vectors.length, vectors[0].length);

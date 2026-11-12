@@ -7,7 +7,7 @@
 # The pilot is `@varmamaster/sdk` (a GitHub Packages scope must be the
 # owner's name), for this machine's platform only: the addon in it is the one
 # just built, so `os` and `cpu` stop it from installing where it cannot run.
-# The public package stays `criogen` (RELEASING.md). Output:
+# The public package stays `criogenai` (RELEASING.md). Output:
 # target/pilot/<name>-<version>.tgz.
 set -euo pipefail
 
@@ -27,7 +27,7 @@ echo "== stage $NAME@$VERSION"
 rm -rf "$out"
 mkdir -p "$out/package/native"
 cp -r "$sdk/dist" "$out/package/dist"
-cp "$sdk/native/criogen.node" "$out/package/native/criogen.node"
+cp "$sdk/native/criogenai.node" "$out/package/native/criogenai.node"
 cp "$sdk/README.md" "$sdk/LICENSE" "$out/package/"
 NAME="$NAME" VERSION="$VERSION" SDK="$sdk" OUT="$out/package/package.json" node -e '
   const fs = require("fs");
@@ -45,7 +45,7 @@ NAME="$NAME" VERSION="$VERSION" SDK="$sdk" OUT="$out/package/package.json" node 
     engines: pkg.engines,
     os: [platform],
     cpu: [cpu],
-    files: ["dist", "native/criogen.node", "README.md", "LICENSE"],
+    files: ["dist", "native/criogenai.node", "README.md", "LICENSE"],
     repository: { type: "git", url: "git+https://github.com/VARMAMASTER/criogen.git" },
     publishConfig: { registry: "https://npm.pkg.github.com", access: "restricted" },
   };
@@ -62,8 +62,8 @@ cd "$work"
 npm init -y >/dev/null
 zod="zod@$(cd "$sdk" && node -p 'require("./package.json").devDependencies.zod')"
 npm install --silent --ignore-scripts --no-audit --no-fund "$tarball" "$zod"
-# The consumer and the tests import `criogen`: point them at the pilot.
-sed "s#criogen#$NAME#g" "$sdk/examples/consumer.mjs" > consumer.mjs
+# The consumer and the tests import `criogenai`: point them at the pilot.
+sed "s#criogenai#$NAME#g" "$sdk/examples/consumer.mjs" > consumer.mjs
 node consumer.mjs
 cp -r "$sdk/test" ./test
 CRIOGEN_ERROR_CATALOG="$root/schemas/error-codes.json" CRIOGEN_SDK="$NAME" node --test test/*.test.js \

@@ -1,4 +1,4 @@
-# Contributing to Criogen
+# Contributing to CriogenAI
 
 Thanks for helping. This page covers how to build, test and propose changes.
 [AGENTS.md](AGENTS.md) has the project's rules in full; the essentials are
@@ -38,7 +38,7 @@ checks every feature against real models (see `tests/live/README.md`).
    design document in `docs/design/` in the same change.
 2. **Tests with every behaviour change.** Tests never call real models: use
    `FakeModel` (agents, providers) or the simulated LLM in
-   `crates/criogen-core/tests/support/` (workflows), on Tokio's paused
+   `crates/criogenai-core/tests/support/` (workflows), on Tokio's paused
    clock where possible. Concurrency claims need a test that would hang or
    fail if the claim were false.
 3. **Explicit failures.** Every error has a stable snake_case code.

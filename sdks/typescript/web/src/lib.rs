@@ -1,21 +1,21 @@
 //! The TypeScript SDK's engine as WebAssembly (design 0021): the same
 //! JavaScript interface as the Node addon (`sdks/typescript/src/lib.rs`),
-//! over the same bridge (`criogen-js`), for the browser and every other
+//! over the same bridge (`criogenai-js`), for the browser and every other
 //! JavaScript host (Web Workers, Node, Deno, edge runtimes).
 //!
 //! Differences, all by necessity: storage is in memory (a database, and
 //! encryption at rest, need a server: `unsupported`), telemetry export is
 //! not available, and model calls go through the host's `fetch`. Tasks run
-//! on the JavaScript event loop (`criogen-rt`).
+//! on the JavaScript event loop (`criogenai-rt`).
 
 use std::sync::Arc;
 
-use criogen_agent::Agent;
-use criogen_core::Workflow;
-use criogen_js::{CallError, ChatStream, EventStream, Failure, Gateway, JsFn, JsFunction};
-use criogen_providers::BoxFuture;
-use criogen_rt::SendWrapper;
-use criogen_storage::Storage;
+use criogenai_agent::Agent;
+use criogenai_core::Workflow;
+use criogenai_js::{CallError, ChatStream, EventStream, Failure, Gateway, JsFn, JsFunction};
+use criogenai_providers::BoxFuture;
+use criogenai_rt::SendWrapper;
+use criogenai_storage::Storage;
 use js_sys::{Array, Function, Promise};
 use wasm_bindgen::JsCast;
 use wasm_bindgen::prelude::*;
@@ -33,7 +33,7 @@ extern "C" {
 pub fn start() {
     std::panic::set_hook(Box::new(|info| {
         console_error(&format!(
-            "criogen: the engine stopped ({info}). This is a bug; reload the page, \
+            "criogenai: the engine stopped ({info}). This is a bug; reload the page, \
              and please report it."
         ));
     }));
@@ -47,7 +47,7 @@ fn to_js(failure: Failure) -> JsValue {
 
 fn promise<F>(work: F) -> Promise
 where
-    F: std::future::Future<Output = criogen_js::Result<JsValue>> + 'static,
+    F: std::future::Future<Output = criogenai_js::Result<JsValue>> + 'static,
 {
     future_to_promise(async move { work.await.map_err(to_js) })
 }
@@ -90,7 +90,7 @@ fn functions(list: &Array, what: &str) -> Result<Vec<JsFn>, JsValue> {
                 .dyn_into::<Function>()
                 .map(|f| Arc::new(WebFunction(SendWrapper::new(f))) as JsFn)
                 .map_err(|_| {
-                    to_js(criogen_js::failure(
+                    to_js(criogenai_js::failure(
                         "invalid_value",
                         format!("every {what} must be a function"),
                         None,
@@ -110,25 +110,25 @@ fn text(value: Option<String>) -> JsValue {
 /// the call starts is not lost.
 #[wasm_bindgen(js_name = newCancelId)]
 pub fn new_cancel_id() -> u32 {
-    criogen_js::new_cancel_id()
+    criogenai_js::new_cancel_id()
 }
 
 /// Cancels the call registered under `id` (no-op once it ended).
 #[wasm_bindgen(js_name = cancelCall)]
 pub fn cancel_call(id: u32) {
-    criogen_js::cancel_call(id);
+    criogenai_js::cancel_call(id);
 }
 
 /// Forgets an id whose call never started.
 #[wasm_bindgen(js_name = releaseCancelId)]
 pub fn release_cancel_id(id: u32) {
-    criogen_js::release_cancel_id(id);
+    criogenai_js::release_cancel_id(id);
 }
 
 /// The named providers (design 0006 §4.1) as JSON.
 #[wasm_bindgen]
 pub fn presets() -> String {
-    criogen_js::presets()
+    criogenai_js::presets()
 }
 
 /// Registers a JavaScript model function (design 0021 §7); the handle
@@ -142,26 +142,26 @@ pub fn engine_version() -> String {
 /// Problems with a value against a JSON Schema (evals, design 0024).
 #[wasm_bindgen(js_name = validateJson)]
 pub fn validate_json(schema: String, value: String) -> Result<String, JsValue> {
-    criogen_js::validate_json(&schema, &value).map_err(to_js)
+    criogenai_js::validate_json(&schema, &value).map_err(to_js)
 }
 
 /// Reaches an MCP server over HTTP (design 0022): `{handle, info, tools}`.
 #[wasm_bindgen(js_name = mcpConnect)]
 pub fn mcp_connect(spec: String) -> Promise {
-    promise(async move { criogen_js::mcp_connect(spec).await.map(JsValue::from) })
+    promise(async move { criogenai_js::mcp_connect(spec).await.map(JsValue::from) })
 }
 
 /// Lists a server's tools again.
 #[wasm_bindgen(js_name = mcpRefresh)]
 pub fn mcp_refresh(handle: u32) -> Promise {
-    promise(async move { criogen_js::mcp_refresh(handle).await.map(JsValue::from) })
+    promise(async move { criogenai_js::mcp_refresh(handle).await.map(JsValue::from) })
 }
 
 /// Calls a server's tool: `{ok, text | value | content | error}`.
 #[wasm_bindgen(js_name = mcpCall)]
 pub fn mcp_call(handle: u32, name: String, args: String) -> Promise {
     promise(async move {
-        criogen_js::mcp_call(handle, name, args)
+        criogenai_js::mcp_call(handle, name, args)
             .await
             .map(JsValue::from)
     })
@@ -171,20 +171,20 @@ pub fn mcp_call(handle: u32, name: String, args: String) -> Promise {
 #[wasm_bindgen(js_name = mcpClose)]
 pub fn mcp_close(handle: u32) -> Promise {
     promise(async move {
-        criogen_js::mcp_close(handle).await;
+        criogenai_js::mcp_close(handle).await;
         Ok(JsValue::UNDEFINED)
     })
 }
 
 #[wasm_bindgen(js_name = registerFunction)]
 pub fn register_function(function: Function) -> u32 {
-    criogen_js::register_function(Arc::new(WebFunction(SendWrapper::new(function))))
+    criogenai_js::register_function(Arc::new(WebFunction(SendWrapper::new(function))))
 }
 
 /// Forgets a model function (models built from it keep working).
 #[wasm_bindgen(js_name = releaseFunction)]
 pub fn release_function(handle: u32) {
-    criogen_js::release_function(handle);
+    criogenai_js::release_function(handle);
 }
 
 // ---------- storage ----------
@@ -202,9 +202,9 @@ impl NativeStorage {
     /// `encryptionKeys` is `unsupported`.
     #[wasm_bindgen(constructor)]
     pub fn new(spec: String) -> Result<NativeStorage, JsValue> {
-        let spec = criogen_js::parse(&spec).map_err(to_js)?;
+        let spec = criogenai_js::parse(&spec).map_err(to_js)?;
         if spec.get("url").is_some_and(|url| !url.is_null()) {
-            return Err(to_js(criogen_js::unsupported(
+            return Err(to_js(criogenai_js::unsupported(
                 "A database (SQLite, Postgres)",
             )));
         }
@@ -212,9 +212,9 @@ impl NativeStorage {
             .get("encryptionKeys")
             .is_some_and(|keys| !keys.is_null())
         {
-            return Err(to_js(criogen_js::unsupported("Encryption at rest")));
+            return Err(to_js(criogenai_js::unsupported("Encryption at rest")));
         }
-        criogen_js::configure_storage(Storage::in_memory(), &spec)
+        criogenai_js::configure_storage(Storage::in_memory(), &spec)
             .map(|storage| NativeStorage { storage })
             .map_err(to_js)
     }
@@ -232,8 +232,8 @@ impl NativeStorage {
     pub fn op(&self, op: String, payload: String) -> Promise {
         let storage = self.storage.clone();
         promise(async move {
-            let payload = criogen_js::parse(&payload)?;
-            let value = criogen_js::storage_operation(storage, &op, payload).await?;
+            let payload = criogenai_js::parse(&payload)?;
+            let value = criogenai_js::storage_operation(storage, &op, payload).await?;
             Ok(JsValue::from_str(&value.to_string()))
         })
     }
@@ -253,7 +253,7 @@ impl NativeTelemetry {
     /// Always `unsupported` here.
     #[wasm_bindgen(constructor)]
     pub fn new(_spec: String) -> Result<NativeTelemetry, JsValue> {
-        Err(to_js(criogen_js::unsupported(
+        Err(to_js(criogenai_js::unsupported(
             "Telemetry export (Langfuse, OTLP)",
         )))
     }
@@ -291,7 +291,7 @@ pub struct NativeAgent {
 
 impl Drop for NativeAgent {
     fn drop(&mut self) {
-        criogen_js::forget_agent(self.handle);
+        criogenai_js::forget_agent(self.handle);
     }
 }
 
@@ -306,16 +306,18 @@ impl NativeAgent {
         storage: &NativeStorage,
         hooks: Array,
     ) -> Result<NativeAgent, JsValue> {
-        let config = criogen_js::parse(&config).map_err(to_js)?;
+        let config = criogenai_js::parse(&config).map_err(to_js)?;
         let telemetry = config.get("telemetry").is_some_and(|t| !t.is_null());
-        let (agent, handle) = criogen_js::build_agent(
+        let (agent, handle) = criogenai_js::build_agent(
             &config,
             functions(&tools, "tool")?,
             &storage.storage,
             functions(&hooks, "hook")?,
             |builder| {
                 if telemetry {
-                    return Err(criogen_js::unsupported("Telemetry export (Langfuse, OTLP)"));
+                    return Err(criogenai_js::unsupported(
+                        "Telemetry export (Langfuse, OTLP)",
+                    ));
                 }
                 Ok(builder)
             },
@@ -334,7 +336,7 @@ impl NativeAgent {
     pub fn run(&self, payload: String, cancel_id: u32) -> Promise {
         let agent = self.agent.clone();
         promise(async move {
-            criogen_js::agent_run(agent, payload, cancel_id)
+            criogenai_js::agent_run(agent, payload, cancel_id)
                 .await
                 .map(|json| JsValue::from_str(&json))
         })
@@ -344,7 +346,7 @@ impl NativeAgent {
     pub fn thread(&self, op: String, payload: String, cancel_id: u32) -> Promise {
         let agent = self.agent.clone();
         promise(async move {
-            criogen_js::agent_thread(agent, op, payload, cancel_id)
+            criogenai_js::agent_thread(agent, op, payload, cancel_id)
                 .await
                 .map(|json| JsValue::from_str(&json))
         })
@@ -353,7 +355,7 @@ impl NativeAgent {
     /// Streams a thread operation (`send`, `approve`, `reject`, `decide`,
     /// `retry`).
     pub fn stream(&self, op: String, payload: String) -> Result<NativeStream, JsValue> {
-        criogen_js::agent_stream(&self.agent, &op, &payload)
+        criogenai_js::agent_stream(&self.agent, &op, &payload)
             .map(|inner| NativeStream { inner })
             .map_err(to_js)
     }
@@ -421,7 +423,7 @@ impl NativeGateway {
     pub fn stream(&self, payload: String) -> Result<NativeChatStream, JsValue> {
         let (inner, task) = self.gateway.stream(&payload).map_err(to_js)?;
         // Detached: the stream's channels end it.
-        drop(criogen_rt::spawn(task));
+        drop(criogenai_rt::spawn(task));
         Ok(NativeChatStream { inner })
     }
 
@@ -484,7 +486,7 @@ impl NativeWorkflow {
         routers: Array,
         storage: &NativeStorage,
     ) -> Result<NativeWorkflow, JsValue> {
-        let workflow = criogen_js::build_workflow(
+        let workflow = criogenai_js::build_workflow(
             &config,
             functions(&nodes, "node")?,
             functions(&routers, "router")?,
@@ -500,7 +502,7 @@ impl NativeWorkflow {
     pub fn run(&self, payload: String, cancel_id: u32) -> Promise {
         let workflow = self.workflow.clone();
         promise(async move {
-            criogen_js::workflow_run(workflow, payload, cancel_id)
+            criogenai_js::workflow_run(workflow, payload, cancel_id)
                 .await
                 .map(|json| JsValue::from_str(&json))
         })
@@ -510,7 +512,7 @@ impl NativeWorkflow {
     pub fn resume(&self, payload: String, cancel_id: u32) -> Promise {
         let workflow = self.workflow.clone();
         promise(async move {
-            criogen_js::workflow_resume(workflow, payload, cancel_id)
+            criogenai_js::workflow_resume(workflow, payload, cancel_id)
                 .await
                 .map(|json| JsValue::from_str(&json))
         })
@@ -520,7 +522,7 @@ impl NativeWorkflow {
     pub fn thread(&self, op: String, payload: String, cancel_id: u32) -> Promise {
         let (workflow, storage) = (self.workflow.clone(), self.storage.clone());
         promise(async move {
-            criogen_js::workflow_thread(workflow, storage, op, payload, cancel_id)
+            criogenai_js::workflow_thread(workflow, storage, op, payload, cancel_id)
                 .await
                 .map(|json| JsValue::from_str(&json))
         })

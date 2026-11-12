@@ -399,7 +399,7 @@ Validation failures before anything runs (`resume_invalid`,
 ## 7. Routers: what they see
 
 LangGraph evaluates a conditional edge inside the source node's task, so it sees
-only that node's own writes. Criogen routers keep 0001's rule: they see the
+only that node's own writes. CriogenAI routers keep 0001's rule: they see the
 **merged state of the whole step**. This is deliberate. Routing is defined on
 the committed view and does not depend on which sibling finished first.
 

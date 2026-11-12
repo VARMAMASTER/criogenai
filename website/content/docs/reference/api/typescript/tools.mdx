@@ -3,7 +3,7 @@ title: "TypeScript API: Tools"
 description: "TypeScript API reference, tools: tool, Tool, ToolDefinition, ToolError, ToolContext, JsonSchema, StandardIssue, StandardResult, and more."
 ---
 
-Functions the model can call: definitions, input schemas, errors and the tool context. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/tools/).
+Functions the model can call: definitions, input schemas, errors and the tool context. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/tools/).
 
 ```ts
 import {
@@ -16,7 +16,7 @@ import {
   StandardIssue,
   StandardResult,
   StandardSchema,
-} from "criogen";
+} from "criogenai";
 ```
 
 ## Contents
@@ -59,7 +59,7 @@ option.
 **Example**
 
 ```ts
-import { tool } from "criogen";
+import { tool } from "criogenai";
 
 const weather = tool<{ city: string }>({
   name: "get_weather",
@@ -75,7 +75,7 @@ const weather = tool<{ city: string }>({
 ```ts
 // With Zod 4 (or another Standard Schema library): the model sees its JSON Schema.
 import { z } from "zod";
-import { tool } from "criogen";
+import { tool } from "criogenai";
 
 const order = tool({
   name: "order",
@@ -199,7 +199,7 @@ as the agent's `onToolException` option says.
 **Example**
 
 ```ts
-import { tool, ToolError } from "criogen";
+import { tool, ToolError } from "criogenai";
 
 const lookup = tool<{ orderId: string }>({
   name: "lookup",

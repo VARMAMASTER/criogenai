@@ -14,12 +14,12 @@ import { byGroup, COVERAGE, loadTour, valueText, type TourFeature, type TourFile
 export const metadata: Metadata = pageMeta({
   title: "Demo: every feature, run for real",
   description:
-    "Every Criogen feature on the status page, run for real: agents, tools, approvals, threads, memory and workflows, with the code, what it printed and the checks it passed, with a simulated model and with a real one.",
+    "Every CriogenAI feature on the status page, run for real: agents, tools, approvals, threads, memory and workflows, with the code, what it printed and the checks it passed, with a simulated model and with a real one.",
   path: "/demo/",
 });
 
 const RUN_COMMANDS = [
-  "pip install criogen                                 # the Python package",
+  "pip install criogenai                                 # the Python package",
   "python demos/feature-tour/tour.py                 # simulated model: no network, no keys",
   "python demos/feature-tour/tour.py --live gemini   # a real model (GEMINI_API_KEY); or: --live openai",
 ].join("\n");
@@ -110,7 +110,7 @@ export default async function DemoPage() {
           <p className="lab-eyebrow">Demo</p>
           <h1>Every feature, run for real</h1>
           <p className="lab-lede">
-            Each scenario below is ordinary Criogen code. It was run, and the page shows that exact code, what it printed and the checks it had to pass.
+            Each scenario below is ordinary CriogenAI code. It was run, and the page shows that exact code, what it printed and the checks it had to pass.
             Chat with the agent yourself, or read the recorded tours: one with a scripted model, so it is exact and repeatable, and one where a real model decides.
           </p>
           <p className="lab-muted">

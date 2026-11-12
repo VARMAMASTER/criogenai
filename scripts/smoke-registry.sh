@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# After a release: install `criogen@<version>` from the public npm registry into a
+# After a release: install `criogenai@<version>` from the public npm registry into a
 # new, empty project with each package manager found here, and run a small agent
 # (engine load, ready(), a tool call on FakeModel). No keys, no real model.
 #
@@ -14,8 +14,8 @@ rm -rf "$root"
 mkdir -p "$root"
 
 cat > "$root/check.cjs" <<'JS'
-const { Agent, FakeModel, ready, tool } = require("criogen");
-const version = require("criogen/package.json").version;
+const { Agent, FakeModel, ready, tool } = require("criogenai");
+const version = require("criogenai/package.json").version;
 (async () => {
   const report = await ready();
   if (!report.ok) throw new Error(`engine did not load: ${JSON.stringify(report.engine)}`);
@@ -28,7 +28,7 @@ const version = require("criogen/package.json").version;
   const model = new FakeModel([{ toolCalls: [{ name: "add", args: { a: 2, b: 3 } }] }, "The sum is 5."]);
   const result = await new Agent({ model, tools: [add] }).run("2 + 3?");
   if (result.text !== "The sum is 5." || result.toolCalls !== 1) throw new Error(`unexpected result: ${result.text}`);
-  console.log(`ok criogen@${version} on ${report.engine.platform}-${report.engine.arch}`);
+  console.log(`ok criogenai@${version} on ${report.engine.platform}-${report.engine.arch}`);
 })().catch((error) => { console.error(`FAILED: ${error.message}`); process.exit(1); });
 JS
 
@@ -43,15 +43,15 @@ for pm in $managers; do
   dir="$root/$pm"
   mkdir -p "$dir"
   cp "$root/check.cjs" "$dir/"
-  printf '{ "name": "criogen-smoke-%s", "private": true }\n' "$pm" > "$dir/package.json"
+  printf '{ "name": "criogenai-smoke-%s", "private": true }\n' "$pm" > "$dir/package.json"
   echo "== $pm"
   (
     cd "$dir"
     case "$pm" in
-      npm)  npm install --ignore-scripts --no-audit --no-fund --prefer-online "criogen@$version" >install.log 2>&1 ;;
-      pnpm) pnpm add --ignore-scripts "criogen@$version" >install.log 2>&1 ;;
-      yarn) yarn add --ignore-scripts "criogen@$version" >install.log 2>&1 ;;
-      bun)  bun add --ignore-scripts "criogen@$version" >install.log 2>&1 ;;
+      npm)  npm install --ignore-scripts --no-audit --no-fund --prefer-online "criogenai@$version" >install.log 2>&1 ;;
+      pnpm) pnpm add --ignore-scripts "criogenai@$version" >install.log 2>&1 ;;
+      yarn) yarn add --ignore-scripts "criogenai@$version" >install.log 2>&1 ;;
+      bun)  bun add --ignore-scripts "criogenai@$version" >install.log 2>&1 ;;
     esac
   ) || { echo "FAILED: $pm install (see $dir/install.log)"; failed=$((failed + 1)); continue; }
   if [ "$pm" = bun ]; then runner=(bun check.cjs); else runner=(node check.cjs); fi

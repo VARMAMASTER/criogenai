@@ -95,7 +95,7 @@ jobs:
         if: matrix.image != ''
         shell: bash
         run: |
-          need="$(objdump -T sdks/typescript/native/criogen.node | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
+          need="$(objdump -T sdks/typescript/native/criogenai.node | grep -o 'GLIBC_[0-9.]*' | sort -uV | tail -1)"
           echo "highest glibc symbol: $need"
           top="$(printf '%s\n' GLIBC_2.28 "$need" | sort -V | tail -1)"
           [ "$top" = GLIBC_2.28 ] || { echo "the addon needs $need, newer than glibc 2.28" >&2; exit 1; }
@@ -105,17 +105,17 @@ jobs:
           version="$(node -p "require('./sdks/typescript/package.json').version")"
           out="platform/${{ matrix.platform }}"
           mkdir -p "$out"
-          cp sdks/typescript/native/criogen.node "$out/criogen.node"
+          cp sdks/typescript/native/criogenai.node "$out/criogenai.node"
           cp sdks/typescript/LICENSE "$out/"
           os="${{ matrix.platform }}"; os="${os%-*}"; cpu="${{ matrix.platform }}"; cpu="${cpu#*-}"
           cat > "$out/package.json" <<EOF
           {
-            "name": "${{ matrix.platform == 'win32-x64' && 'criogen-windows-x64' || format('criogen-{0}', matrix.platform) }}",
+            "name": "${{ matrix.platform == 'win32-x64' && 'criogenai-windows-x64' || format('criogenai-{0}', matrix.platform) }}",
             "version": "$version",
-            "description": "The native addon of criogen for ${{ matrix.platform }}",
+            "description": "The native addon of criogenai for ${{ matrix.platform }}",
             "license": "SEE LICENSE IN LICENSE",
-            "main": "criogen.node",
-            "files": ["criogen.node", "LICENSE"],
+            "main": "criogenai.node",
+            "files": ["criogenai.node", "LICENSE"],
             "os": ["$os"],
             "cpu": ["$cpu"]
           }
@@ -170,9 +170,9 @@ jobs:
             const fs = require("fs");
             const pkg = JSON.parse(fs.readFileSync("package.json"));
             pkg.optionalDependencies = Object.fromEntries(
-              // Windows is criogen-windows-x64: npm's spam filter refused criogen-win32-x64.
+              // Windows is criogenai-windows-x64: npm's spam filter refused criogenai-win32-x64.
               ["linux-x64", "linux-arm64", "darwin-arm64", "darwin-x64", "windows-x64"]
-                .map((p) => [`criogen-${p}`, process.argv[1]]));
+                .map((p) => [`criogenai-${p}`, process.argv[1]]));
             pkg.files = pkg.files.filter((f) => !f.startsWith("native"));
             fs.writeFileSync("package.json", JSON.stringify(pkg, null, 2));
           ' "$version"

@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Extracts the public Python API of `criogen` from its source and prints it
+"""Extracts the public Python API of `criogenai` from its source and prints it
 as JSON (read by scripts/gen-api.mjs, which writes the reference pages).
 
 Nothing is imported: the source is parsed with `ast`, so this runs without
 the compiled engine, and a docs build never executes package code.
 
-Public means what `criogen/__init__.py` re-exports (its `__all__`), plus the
-public names of the submodules it exposes (`criogen.evals`, `criogen.mcp`,
+Public means what `criogenai/__init__.py` re-exports (its `__all__`), plus the
+public names of the submodules it exposes (`criogenai.evals`, `criogenai.mcp`,
 ...). Run with `python -I`.
 """
 
@@ -17,7 +17,7 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
-PKG = ROOT / "sdks" / "python" / "python" / "criogen"
+PKG = ROOT / "sdks" / "python" / "python" / "criogenai"
 WIDTH = 88
 
 _trees = {}
@@ -426,13 +426,13 @@ def main():
         if name not in exports:
             continue
         source_module, source_name = exports[name]
-        home, item = item_for(source_module, source_name, f"from criogen import {name}")
+        home, item = item_for(source_module, source_name, f"from criogenai import {name}")
         if item is None or home is None:
             continue
         item["name"] = name
         module_entry(home)["items"].setdefault(name, item)
 
-    # What the submodules expose as `criogen.<module>.<name>`.
+    # What the submodules expose as `criogenai.<module>.<name>`.
     for ns in namespaces:
         public = literal_list(ns, "__all__")
         if public is None:
@@ -444,7 +444,7 @@ def main():
         for name in public:
             if name.startswith("_"):
                 continue
-            home, item = item_for(ns, name, f"criogen.{ns}.{name}")
+            home, item = item_for(ns, name, f"criogenai.{ns}.{name}")
             if item is None or home is None:
                 continue
             module_entry(ns)["items"].setdefault(name, item)

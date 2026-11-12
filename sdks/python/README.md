@@ -1,4 +1,4 @@
-# criogen
+# criogenai
 
 **The fast AI agent framework for Python.** Build agents that call tools, wait for a
 person's approval, remember users, and survive crashes, on a Rust engine that adds
@@ -6,7 +6,7 @@ almost nothing to each step. A LangChain and LangGraph alternative with one pack
 and no dependency tree.
 
 ```sh
-pip install criogen
+pip install criogenai
 ```
 
 Python 3.9+ · Linux (x64, ARM64) · macOS (Apple Silicon, Intel) · Windows (x64) ·
@@ -16,9 +16,9 @@ free to use, also commercially
 [Docs](https://criogenai.com/docs/) ·
 [Quickstart](https://criogenai.com/docs/quickstart/) ·
 [Benchmarks](https://criogenai.com/benchmarks/) ·
-[npm package](https://www.npmjs.com/package/criogen)
+[npm package](https://www.npmjs.com/package/criogenai)
 
-## Why Criogen
+## Why CriogenAI
 
 The scheduling, tool-call checks, retries and saving run in compiled Rust. Your
 agents, tools and workflows stay plain Python: `async def` functions, type hints,
@@ -28,7 +28,7 @@ Measured on one machine (AMD Ryzen 5 4600H, Windows 11, 2026-10-21), all three
 frameworks from Python against the same simulated model, so only framework cost is
 counted:
 
-| | Criogen | LangGraph | CrewAI |
+| | CriogenAI | LangGraph | CrewAI |
 |---|---|---|---|
 | Framework overhead per agent turn | **0.29 ms** | 1.23 ms | 33.9 ms |
 | 1,000 agent runs at once | **333 ms** | 2.85 s | 49 s |
@@ -46,7 +46,7 @@ scenario and a kit to rerun them on your machine.
 
 ```python
 import asyncio
-from criogen import Agent, tool, ToolError
+from criogenai import Agent, tool, ToolError
 
 @tool
 async def get_order(order_id: str) -> dict:
@@ -65,7 +65,7 @@ async def main():
 asyncio.run(main())
 ```
 
-Keep keys in a `.env` file: `from criogen import load_env; load_env()` reads
+Keep keys in a `.env` file: `from criogenai import load_env; load_env()` reads
 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` and `OPENROUTER_API_KEY`. It
 never prints values and never overrides a variable that is already set.
 
@@ -87,8 +87,8 @@ never prints values and never overrides a variable that is already set.
 - **Workflows.** Graphs of plain functions and agents with routes, joins, loops and
   pauses (`suspend`) that wait for a person, for days if needed.
 - **Multi-agent.** `agent.as_tool(...)` turns an agent into another agent's tool.
-  `criogen.patterns` has 12 ready-made designs (sequential, parallel, review loops and
-  more), and `criogen.specialists` has agent recipes you can extend.
+  `criogenai.patterns` has 12 ready-made designs (sequential, parallel, review loops and
+  more), and `criogenai.specialists` has agent recipes you can extend.
 - **Resilience.** Retries with `Retry-After`, fallback models, limits on model calls,
   tool calls and tokens, and tool timeouts.
 - **Storage.** SQLite or Postgres, encryption at rest (AES-256-GCM), retention rules,
@@ -104,7 +104,7 @@ never prints values and never overrides a variable that is already set.
 ## Approval before a tool runs
 
 ```python
-from criogen import Agent, Storage
+from criogenai import Agent, Storage
 
 agent = Agent(
     "openai:gpt-5-mini",
@@ -128,7 +128,7 @@ reply = await agent.thread("ticket-7", actor="user:manager").approve()
 ```python
 from typing import Literal
 from pydantic import BaseModel
-from criogen import Agent
+from criogenai import Agent
 
 class Resolution(BaseModel):
     category: Literal["billing", "shipping", "other"]
@@ -158,7 +158,7 @@ reply = await stream.reply()                 # saved, like send()
 ## Workflows
 
 ```python
-from criogen import END, NodeContext, Storage, Workflow, suspend
+from criogenai import END, NodeContext, Storage, Workflow, suspend
 
 wf = Workflow()
 
@@ -187,7 +187,7 @@ turn = await app.thread("ticket-7").run({"text": "I was charged twice", "amount"
 ## Models
 
 ```python
-from criogen import Agent, Anthropic, Gemini, Groq, Ollama, OpenAICompatible, Retry
+from criogenai import Agent, Anthropic, Gemini, Groq, Ollama, OpenAICompatible, Retry
 
 Agent("openai:gpt-5-mini")                                   # OPENAI_API_KEY
 Agent(Anthropic("claude-sonnet-5-5"))                        # ANTHROPIC_API_KEY
@@ -204,7 +204,7 @@ Agent("openai:gpt-5-mini", fallbacks=[Ollama("llama3.2")], model_retry=Retry(max
 ## Testing without a model
 
 ```python
-from criogen import Agent, FakeModel, FakeReply
+from criogenai import Agent, FakeModel, FakeReply
 
 agent = Agent(
     FakeModel([FakeReply.tool_call("get_order", {"order_id": "A-1"}), "It has shipped."]),
@@ -218,8 +218,8 @@ Scripted replies, no network, the same answer every time.
 ## Also on npm
 
 The same engine and the same features for TypeScript and Node.js:
-`npm install criogen` ([npm](https://www.npmjs.com/package/criogen)).
+`npm install criogenai` ([npm](https://www.npmjs.com/package/criogenai)).
 
 ## Licence
 
-Free to use, also commercially, under the Criogen Free Licence (see `LICENSE`).
+Free to use, also commercially, under the CriogenAI Free Licence (see `LICENSE`).

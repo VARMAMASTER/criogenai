@@ -16,7 +16,7 @@ cd "$root"
 # In dependency order: each crate is verified against the unpacked packages
 # of the ones before it (they are not on crates.io, so their registry
 # dependencies are patched to those packages).
-crates=(criogen-rt criogen-core criogen-providers criogen-storage criogen-agent criogen-telemetry criogen-gateway)
+crates=(criogenai-rt criogenai-core criogenai-providers criogenai-storage criogenai-agent criogenai-telemetry criogenai-gateway)
 template="$root/tests/package/rust-consumer/Cargo.toml.in"
 work="$(mktemp -d)"
 # The patches below make cargo record `[[patch.unused]]` entries in the

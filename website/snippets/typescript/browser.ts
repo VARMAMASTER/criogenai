@@ -1,11 +1,11 @@
 // The browser guide's samples (content/docs/guides/browser.mdx): the engine
 // as WebAssembly (design 0021). Type-checked by scripts/check-snippets.sh.
-import { Agent, FakeReply, FunctionModel, Gateway, openai, ready, tool } from "criogen/web";
+import { Agent, FakeReply, FunctionModel, Gateway, openai, ready, tool } from "criogenai/web";
 
 export async function basics(apiKey: string) {
   // [show]
-  // npm install criogen, then in the browser (or a Web Worker):
-  // import { Agent, openai, ready, tool } from "criogen/web";
+  // npm install criogenai, then in the browser (or a Web Worker):
+  // import { Agent, openai, ready, tool } from "criogenai/web";
 
   await ready(); // loads the engine (WebAssembly) once; call it before anything else
 
@@ -51,6 +51,6 @@ export async function forward(upstreamKey: string) {
 export async function locate() {
   // [show locate]
   // The engine file sits next to the script by default; elsewhere, say where:
-  await ready({ wasm: new URL("/assets/criogen_bg.wasm", location.href) });
+  await ready({ wasm: new URL("/assets/criogenai_bg.wasm", location.href) });
   // [/show locate]
 }

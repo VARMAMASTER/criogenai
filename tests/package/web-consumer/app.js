@@ -1,7 +1,7 @@
 // A browser app using the installed package as a user would (AGENTS.md rule 9,
-// design 0021): `import … from "criogen/web"`, bundled by esbuild, the engine
+// design 0021): `import … from "criogenai/web"`, bundled by esbuild, the engine
 // file served next to the bundle. Public API only.
-import { Agent, FakeReply, FunctionModel, Workflow, END, isCriogenError, ready, tool } from "criogen/web";
+import { Agent, FakeReply, FunctionModel, Workflow, END, isCriogenError, ready, tool } from "criogenai/web";
 
 async function main() {
   const report = await ready();

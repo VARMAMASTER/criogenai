@@ -1,6 +1,6 @@
 # Live check
 
-Runs every Criogen feature against real model APIs and prints a
+Runs every CriogenAI feature against real model APIs and prints a
 PASS/FAIL table per provider. It complements the automated tests, which use
 simulated models: this is how we learn what real providers actually do
 (error shapes, tool-calling habits, streaming granularity).

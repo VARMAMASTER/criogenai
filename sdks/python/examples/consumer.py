@@ -6,8 +6,8 @@ import os
 import tempfile
 import uuid
 
-import criogen
-from criogen import END, Agent, FakeModel, FakeReply, Storage, ToolError, ValidationError, Workflow, suspend, tool
+import criogenai
+from criogenai import END, Agent, FakeModel, FakeReply, Storage, ToolError, ValidationError, Workflow, suspend, tool
 
 
 @tool
@@ -19,8 +19,8 @@ async def lookup(order_id: str) -> dict:
 
 
 async def main():
-    assert criogen.__file__ and "site-packages" in criogen.__file__, criogen.__file__
-    path = os.path.join(tempfile.gettempdir(), f"criogen-consumer-{uuid.uuid4().hex}.db")
+    assert criogenai.__file__ and "site-packages" in criogenai.__file__, criogenai.__file__
+    path = os.path.join(tempfile.gettempdir(), f"criogenai-consumer-{uuid.uuid4().hex}.db")
     storage = Storage(f"sqlite:///{path}", audit=True)
     agent = Agent(
         FakeModel([FakeReply.tool_call("lookup", {"order_id": "A-1"}), "It shipped."]),
@@ -49,7 +49,7 @@ async def main():
     assert paused.suspended and paused.interrupts[0].payload == {"refund": 40}
     assert (await app.resume(paused.snapshot, {"ask": True})).state["ok"] is True
     # Patterns and specialists (design 0019): a one-line pipeline and a review loop.
-    from criogen import patterns, specialists
+    from criogenai import patterns, specialists
 
     flow = patterns.quick("researcher > writer", model=FakeModel(["notes", "article"]))
     piped = await flow.run("topic")
@@ -58,7 +58,7 @@ async def main():
         Agent(FakeModel(["draft"])), Agent(FakeModel(["APPROVED"]))
     ).run("write")
     assert reviewed.stop_reason == "approved" and "researcher" in specialists.available()
-    print("python package test: ok", criogen.__version__)
+    print("python package test: ok", criogenai.__version__)
     for suffix in ("", "-wal", "-shm"):
         try:
             os.remove(path + suffix)

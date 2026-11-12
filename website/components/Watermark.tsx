@@ -1,5 +1,5 @@
 "use client";
-// A large, faint Criogen mark behind every page. It draws itself in on load,
+// A large, faint CriogenAI mark behind every page. It draws itself in on load,
 // breathes slowly, and drifts and turns a little as the page scrolls. It is
 // decoration only: no pointer events, hidden from assistive technology, and
 // still (and just as faint) when the visitor asks for reduced motion.

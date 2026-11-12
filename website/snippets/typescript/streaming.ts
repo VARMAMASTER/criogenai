@@ -1,4 +1,4 @@
-import { Agent } from "criogen";
+import { Agent } from "criogenai";
 
 declare const agent: Agent;
 

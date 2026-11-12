@@ -218,7 +218,7 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
           <h2 id="sb-run">Run it</h2>
           <span className={`sb-mode ${live ? "sb-mode-live" : ""}`}>
             {!def.usesModel ? "No model needed" : live ? "Real model · simulated tools" : "Scripted model · no key needed"}
-            {def.engine ? " · Criogen engine in your browser" : ""}
+            {def.engine ? " · CriogenAI engine in your browser" : ""}
           </span>
         </div>
         <figure className="scene pg-stage">
@@ -371,22 +371,22 @@ export default function Story({ id, code }: { id: string; code: ReactNode }) {
         )}
         {def.engine ? (
           <p className="sb-small sb-honest">
-            This run is the TypeScript code below, running on the Criogen engine in your browser (WebAssembly). Without a key, a scripted
+            This run is the TypeScript code below, running on the CriogenAI engine in your browser (WebAssembly). Without a key, a scripted
             model stands in for <code>MODEL</code>; with your key, your provider answers, called from this tab. The tools return made-up data.
           </p>
         ) : (
           <p className="sb-small sb-honest">
-            This run is a small JavaScript copy of the pattern&apos;s control flow, so it can work in your browser. It is not the Criogen engine.
-            The code below is how you build the same pattern with Criogen.
+            This run is a small JavaScript copy of the pattern&apos;s control flow, so it can work in your browser. It is not the CriogenAI engine.
+            The code below is how you build the same pattern with CriogenAI.
           </p>
         )}
       </section>
 
       <section className="sb-card" aria-labelledby="sb-code">
         <div className="sb-run-head">
-          <h2 id="sb-code">Build it with Criogen</h2>
-          <span className={`sb-mode ${def.criogen.kind === "helper" ? "sb-mode-live" : ""}`}>
-            {def.criogen.kind === "helper" ? "Ready-made" : "Built from primitives"}: <code>{def.criogen.api}</code>
+          <h2 id="sb-code">Build it with CriogenAI</h2>
+          <span className={`sb-mode ${def.criogenai.kind === "helper" ? "sb-mode-live" : ""}`}>
+            {def.criogenai.kind === "helper" ? "Ready-made" : "Built from primitives"}: <code>{def.criogenai.api}</code>
           </span>
         </div>
         {code}
@@ -402,7 +402,7 @@ function TimeSplit({ t }: { t: Timing }) {
   const parts = [
     { key: "model", label: t.live ? "Model (your provider, over the network)" : "Scripted model (a pause, to read along)", ms: t.model },
     { key: "tool", label: "Tools (the sample's functions)", ms: t.tool },
-    { key: "engine", label: "Criogen engine and this page (everything else)", ms: t.engine },
+    { key: "engine", label: "CriogenAI engine and this page (everything else)", ms: t.engine },
     { key: "wait", label: "Playground pauses (to tell the story, or waiting for you)", ms: t.wait },
   ].filter((p) => p.ms > 0.5);
   const total = Math.max(t.total, 1);
@@ -425,7 +425,7 @@ function TimeSplit({ t }: { t: Timing }) {
         ))}
       </ul>
       <p className="sb-small">
-        {t.modelCalls} model call{t.modelCalls === 1 ? "" : "s"}, {t.toolCalls} tool call{t.toolCalls === 1 ? "" : "s"}. Criogen&apos;s share is
+        {t.modelCalls} model call{t.modelCalls === 1 ? "" : "s"}, {t.toolCalls} tool call{t.toolCalls === 1 ? "" : "s"}. CriogenAI&apos;s share is
         an upper bound: it also holds this page drawing the story. On a server, the engine&apos;s own work is a fraction of a millisecond per
         step (<a href="/benchmarks/">benchmarks</a>).
       </p>

@@ -3,7 +3,7 @@ title: "TypeScript API: Models"
 description: "TypeScript API reference, models: openai, anthropic, gemini, FakeModel, openaiCompatible, ModelOptions, ProviderModel, openrouter, and more."
 ---
 
-Providers and models: OpenAI, Anthropic, Gemini, Azure, Bedrock, Vertex AI, local servers and more. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/models/).
+Providers and models: OpenAI, Anthropic, Gemini, Azure, Bedrock, Vertex AI, local servers and more. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/models/).
 
 ```ts
 import {
@@ -46,7 +46,7 @@ import {
   FunctionModel,
   Model,
   Embedder,
-} from "criogen";
+} from "criogenai";
 ```
 
 ## Contents
@@ -113,7 +113,7 @@ A model on OpenAI's API (OPENAI_API_KEY), e.g. openai("gpt-5-mini"). The same as
 **Example**
 
 ```ts
-import { Agent, openai } from "criogen";
+import { Agent, openai } from "criogenai";
 
 const agent = new Agent({ model: openai("gpt-5-mini"), instructions: "Answer in one sentence." });
 ```
@@ -138,7 +138,7 @@ A Claude model on Anthropic's Messages API (ANTHROPIC_API_KEY), e.g. anthropic("
 **Example**
 
 ```ts
-import { Agent, anthropic, openai } from "criogen";
+import { Agent, anthropic, openai } from "criogenai";
 
 // Claude first; OpenAI when Claude fails with a transient error after its retries.
 const agent = new Agent({ model: anthropic("claude-sonnet-5-5"), fallbacks: [openai("gpt-5-mini")] });
@@ -184,7 +184,7 @@ Usage is counted, and replies name the model "fake".
 **Example**
 
 ```ts
-import { Agent, FakeModel, FakeReply } from "criogen";
+import { Agent, FakeModel, FakeReply } from "criogenai";
 
 const model = new FakeModel([FakeReply.toolCall("lookup", { orderId: "A-1" }), "Order A-1 shipped."]);
 // A model that fails twice with rate_limited, then answers: tests retries.
@@ -260,7 +260,7 @@ default, because a key sent over http is readable by anyone on the path.
 **Example**
 
 ```ts
-import { Agent, openaiCompatible } from "criogen";
+import { Agent, openaiCompatible } from "criogenai";
 
 const agent = new Agent({
   model: openaiCompatible("meta-llama/Llama-3.3-70B-Instruct", { baseUrl: "http://localhost:8000/v1", name: "vllm" }),
@@ -381,7 +381,7 @@ A model on Ollama on this machine, no key, e.g. ollama("llama3.2"): nothing leav
 **Example**
 
 ```ts
-import { Agent, ollama } from "criogen";
+import { Agent, ollama } from "criogenai";
 
 const agent = new Agent({ model: ollama("llama3.2") }); // `ollama pull llama3.2` first
 ```
@@ -599,7 +599,7 @@ The token is not a property, and `toJSON()` leaves it out.
 **Example**
 
 ```ts
-import { Agent, kaggle } from "criogen";
+import { Agent, kaggle } from "criogenai";
 
 // KAGGLE_API_TOKEN set, or ~/.kaggle/access_token present
 const agent = new Agent({ model: kaggle("google/gemini-3.6-flash") });
@@ -722,7 +722,7 @@ code `unsupported`.
 **Example**
 
 ```ts
-import { Agent, AzureModel } from "criogen";
+import { Agent, AzureModel } from "criogenai";
 
 // A service principal; the engine fetches and renews Entra ID tokens.
 const model = new AzureModel("gpt-5-mini", {
@@ -782,7 +782,7 @@ A deployment on Azure OpenAI or Foundry, e.g. azure("gpt-5-mini", \{ endpoint: "
 **Example**
 
 ```ts
-import { Agent, azure } from "criogen";
+import { Agent, azure } from "criogenai";
 
 // AZURE_OPENAI_API_KEY set; a Foundry model from another maker goes over Chat Completions.
 const agent = new Agent({ model: azure("my-llama-deployment", { endpoint: "my-resource", api: "chat" }) });
@@ -889,7 +889,7 @@ A model on Amazon Bedrock, e.g. bedrock("us.anthropic.claude-sonnet-5", \{ regio
 **Example**
 
 ```ts
-import { Agent, bedrock } from "criogen";
+import { Agent, bedrock } from "criogenai";
 
 // AWS_BEARER_TOKEN_BEDROCK set; the region is always chosen explicitly.
 const agent = new Agent({ model: bedrock("us.anthropic.claude-sonnet-5", { region: "us-east-1" }) });
@@ -1005,7 +1005,7 @@ A model on Google Vertex AI, e.g. vertex("google/gemini-3.6-flash", \{ project: 
 **Example**
 
 ```ts
-import { Agent, vertex } from "criogen";
+import { Agent, vertex } from "criogenai";
 
 // Credentials from GOOGLE_APPLICATION_CREDENTIALS, gcloud, or the metadata server.
 const agent = new Agent({ model: vertex("google/gemini-3.6-flash", { project: "my-project", location: "global" }) });
@@ -1026,7 +1026,7 @@ interface ModelCall {
 What a model function receives: the request the engine would send to a provider.
 
 It has the messages so far, the tools the model may call, the settings
-and any output schema (`ModelRequest` in schemas/criogen.schema.json).
+and any output schema (`ModelRequest` in schemas/criogenai.schema.json).
 
 **Fields**
 
@@ -1080,7 +1080,7 @@ using the model throws an error with code `unsupported`.
 **Example**
 
 ```ts
-import { Agent, FakeReply, FunctionModel } from "criogen";
+import { Agent, FakeReply, FunctionModel } from "criogenai";
 
 // Ask for the weather tool once, then answer with what it returned.
 const model = new FunctionModel((call) => {
@@ -1175,7 +1175,7 @@ OpenAI's /embeddings (key from OPENAI_API_KEY).
 **Example**
 
 ```ts
-import { Embedder, Gateway } from "criogen";
+import { Embedder, Gateway } from "criogenai";
 
 const vectors = await new Gateway().embed(Embedder.openai(), ["refund policy", "shipping times"]);
 ```

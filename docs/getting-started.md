@@ -5,7 +5,7 @@ asks a person before doing something risky, and keeps conversations in a
 SQLite file. Every Rust example on this page is compiled and run by the
 test suite, so it matches the current API.
 
-Criogen is Rust-only today; Python and TypeScript SDKs are planned
+CriogenAI is Rust-only today; Python and TypeScript SDKs are planned
 ([design 0007](design/0007-public-api.md)).
 
 ## Add the crates
@@ -14,21 +14,21 @@ Until the first release is on crates.io, depend on the repository:
 
 ```toml
 [dependencies]
-criogen-core = { git = "https://github.com/VARMAMASTER/criogen" }
-criogen-providers = { git = "https://github.com/VARMAMASTER/criogen" }
-criogen-agent = { git = "https://github.com/VARMAMASTER/criogen", features = ["sqlite"] }
-criogen-storage = { git = "https://github.com/VARMAMASTER/criogen", features = ["sqlite"] }
+criogenai-core = { git = "https://github.com/VARMAMASTER/criogen" }
+criogenai-providers = { git = "https://github.com/VARMAMASTER/criogen" }
+criogenai-agent = { git = "https://github.com/VARMAMASTER/criogen", features = ["sqlite"] }
+criogenai-storage = { git = "https://github.com/VARMAMASTER/criogen", features = ["sqlite"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
 | Crate | What it gives you |
 |---|---|
-| `criogen-core` | The workflow engine: nodes, edges, routers, state, suspend/resume, retries |
-| `criogen-providers` | Messages, tools and models: OpenAI-compatible servers, Anthropic, Gemini, Ollama, vLLM, LM Studio |
-| `criogen-agent` | Agents: the model ⇄ tools loop, approvals, structured output, hooks, threads |
-| `criogen-storage` | Where threads live: in memory, SQLite (`sqlite` feature) or Postgres (`postgres` feature) |
-| `criogen-telemetry` | OpenTelemetry / Langfuse export |
+| `criogenai-core` | The workflow engine: nodes, edges, routers, state, suspend/resume, retries |
+| `criogenai-providers` | Messages, tools and models: OpenAI-compatible servers, Anthropic, Gemini, Ollama, vLLM, LM Studio |
+| `criogenai-agent` | Agents: the model ⇄ tools loop, approvals, structured output, hooks, threads |
+| `criogenai-storage` | Where threads live: in memory, SQLite (`sqlite` feature) or Postgres (`postgres` feature) |
+| `criogenai-telemetry` | OpenTelemetry / Langfuse export |
 
 Rust 1.88 or newer.
 
@@ -38,7 +38,7 @@ A workflow is a graph of async nodes. Each node reads the shared state and
 returns the keys it changes.
 
 ```rust
-use criogen_core::{END, State, Update, WorkflowBuilder, node_fn};
+use criogenai_core::{END, State, Update, WorkflowBuilder, node_fn};
 
 # tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {
 let mut builder = WorkflowBuilder::new();
@@ -58,7 +58,7 @@ assert_eq!(output.state.get("greeting").unwrap(), "Hello, Ada!");
 
 Workflows also do branching with routers, parallel nodes and joins, loops,
 per-node timeouts and retries, cancellation, live events and pausing for a
-person. See [the core crate](../crates/criogen-core/README.md) and
+person. See [the core crate](../crates/criogenai-core/README.md) and
 [the execution model](design/0001-execution-model.md).
 
 ## 2. An agent with a tool
@@ -70,8 +70,8 @@ results go back to the model.
 With a real model:
 
 ```rust,no_run
-use criogen_agent::{Agent, ToolError, tool_fn};
-use criogen_providers::{Endpoint, ProviderModel, ToolSpec};
+use criogenai_agent::{Agent, ToolError, tool_fn};
+use criogenai_providers::{Endpoint, ProviderModel, ToolSpec};
 use serde_json::json;
 
 # async fn demo() -> Result<(), Box<dyn std::error::Error>> {
@@ -105,8 +105,8 @@ The same agent with `FakeModel`, which plays back scripted replies. Use it
 in tests: no network, no cost, exact behaviour.
 
 ```rust
-use criogen_agent::{Agent, ToolError, tool_fn};
-use criogen_providers::{FakeModel, FakeReply, ToolSpec};
+use criogenai_agent::{Agent, ToolError, tool_fn};
+use criogenai_providers::{FakeModel, FakeReply, ToolSpec};
 use serde_json::json;
 
 # tokio::runtime::Builder::new_current_thread().enable_time().start_paused(true).build().unwrap().block_on(async {
@@ -141,8 +141,8 @@ approve, reject (with a reason the model sees), edit the arguments, or
 respond in the tool's place.
 
 ```rust
-use criogen_agent::{Agent, Approval, Decision, ToolError, tool_fn};
-use criogen_providers::{FakeModel, FakeReply, ToolSpec};
+use criogenai_agent::{Agent, Approval, Decision, ToolError, tool_fn};
+use criogenai_providers::{FakeModel, FakeReply, ToolSpec};
 use serde_json::json;
 
 # tokio::runtime::Builder::new_current_thread().enable_time().start_paused(true).build().unwrap().block_on(async {
@@ -185,9 +185,9 @@ storage: before every step and after every tool call. So:
 ```rust
 use std::time::Duration;
 
-use criogen_agent::Agent;
-use criogen_providers::{FakeModel, FakeReply};
-use criogen_storage::Storage;
+use criogenai_agent::Agent;
+use criogenai_providers::{FakeModel, FakeReply};
+use criogenai_storage::Storage;
 
 # tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
 // A file in real use: Storage::connect("sqlite://agent.db"). Tables are
@@ -217,7 +217,7 @@ interrupted answers `chat.retry()`; `send` refuses until then
 (`thread_interrupted`). Two `send`s on one thread queue up by default.
 
 **Several processes or machines?** Use Postgres. Turn on the
-`postgres` feature (on `criogen-storage` and `criogen-agent`) and
+`postgres` feature (on `criogenai-storage` and `criogenai-agent`) and
 connect with
 `Storage::connect("postgres://app:secret@db.internal/agents?sslmode=verify-full")`.
 Tables are created on first use, and threads and memory share the
@@ -322,8 +322,8 @@ once; use `Storage::in_memory()` there, or real time with a fast
 tool calls starting and finishing, approvals needed.
 
 ```rust
-use criogen_agent::{Agent, AgentEvent};
-use criogen_providers::{FakeModel, FakeReply};
+use criogenai_agent::{Agent, AgentEvent};
+use criogenai_providers::{FakeModel, FakeReply};
 
 # tokio::runtime::Builder::new_current_thread().enable_time().start_paused(true).build().unwrap().block_on(async {
 let agent = Agent::builder(FakeModel::new().then(FakeReply::text("Hello!")))
@@ -346,12 +346,12 @@ assert_eq!(result.text(), Some("Hello!"));
 
 Make the run end with JSON matching a schema. Invalid answers go back to the
 model with the validation errors. A model with a JSON mode (OpenAI, Gemini)
-answers in it; others call a reserved `final_output` tool. Criogen picks
+answers in it; others call a reserved `final_output` tool. CriogenAI picks
 from the model's capabilities, or you choose with `output_with`.
 
 ```rust
-use criogen_agent::Agent;
-use criogen_providers::{FakeModel, FakeReply};
+use criogenai_agent::Agent;
+use criogenai_providers::{FakeModel, FakeReply};
 use serde_json::json;
 
 # tokio::runtime::Builder::new_current_thread().enable_time().start_paused(true).build().unwrap().block_on(async {
@@ -385,9 +385,9 @@ than seeing someone else's facts.
 use std::sync::Arc;
 use std::time::Duration;
 
-use criogen_agent::{Agent, AgentInput, Memory, REMEMBER_TOOL};
-use criogen_providers::{FakeModel, FakeReply};
-use criogen_storage::{Namespace, Storage};
+use criogenai_agent::{Agent, AgentInput, Memory, REMEMBER_TOOL};
+use criogenai_providers::{FakeModel, FakeReply};
+use criogenai_storage::{Namespace, Storage};
 use serde_json::json;
 
 # tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap().block_on(async {
@@ -427,10 +427,10 @@ now. `Memory::shared(namespace)` gives every run the same memory, and
 
 - **More agent features:** hooks around every model and tool call, limits
   and token budgets, fallback models, agents as tools of other agents: the
-  [agent crate](../crates/criogen-agent/README.md).
+  [agent crate](../crates/criogenai-agent/README.md).
 - **Tracing:** send every run to Langfuse or any OpenTelemetry backend:
-  [criogen-telemetry](../crates/criogen-telemetry/README.md).
-- **Examples you can run:** `cargo run -p criogen-agent --example
+  [criogenai-telemetry](../crates/criogenai-telemetry/README.md).
+- **Examples you can run:** `cargo run -p criogenai-agent --example
   approval_agent -- edit`, `thread_agent`, and `durable_agent` (a run killed
   mid-step and continued from SQLite, with `--features sqlite`).
 - **A complete app:** [demos/support-chat](../demos/support-chat), a Rust

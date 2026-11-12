@@ -1,5 +1,5 @@
 // The MCP guide's samples (content/docs/guides/mcp.mdx), design 0022.
-import { Agent, mcp, openai } from "criogen";
+import { Agent, mcp, openai } from "criogenai";
 
 export async function basics() {
   // [show]

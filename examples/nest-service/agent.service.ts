@@ -1,7 +1,7 @@
-// A NestJS service around one Criogen agent: built once, on first use, with
+// A NestJS service around one CriogenAI agent: built once, on first use, with
 // tools, limits, redaction and a fallback; a controller and a health check use it.
 import { Injectable, OnModuleInit, ServiceUnavailableException } from "@nestjs/common";
-import { Agent, NativeUnavailableError, loadEnv, openai, kaggle, ready, tool, type RunResult } from "criogen";
+import { Agent, NativeUnavailableError, loadEnv, openai, kaggle, ready, tool, type RunResult } from "criogenai";
 
 const findAppointment = tool({
   name: "find_appointment",

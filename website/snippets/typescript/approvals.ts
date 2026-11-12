@@ -1,4 +1,4 @@
-import { tool } from "criogen";
+import { tool } from "criogenai";
 
 const issueRefund = tool({
   name: "issue_refund",
@@ -8,7 +8,7 @@ const issueRefund = tool({
 });
 
 // [show]
-import { Agent, Decision, Storage } from "criogen";
+import { Agent, Decision, Storage } from "criogenai";
 
 const agent = new Agent({
   model: "openai:gpt-5-mini",

@@ -3,7 +3,7 @@
 import asyncio
 import sys
 
-from criogen import Reply, Storage, Thread, load_env
+from criogenai import Reply, Storage, Thread, load_env
 from support_agent import build_agent
 
 load_env()  # OPENAI_API_KEY from .env, if there is one

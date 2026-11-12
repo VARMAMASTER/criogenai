@@ -23,7 +23,7 @@ import { LANG_ORDER, LANGS, snippet, type Lang } from "@/lib/snippets";
 const f = facts();
 
 export const metadata: Metadata = pageMeta({
-  title: "Criogen: the fast AI agent framework and LangChain alternative (Rust engine, Python, TypeScript)",
+  title: "CriogenAI: the fast AI agent framework and LangChain alternative (Rust engine, Python, TypeScript)",
   absolute: true,
   description: `AI agents and workflows on a Rust engine, from Python or TypeScript: tools, human approval, durable threads, memory, an audit trail and an LLM gateway. ${f.vsLangGraph} less framework overhead per agent turn than LangGraph, ${f.vsCrewAI} less than CrewAI (benchmark of ${f.date}).`,
   path: "/",
@@ -32,8 +32,8 @@ export const metadata: Metadata = pageMeta({
 // Python and TypeScript are published first; the Rust crates come when
 // the code opens.
 const install: Partial<Record<Lang, string>> = {
-  python: "pip install criogen",
-  typescript: "npm install criogen",
+  python: "pip install criogenai",
+  typescript: "npm install criogenai",
 };
 
 // The lifecycle of a run, in the order it happens; each row links to its guide.
@@ -86,7 +86,7 @@ const lifecycle = [
 const toolkit = [
   {
     title: "Tools from any MCP server",
-    text: "GitHub, file systems, databases, browsers, your own services: connect any MCP server, started locally or at a URL, and its tools become the agent's. Criogen speaks the current protocol and falls back for older servers.",
+    text: "GitHub, file systems, databases, browsers, your own services: connect any MCP server, started locally or at a URL, and its tools become the agent's. CriogenAI speaks the current protocol and falls back for older servers.",
     href: "/docs/guides/mcp/",
     link: "MCP servers' tools",
   },
@@ -137,11 +137,11 @@ const scenes = [
 
 const faq = [
   {
-    q: "Is Criogen the fastest AI agent framework?",
-    a: `It has the lowest framework overhead of the frameworks we measured. On one machine (benchmark of ${f.date}), an agent turn costs ${ms(f.turn.criogen)} in Criogen, ${ms(f.turn.langgraph)} in LangGraph and ${ms(f.turn.crewai)} in CrewAI, and 1,000 agent runs at once take ${ms(f.crowd.criogen)} against ${ms(f.crowd.langgraph)} and ${ms(f.crowd.crewai)}. With one agent and a real model, the model's own time dominates and all three are close; the gap matters for many steps, many tools and many users at once. The benchmarks page has every number and the kit to rerun it.`,
+    q: "Is CriogenAI the fastest AI agent framework?",
+    a: `It has the lowest framework overhead of the frameworks we measured. On one machine (benchmark of ${f.date}), an agent turn costs ${ms(f.turn.criogen)} in CriogenAI, ${ms(f.turn.langgraph)} in LangGraph and ${ms(f.turn.crewai)} in CrewAI, and 1,000 agent runs at once take ${ms(f.crowd.criogen)} against ${ms(f.crowd.langgraph)} and ${ms(f.crowd.crewai)}. With one agent and a real model, the model's own time dominates and all three are close; the gap matters for many steps, many tools and many users at once. The benchmarks page has every number and the kit to rerun it.`,
   },
   {
-    q: "Is Criogen a LangChain or LangGraph alternative?",
+    q: "Is CriogenAI a LangChain or LangGraph alternative?",
     a: `Yes. It covers what most teams use LangChain and LangGraph for: agents with tool calling, workflow graphs with branches, joins and loops, human approval, saved conversations and memory, from Python or TypeScript. It installs as one package (${f.footprint.criogen.packages} against ${f.footprint.langgraph.packages} for LangGraph) and passed ${f.reliability.criogen} of ${f.reliability.tests} reliability tests by default, against ${f.reliability.langgraph} for LangGraph. It has no catalogue of integrations of its own: any MCP server's tools work instead, and document collections search by meaning. Document loaders and text splitters are next.`,
   },
   {
@@ -154,11 +154,11 @@ const faq = [
   },
   {
     q: "How is it different from LangGraph or CrewAI?",
-    a: "Criogen's engine is written in Rust and shared by its Python, TypeScript and Rust APIs, so a run behaves the same in all three. Its storage includes encryption at rest and a hash-chained audit trail. The measured cost per step, compared with LangGraph on the same workflows, is on the benchmarks page.",
+    a: "CriogenAI's engine is written in Rust and shared by its Python, TypeScript and Rust APIs, so a run behaves the same in all three. Its storage includes encryption at rest and a hash-chained audit trail. The measured cost per step, compared with LangGraph on the same workflows, is on the benchmarks page.",
   },
   {
     q: "What does it cost?",
-    a: "Nothing: Criogen is free to use, also commercially. You pay your model provider, if you use one. The source code opens (MIT or Apache-2.0) once Criogen reaches 10,000 installs.",
+    a: "Nothing: CriogenAI is free to use, also commercially. You pay your model provider, if you use one. The source code opens (MIT or Apache-2.0) once CriogenAI reaches 10,000 installs.",
   },
 ];
 
@@ -294,7 +294,7 @@ export default async function Home() {
               <thead>
                 <tr>
                   <th scope="col">Per</th>
-                  <th scope="col">Criogen (Rust engine)</th>
+                  <th scope="col">CriogenAI (Rust engine)</th>
                   <th scope="col">LangGraph 1.2 (Python)</th>
                 </tr>
               </thead>

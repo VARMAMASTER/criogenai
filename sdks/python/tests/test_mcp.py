@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from criogen import Agent, CriogenError, FakeModel, FakeReply, ToolError, mcp
+from criogenai import Agent, CriogenError, FakeModel, FakeReply, ToolError, mcp
 
 sys.path.insert(0, os.path.dirname(__file__))
 from mcp_server import serve_http  # noqa: E402
@@ -82,7 +82,7 @@ def test_an_http_server_sends_the_protocol_headers_and_keeps_the_token_private()
 def test_failures_have_stable_codes():
     async def main():
         with pytest.raises(CriogenError) as error:
-            await mcp.stdio("criogen-no-such-command-xyz")
+            await mcp.stdio("criogenai-no-such-command-xyz")
         assert error.value.code == "mcp_connect"
         with pytest.raises(CriogenError) as error:
             await mcp.http("http://example.com/mcp", headers={"Authorization": TOKEN})

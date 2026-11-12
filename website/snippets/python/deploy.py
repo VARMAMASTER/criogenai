@@ -22,7 +22,7 @@ from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
-from criogen import CriogenError, Storage
+from criogenai import CriogenError, Storage
 from support_agent import build_agent
 
 # One Storage and one Agent per process, shared by every request.

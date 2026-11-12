@@ -227,7 +227,7 @@ html.theme-fade *::after {
   }
 }
 
-/* The Criogen mark (components/LogoMark.tsx). On load: the outline draws
+/* The CriogenAI mark (components/LogoMark.tsx). On load: the outline draws
    itself, the core pops in, the engine ignites, then the flame flickers for
    good. Hovering the brand link launches the rocket: it shakes, lifts and
    settles while the flame roars and exhaust puffs fall away. */

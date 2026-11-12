@@ -1,9 +1,9 @@
 ---
 title: Coming from LangGraph or LangChain
-description: How LangGraph and LangChain ideas map to Criogen - graphs, state and reducers, checkpointers and threads, interrupts and approvals, stores and memory - with side-by-side code and the differences that matter.
+description: How LangGraph and LangChain ideas map to CriogenAI - graphs, state and reducers, checkpointers and threads, interrupts and approvals, stores and memory - with side-by-side code and the differences that matter.
 ---
 
-If you know LangGraph or LangChain's agents, most of Criogen will look
+If you know LangGraph or LangChain's agents, most of CriogenAI will look
 familiar: a graph of steps over a shared state, run in steps, saved by a
 checkpointer, paused for a person. This page maps the ideas one to one, shows
 the same program in both, and lists the differences that change how you write
@@ -12,7 +12,7 @@ programs.
 
 ## The map
 
-| LangGraph / LangChain | Criogen | Notes |
+| LangGraph / LangChain | CriogenAI | Notes |
 |---|---|---|
 | `StateGraph(State)` with a `TypedDict` | `Workflow()` | The state is plain JSON: no schema class |
 | `add_node(name, fn)` | `@wf.node`, `wf.add_node(name, fn)`, `.node(name, fn)` | Same contract: return the keys you change |
@@ -63,7 +63,7 @@ app = graph.compile()
 app.invoke({"question": "..."})
 ```
 
-Criogen:
+CriogenAI:
 
 <Sample name="migrate" region="graph" />
 
@@ -90,7 +90,7 @@ agent.invoke(
 )
 ```
 
-Criogen:
+CriogenAI:
 
 <Sample name="migrate" region="agent" />
 
@@ -101,7 +101,7 @@ time: a second `send` waits (or is rejected) instead of racing.
 ## Human in the loop
 
 In LangGraph you call `interrupt()` inside a node (often a node in front of
-the tools) and resume with `Command(resume=...)`. In Criogen, approval of
+the tools) and resume with `Command(resume=...)`. In CriogenAI, approval of
 tool calls is an agent option; the four answers (approve, edit, reject,
 respond) are built in:
 
@@ -123,7 +123,7 @@ store.put(("users", "1"), "language", {"value": "French"})
 store.search(("users", "1"), query="language")
 ```
 
-Criogen's memory lives in the same storage as threads, under path namespaces,
+CriogenAI's memory lives in the same storage as threads, under path namespaces,
 and an agent can use it directly:
 
 <Sample name="migrate" region="store" />
@@ -145,7 +145,7 @@ and an agent can use it directly:
 - **One run per thread.** Concurrent calls on one thread wait, are rejected,
   or interrupt the running one ([`on_busy`](/docs/guides/storage/#a-thread-that-is-busy)).
 
-## What Criogen does not have (yet)
+## What CriogenAI does not have (yet)
 
 Be sure these are not load-bearing for you before you move:
 
@@ -157,21 +157,21 @@ Be sure these are not load-bearing for you before you move:
 - No subgraph type: put an agent in a node, or call another compiled workflow
   from a node.
 - No large catalog of integrations (document loaders, many vector stores):
-  Criogen has its own [collections](/docs/guides/retrieval/) and
+  CriogenAI has its own [collections](/docs/guides/retrieval/) and
   [MCP](/docs/guides/mcp/) for outside tools.
 
 The [status page](/docs/status/) lists what is built per language.
 
 ## Moving a project
 
-1. Install Criogen next to LangGraph; nothing conflicts.
+1. Install CriogenAI next to LangGraph; nothing conflicts.
 2. Move tools first: a LangChain `@tool` function usually needs only the
    import changed in Python. Check the schema with `tool.schema`.
 3. Replace `create_react_agent` / `create_agent` with `Agent`, and the
    checkpointer with a `Storage`. Approvals become `approve=[...]`.
 4. Move custom graphs node by node: the node functions often stay as they
    are (they take the state and return a dict).
-5. Existing LangGraph checkpoints cannot be read by Criogen: start new threads,
+5. Existing LangGraph checkpoints cannot be read by CriogenAI: start new threads,
    or copy the messages you need into the first message of a new thread.
 6. Test with `FakeModel` ([Testing](/docs/guides/testing/)) before switching
    traffic.

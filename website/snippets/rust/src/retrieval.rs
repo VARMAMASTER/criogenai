@@ -4,10 +4,10 @@ pub async fn retrieval() -> Result<(), Error> {
     // [show]
     use std::sync::Arc;
 
-    use criogen_agent::Agent;
-    use criogen_agent::retrieval::{Collection, Document};
-    use criogen_providers::{Endpoint, ProviderEmbedder, ProviderModel};
-    use criogen_storage::Storage;
+    use criogenai_agent::Agent;
+    use criogenai_agent::retrieval::{Collection, Document};
+    use criogenai_providers::{Endpoint, ProviderEmbedder, ProviderModel};
+    use criogenai_storage::Storage;
 
     let key = std::env::var("OPENAI_API_KEY")?;
     let storage = Storage::connect("sqlite://handbook.db").await?;

@@ -5,7 +5,7 @@ declare function customerOf(request: Request): Promise<string>;
 
 // [show]
 // app/api/tickets/[id]/stream/route.ts
-import { CriogenError } from "criogen";
+import { CriogenError } from "criogenai";
 
 export const runtime = "nodejs";
 

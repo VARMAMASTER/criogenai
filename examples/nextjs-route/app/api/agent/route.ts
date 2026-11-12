@@ -1,7 +1,7 @@
 // An agent behind a Next.js route handler (also what runs on Vercel).
 // The engine is native: Node runtime only, and kept out of the bundle
 // (next.config.mjs). Keys come from server environment variables.
-import { Agent, NativeUnavailableError, isCriogenError, kaggle, openai, tool } from "criogen";
+import { Agent, NativeUnavailableError, isCriogenError, kaggle, openai, tool } from "criogenai";
 
 export const runtime = "nodejs";
 

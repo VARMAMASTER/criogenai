@@ -1,11 +1,11 @@
-# Mugshot Support: an Criogen demo
+# Mugshot Support: an CriogenAI demo
 
-A small but real app on Criogen: a customer support agent for a pretend
+A small but real app on CriogenAI: a customer support agent for a pretend
 coffee gear shop, with a Next.js chat UI.
 
 What it shows:
 
-- **Threads in SQLite.** Every conversation is an Criogen thread in
+- **Threads in SQLite.** Every conversation is an CriogenAI thread in
   `server/support.db`. Restart the server and conversations are still there.
 - **Human approval.** The agent may call `issue_refund`, but the call waits
   until you press *Approve* or *Reject* in the UI. The pending approval is

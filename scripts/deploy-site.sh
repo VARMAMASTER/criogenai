@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Deploys the built website (website/out) to Vercel production: project
-# `criogen`, team `varmamasters-projects`, https://criogenai.com.
+# `criogenai`, team `varmamasters-projects`, https://criogenai.com.
 #
 #   bash scripts/deploy-site.sh          # builds first if out/ is missing
 #
@@ -28,7 +28,7 @@ stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 cp -r "$root/website/out" "$stage/site"
 cd "$stage"
-npx --yes vercel@59.26.0 deploy site --prod --yes --name criogen --scope varmamasters-projects
+npx --yes vercel@59.26.0 deploy site --prod --yes --name criogenai --scope varmamasters-projects
 
 # Tell Bing and Yandex about the pages (never fails the deploy).
 bash "$root/scripts/indexnow.sh" || true

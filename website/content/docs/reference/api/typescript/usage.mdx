@@ -3,10 +3,10 @@ title: "TypeScript API: Usage and cost"
 description: "TypeScript API reference, usage and cost: ModelUse, RunFacts, Price, estimateCost."
 ---
 
-Tokens and an estimated price for a run. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/usage/).
+Tokens and an estimated price for a run. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/usage/).
 
 ```ts
-import { ModelUse, RunFacts, Price, estimateCost } from "criogen";
+import { ModelUse, RunFacts, Price, estimateCost } from "criogenai";
 ```
 
 ## Contents
@@ -84,7 +84,7 @@ The cost of a run in USD from your prices, keyed by `"provider:model"` or by
 model name. `null` when a model that was used has no price. Reasoning tokens
 are counted as output tokens.
 
-Criogen ships no price list: prices change too often. Put in your
+CriogenAI ships no price list: prices change too often. Put in your
 provider's current prices.
 
 **Parameters**
@@ -97,7 +97,7 @@ provider's current prices.
 **Example**
 
 ```ts
-import { Agent, estimateCost } from "criogen";
+import { Agent, estimateCost } from "criogenai";
 
 const result = await new Agent({ model: "openai:gpt-5-mini" }).run("Hello");
 // Example prices: use your provider's current ones.

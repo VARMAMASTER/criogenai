@@ -3,7 +3,7 @@ title: "Python API: Agents"
 description: "Python API reference, agents: Agent, Thread, Stream, Reply, RunResult, Decision, ApprovalRequest, Retry, and more."
 ---
 
-The agent: a model, tools and instructions; runs, threads, streams and approvals. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/agent/).
+The agent: a model, tools and instructions; runs, threads, streams and approvals. Generated from the docstrings and type hints of `criogenai` 0.1.7. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/agent/).
 
 Agents and threads: a model with tools, run by the Rust engine.
 
@@ -13,7 +13,7 @@ until the model answers. `agent.run` is one call that remembers nothing;
 approvals, retries, history and rewind.
 
 ```python
-from criogen import (
+from criogenai import (
     Agent,
     Thread,
     Stream,
@@ -81,7 +81,7 @@ saved, can wait for approval and can be retried.
 
 - `model` (`Any`): The model: a model object (`OpenAI("gpt-5-mini")`, `FakeModel([...])`, ...) or a `"provider:model"` string such as `"openai:gpt-5-mini"`. A string takes the provider's key from its usual environment variable.
 - `instructions` (`Optional[str]`, default `None`): The system prompt, sent ahead of the conversation on every model call.
-- `tools` (`Sequence[Any]`, default `()`): What the model may call: functions decorated with `@tool`, other agents (`agent.as_tool(...)`), MCP servers or single MCP tools (`criogen.mcp`), and collection search tools (`Collection.as_tool`).
+- `tools` (`Sequence[Any]`, default `()`): What the model may call: functions decorated with `@tool`, other agents (`agent.as_tool(...)`), MCP servers or single MCP tools (`criogenai.mcp`), and collection search tools (`Collection.as_tool`).
 - `approve` (`Sequence[str]`, default `()`): Names of tools that need a human decision before they run. The run stops with `needs_approval` set; continue it on a thread with `approve`, `reject` or `decide`.
 - `output` (`Any`, default `None`): Structured output: a JSON Schema (dict) or a Pydantic model class. The run must end with JSON that matches it, which becomes `result.output` (an instance when you passed a Pydantic model).
 - `limits` (`Optional[Dict[str, Any]]`, default `None`): Bounds on each run, as a dict: `model_calls` (default 25), `tool_calls` (default 200), `tokens` (input plus output tokens across the run; no limit by default) and `tool_timeout_secs` (per tool call, default 60). Reaching a limit fails the run with `LimitExceededError`.
@@ -94,7 +94,7 @@ saved, can wait for approval and can be retried.
 - `tool_retry` (`Optional[Retry]`, default `None`): How tool calls are retried after a `ToolError` with `retryable=True` or a timeout. Only tools marked `read_only` or `idempotent` are retried. Default `Retry()`.
 - `max_retry_after` (`Optional[float]`, default `None`): The longest `Retry-After` the agent waits for, in seconds (default 60). When a provider asks for longer, the call fails at once (or moves to a fallback) instead of hanging.
 - `telemetry` (`Any`, default `None`): A `Telemetry` exporter; every run of this agent is sent to it.
-- `hooks` (`Sequence[Any]`, default `()`): Objects whose methods run around the loop (`on_start`, `before_model`, `after_model`, `before_tool`, `after_tool`, `on_end`); see `criogen.hooks`.
+- `hooks` (`Sequence[Any]`, default `()`): Objects whose methods run around the loop (`on_start`, `before_model`, `after_model`, `before_tool`, `after_tool`, `on_end`); see `criogenai.hooks`.
 - `redact` (`Any`, default `None`): A function `text -> text` (or an async function) applied to every text in the transcript before each model call: the input, earlier replies and tool results. It runs before all hooks, so neither a hook nor a provider sees the original text, and the redacted transcript is what a thread saves. Use it to remove identifiers before anything leaves your systems.
 
 **Raises**
@@ -107,7 +107,7 @@ saved, can wait for approval and can be retried.
 **Example**
 
 ```python
-from criogen import Agent, FakeModel, FakeReply, tool
+from criogenai import Agent, FakeModel, FakeReply, tool
 
 @tool
 def add(a: int, b: int) -> int:

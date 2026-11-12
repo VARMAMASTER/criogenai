@@ -5,7 +5,7 @@
 
 export type Fw = "criogen" | "langchain";
 export const FRAMEWORKS: { id: Fw; label: string }[] = [
-  { id: "criogen", label: "Criogen" },
+  { id: "criogen", label: "CriogenAI" },
   { id: "langchain", label: "LangChain" },
 ];
 
@@ -212,7 +212,7 @@ export function compare(state: PlayState): Compared[] {
       const ratio = row.higher ? (abAhead ? x / y : y / x) : abAhead ? y / x : x / y;
       if (ratio >= 1.1) {
         win = abAhead ? "criogen" : "langchain";
-        note = `${abAhead ? "Criogen" : "LangChain"} ${fmt(ratio, ratio < 10 ? 1 : 0)}× ${row.higher ? "higher" : "lower"}`;
+        note = `${abAhead ? "CriogenAI" : "LangChain"} ${fmt(ratio, ratio < 10 ? 1 : 0)}× ${row.higher ? "higher" : "lower"}`;
       } else note = "within 10%";
     }
     out.push({ row, criogen: x, langchain: y, win, note });

@@ -59,7 +59,7 @@ refused with `resume_invalid`, and the thread keeps waiting, unchanged:
   (the same tools and `approve` list); an agent built differently gets
   `workflow_mismatch` or `resume_invalid`. Answer waiting approvals before
   you deploy a change to them.
-- Criogen does not notify anyone. Store the waiting calls where your
+- CriogenAI does not notify anyone. Store the waiting calls where your
   reviewers look (a table, a queue, a chat message) when `send` returns
   `needs_approval`, together with the thread id.
 - The thread's `history()` shows the pause as a checkpoint with status
@@ -72,7 +72,7 @@ Thread handles carry an `actor`: `agent.thread(id, actor="user:dr-rao")`
 the reviewer, as in the [tutorial](/docs/tutorial/support-agent/). With the
 [audit trail](/docs/guides/compliance/#audit-trail) on, the request, the
 decision and its actor are recorded, and the decision is recorded **before**
-the call runs. Criogen records the actor you give; checking that this person
+the call runs. CriogenAI records the actor you give; checking that this person
 may approve is your application's job.
 
 ## Streaming the continuation

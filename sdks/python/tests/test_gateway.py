@@ -5,7 +5,7 @@ import time
 
 import pytest
 
-from criogen import (
+from criogenai import (
     CriogenError,
     Embedder,
     FakeModel,

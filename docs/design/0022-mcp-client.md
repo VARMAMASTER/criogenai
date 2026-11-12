@@ -1,15 +1,15 @@
 # 0022: MCP client: tools from any MCP server
 
 Status: approved by the user's request (2026-11-07, roadmap three, task 21).
-Built in Rust (`criogen_agent::mcp`, feature `mcp`), exposed in Python and
+Built in Rust (`criogenai_agent::mcp`, feature `mcp`), exposed in Python and
 TypeScript.
 
 ## Why
 
 The Model Context Protocol is how tool servers are shared: GitHub, file
 systems, databases, browsers, internal company services. One client gives a
-Criogen agent every one of them, so we do not need an integration catalogue
-of our own. The client only **uses** tools; Criogen does not serve MCP here.
+CriogenAI agent every one of them, so we do not need an integration catalogue
+of our own. The client only **uses** tools; CriogenAI does not serve MCP here.
 
 ## The protocol we speak
 
@@ -21,7 +21,7 @@ server/tools, transports), and 2025-11-25 for older servers.
   `io.modelcontextprotocol/protocolVersion` (`"2026-07-28"`),
   `io.modelcontextprotocol/clientCapabilities` (`{}`: we offer no sampling,
   roots or elicitation) and `io.modelcontextprotocol/clientInfo`
-  (`{name: "criogen", version}`). Modern servers are stateless: no
+  (`{name: "criogenai", version}`). Modern servers are stateless: no
   handshake, no session.
 - **Discovery.** `server/discover` returns the versions and capabilities a
   modern server supports. An older server answers it with an error (usually
@@ -67,7 +67,7 @@ server/tools, transports), and 2025-11-25 for older servers.
 Rust:
 
 ```rust
-use criogen_agent::{Agent, mcp::McpServer};
+use criogenai_agent::{Agent, mcp::McpServer};
 
 let github = McpServer::stdio("npx", ["-y", "@modelcontextprotocol/server-github"])
     .env("GITHUB_TOKEN", token)
@@ -98,12 +98,12 @@ let agent = Agent::builder(model)
   gives the server's name, version, protocol version and `instructions`.
 - `AgentBuilder::tools(iter)` adds several shared tools at once.
 
-Python: `server = await criogen.mcp.stdio("npx", [...], env=..., prefix=...)`
-or `await criogen.mcp.http(url, headers=...)`; `server.tools` goes into
+Python: `server = await criogenai.mcp.stdio("npx", [...], env=..., prefix=...)`
+or `await criogenai.mcp.http(url, headers=...)`; `server.tools` goes into
 `Agent(tools=[...])`; `await server.close()`; `async with` closes it.
 TypeScript: `const server = await mcp.stdio("npx", [...], {...})` or
 `await mcp.http(url, {...})`; `server.tools`, `await server.close()`. In
-`criogen/web` only `mcp.http` exists; `mcp.stdio` throws `unsupported`.
+`criogenai/web` only `mcp.http` exists; `mcp.stdio` throws `unsupported`.
 
 ## Mapping tools
 

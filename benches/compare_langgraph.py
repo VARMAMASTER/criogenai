@@ -1,9 +1,9 @@
-"""The same graph shapes as `criogen-bench`, in LangGraph (design 0014 §3).
+"""The same graph shapes as `criogenai-bench`, in LangGraph (design 0014 §3).
 
     research/.venv/Scripts/python benches/compare_langgraph.py
 
 Trivial nodes, no model calls: this measures each engine's own cost per
-step and per parallel node. LangGraph runs in Python; Criogen's numbers
+step and per parallel node. LangGraph runs in Python; CriogenAI's numbers
 come from its Rust core (an SDK-defined workflow would add the bridge cost
 measured by benches/python_bridge.py).
 """

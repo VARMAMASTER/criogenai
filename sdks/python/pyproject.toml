@@ -3,12 +3,12 @@ requires = ["maturin>=1.9,<2"]
 build-backend = "maturin"
 
 [project]
-name = "criogen"
-version = "0.1.6"
+name = "criogenai"
+version = "0.1.7"
 description = "The fast AI agent framework for Python, a LangChain and LangGraph alternative on a Rust engine: tool calling, multi-agent workflows, human approval, durable threads, memory"
 readme = "README.md"
 requires-python = ">=3.9"
-license = "LicenseRef-Criogen-Free"
+license = "LicenseRef-CriogenAI-Free"
 license-files = ["LICENSE"]
 keywords = ["ai", "ai-agents", "agent-framework", "llm", "llm-agents", "multi-agent", "agentic", "agent-orchestration", "workflow", "tool-calling", "function-calling", "langchain-alternative", "langgraph-alternative", "openai", "anthropic", "gemini", "rust", "asyncio"]
 classifiers = [
@@ -42,7 +42,7 @@ test = ["pytest>=8"]
 
 [tool.maturin]
 python-source = "python"
-module-name = "criogen._native"
+module-name = "criogenai._native"
 features = ["pyo3/extension-module"]
 
 [tool.pytest.ini_options]

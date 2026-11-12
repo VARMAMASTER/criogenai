@@ -3,7 +3,7 @@
 // runs these same functions on the engine in the browser (design 0021):
 // `task` is the visitor's input, MODEL the model it swaps in, and each
 // function returns the answer it shows.
-import { END, Agent, Storage, Workflow, goto, patterns, tool } from "criogen";
+import { END, Agent, Storage, Workflow, goto, patterns, tool } from "criogenai";
 import { z } from "zod";
 import { MODEL } from "./model.js";
 

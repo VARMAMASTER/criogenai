@@ -27,7 +27,7 @@ function body(req) {
   });
 }
 
-/** `files`: the directory with criogen.js and criogen_bg.wasm. */
+/** `files`: the directory with criogenai.js and criogenai_bg.wasm. */
 export async function startServers({ files }) {
   const here = new URL(".", import.meta.url);
   const pages = new Map([

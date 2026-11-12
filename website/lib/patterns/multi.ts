@@ -17,7 +17,7 @@ const router: PatternDef = {
   avoid: ["A request needs several specialists (Supervisor)", "Categories overlap heavily"],
   task: "I was charged twice for my subscription this month.",
   usesModel: true,
-  criogen: { kind: "primitives", api: "Workflow.route" },
+  criogenai: { kind: "primitives", api: "Workflow.route" },
   graph: {
     w: 640,
     h: 240,
@@ -56,7 +56,7 @@ const supervisor: PatternDef = {
   avoid: ["A fixed order always works (a sequential pipeline is cheaper)", "Tight latency budgets"],
   task: "Give me three bullet points on why teams adopt TypeScript.",
   usesModel: true,
-  criogen: { kind: "helper", api: "patterns.coordinator" },
+  criogenai: { kind: "helper", api: "patterns.coordinator" },
   graph: {
     w: 640,
     h: 240,
@@ -96,7 +96,7 @@ const hierarchical: PatternDef = {
   avoid: ["Small tasks: every level adds calls and latency", "Areas that must constantly talk to each other"],
   task: "Should our bakery open a second shop downtown?",
   usesModel: true,
-  criogen: { kind: "helper", api: "patterns.hierarchical" },
+  criogenai: { kind: "helper", api: "patterns.hierarchical" },
   graph: {
     w: 640,
     h: 250,
@@ -139,7 +139,7 @@ const collaboration: PatternDef = {
   avoid: ["Stages that need to go back and forth (Debate, Reflexion)", "When one capable agent can do it all in one call"],
   task: "Explain why the sky is blue, for a 10-year-old.",
   usesModel: true,
-  criogen: { kind: "helper", api: "patterns.sequential" },
+  criogenai: { kind: "helper", api: "patterns.sequential" },
   graph: {
     w: 640,
     h: 180,
@@ -174,7 +174,7 @@ const debate: PatternDef = {
   avoid: ["Questions with a single factual answer", "Tight budgets: rounds × sides calls"],
   task: "Should a 5-person startup build its own LLM gateway?",
   usesModel: true,
-  criogen: { kind: "primitives", api: "Workflow: two agent nodes in a loop + judge (or patterns.review_and_critique)" },
+  criogenai: { kind: "primitives", api: "Workflow: two agent nodes in a loop + judge (or patterns.review_and_critique)" },
   graph: {
     w: 640,
     h: 230,
@@ -211,7 +211,7 @@ const parallel: PatternDef = {
   avoid: ["Branches that need each other's results (chain them instead)", "Rate-limited APIs: all calls land at once"],
   task: "Review: “Battery lasts forever, but the app keeps logging me out and support took 4 days to reply.”",
   usesModel: true,
-  criogen: { kind: "helper", api: "patterns.parallel" },
+  criogenai: { kind: "helper", api: "patterns.parallel" },
   graph: {
     w: 640,
     h: 240,
@@ -250,7 +250,7 @@ const swarm: PatternDef = {
   avoid: ["You need one place that decides (Supervisor)", "Strict audit of who decided what (a central coordinator is easier to trace)"],
   task: "I returned my headphones two weeks ago and still have no refund.",
   usesModel: true,
-  criogen: { kind: "helper", api: "patterns.swarm" },
+  criogenai: { kind: "helper", api: "patterns.swarm" },
   graph: {
     w: 640,
     h: 240,
@@ -283,13 +283,13 @@ const human: PatternDef = {
   short: "The agent drafts; a person approves before anything happens.",
   what: [
     "The run pauses before a step that matters, here sending a refund email, and waits for a person to approve, edit or reject the draft. Nothing is sent until they decide.",
-    "In Criogen the pause is durable: it is saved in the database, so the decision can come from another process, days later, and is recorded in the audit trail.",
+    "In CriogenAI the pause is durable: it is saved in the database, so the decision can come from another process, days later, and is recorded in the audit trail.",
   ],
   use: ["Money, messages to customers, deletions, anything hard to undo", "Regulated work that needs a named approver", "Building trust in a new agent"],
   avoid: ["High-volume, low-risk steps (people become the bottleneck)"],
   task: "A customer asks for a $180 refund on a damaged order (A-2077).",
   usesModel: true,
-  criogen: { kind: "helper", api: "patterns.human_review (Approval on tools)" },
+  criogenai: { kind: "helper", api: "patterns.human_review (Approval on tools)" },
   graph: {
     w: 640,
     h: 220,

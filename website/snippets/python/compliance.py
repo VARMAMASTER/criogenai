@@ -3,7 +3,7 @@ import os
 
 async def main() -> None:
     # [show]
-    from criogen import Storage
+    from criogenai import Storage
 
     storage = Storage(
         "postgres://app:secret@db.internal/agents",

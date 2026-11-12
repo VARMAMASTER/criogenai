@@ -2,18 +2,18 @@
 # a temporary directory, fills in the paths of the unpacked packages
 # and runs it. Not a workspace member.
 [package]
-name = "criogen-package-test"
+name = "criogenai-package-test"
 version = "0.0.0"
 edition = "2024"
 publish = false
 
 [dependencies]
-criogen-core = { path = "@CRIOGEN_CORE_DIR@" }
-criogen-providers = { path = "@CRIOGEN_PROVIDERS_DIR@" }
-criogen-storage = { path = "@CRIOGEN_STORAGE_DIR@", features = ["sqlite", "postgres", "encryption"] }
-criogen-agent = { path = "@CRIOGEN_AGENT_DIR@" }
-criogen-telemetry = { path = "@CRIOGEN_TELEMETRY_DIR@" }
-criogen-gateway = { path = "@CRIOGEN_GATEWAY_DIR@" }
+criogenai-core = { path = "@CRIOGENAI_CORE_DIR@" }
+criogenai-providers = { path = "@CRIOGENAI_PROVIDERS_DIR@" }
+criogenai-storage = { path = "@CRIOGENAI_STORAGE_DIR@", features = ["sqlite", "postgres", "encryption"] }
+criogenai-agent = { path = "@CRIOGENAI_AGENT_DIR@" }
+criogenai-telemetry = { path = "@CRIOGENAI_TELEMETRY_DIR@" }
+criogenai-gateway = { path = "@CRIOGENAI_GATEWAY_DIR@" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 serde_json = "1"
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "time", "net"] }
@@ -21,10 +21,10 @@ tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "time", "ne
 # The packaged crates depend on each other through crates.io versions, which
 # are not published: use the unpacked packages instead.
 [patch.crates-io]
-criogen-rt = { path = "@CRIOGEN_RT_DIR@" }
-criogen-core = { path = "@CRIOGEN_CORE_DIR@" }
-criogen-providers = { path = "@CRIOGEN_PROVIDERS_DIR@" }
-criogen-storage = { path = "@CRIOGEN_STORAGE_DIR@" }
+criogenai-rt = { path = "@CRIOGENAI_RT_DIR@" }
+criogenai-core = { path = "@CRIOGENAI_CORE_DIR@" }
+criogenai-providers = { path = "@CRIOGENAI_PROVIDERS_DIR@" }
+criogenai-storage = { path = "@CRIOGENAI_STORAGE_DIR@" }
 
-# Stand-alone: never part of the Criogen workspace.
+# Stand-alone: never part of the CriogenAI workspace.
 [workspace]

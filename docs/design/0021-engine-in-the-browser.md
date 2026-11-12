@@ -2,8 +2,8 @@
 
 Status: approved by the user's request (2026-11-05: "lets go build it", after
 the plan and the performance trade-offs were discussed). Built in Rust
-(`criogen-rt`, `criogen-js`, the providers' `fetch` transport, the
-`criogen-web` binding) and in the TypeScript SDK (`criogen/web`). Servers
+(`criogenai-rt`, `criogenai-js`, the providers' `fetch` transport, the
+`criogenai-web` binding) and in the TypeScript SDK (`criogenai/web`). Servers
 are unchanged: the same crates build there exactly as before.
 
 ## Why
@@ -11,21 +11,21 @@ are unchanged: the same crates build there exactly as before.
 The website's playground ran a JavaScript copy of each pattern's control
 flow, because the engine could not run in a page. That broke rule 3 (engine
 semantics live in Rust only) in spirit, and the page had to say so. More
-important for users: Criogen ran only where the Node addon or the Python
+important for users: CriogenAI ran only where the Node addon or the Python
 wheel loads. With the same engine compiled to WebAssembly:
 
 - an agent can run in a visitor's browser (or a Web Worker): no server work
   per run, nothing to scale for the agent loop itself;
 - the playground runs the code it shows, on the real engine;
 - the TypeScript API is the same on servers and in the browser: one bridge
-  (`criogen-js`) under both, one test suite checking both.
+  (`criogenai-js`) under both, one test suite checking both.
 
 Servers stay the right place for long or durable runs, secrets, databases,
 audit trails and patient data; see *Limits*.
 
 ## Design
 
-### 1. Tasks and timers: `criogen-rt`
+### 1. Tasks and timers: `criogenai-rt`
 
 The engine used Tokio for tasks (`spawn`, `JoinSet`), timers (`sleep`,
 `timeout`, `timeout_at`, `Instant`) and the wall clock. In a browser there
@@ -33,7 +33,7 @@ is no Tokio runtime (nothing may block the page's thread), and
 `std::time::Instant::now()` / `SystemTime::now()` panic on
 `wasm32-unknown-unknown`.
 
-`criogen-rt` is the part of Tokio's API the engine uses:
+`criogenai-rt` is the part of Tokio's API the engine uses:
 
 - On servers (every target with an operating system) it *re-exports Tokio*:
   same types, same behaviour, the paused test clock still works. Nothing
@@ -51,7 +51,7 @@ is no Tokio runtime (nothing may block the page's thread), and
   `std::time::Instant`, unaffected by the paused test clock), for durations
   reported to people (a tool call's `duration_ms`).
 
-Engine crates (`core`, `agent`, `providers`, `storage`) call `criogen_rt`
+Engine crates (`core`, `agent`, `providers`, `storage`) call `criogenai_rt`
 instead of `tokio::spawn` / `tokio::time`; they keep `tokio::sync`, which
 needs no runtime. The Postgres code, gateway and telemetry keep Tokio
 directly (servers only).
@@ -87,11 +87,11 @@ JavaScript hosts (browsers, workers, Node 18+, Deno). The `fetch` backend:
 The insecure-http rule (no key over plain `http` to another machine) is
 checked before any transport, so it holds here too.
 
-### 3. One bridge for both engines: `criogen-js`
+### 3. One bridge for both engines: `criogenai-js`
 
 The Node addon's logic (configurations, envelopes, results, errors, the
 cancel registry, agents by handle, workflows, the gateway) moved from
-`sdks/typescript/src/lib.rs` into the workspace crate `criogen-js`. A
+`sdks/typescript/src/lib.rs` into the workspace crate `criogenai-js`. A
 JavaScript function is a `JsFunction` (request JSON in, a future of an
 envelope out), a failure a `Failure` (`{code, message, details}`). The
 bindings only adapt calling conventions:
@@ -105,12 +105,12 @@ Both export the same JavaScript interface (`Addon` in `lib/native.ts`), so
 the TypeScript layer is shared unchanged, and the TypeScript test suite runs
 on both engines (`CRIOGEN_ENGINE=wasm`).
 
-### 4. The TypeScript entry: `criogen/web`
+### 4. The TypeScript entry: `criogenai/web`
 
 `lib/native.ts` is now an engine registry: the Node loader
 (`lib/native-node.ts`, the default) or the WebAssembly loader
 (`lib/browser/engine.ts`, chosen by the browser entry). The browser entry
-(`lib/browser/index.ts`) exports the same API as `criogen` except what needs
+(`lib/browser/index.ts`) exports the same API as `criogenai` except what needs
 Node (`loadEnv` and friends); web tools are there but say they run on
 servers. Environment variables are read through `host-env.ts` (a browser has
 none: keys are passed as `apiKey`).
@@ -121,9 +121,9 @@ the engine once, before anything else; a use before it throws
 location when it is not next to the script (a URL, a `Response`, bytes, or a
 compiled `WebAssembly.Module`).
 
-The package ships `dist-web/criogen.js` (one ES module: the TypeScript layer
-and the glue), `dist-web/criogen_bg.wasm` and `dist-web/types`, exported as
-`criogen/web`. `scripts/build-web.mjs` builds them (cargo, wasm-bindgen at
+The package ships `dist-web/criogenai.js` (one ES module: the TypeScript layer
+and the glue), `dist-web/criogenai_bg.wasm` and `dist-web/types`, exported as
+`criogenai/web`. `scripts/build-web.mjs` builds them (cargo, wasm-bindgen at
 the exact version of the crate's lockfile, `wasm-opt -Os`, esbuild).
 
 ### 5. Errors
@@ -170,7 +170,7 @@ engine and return its message.
   may pause them: a long run can stall. Short interactive runs are the fit.
 - **Keys.** A key used in a page is visible to whoever uses the page. For
   the playground the visitor's own key stays in their tab (never sent to
-  our servers). In a product, point models at your own server or a Criogen
+  our servers). In a product, point models at your own server or a CriogenAI
   gateway with per-user virtual keys.
 - **CORS.** The provider must accept calls from a browser page (OpenAI,
   Anthropic with its direct-browser header, Gemini's OpenAI-compatible
@@ -180,7 +180,7 @@ engine and return its message.
 
 ## Performance
 
-Criogen's own work per run is a fraction of a millisecond natively
+CriogenAI's own work per run is a fraction of a millisecond natively
 (docs/benchmarks.md); a model call takes 0.3–5 s. WebAssembly is somewhat
 slower than native and single-threaded, which matters little next to the
 model. The difference users can feel is the network: each model call from a
@@ -191,7 +191,7 @@ numbers are claimed until they are measured and published separately
 
 ## Tests
 
-- `criogen-rt` as WebAssembly on a JavaScript event loop
+- `criogenai-rt` as WebAssembly on a JavaScript event loop
   (`wasm-bindgen-test-runner` on Node): tasks, aborts, join order,
   concurrency (three 300 ms waits take about 300 ms), timers that never end
   early, timeouts, the clock.
@@ -209,6 +209,6 @@ numbers are claimed until they are measured and published separately
   (the key appears nowhere in the error), a server without CORS, a body over
   64 MiB, plain http to another machine; a Web Worker.
 - The package (rule 9): `npm pack`, installed into a new project, an app
-  importing `criogen/web` bundled by esbuild and run in Chromium, then the
+  importing `criogenai/web` bundled by esbuild and run in Chromium, then the
   browser tests against the installed files.
 - `scripts/test-web.sh` runs all of it; `ci-local.sh` step `web`.

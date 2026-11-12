@@ -1,7 +1,7 @@
 import asyncio
 
 # [show]
-from criogen import Agent, ToolError, tool
+from criogenai import Agent, ToolError, tool
 
 
 @tool

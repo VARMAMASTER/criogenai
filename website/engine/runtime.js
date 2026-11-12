@@ -1,12 +1,12 @@
-// "criogen" inside the playground's samples bundle (scripts/build-engine.mjs,
-// design 0021): the real engine in the browser (./criogen.js, served next to
+// "criogenai" inside the playground's samples bundle (scripts/build-engine.mjs,
+// design 0021): the real engine in the browser (./criogenai.js, served next to
 // this bundle), re-exported unchanged, plus a report to the page of what the
 // samples do (their tools, workflow nodes and storage), so the playground can
 // tell the story as it happens. Nothing is reimplemented: every call goes to
 // the engine as written.
-import * as engine from "./criogen.js";
+import * as engine from "./criogenai.js";
 
-export * from "./criogen.js";
+export * from "./criogenai.js";
 
 let observer = {};
 

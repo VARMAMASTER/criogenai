@@ -3,10 +3,10 @@ title: "TypeScript API: Telemetry"
 description: "TypeScript API reference, telemetry: Telemetry, TelemetryOptions."
 ---
 
-Exporting runs to Langfuse or any OpenTelemetry backend. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/telemetry/).
+Exporting runs to Langfuse or any OpenTelemetry backend. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/telemetry/).
 
 ```ts
-import { Telemetry, TelemetryOptions } from "criogen";
+import { Telemetry, TelemetryOptions } from "criogenai";
 ```
 
 ## Contents
@@ -39,9 +39,9 @@ counts and error codes, not prompts or outputs.
 **Example**
 
 ```ts
-import { Agent, FakeModel, Telemetry } from "criogen";
+import { Agent, FakeModel, Telemetry } from "criogenai";
 
-// Sends to the local trace viewer: start it first with `npx criogen trace`.
+// Sends to the local trace viewer: start it first with `npx criogenai trace`.
 const telemetry = Telemetry.local();
 const agent = new Agent({ model: new FakeModel(["Hello."]), telemetry });
 await agent.run("Hi");
@@ -72,7 +72,7 @@ LANGFUSE_SECRET_KEY and the address to LANGFUSE_BASE_URL.
 **Example**
 
 ```ts
-import { Agent, Telemetry } from "criogen";
+import { Agent, Telemetry } from "criogenai";
 
 // Reads LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY and LANGFUSE_BASE_URL.
 const telemetry = Telemetry.langfuse({ serviceName: "support-bot" });
@@ -97,7 +97,7 @@ Any OTLP/HTTP (JSON) collector, e.g. "http://localhost:4318/v1/traces".
 **Example**
 
 ```ts
-import { Telemetry } from "criogen";
+import { Telemetry } from "criogenai";
 
 const telemetry = Telemetry.otlp("https://otel.example.com/v1/traces", {
   headers: { authorization: `Bearer ${process.env.OTEL_TOKEN}` },
@@ -111,7 +111,7 @@ const telemetry = Telemetry.otlp("https://otel.example.com/v1/traces", {
 static local(options?: TelemetryOptions & { url?: string; }): Telemetry
 ```
 
-The local trace viewer (`npx criogen trace`, `serveTraces()`).
+The local trace viewer (`npx criogenai trace`, `serveTraces()`).
 Content only with `captureContent: true`; it stays on this computer either way.
 
 **Parameters**
@@ -166,4 +166,4 @@ Settings every exporter takes.
 **Fields**
 
 - `captureContent` (`boolean`, optional): Send message text and tool arguments too (default false).
-- `serviceName` (`string`, default `"criogen"`): The `service.name` of the traces.
+- `serviceName` (`string`, default `"criogenai"`): The `service.name` of the traces.

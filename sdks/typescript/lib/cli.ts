@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// `npx criogen trace [--port 4318] [--db file | --memory] [--prices file.json]`:
+// `npx criogenai trace [--port 4318] [--db file | --memory] [--prices file.json]`:
 // the local trace viewer (design 0023).
 
 import { readFileSync } from "node:fs";
 import { EvalResult, compare, comparisonReport } from "./evals";
 import { serveTraces, type TraceViewerOptions } from "./trace";
 
-const USAGE = `usage: criogen trace [--port N] [--host ADDR] [--db FILE | --memory] [--keep-runs N] [--keep-days N]
+const USAGE = `usage: criogenai trace [--port N] [--host ADDR] [--db FILE | --memory] [--keep-runs N] [--keep-days N]
                      [--prices FILE.json] [--token-env NAME]`;
 
 async function trace(args: string[]): Promise<number> {
@@ -37,7 +37,7 @@ async function trace(args: string[]): Promise<number> {
     }
   }
   const viewer = await serveTraces(options);
-  console.log(`Criogen traces: open ${viewer.url}  (send runs with Telemetry.local(); Ctrl+C to stop)`);
+  console.log(`CriogenAI traces: open ${viewer.url}  (send runs with Telemetry.local(); Ctrl+C to stop)`);
   await new Promise<void>((resolve) => {
     process.once("SIGINT", resolve);
     process.once("SIGTERM", resolve);
@@ -46,11 +46,11 @@ async function trace(args: string[]): Promise<number> {
   return 0;
 }
 
-// `criogen eval compare base.json new.json [--fail-on-regression]` (design 0024).
+// `criogenai eval compare base.json new.json [--fail-on-regression]` (design 0024).
 async function evalCommand(args: string[]): Promise<number> {
   const files = args.filter((a) => !a.startsWith("--"));
   if (files[0] !== "compare" || files.length !== 3) {
-    console.log("usage: criogen eval compare <baseline.json> <current.json> [--fail-on-regression]");
+    console.log("usage: criogenai eval compare <baseline.json> <current.json> [--fail-on-regression]");
     return 2;
   }
   const [base, current] = await Promise.all([EvalResult.load(files[1]), EvalResult.load(files[2])]);
@@ -66,15 +66,15 @@ async function main(): Promise<number> {
   const [command, ...rest] = process.argv.slice(2);
   if (command === "trace") return trace(rest);
   if (command === "eval") return evalCommand(rest);
-  console.log("usage: criogen trace [options]                 the local trace viewer (--help for options)");
-  console.log("       criogen eval compare <base> <current>   compare two eval results");
+  console.log("usage: criogenai trace [options]                 the local trace viewer (--help for options)");
+  console.log("       criogenai eval compare <base> <current>   compare two eval results");
   return command ? 2 : 0;
 }
 
 main().then(
   (code) => process.exit(code),
   (error) => {
-    console.error(`criogen: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(`criogenai: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(1);
   },
 );

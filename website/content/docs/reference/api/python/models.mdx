@@ -3,7 +3,7 @@ title: "Python API: Models"
 description: "Python API reference, models: OpenAI, Anthropic, Gemini, FakeModel, OpenAICompatible, OpenRouter, DeepSeek, Mistral, and more."
 ---
 
-Providers and models: OpenAI, Anthropic, Gemini, Azure, Bedrock, Vertex AI, local servers and more. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/models/).
+Providers and models: OpenAI, Anthropic, Gemini, Azure, Bedrock, Vertex AI, local servers and more. Generated from the docstrings and type hints of `criogenai` 0.1.7. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/models/).
 
 Models: hosted providers, cloud platforms, local servers, and
 `FakeModel` for tests.
@@ -12,7 +12,7 @@ Pass a model object or a `"provider:model"` string wherever a model is
 taken (`Agent`, `Gateway`, fallbacks). A string takes the provider's key
 from its usual environment variable: `"openai:gpt-5-mini"` from
 `OPENAI_API_KEY`, `"deepseek:deepseek-chat"` from `DEEPSEEK_API_KEY`
-(`criogen.env.key_name` gives the variable). The providers a string may
+(`criogenai.env.key_name` gives the variable). The providers a string may
 name: openai, anthropic, gemini, openrouter, deepseek, mistral, xai, groq,
 cerebras, together, fireworks, qwen, moonshot, zai, ollama, lmstudio,
 kaggle, azure, bedrock and vertex.
@@ -26,7 +26,7 @@ also a `ValueError`). `repr()` of a model
 never shows a key.
 
 ```python
-from criogen import (
+from criogenai import (
     OpenAI,
     Anthropic,
     Gemini,
@@ -99,7 +99,7 @@ defaults to `OPENAI_API_KEY`; `base_url` replaces OpenAI's URL.
 **Example**
 
 ```python
-from criogen import Agent, OpenAI
+from criogenai import Agent, OpenAI
 
 agent = Agent(OpenAI("gpt-5-mini"), instructions="Answer briefly.")
 # the same, with the key from OPENAI_API_KEY:
@@ -161,7 +161,7 @@ it echoes the last user message (`"[fake-llm] reply to: ..."`).
 **Example**
 
 ```python
-from criogen import Agent, FakeModel, FakeReply, tool
+from criogenai import Agent, FakeModel, FakeReply, tool
 
 @tool
 def weather(city: str) -> str:
@@ -209,7 +209,7 @@ or a provider without a class here.
 **Example**
 
 ```python
-from criogen import Agent, OpenAICompatible
+from criogenai import Agent, OpenAICompatible
 
 model = OpenAICompatible("my-model", base_url="http://localhost:8000/v1")
 agent = Agent(model)
@@ -434,7 +434,7 @@ OpenAI-compatible one.
 **Example**
 
 ```python
-from criogen import Agent, Vertex
+from criogenai import Agent, Vertex
 
 model = Vertex("google/gemini-3.6-flash", project="my-project", location="europe-west4")
 agent = Agent(model)
@@ -481,7 +481,7 @@ supported.
 **Example**
 
 ```python
-from criogen import Agent, Bedrock
+from criogenai import Agent, Bedrock
 
 agent = Agent(Bedrock("us.anthropic.claude-sonnet-5", region="us-east-1"))
 ```
@@ -543,7 +543,7 @@ obtains Entra ID tokens and renews them.
 **Example**
 
 ```python
-from criogen import Agent, Azure
+from criogenai import Agent, Azure
 
 agent = Agent(Azure("gpt-5-mini", endpoint="my-resource", managed_identity=True))
 ```
@@ -668,7 +668,7 @@ as the models'. `repr()` never shows a key.
 **Example**
 
 ```python
-from criogen import Embedder, Gateway
+from criogenai import Embedder, Gateway
 
 vectors = Gateway().embed_sync(Embedder.fake(), ["a red car", "a blue car"])
 print(len(vectors), len(vectors[0]))  # 2 256

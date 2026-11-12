@@ -2,7 +2,7 @@
 
 A small chat that **keeps its conversation**: close it, open it tomorrow, and
 the model still knows what you said. Built on the private pilot package
-`@varmamaster/sdk` (Criogen), about 150 lines of code.
+`@varmamaster/sdk` (CriogenAI), about 150 lines of code.
 
 - `chat.mjs`: the agent and one saved conversation (a *thread*) per name.
 - `cli.mjs`: a terminal chat. `server.mjs` + `index.html`: the same in a browser.

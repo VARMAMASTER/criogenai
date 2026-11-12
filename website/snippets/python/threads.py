@@ -1,4 +1,4 @@
-from criogen import Agent
+from criogenai import Agent
 
 
 async def main(agent: Agent) -> None:
@@ -28,7 +28,7 @@ def sync_scripts(agent: Agent) -> None:
 
 async def recover(agent: Agent) -> None:
     # [show recover]
-    from criogen import CriogenError, ThreadSuspendedError
+    from criogenai import CriogenError, ThreadSuspendedError
 
     chat = agent.thread("user-42")
     try:

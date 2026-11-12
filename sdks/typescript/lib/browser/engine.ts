@@ -1,9 +1,9 @@
 // The engine in the browser and other JavaScript hosts (design 0021): the
 // Rust engine compiled to WebAssembly, through the same bridge as the Node
-// addon (criogen-js). WebAssembly compiles asynchronously, so `ready()` loads
+// addon (criogenai-js). WebAssembly compiles asynchronously, so `ready()` loads
 // it once, before anything else runs.
 
-import init, * as glue from "../../web-dist/engine/criogen.js";
+import init, * as glue from "../../web-dist/engine/criogenai.js";
 import { NativeUnavailableError } from "../errors";
 import type { Addon, EngineLoader, HostInfo } from "../native";
 
@@ -21,7 +21,7 @@ export const webLoader: EngineLoader = {
     if (!loaded) {
       throw new NativeUnavailableError(
         "native_unavailable",
-        "the engine is not loaded yet: call `await ready()` once, before using Criogen in the browser",
+        "the engine is not loaded yet: call `await ready()` once, before using CriogenAI in the browser",
         { ...host() },
       );
     }

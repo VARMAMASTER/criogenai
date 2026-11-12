@@ -1,4 +1,4 @@
-// `ready()`: one call that says whether Criogen can work here, for start-up
+// `ready()`: one call that says whether CriogenAI can work here, for start-up
 // checks and health endpoints. It never throws; it reports. In the browser it
 // also loads the engine (WebAssembly, design 0021): call it once, first.
 
@@ -48,14 +48,14 @@ function describe(error: unknown): { error: string; code?: string } {
  * Checks the engine loads and, with `model`, that the model answers.
  *
  * Use it at start-up or in a health endpoint. It never throws: every problem
- * is in the report. In the browser (`criogen/web`) it also loads the
+ * is in the report. In the browser (`criogenai/web`) it also loads the
  * WebAssembly engine, so call it once before anything else there.
  *
  * @param options `model` to also call a model once, `timeoutMs` for that call, `wasm` for the browser engine's location.
  * @returns `ok` and what was checked.
  *
  * @example
- * import { ready } from "criogen";
+ * import { ready } from "criogenai";
  *
  * const report = await ready(); // or ready({ model: "openai:gpt-5-mini" })
  * console.log(report.ok, report.engine.platform, report.engine.arch);

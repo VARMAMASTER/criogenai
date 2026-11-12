@@ -8,8 +8,8 @@ import urllib.parse
 
 import pytest
 
-from criogen import Agent, Azure
-from criogen.models import model_spec
+from criogenai import Agent, Azure
+from criogenai.models import model_spec
 
 TEXT = "Hi from Azure"
 SECRET = "python-client-secret-value"
@@ -90,7 +90,7 @@ def test_a_service_principal_gets_a_bearer_token(origin):
 
 
 def test_a_bad_secret_is_an_auth_error_without_the_secret(origin):
-    from criogen import ModelError
+    from criogenai import ModelError
 
     model = Azure("gpt-5-mini", endpoint=origin, tenant_id="t", client_id="c",
                   client_secret="wrong-secret-value", authority=origin)

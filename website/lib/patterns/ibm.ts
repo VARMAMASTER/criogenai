@@ -20,7 +20,7 @@ const simpleReflex: PatternDef = {
   avoid: ["The world is only partly visible (it cannot remember)", "Situations the rules do not cover"],
   task: "Keep the living room comfortable.",
   usesModel: false,
-  criogen: { kind: "primitives", api: "Workflow.route (a router is a rule)" },
+  criogenai: { kind: "primitives", api: "Workflow.route (a router is a rule)" },
   params: [{ id: "target", label: "Target °C", min: 16, max: 26, value: 21 }],
   graph: {
     w: 640,
@@ -56,7 +56,7 @@ const modelReflex: PatternDef = {
   avoid: ["Choices between competing goals (goal- or utility-based)"],
   task: "Clean all four rooms.",
   usesModel: false,
-  criogen: { kind: "primitives", api: "Workflow state (the internal model) + route" },
+  criogenai: { kind: "primitives", api: "Workflow state (the internal model) + route" },
   graph: {
     w: 640,
     h: 220,
@@ -90,7 +90,7 @@ const goalBased: PatternDef = {
   avoid: ["Several goals that trade off (utility-based)", "Search spaces too big to plan in time"],
   task: "Deliver the package from the Depot to the Clinic.",
   usesModel: false,
-  criogen: { kind: "primitives", api: "Workflow loop: plan → act → check (goto)" },
+  criogenai: { kind: "primitives", api: "Workflow loop: plan → act → check (goto)" },
   graph: {
     w: 640,
     h: 220,
@@ -126,7 +126,7 @@ const utilityBased: PatternDef = {
   avoid: ["Preferences you cannot express as weights", "Only one acceptable option"],
   task: "Book a flight from Lisbon to Berlin.",
   usesModel: true,
-  criogen: { kind: "primitives", api: "A tool or node that scores options" },
+  criogenai: { kind: "primitives", api: "A tool or node that scores options" },
   params: [
     { id: "price", label: "Price matters", min: 0, max: 10, value: 6 },
     { id: "time", label: "Time matters", min: 0, max: 10, value: 4 },
@@ -164,7 +164,7 @@ const learning: PatternDef = {
   avoid: ["Mistakes are expensive while it learns", "There is no reliable feedback signal"],
   task: "Learn which reply style gets the best customer ratings.",
   usesModel: false,
-  criogen: { kind: "primitives", api: "Memory (stores what was learned) + a hook that scores runs" },
+  criogenai: { kind: "primitives", api: "Memory (stores what was learned) + a hook that scores runs" },
   params: [{ id: "explore", label: "Exploration %", min: 0, max: 60, step: 5, value: 20 }],
   graph: {
     w: 640,

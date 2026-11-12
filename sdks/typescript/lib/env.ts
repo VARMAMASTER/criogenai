@@ -34,7 +34,7 @@ const NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
  * @returns The variables, by name.
  * @throws {Error} A line is not `NAME=value`, or a quoted value is not closed.
  * @example
- * import { parseEnv } from "criogen";
+ * import { parseEnv } from "criogenai";
  *
  * parseEnv("# keys\nOPENAI_API_KEY=sk-test\nexport GEMINI_API_KEY='g-test'\n");
  * // { OPENAI_API_KEY: "sk-test", GEMINI_API_KEY: "g-test" }
@@ -87,7 +87,7 @@ export interface LoadEnvOptions {
  * @returns The names of the variables it set, sorted.
  * @throws {Error} The file is over 1 MB, a line is malformed, or (with `required`) the file is missing.
  * @example
- * import { Agent, loadEnv } from "criogen";
+ * import { Agent, loadEnv } from "criogenai";
  *
  * loadEnv(); // reads ./.env, e.g. OPENAI_API_KEY=...
  * const agent = new Agent({ model: "openai:gpt-5-mini" });

@@ -6,7 +6,7 @@
 //      test suite on the WebAssembly engine, CRIOGEN_ENGINE=wasm);
 //   3. smaller code (wasm-opt, from binaryen);
 //   4. the browser bundle: lib/browser/index.ts with the glue, as one ES
-//      module, dist-web/criogen.js, next to dist-web/criogen_bg.wasm; and its
+//      module, dist-web/criogenai.js, next to dist-web/criogenai_bg.wasm; and its
 //      types, dist-web/types.
 //
 // Usage: node scripts/build-web.mjs [--skip-cargo]   (needs Rust with the
@@ -37,7 +37,7 @@ function run(command, args, options = {}) {
 }
 
 // 1. The engine.
-const wasmIn = join(crate, "target", "wasm32-unknown-unknown", "release", "criogen_web.wasm");
+const wasmIn = join(crate, "target", "wasm32-unknown-unknown", "release", "criogenai_web.wasm");
 if (!process.argv.includes("--skip-cargo")) {
   run(tool("cargo"), ["build", "--release", "--locked", "--target", "wasm32-unknown-unknown", "--manifest-path", join(crate, "Cargo.toml")]);
 }
@@ -53,14 +53,14 @@ if (wanted && have !== wanted) {
 const out = join(root, "web-dist");
 rmSync(out, { recursive: true, force: true });
 for (const [target, dir] of [["web", "engine"], ["nodejs", "node"]]) {
-  run(bindgen, ["--target", target, "--out-dir", join(out, dir), "--out-name", "criogen", "--remove-producers-section", wasmIn]);
+  run(bindgen, ["--target", target, "--out-dir", join(out, dir), "--out-name", "criogenai", "--remove-producers-section", wasmIn]);
 }
 
 // 3. Smaller code: the features rustc emits for wasm32 by default.
 const features = ["bulk-memory", "mutable-globals", "nontrapping-float-to-int", "sign-ext", "reference-types", "multivalue"];
 const wasmOpt = join(root, "node_modules", ".bin", "wasm-opt" + (process.platform === "win32" ? ".cmd" : ""));
 for (const dir of ["engine", "node"]) {
-  const file = join(out, dir, "criogen_bg.wasm");
+  const file = join(out, dir, "criogenai_bg.wasm");
   run(wasmOpt, ["-Os", ...features.map((f) => `--enable-${f}`), "-o", file, file], { shell: process.platform === "win32" });
 }
 
@@ -68,7 +68,7 @@ for (const dir of ["engine", "node"]) {
 // ones: the addon loader, web tools, and nothing else reaches Node.
 const swaps = { "./native-node": "native-node.ts", "./web": "web.ts" };
 const browserOnly = {
-  name: "criogen-browser",
+  name: "criogenai-browser",
   setup(build) {
     build.onResolve({ filter: /^\.\/(native-node|web)$/ }, (args) => {
       if (resolve(args.resolveDir) !== join(root, "lib")) return undefined;
@@ -89,18 +89,18 @@ await esbuild.build({
   platform: "neutral",
   mainFields: ["module", "main"],
   target: "es2022",
-  outfile: join(dist, "criogen.js"),
+  outfile: join(dist, "criogenai.js"),
   sourcemap: true,
   legalComments: "none",
   plugins: [browserOnly],
   logLevel: "warning",
 });
-copyFileSync(join(out, "engine", "criogen_bg.wasm"), join(dist, "criogen_bg.wasm"));
+copyFileSync(join(out, "engine", "criogenai_bg.wasm"), join(dist, "criogenai_bg.wasm"));
 run(process.execPath, [join(root, "node_modules", "typescript", "bin", "tsc"), "-p", join(root, "tsconfig.web.json")]);
 
 const size = (file) => {
   const bytes = readFileSync(file);
   return `${(statSync(file).size / 1024).toFixed(0)} KiB (${(gzipSync(bytes, { level: 9 }).length / 1024).toFixed(0)} KiB gzipped)`;
 };
-console.log(`engine:  dist-web/criogen_bg.wasm  ${size(join(dist, "criogen_bg.wasm"))}`);
-console.log(`library: dist-web/criogen.js       ${size(join(dist, "criogen.js"))}`);
+console.log(`engine:  dist-web/criogenai_bg.wasm  ${size(join(dist, "criogenai_bg.wasm"))}`);
+console.log(`library: dist-web/criogenai.js       ${size(join(dist, "criogenai.js"))}`);

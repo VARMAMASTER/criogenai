@@ -1,4 +1,4 @@
-// Every Criogen icon, drawn from the one mark (lib/mark.ts), so no place shows
+// Every CriogenAI icon, drawn from the one mark (lib/mark.ts), so no place shows
 // an older logo: favicon.ico (16, 32, 48), apple-touch-icon.png (180), the
 // web app icons (192, 512, and a maskable 512 with a safe zone) and mark.svg.
 // Run after changing the mark: node scripts/icons.mjs (writes to public/).
@@ -80,6 +80,6 @@ await writeFile(out("icon-maskable-512.png"), await png(svg({ background: page, 
 // The plain mark, for anyone who links to it.
 await writeFile(
   out("mark.svg"),
-  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="Criogen">${shapes}\n</svg>\n`,
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none" role="img" aria-label="CriogenAI">${shapes}\n</svg>\n`,
 );
 console.log("icons: favicon.ico, apple-touch-icon.png, icon-192.png, icon-512.png, icon-maskable-512.png, mark.svg");

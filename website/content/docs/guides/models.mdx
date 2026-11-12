@@ -25,7 +25,7 @@ description: OpenAI, Anthropic, Gemini, DeepSeek, Mistral, Groq, xAI, Qwen, Kimi
 | Azure OpenAI and Microsoft Foundry | `azure:<deployment>` / `Azure(...)` / `azure(...)`: the resource's v1 API, Responses (or `api="chat"` for Foundry's other models); an API key, or Entra ID (service principal, managed identity) with tokens renewed by the engine | `AZURE_OPENAI_ENDPOINT` + `AZURE_OPENAI_API_KEY`, or `AZURE_TENANT_ID` + `AZURE_CLIENT_ID` + `AZURE_CLIENT_SECRET` |
 | Amazon Bedrock | `bedrock:<model id>` / `Bedrock(...)` / `bedrock(...)`: Claude over the Messages API, other makers' models over Chat Completions, on `bedrock-runtime` in your region (there is no default region). API keys only for now; IAM roles (SigV4) are planned | `AWS_BEARER_TOKEN_BEDROCK` + `AWS_REGION` |
 | Google Vertex AI | `vertex:<model>` / `Vertex(...)` / `vertex(...)`: Gemini and Google's hosted models over the OpenAI-compatible endpoint, Claude over `rawPredict`, in your project and location (no defaults). Tokens from `gcloud auth application-default login`, the metadata server on Google Cloud, or a token you pass; service-account key files are planned | `GOOGLE_CLOUD_PROJECT` + `GOOGLE_CLOUD_LOCATION` |
-| Kaggle Model Proxy (prototypes) | OpenAI-compatible; Criogen mints and renews the hourly proxy token | `KAGGLE_API_TOKEN` or `~/.kaggle/access_token` |
+| Kaggle Model Proxy (prototypes) | OpenAI-compatible; CriogenAI mints and renews the hourly proxy token | `KAGGLE_API_TOKEN` or `~/.kaggle/access_token` |
 | Ollama, LM Studio | `ollama:`, `lmstudio:`; local, OpenAI-compatible | none |
 | vLLM and any OpenAI-compatible server | Your URL (a key is never sent over plain `http://` to another machine unless you pass `allow_insecure_http` / `allowInsecureHttp`) | optional |
 | Any Anthropic-compatible server | Your URL: `AnthropicCompatible` / `anthropicCompatible` | optional |
@@ -41,7 +41,7 @@ The model name is your **deployment** name, and `endpoint` is the resource
 name (`my-resource`) or its URL; `/openai/v1` is added for you.
 
 ```python
-from criogen import Agent, Azure
+from criogenai import Agent, Azure
 
 # An API key (or AZURE_OPENAI_ENDPOINT + AZURE_OPENAI_API_KEY and "azure:gpt-5-mini")
 agent = Agent(Azure("gpt-5-mini", endpoint="my-resource", api_key=key))
@@ -55,7 +55,7 @@ agent = Agent(Azure("gpt-5-mini", endpoint="my-resource",
 ```
 
 ```ts
-import { Agent, azure } from "criogen";
+import { Agent, azure } from "criogenai";
 
 const agent = new Agent({ model: azure("gpt-5-mini", { endpoint: "my-resource", managedIdentity: true }) });
 ```
@@ -81,7 +81,7 @@ OPENROUTER_API_KEY=sk-or-...
 <TabItem label="Python">
 
 ```python
-from criogen import Agent, load_env, env
+from criogenai import Agent, load_env, env
 
 load_env()                      # reads ./.env; never replaces a variable already set
 print(env.status())             # {"openai": True, "anthropic": True, ...}: yes or no, never a key
@@ -94,7 +94,7 @@ careful = Agent("anthropic:claude-sonnet-5-5")
 <TabItem label="TypeScript">
 
 ```ts
-import { Agent, loadEnv, envStatus } from "criogen";
+import { Agent, loadEnv, envStatus } from "criogenai";
 
 loadEnv();                      // reads ./.env; never replaces a variable already set
 console.log(envStatus());       // { openai: true, anthropic: true, ... }: yes or no, never a key
@@ -129,7 +129,7 @@ Kaggle; a model you may not use fails with `not_found` and costs nothing.
 <TabItem label="Python">
 
 ```python
-from criogen import Agent, Kaggle
+from criogenai import Agent, Kaggle
 
 agent = Agent("kaggle:google/gemini-3.6-flash")      # or Kaggle("...", api_token=...)
 ```
@@ -138,7 +138,7 @@ agent = Agent("kaggle:google/gemini-3.6-flash")      # or Kaggle("...", api_toke
 <TabItem label="TypeScript">
 
 ```ts
-import { Agent, kaggle } from "criogen";
+import { Agent, kaggle } from "criogenai";
 
 const agent = new Agent({ model: "kaggle:google/gemini-3.6-flash" }); // or kaggle("...", { apiToken })
 ```
@@ -147,7 +147,7 @@ const agent = new Agent({ model: "kaggle:google/gemini-3.6-flash" }); // or kagg
 <TabItem label="Rust">
 
 ```rust
-use criogen_providers::KaggleModel;
+use criogenai_providers::KaggleModel;
 
 let model = KaggleModel::from_env("google/gemini-3.6-flash")?;
 ```
@@ -159,7 +159,7 @@ let model = KaggleModel::from_env("google/gemini-3.6-flash")?;
   `MODEL_PROXY_API_KEY` (set in Kaggle notebooks); `KAGGLE_API_TOKEN`; the
   `access_token` file in `KAGGLE_CONFIG_DIR` or `~/.kaggle` (what the Kaggle CLI
   writes). Create the token at kaggle.com/settings, under API.
-- Criogen mints the short-lived proxy token itself, renews it before it expires,
+- CriogenAI mints the short-lived proxy token itself, renews it before it expires,
   and renews and retries once if the proxy refuses it. Tools and streaming work.
 - In the gateway: `{ provider = "kaggle", model = "google/gemini-3.6-flash" }`.
 - **Use it for prototypes, tests and MVPs, not production traffic**: the

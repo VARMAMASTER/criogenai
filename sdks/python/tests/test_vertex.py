@@ -7,8 +7,8 @@ import threading
 
 import pytest
 
-from criogen import Agent, Vertex
-from criogen.models import model_spec
+from criogenai import Agent, Vertex
+from criogenai.models import model_spec
 
 TEXT = "Hi from Vertex"
 CLAUDE_STREAM = [

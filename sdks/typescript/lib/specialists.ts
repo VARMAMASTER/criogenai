@@ -1,7 +1,7 @@
 // Specialist agents: default recipes for common jobs that you configure,
 // extend or replace (design 0019).
 //
-//     import { specialists } from "criogen";
+//     import { specialists } from "criogenai";
 //     const agent = specialists.researcher.build("openai:gpt-5-mini", { tools: [search] });
 //     const careful = specialists.researcher.extend("careful-researcher", { add: "Always give two sources." });
 //     specialists.register(careful);
@@ -48,7 +48,7 @@ export interface ExtendOptions extends SpecialistSettings {
  * `codeReviewer`, `translator`, `supportAgent`), already registered by name.
  *
  * @example
- * import { FakeModel, specialists } from "criogen";
+ * import { FakeModel, specialists } from "criogenai";
  *
  * const careful = specialists.writer.extend("careful_writer", { add: "Keep it under 50 words." });
  * specialists.register(careful);

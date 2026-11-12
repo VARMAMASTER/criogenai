@@ -65,7 +65,7 @@ background task and let the page poll for the result.
 ## To a browser
 
 Run the stream on your server and forward the events as Server-Sent Events.
-The browser needs no Criogen package: it reads the events with `fetch` or
+The browser needs no CriogenAI package: it reads the events with `fetch` or
 `EventSource`. Send only what the page needs (`text`, tool names,
 `done`), and send error **codes**, not messages. Complete examples for
 FastAPI and a Next.js route handler are on [Deploying](/docs/guides/deploying/#stream-to-a-browser).

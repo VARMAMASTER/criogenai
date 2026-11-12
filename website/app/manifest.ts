@@ -7,8 +7,8 @@ export const dynamic = "force-static";
  * site is saved to a home screen. The icons come from scripts/icons.mjs. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Criogen: fast AI agent framework",
-    short_name: "Criogen",
+    name: "CriogenAI: fast AI agent framework",
+    short_name: "CriogenAI",
     description: SITE.description,
     start_url: "/",
     display: "standalone",

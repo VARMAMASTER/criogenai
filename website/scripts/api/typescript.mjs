@@ -1,4 +1,4 @@
-// Extracts the public TypeScript API of `criogen` from its source, with the
+// Extracts the public TypeScript API of `criogenai` from its source, with the
 // TypeScript compiler's own symbol table, and returns it as plain data (the
 // same shape scripts/api/python.py prints). Public means what
 // sdks/typescript/lib/index.ts exports, namespaces (`patterns`, `evals`, ...)
@@ -249,7 +249,7 @@ export function extractTypescript(root) {
       namespaces.push({ name, target, file: declaration.getSourceFile() });
       continue;
     }
-    const built = itemFor(name, symbol, `import { ${name} } from "criogen"`);
+    const built = itemFor(name, symbol, `import { ${name} } from "criogenai"`);
     if (!built) continue;
     const id = path.basename(built.decl.getSourceFile().fileName, ".ts");
     entryOf(id, false).items.push(built.item);

@@ -1,5 +1,5 @@
 // The playground's story context: what a run reports (lines, the diagram's
-// active node, counts, a person's decision). Patterns run on the Criogen
+// active node, counts, a person's decision). Patterns run on the CriogenAI
 // engine in the browser (live.ts runs their code sample); `Ctx` is how that
 // run is told on the page.
 import type { EngineSpec } from "./live";
@@ -21,7 +21,7 @@ export interface Line {
  * Where a run's time went, by wall clock (parallel calls overlap, so nothing
  * is counted twice): a model was answering; else a tool was running; else the
  * playground was pausing to tell the story (or waiting for you); else
- * Criogen and the page (the engine, the bridge, the transcript).
+ * CriogenAI and the page (the engine, the bridge, the transcript).
  */
 export interface Timing {
   total: number;
@@ -95,8 +95,8 @@ export interface PatternDef {
   task: string;
   /** False for agents that make no model call (reflex agents and friends). */
   usesModel: boolean;
-  /** How Criogen does it: a ready helper, or built from Workflow and Agent. */
-  criogen: { kind: "helper" | "primitives"; api: string };
+  /** How CriogenAI does it: a ready helper, or built from Workflow and Agent. */
+  criogenai: { kind: "helper" | "primitives"; api: string };
   graph: Graph;
   params?: Param[];
   /** How the pattern runs on the engine: its code sample and cast (casts.ts). */

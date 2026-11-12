@@ -9,7 +9,7 @@ and the gateway, so code that checks codes works everywhere. Codes may be
 added; before 1.0 none is renamed or removed.
 
 ```python
-from criogen import CriogenError, ThreadBusyError
+from criogenai import CriogenError, ThreadBusyError
 
 try:
     await chat.send("Hello")
@@ -20,7 +20,7 @@ except CriogenError as error:
 ```
 
 ```ts
-import { isCriogenError } from "criogen";
+import { isCriogenError } from "criogenai";
 
 try {
   await chat.send("Hello");

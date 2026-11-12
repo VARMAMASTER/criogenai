@@ -5,21 +5,21 @@ All crates and both SDKs share one version and are released together.
 ## Before the first release (once)
 
 - [ ] Confirm the package names. Free as of 2026-10-16: on crates.io
-      `criogen-core`, `criogen-providers`, `criogen-storage`,
-      `criogen-agent`, `criogen-telemetry`, `criogen-gateway`;
-      on PyPI `criogen`; on npm `criogen` (the unscoped
-      `criogen` is taken). `criogen-bench` is never published.
+      `criogenai-core`, `criogenai-providers`, `criogenai-storage`,
+      `criogenai-agent`, `criogenai-telemetry`, `criogenai-gateway`;
+      on PyPI `criogenai`; on npm `criogenai` (the unscoped
+      `criogenai` is taken). `criogenai-bench` is never published.
 - [ ] Remove `publish = false` (and its comment) from every published
-      `crates/*/Cargo.toml` (not `criogen-bench`).
+      `crates/*/Cargo.toml` (not `criogenai-bench`).
 - [ ] Make the GitHub repository public and turn on **private
       vulnerability reporting** (Settings → Code security), which
       [SECURITY.md](SECURITY.md) points to.
 - [ ] Create a crates.io API token (scope: publish-new, publish-update) and
       save it as the repository secret `CARGO_REGISTRY_TOKEN`.
-- [ ] PyPI: create the `criogen` project's **trusted publisher** for
+- [ ] PyPI: create the `criogenai` project's **trusted publisher** for
       this repository, workflow `sdk-packages.yml`, environment `release`
       (no token is stored).
-- [ ] npm: an npm account that owns the `criogen` and `criogen-*` packages, and an automation token saved as
+- [ ] npm: an npm account that owns the `criogenai` and `criogenai-*` packages, and an automation token saved as
       the repository secret `NPM_TOKEN` for the **first** publish only.
       After the packages exist, give each one a **trusted publisher** on
       npmjs.com (this repository, workflow `sdk-packages.yml`, environment
@@ -64,10 +64,10 @@ All crates and both SDKs share one version and are released together.
    Linux (x64, arm64), macOS (arm64, x64) and Windows (x64), and tests
    each package installed in a fresh environment on its own platform;
    the packages are kept as artifacts. Then with *publish*: wheels to
-   PyPI, the platform packages `criogen-<platform>-<arch>` to
-   npm, then `criogen` with them as optional dependencies.
-8. Check the crates on crates.io and docs.rs, `pip install criogen`
-   and `npm install criogen` on a clean machine. For npm,
+   PyPI, the platform packages `criogenai-<platform>-<arch>` to
+   npm, then `criogenai` with them as optional dependencies.
+8. Check the crates on crates.io and docs.rs, `pip install criogenai`
+   and `npm install criogenai` on a clean machine. For npm,
    `bash scripts/smoke-registry.sh x.y.z` installs the version from the
    public registry into new projects with npm, pnpm, yarn and bun (those
    installed) and runs an agent with a tool call; it fails while a platform

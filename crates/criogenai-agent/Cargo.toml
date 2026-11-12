@@ -1,0 +1,72 @@
+[package]
+name = "criogenai-agent"
+description = "Agents for CriogenAI: the model and tools loop on the workflow engine"
+readme = "README.md"
+keywords = ["agents", "llm", "tools", "workflow", "ai"]
+categories = ["asynchronous"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# Not published until the package name is confirmed.
+publish = false
+
+# docs.rs documents every feature (e.g. SQLite storage).
+[package.metadata.docs.rs]
+all-features = true
+
+[dependencies]
+criogenai-core = { path = "../criogenai-core", version = "0.1.0" }
+criogenai-providers = { path = "../criogenai-providers", version = "0.1.0", default-features = false }
+criogenai-storage = { path = "../criogenai-storage", version = "0.1.0" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+# `sync`: the parallel-call semaphore.
+tokio = { workspace = true, features = ["sync"] }
+# Tasks and timers (tool calls run as tasks, tool timeouts, backoff): Tokio on
+# servers, the JavaScript event loop in the browser (design 0021).
+criogenai-rt = { path = "../criogenai-rt", version = "0.1.0" }
+reqwest = { version = "0.13", optional = true, default-features = false, features = ["rustls", "system-proxy"] }
+
+[features]
+default = ["http"]
+# Real model providers over HTTP (criogenai-providers' `http`).
+http = ["criogenai-providers/http"]
+# SQLite thread storage (criogenai-storage's `sqlite`).
+sqlite = ["criogenai-storage/sqlite"]
+# Postgres thread storage (criogenai-storage's `postgres`).
+postgres = ["criogenai-storage/postgres"]
+# Encryption at rest (criogenai-storage's `encryption`).
+encryption = ["criogenai-storage/encryption"]
+# Web search and page reading tools (`criogenai_agent::web`, design 0019). Off by
+# default: it adds `reqwest` (the HTTP client criogenai-providers already
+# uses, same version and features, so no new crate) and tokio `net` for DNS.
+web = ["dep:reqwest", "tokio/net"]
+# Tools from MCP servers over Streamable HTTP (`criogenai_agent::mcp`, design
+# 0022). Uses the providers' HTTP transport, so it also works in the browser.
+mcp = ["http"]
+# MCP servers started as a local process (stdio). Servers only: adds tokio's
+# `process` and `io-util` (no new crate).
+mcp-stdio = ["mcp", "tokio/process", "tokio/io-util"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "sync", "test-util", "net", "io-util"] }
+
+[lints]
+workspace = true
+
+[[test]]
+name = "mcp"
+# The test binary is also the scripted MCP server (started again by the tests).
+harness = false
+required-features = ["mcp-stdio"]
+
+[[test]]
+name = "mcp_http"
+required-features = ["mcp"]
+
+[[example]]
+name = "durable_agent"
+required-features = ["sqlite"]

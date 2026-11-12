@@ -1,5 +1,5 @@
 // Docs: from-langgraph. Type-checked against the SDK.
-import { tool } from "criogen";
+import { tool } from "criogenai";
 
 const getWeather = tool<{ city: string }>({
   name: "get_weather",
@@ -9,7 +9,7 @@ const getWeather = tool<{ city: string }>({
 });
 
 // [show graph]
-import { END, Workflow } from "criogen";
+import { END, Workflow } from "criogenai";
 
 const app = new Workflow({ reducers: { log: "append" } }) // like a reducer on a state channel
   .node("plan", () => ({ steps: ["search", "write"], log: ["planned"] }))
@@ -24,7 +24,7 @@ console.log(result.state.answer, result.state.log);
 // [/show graph]
 
 // [show agent]
-import { Agent, Storage } from "criogen";
+import { Agent, Storage } from "criogenai";
 
 const agent = new Agent({
   model: "openai:gpt-5-mini",
@@ -53,7 +53,7 @@ if (answer.needsApproval) {
 // [/show interrupt]
 
 // [show store]
-import { Memory } from "criogen";
+import { Memory } from "criogenai";
 
 const storage = new Storage("sqlite://chat.db");
 await storage.remember("users/1", "language", "French"); // namespace as a path, not an array

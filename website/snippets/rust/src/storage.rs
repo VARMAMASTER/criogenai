@@ -2,7 +2,7 @@ type Error = Box<dyn std::error::Error>;
 
 pub async fn storage() -> Result<(), Error> {
     // [show]
-    use criogen_storage::{OnBusy, Storage};
+    use criogenai_storage::{OnBusy, Storage};
 
     // One process: a SQLite file. Tables are created on first use.
     let storage = Storage::connect("sqlite://agent.db").await?;

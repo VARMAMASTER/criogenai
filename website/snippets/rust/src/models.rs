@@ -3,8 +3,8 @@ type Error = Box<dyn std::error::Error>;
 pub async fn models() -> Result<(), Error> {
     let key = std::env::var("OPENAI_API_KEY")?;
     // [show]
-    use criogen_agent::Agent;
-    use criogen_providers::{Endpoint, ProviderModel};
+    use criogenai_agent::Agent;
+    use criogenai_providers::{Endpoint, ProviderModel};
 
     let openai = ProviderModel::new(Endpoint::openai(key), "gpt-5-mini")?;
     let claude = ProviderModel::new(
@@ -30,9 +30,9 @@ pub async fn direct() -> Result<(), Error> {
     // [show direct]
     use std::sync::Arc;
 
-    use criogen_agent::ResilientModel;
-    use criogen_core::RetryPolicy;
-    use criogen_providers::{Endpoint, Message, Model, ModelRequest, ProviderModel};
+    use criogenai_agent::ResilientModel;
+    use criogenai_core::RetryPolicy;
+    use criogenai_providers::{Endpoint, Message, Model, ModelRequest, ProviderModel};
 
     let openai = ProviderModel::new(Endpoint::openai(key), "gpt-5-mini")?;
     let local = ProviderModel::new(Endpoint::ollama(), "llama3.2")?;

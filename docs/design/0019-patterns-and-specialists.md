@@ -20,7 +20,7 @@ limits stay in Rust. A pattern is a function that returns a graph.
 
 ## The 12 patterns
 
-| Guide pattern | Criogen | Built how |
+| Guide pattern | CriogenAI | Built how |
 |---|---|---|
 | Single agent | `Agent` | exists |
 | ReAct | `patterns.react(model, tools, max_steps)` | an `Agent` with the loop's limits set and a reasoning prompt |
@@ -72,9 +72,9 @@ tools come from the user, and nothing is claimed about quality.
 
 ## Per language
 
-Python (`criogen.patterns`, `specialists`, `web`), TypeScript
+Python (`criogenai.patterns`, `specialists`, `web`), TypeScript
 (`patterns`, `specialists`, `web` namespaces; camelCase) and Rust
-(`criogen_agent::patterns`, `specialists`, and `web` behind the cargo
+(`criogenai_agent::patterns`, `specialists`, and `web` behind the cargo
 feature `web`). Differences are only what the language forces: Rust has no model
 strings or `CRIOGEN_MODEL` fallback (specialist steps take an `Arc<dyn Model>`),
 returns `Result<_, PatternError>` and a `PatternStop` enum, and extends a pattern

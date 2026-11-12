@@ -4,10 +4,10 @@ description: One OpenAI- and Anthropic-compatible endpoint in front of every pro
 ---
 
 
-`criogen-gateway` is a server that speaks the OpenAI Chat Completions
+`criogenai-gateway` is a server that speaks the OpenAI Chat Completions
 API and the Anthropic Messages API. Any OpenAI or Anthropic client (the
-official SDKs, curl, LangChain, Claude tooling, Criogen itself) can use
-it, and behind it each **route** can be any model Criogen supports: a
+official SDKs, curl, LangChain, Claude tooling, CriogenAI itself) can use
+it, and behind it each **route** can be any model CriogenAI supports: a
 client written for OpenAI can use Claude, one written for Claude can use
 Gemini or a model on your own GPUs.
 
@@ -33,7 +33,7 @@ budget = { tokens = 5000000, period = "month" }   # optional: "day", "month" or 
 ```
 
 ```sh
-criogen-gateway --config gateway.toml --listen 0.0.0.0:4000 --log-usage
+criogenai-gateway --config gateway.toml --listen 0.0.0.0:4000 --log-usage
 ```
 
 ## Call it
@@ -79,7 +79,7 @@ Anthropic; fields another provider could not honour (`thinking`,
 | Keys | Keys per route (`Authorization: Bearer` or `x-api-key`), stored as SHA-256 digests; without keys the server only listens on localhost unless `--allow-open` |
 | Rate limits | Requests and tokens per minute per key; over the limit: 429 `key_rate_limited` with `Retry-After` |
 | Budgets | Tokens per UTC day, month or in total per key; spent: 429 `budget_exceeded`, with `Retry-After` until the period ends |
-| Errors | OpenAI's or Anthropic's error format (by endpoint), with Criogen's [codes](/docs/reference/errors/) and matching HTTP statuses |
+| Errors | OpenAI's or Anthropic's error format (by endpoint), with CriogenAI's [codes](/docs/reference/errors/) and matching HTTP statuses |
 | Usage | One record per request: key, route, model, tokens, latency, outcome; **no content**; never slows a request |
 | Disconnects | When a client goes away, the call to the provider stops, and the tokens it may have used stay charged to its key |
 | Concurrency | At most 1024 requests in flight over all keys (`max_concurrent_requests`), and `max_concurrent` per key; over: 429 `concurrency_limited` |

@@ -1,4 +1,4 @@
-# Criogen architecture
+# CriogenAI architecture
 
 How the system is put together and how it works. Each section is marked:
 
@@ -24,13 +24,13 @@ flowchart TB
     end
 
     subgraph SDKs["Language SDKs (idiomatic API)"]
-        PYSDK["criogen (Python)<br/>decorators, typing, asyncio"]
-        TSSDK["criogen (TS)<br/>types, Promises, AsyncIterators"]
+        PYSDK["criogenai (Python)<br/>decorators, typing, asyncio"]
+        TSSDK["criogenai (TS)<br/>types, Promises, AsyncIterators"]
     end
 
     subgraph Bridges["Language bridges (native extensions)"]
-        PYB["criogen-py<br/>PyO3 + maturin"]
-        TSB["criogen-node<br/>NAPI-RS"]
+        PYB["criogenai-py<br/>PyO3 + maturin"]
+        TSB["criogenai-node<br/>NAPI-RS"]
     end
 
     subgraph Core["Rust core"]
@@ -59,22 +59,22 @@ flowchart TB
 ```
 
 Model-provider calls are **decided** to live in a shared Rust provider layer
-(`criogen-providers`, [0006](design/0006-provider-layer.md); §8 item 1), not
+(`criogenai-providers`, [0006](design/0006-provider-layer.md); §8 item 1), not
 in each SDK. The diagram above predates that decision for the SDK boxes.
 
 ### Products and how people use them (proposed)
 
-Criogen's primary purpose is letting developers **build agents and
+CriogenAI's primary purpose is letting developers **build agents and
 workflows** in Python and TypeScript (developer API: [0007](design/0007-public-api.md)).
 It is two products on one Rust foundation: a **fast agent engine**
-(`criogen-core` plus the agent layer) and a **fast LLM gateway**
-(`criogen-providers`). The gateway is designed to be **embedded in other
+(`criogenai-core` plus the agent layer) and a **fast LLM gateway**
+(`criogenai-providers`). The gateway is designed to be **embedded in other
 people's projects**, so it is a library first and a server second.
 
 | Mode | Who it's for | Shape |
 |---|---|---|
-| 1. Library, Rust | Rust services | `criogen-providers` crate: `gateway.chat(request).await`, streaming, errors per 0003 |
-| 2. Library, Python / TS | Python and Node apps, with or without agents | `from criogen.gateway import Gateway` / `import { Gateway } from "criogen"`; in-process, no server |
+| 1. Library, Rust | Rust services | `criogenai-providers` crate: `gateway.chat(request).await`, streaming, errors per 0003 |
+| 2. Library, Python / TS | Python and Node apps, with or without agents | `from criogenai.gateway import Gateway` / `import { Gateway } from "criogenai"`; in-process, no server |
 | 3. Mounted in the user's server | Apps that want a gateway endpoint inside their own service | Rust `axum::Router`, Python ASGI app, JS fetch handler `(Request) => Response` (works with Hono, Next.js route handlers, Express adapters) |
 | 4. Standalone | Teams replacing a proxy | One static binary and a Docker image; OpenAI-compatible `/v1/chat/completions`, `/v1/models` and Anthropic-compatible `/v1/messages`; official OpenAI/Anthropic SDKs work by changing `base_url` |
 
@@ -115,7 +115,7 @@ or validation, or Python and TypeScript will drift apart.
 
 ## 2. Rust core: module map (implemented)
 
-Crate: `crates/criogen-core`. Dependencies: `tokio` (rt, sync, time),
+Crate: `crates/criogenai-core`. Dependencies: `tokio` (rt, sync, time),
 `serde`, `serde_json`, `thiserror`, `uuid`.
 
 ```mermaid
@@ -177,7 +177,7 @@ Target:      Node(NodeId) | End
 
 ---
 
-### `criogen-providers` (foundation implemented)
+### `criogenai-providers` (foundation implemented)
 
 Dependencies: `serde`, `serde_json`, `thiserror`, `uuid`, `tokio` (`time`),
 and `reqwest` (rustls, HTTP/2, system proxy) behind the default `http`
@@ -199,16 +199,16 @@ feature. Without `http` the crate is pure data and logic.
 | `model.rs` | `Model` trait: `provider`, `model`, `capabilities`, `invoke` |
 | `fake.rs` | `FakeModel`: simulated 2–3 s replies, scripted tool calls, failures |
 
-The engine (`criogen-core`) does not depend on this crate. An agent node
+The engine (`criogenai-core`) does not depend on this crate. An agent node
 calls a `Model` and stores messages in the state under an `upsert_by_id` key;
 the package test (`tests/package/rust-consumer`) does exactly that.
 
 ---
 
-### `criogen-agent` (implemented)
+### `criogenai-agent` (implemented)
 
-Depends on `criogen-core`, `criogen-providers` (feature `http`
-forwarded) and `criogen-storage`. An `Agent` compiles into a two-node workflow:
+Depends on `criogenai-core`, `criogenai-providers` (feature `http`
+forwarded) and `criogenai-storage`. An `Agent` compiles into a two-node workflow:
 
 ```mermaid
 flowchart LR
@@ -228,9 +228,9 @@ flowchart LR
 
 ---
 
-### `criogen-storage` (steps 1–2 of 0008 implemented)
+### `criogenai-storage` (steps 1–2 of 0008 implemented)
 
-Depends on `criogen-core`, `tokio` (sync, time), `uuid`; `sqlx` (SQLite,
+Depends on `criogenai-core`, `tokio` (sync, time), `uuid`; `sqlx` (SQLite,
 bundled) behind the `sqlite` feature. Holds what is stored and the rules for
 using it; agents add the `Thread` API on top.
 
@@ -266,9 +266,9 @@ sequenceDiagram
 
 ---
 
-### `criogen-telemetry` (implemented)
+### `criogenai-telemetry` (implemented)
 
-Depends on `criogen-core`, `reqwest`, `tokio`. Exports runs as
+Depends on `criogenai-core`, `reqwest`, `tokio`. Exports runs as
 OpenTelemetry traces over OTLP/HTTP JSON; `Langfuse` is a preset (design
 0009).
 
@@ -390,7 +390,7 @@ None of this has been measured. Benchmarks come before optimization (principle 1
 
 ## 5. Language bridge design (proposed)
 
-The bridge is where Criogen either earns or loses its performance claims.
+The bridge is where CriogenAI either earns or loses its performance claims.
 Every node call crosses it twice: state in, update out.
 
 ### 5.1 Responsibilities
@@ -447,16 +447,16 @@ flowchart LR
 ## 6. Repository layout
 
 ```
-criogen/
+criogenai/
 ├── AGENTS.md                     Orientation notes for assistants and contributors (CLAUDE.md imports it)
 ├── Cargo.toml                    Rust workspace
 ├── crates/
-│   ├── criogen-core/          [implemented] execution engine
+│   ├── criogenai-core/          [implemented] execution engine
 │   │   ├── src/                  lib, state, node, graph, runtime, reducer, event, policy, cancel, memo, error
 │   │   ├── tests/                execution, validation, outcomes, events, policies, memo, llm_simulation
 │   │   │   └── support/fake_llm.rs   simulated LLM for engine tests
 │   │   └── examples/             basic, approval, llm, retry, recover workflows
-│   └── criogen-providers/     [foundation] messages, tools, model errors, Model trait, FakeModel
+│   └── criogenai-providers/     [foundation] messages, tools, model errors, Model trait, FakeModel
 ├── scripts/test-package.sh       package the crates and use them from a separate project
 ├── tests/package/rust-consumer/  that separate project (public API only)
 ├── docs/
@@ -469,7 +469,7 @@ criogen/
 └── .github/workflows/ci.yml      fmt, clippy, tests on Linux/Windows/macOS + MSRV; package test, docs, examples
 ```
 
-Planned additions (proposed): `crates/criogen-py/`, `crates/criogen-node/`,
+Planned additions (proposed): `crates/criogenai-py/`, `crates/criogenai-node/`,
 `python/`, `typescript/`, `examples/{python,typescript}/`, `benchmarks/`.
 
 ---
@@ -485,7 +485,7 @@ four linked contracts:
 | [0003 Error model](design/0003-error-model.md) | Run outcomes, error categories (who can fix it), provider error classification, retry/timeout/fallback defaults, Python/TS error types, propagation, cancellation, code catalog, edge cases |
 | [0004 Agent loop](design/0004-agent-loop.md) | Agent API, fixed `model ⇄ tools` graph, six hooks with explicit ordering, exact routing tables, limits, structured output, human-in-the-loop with suspend/resume |
 | [0005 Core runtime extensions](design/0005-core-runtime-extensions.md) | NodeContext, `Update`/`Command`/`Suspend` outcomes, reducers, policies, snapshots with per-task saved writes, the event envelope |
-| [0006 Provider layer and gateway](design/0006-provider-layer.md) | `criogen-providers` (Model/Protocol traits, `openai_chat` + `anthropic_messages`, streaming, error classification, catalog) and `criogen-gateway` (embeddable/standalone HTTP gateway, relay fast path, plugins) |
+| [0006 Provider layer and gateway](design/0006-provider-layer.md) | `criogenai-providers` (Model/Protocol traits, `openai_chat` + `anthropic_messages`, streaming, error classification, catalog) and `criogenai-gateway` (embeddable/standalone HTTP gateway, relay fast path, plugins) |
 | [0007 Public API](design/0007-public-api.md) | What developers write in Python and TS: levels 0–5 from a model call to workflows, threads and memory |
 | [0008 Persistence and memory](design/0008-persistence-and-memory.md) | `storage=` (SQLite/Postgres), threads (`send`, `approve`, `history`, `rewind`), delta+keyframe checkpoints, compare-and-set concurrency, crash recovery, long-term memory store |
 
@@ -522,7 +522,7 @@ flowchart TB
 2. **Dynamic fan-out** (`Send`-style). Deferred (0005 §2); the frontier design
    stays compatible.
 3. **Persistence backends**: designed in 0008. Steps 1–4 are built
-   (`criogen-storage`: contract, in-memory, SQLite and Postgres
+   (`criogenai-storage`: contract, in-memory, SQLite and Postgres
    backends, per-step saving and crash recovery, agent threads, the
    long-term memory store and agent `Memory`, thread locks across
    processes). Steps 5 (retention, encryption at rest) and 6 (semantic

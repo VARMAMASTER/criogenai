@@ -43,7 +43,7 @@ export default async function PostPage({ params }: Props) {
     description: post.description,
     datePublished: post.date,
     author: { "@type": "Organization", name: post.author },
-    publisher: { "@id": `${SITE.url}/#org`, "@type": "Organization", name: "Criogen", logo: { "@type": "ImageObject", url: `${SITE.url}/icon-512.png` } },
+    publisher: { "@id": `${SITE.url}/#org`, "@type": "Organization", name: "CriogenAI", logo: { "@type": "ImageObject", url: `${SITE.url}/icon-512.png` } },
     image: `${SITE.url}${OG_IMAGE.url}`,
     mainEntityOfPage: `${SITE.url}/blog/${post.slug}/`,
     keywords: post.tags.join(", "),

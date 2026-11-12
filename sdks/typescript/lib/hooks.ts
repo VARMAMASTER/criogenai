@@ -67,7 +67,7 @@ export interface ToolCall {
  * Returned by `beforeTool`: use `value` as the result and skip the tool (e.g. a cached answer).
  *
  * @example
- * import { ToolResult, type Hook } from "criogen";
+ * import { ToolResult, type Hook } from "criogenai";
  *
  * const cache = new Map<string, unknown>([["get_weather:Paris", { forecast: "sunny" }]]);
  * const cached: Hook = {
@@ -96,7 +96,7 @@ type Maybe<T> = T | undefined | void | Promise<T | undefined | void>;
  * `onToolException`).
  *
  * @example
- * import { Agent, type Hook } from "criogen";
+ * import { Agent, type Hook } from "criogenai";
  *
  * const logTools: Hook = {
  *   name: "log-tools",

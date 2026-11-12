@@ -1,6 +1,6 @@
 // The engine on servers (design 0012 §4): the native addon, built from source
-// (native/criogen.node, as scripts/test-typescript.sh makes) or the prebuilt
-// package for this platform (criogen-<platform>-<arch>, an optional
+// (native/criogenai.node, as scripts/test-typescript.sh makes) or the prebuilt
+// package for this platform (criogenai-<platform>-<arch>, an optional
 // dependency). With CRIOGEN_ENGINE=wasm, the browser's engine instead (design
 // 0021): the same test suite then checks the WebAssembly build.
 
@@ -8,9 +8,9 @@ import * as path from "path";
 import { NativeUnavailableError } from "./errors";
 import type { Addon, EngineLoader, HostInfo } from "./native";
 
-/** Platform packages whose name differs from criogen-<platform>-<arch>: npm's spam
- * filter refused `criogen-win32-x64`, so Windows uses `criogen-windows-x64`. */
-export const PLATFORM_PACKAGES: Record<string, string> = { "win32-x64": "criogen-windows-x64" };
+/** Platform packages whose name differs from criogenai-<platform>-<arch>: npm's spam
+ * filter refused `criogenai-win32-x64`, so Windows uses `criogenai-windows-x64`. */
+export const PLATFORM_PACKAGES: Record<string, string> = { "win32-x64": "criogenai-windows-x64" };
 
 /** This system, for error messages and `ready()`: platform, architecture, C library. */
 export function nodeHost(): HostInfo {
@@ -42,17 +42,17 @@ function unavailable(message: string, pkg: string, cause: unknown): NativeUnavai
 
 function load(): Addon {
   if (process.env.CRIOGEN_ENGINE === "wasm") {
-    const glue = path.join(__dirname, "..", "web-dist", "node", "criogen.js");
+    const glue = path.join(__dirname, "..", "web-dist", "node", "criogenai.js");
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       return require(glue);
     } catch (error) {
-      throw unavailable("criogen's WebAssembly engine could not be loaded (npm run build:web)", glue, error);
+      throw unavailable("criogenai's WebAssembly engine could not be loaded (npm run build:web)", glue, error);
     }
   }
-  const local = path.join(__dirname, "..", "native", "criogen.node");
+  const local = path.join(__dirname, "..", "native", "criogenai.node");
   const target = `${process.platform}-${process.arch}`;
-  const prebuilt = PLATFORM_PACKAGES[target] ?? `criogen-${target}`;
+  const prebuilt = PLATFORM_PACKAGES[target] ?? `criogenai-${target}`;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     return require(local);
@@ -60,7 +60,7 @@ function load(): Addon {
     const code = (error as NodeJS.ErrnoException).code;
     // The file is there but cannot be loaded here (built for another system, or
     // a C library it does not match, such as an older glibc or musl).
-    if (code === "ERR_DLOPEN_FAILED") throw unavailable("criogen's engine could not be loaded", "native/criogen.node", error);
+    if (code === "ERR_DLOPEN_FAILED") throw unavailable("criogenai's engine could not be loaded", "native/criogenai.node", error);
     if (code !== "MODULE_NOT_FOUND") throw error;
   }
   try {
@@ -68,9 +68,9 @@ function load(): Addon {
     return require(prebuilt);
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
-    if (code === "ERR_DLOPEN_FAILED") throw unavailable(`criogen's engine (${prebuilt}) could not be loaded`, prebuilt, error);
+    if (code === "ERR_DLOPEN_FAILED") throw unavailable(`criogenai's engine (${prebuilt}) could not be loaded`, prebuilt, error);
     if (code !== "MODULE_NOT_FOUND") throw error;
-    throw unavailable(`criogen has no engine package installed (${prebuilt})`, prebuilt, error);
+    throw unavailable(`criogenai has no engine package installed (${prebuilt})`, prebuilt, error);
   }
 }
 

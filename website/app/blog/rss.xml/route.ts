@@ -26,10 +26,10 @@ export function GET() {
   const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Criogen blog</title>
+    <title>CriogenAI blog</title>
     <link>${SITE.url}/blog/</link>
     <atom:link href="${SITE.url}/blog/rss.xml" rel="self" type="application/rss+xml"/>
-    <description>Releases, guides and engineering notes from Criogen, the fast AI agent framework on a Rust engine.</description>
+    <description>Releases, guides and engineering notes from CriogenAI, the fast AI agent framework on a Rust engine.</description>
     <language>en</language>
 ${items}
   </channel>

@@ -7,7 +7,7 @@ import threading
 
 import pytest
 
-from criogen import Agent, FakeModel, FakeReply, Kaggle, OpenAICompatible, Retry, estimate_cost, ready_sync, tool
+from criogenai import Agent, FakeModel, FakeReply, Kaggle, OpenAICompatible, Retry, estimate_cost, ready_sync, tool
 
 
 @tool

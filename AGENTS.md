@@ -1,4 +1,4 @@
-# Criogen: notes for assistants and contributors
+# CriogenAI: notes for assistants and contributors
 
 Read this first when picking up work on this repository. Then read
 [docs/progress.md](docs/progress.md) for current status and next steps, and
@@ -18,7 +18,7 @@ write our own implementation.
 
 ## Current state (keep this section accurate)
 
-- **Implemented:** `crates/criogen-core`. Superstep engine with static
+- **Implemented:** `crates/criogenai-core`. Superstep engine with static
   edges, async routers, joins, cycles, concurrent nodes, atomic steps, stable
   error codes. CI was last green on GitHub on Linux, Windows, macOS and
   MSRV 1.88 at `3ca76cc` (2026-10-13).
@@ -26,14 +26,14 @@ write our own implementation.
   `docs/design/0002`–`0008` cover messages and tools, errors, the agent loop,
   core extensions, the provider layer and gateway, the public API, and
   persistence and memory. Research is in `docs/research/`.
-- **Implemented in `criogen-core`:** the 0001 engine plus all of 0005:
+- **Implemented in `criogenai-core`:** the 0001 engine plus all of 0005:
   NodeContext, `Update`/`Command`/`Suspend` outcomes, suspend/resume with
   JSON snapshots, reducers, the workflow fingerprint, live events
   (`Workflow::stream`, `event_channel`, `ctx.events()`), policies
   (`NodePolicy` timeout/retry, run deadline, `CancelToken` with grace), and
   saved task writes with `ctx.memo()` plus snapshots on failure
   (`RunError::snapshot`, `Workflow::retry`).
-- **Implemented in `criogen-providers` (foundation):** the 0002 types
+- **Implemented in `criogenai-providers` (foundation):** the 0002 types
   (`Message`, `ContentBlock`, `ToolSpec`, `ModelRequest`/`ModelResponse`,
   `Capabilities`), `ModelError` with `classify_http` (0003 §4), transcript
   check/repair (0002 §6), the `Model` trait, `FakeModel`, the SSE parser,
@@ -45,7 +45,7 @@ write our own implementation.
   Vertex AI (0006 §19: `VertexModel`),
   `Endpoint` presets and `ProviderModel` (OpenAI, OpenRouter, Ollama,
   LM Studio, vLLM, Anthropic, any OpenAI- or Anthropic-compatible server).
-- **Implemented in `criogen-agent` (slice 1):** the agent loop (0004):
+- **Implemented in `criogenai-agent` (slice 1):** the agent loop (0004):
   `model` ⇄ `tools` workflow, Rust tools (`tool_fn`), argument validation,
   concurrent calls in call order, timeouts, limits, model retries, events,
   memo-backed `Agent::retry`; slice 2: human approval (`Approval`,
@@ -63,7 +63,7 @@ write our own implementation.
   `rewind`, `delete`; `stream` / `stream_approve` / `stream_reject` /
   `stream_decide` / `stream_retry` (`ThreadStream`, 0008 §17: a dropped
   stream cancels and still saves; model calls stop at once on cancel).
-- **Implemented in `criogen-storage` (0008 steps 1–5):** `Checkpoint`,
+- **Implemented in `criogenai-storage` (0008 steps 1–5):** `Checkpoint`,
   the `Checkpointer` trait (compare-and-set commit, `put_pending`),
   `InMemoryCheckpointer`, `SqliteCheckpointer` (feature `sqlite`, sqlx
   0.8: delta + keyframe checkpoints, migrations), `ThreadWriter`,
@@ -110,7 +110,7 @@ write our own implementation.
   records. Core: `NodeContext::metadata` (agents put the audit context
   under `criogen_audit`).
 - **Implemented: Python SDK, first slice (0011).** `sdks/python`
-  (crate `criogen-python`, not a workspace member; PyO3 0.29 abi3,
+  (crate `criogenai-python`, not a workspace member; PyO3 0.29 abi3,
   maturin): `Agent`, `@tool` (schemas from type hints; sync tools on a
   worker thread, async tools on the caller's loop), approvals, typed
   output, threads (send/approve/reject/decide/retry/history/rewind/
@@ -123,15 +123,15 @@ write our own implementation.
   for it: `Thread::with_options`, `ToolContext::metadata`. Workflows
   (0015): `Workflow`, nodes (functions or agents), routes, joins, goto,
   reducers, suspend/resume, threads (`sdks/python/tests/test_workflow.py`).
-  Package name **`criogen`** on PyPI (import `criogen`; published from 0.1.2).
+  Package name **`criogenai`** on PyPI (import `criogenai`) from 0.1.7; 0.1.2–0.1.6 were published as `criogen`.
   Since then (0017):
   sub-agents, retries and fallbacks, semantic memory, telemetry and
   hooks in both SDKs; Zod / Standard Schema tool input in TypeScript;
   `Gateway` (0018: chat, stream, embed without an agent, over Rust's
   `ResilientModel`).
 - **Implemented: TypeScript SDK, first slice (0012).** `sdks/typescript`
-  (crate `criogen-node`, not a workspace member; napi-rs 3, N-API 6,
-  Node 18+; package `criogen`, TypeScript in `lib/` compiled to
+  (crate `criogenai-node`, not a workspace member; napi-rs 3, N-API 6,
+  Node 18+; package `criogenai`, TypeScript in `lib/` compiled to
   `dist/`): the same slice as Python, and workflows (`Workflow`, 0015;
   `test/workflow.test.js`). `Agent`, `tool({...})` with JSON
   Schema input, approvals, typed output, threads (incl. `stream*`),
@@ -141,11 +141,11 @@ write our own implementation.
   (`sdks/typescript/test`); `scripts/test-typescript.sh` installs the
   npm tarball into a new project; `ci-local.sh` step `typescript`.
 - **Implemented: LLM gateway, first slice (0006 §12).**
-  `crates/criogen-gateway` (axum 0.8, toml): `Gateway::builder()`
+  `crates/criogenai-gateway` (axum 0.8, toml): `Gateway::builder()`
   (routes with fallbacks, virtual keys kept as SHA-256 digests, usage
   records on a `try_send` channel) → axum `Router`; `Config` (TOML;
   secrets only through `*_env` variable names); binary
-  `criogen-gateway --config … [--listen] [--allow-open] [--log-usage]`
+  `criogenai-gateway --config … [--listen] [--allow-open] [--log-usage]`
   (refuses an open gateway off loopback). `POST /v1/chat/completions`
   (stream and not; OpenAI wire format in and out, any upstream protocol),
   `GET /v1/models`, `GET /health`; the upstream call is aborted when the
@@ -158,30 +158,30 @@ write our own implementation.
 - **Implemented: error catalog and JSON Schemas (0013).**
   `schemas/error-codes.json` (every stable code: layers, category,
   retryable, SDK family, gateway HTTP status) and
-  `schemas/criogen.schema.json` (Message, ContentBlock, ToolSpec,
+  `schemas/criogenai.schema.json` (Message, ContentBlock, ToolSpec,
   ModelRequest/Response, MessageDelta, ModelError, ApprovalRequest,
   Decision, AuditRecord, UsageRecord, ErrorObject). Tests:
-  `criogen-agent/tests/catalog.rs` (scans the sources for raised
+  `criogenai-agent/tests/catalog.rs` (scans the sources for raised
   codes; `docs/errors.md` is generated: `CRIOGEN_UPDATE_DOCS=1 cargo
-  test -p criogen-agent --test catalog`), `tests/schemas.rs` (real
+  test -p criogenai-agent --test catalog`), `tests/schemas.rs` (real
   values validate), SDK tests check their error classes against the
   catalog. The validator now enforces `anyOf`/`oneOf`/`allOf`/local
   `$ref` (tool arguments too).
-- **Benchmarks (0014):** `crates/criogen-bench` (`cargo run -p
-  criogen-bench --release`), `benches/` (LangGraph comparison, Python
+- **Benchmarks (0014):** `crates/criogenai-bench` (`cargo run -p
+  criogenai-bench --release`), `benches/` (LangGraph comparison, Python
   and TypeScript bridges); results in `docs/benchmarks.md` (one machine,
   2026-10-16). Quote numbers only from that page, with what was measured.
 - **Framework comparison (0016):** `benches/compare/` (setup.py: one venv
   per framework in `target/compare/venvs`; `run.py`: scenarios, load,
   reliability, footprint → `bench/results/<date>T<time>-<machine>.json`;
-  `package.py`: the public kit zip for the website). Criogen,
+  `package.py`: the public kit zip for the website). CriogenAI,
   LangGraph and CrewAI in Python with one simulated model. The website's
   benchmark lab (`website/app/benchmarks`) shows the file in
   `website/public/bench/results.json`.
 - **Tool exceptions:** `Limits::on_tool_exception` (`OnToolException`:
   `ReturnToModel` default, `ReturnGeneric`, `Fail`); `ToolError::crashed`;
   Rust tool panics are caught and follow it (0003 §5.1).
-- **Implemented in `criogen-telemetry` (0009):** OTLP/HTTP JSON export
+- **Implemented in `criogenai-telemetry` (0009):** OTLP/HTTP JSON export
   of runs (trace = run, spans, generations, tool observations), Langfuse
   preset, content capture switch and masks, non-blocking observer
   (`RunOptions::observe`), run metadata (`RunOptions::metadata`).
@@ -191,7 +191,7 @@ write our own implementation.
   `deny.toml` (CI job `dependencies`), `.github/workflows/release.yml`
   (manual; dry run unless "publish"). Crates still have `publish = false`
   until the user confirms the names.
-- **Demo app:** `demos/support-chat` (Rust server on Criogen + Next.js
+- **Demo app:** `demos/support-chat` (Rust server on CriogenAI + Next.js
   UI; real OpenAI/Gemini models, manual only, not in CI or the workspace).
   Keys live in `~/.criogen-keys.env`, never in the repo.
 - **Next:** the 10-task roadmap in `docs/progress.md` ("Roadmap
@@ -199,16 +199,16 @@ write our own implementation.
   decision: `Storage::close` (and `close()` in both SDKs),
   `.github/workflows/sdk-packages.yml` (wheels and npm addons for Linux
   x64/arm64, macOS arm64/x64, Windows x64, tested per platform; manual,
-  never run yet), the TS loader for `criogen-<platform>-<arch>`.
+  never run yet), the TS loader for `criogenai-<platform>-<arch>`.
   Decided (2026-10-22): the code stays private until 10,000 installs
   (then MIT or Apache-2.0); until then the Python and npm packages are
-  free to use under the Criogen Free Licence (`sdks/*/LICENSE`, a
+  free to use under the CriogenAI Free Licence (`sdks/*/LICENSE`, a
   draft to review); Python and TypeScript first, Rust crates when the
   code opens; no GitHub links on the website; a live install counter on
   the home page. Waiting for the user: running the GitHub workflows (paid
   minutes while private), registry accounts (see RELEASING.md), a legal
   review of the licence. The user will build their
-  hospital product (Axon Health OS) on Criogen: keep the framework
+  hospital product (Axon Health OS) on CriogenAI: keep the framework
   general, but approval gates, audit trails, no patient data in logs, and
   self-hosted models matter.
 - **Website:** `website/` (Next.js 16, React, static export for Vercel):
@@ -223,30 +223,30 @@ write our own implementation.
   build` / `npm run preview` (port 4400); checked by `ci-local.sh` step `website`.
   Pattern playground (`/playground/`): 19 agent patterns
   (`website/lib/patterns/`: reasoning, multi-agent, IBM's five agent types),
-  one page each with a diagram, a run and the Criogen code
+  one page each with a diagram, a run and the CriogenAI code
   (`snippets/*/patterns.*`, one region per pattern). The run is the
   TypeScript sample itself on the engine in the browser (design 0021):
   `scripts/build-engine.mjs` bundles the samples into
   `public/engine/playground.js` with `website/engine/runtime.js` as
-  "criogen" (the real engine plus a report of tools, nodes and storage);
+  "criogenai" (the real engine plus a report of tools, nodes and storage);
   `lib/patterns/live.ts` sets the samples' `MODEL` (snippets/typescript/
   model.ts) to a `FunctionModel`: scripted per agent (`casts.ts`) without a
   key, the visitor's provider through the engine with one (React state
   only, at most 16 calls a run, tools return made-up data).
   `scripts/test-playground.mjs` runs all 19 and a key (mocked providers).
-  The Criogen-vs-LangChain comparison moved to `/benchmarks/#live`.
-- **Implemented: the engine in the browser (0021).** `crates/criogen-rt`
+  The CriogenAI-vs-LangChain comparison moved to `/benchmarks/#live`.
+- **Implemented: the engine in the browser (0021).** `crates/criogenai-rt`
   (Tokio on servers, the JavaScript event loop on `wasm32-unknown-unknown`:
   spawn, JoinSet, timers, Instant); the providers' transport moves bytes
-  with reqwest or `fetch`; `crates/criogen-js` is the TypeScript bridge
+  with reqwest or `fetch`; `crates/criogenai-js` is the TypeScript bridge
   under both the Node addon and `sdks/typescript/web` (wasm-bindgen).
-  TypeScript `criogen/web` (`lib/browser`, `await ready()`), in-memory
+  TypeScript `criogenai/web` (`lib/browser`, `await ready()`), in-memory
   storage, `unsupported` for what needs a server. `FunctionModel` (models
   written in JavaScript, both engines) and gateway `tools`. Build:
   `node sdks/typescript/scripts/build-web.mjs`; tests:
-  `bash scripts/test-web.sh` (criogen-rt on WebAssembly, the TypeScript
+  `bash scripts/test-web.sh` (criogenai-rt on WebAssembly, the TypeScript
   suite with `CRIOGEN_ENGINE=wasm`, Chromium/Firefox/WebKit, the package in
-  a new app), ci-local step `web`. Released in npm `criogen@0.1.4` (2026-11-06), with only the
+  a new app), ci-local step `web`. Released in npm `criogen@0.1.4` (2026-11-06; the old name), with only the
   Windows engine at 0.1.4 (GitHub Actions billing failed): Linux/macOS engine
   packages stay 0.1.3 until `sdk-packages.yml` runs again; `requireFunctions`
   in models.ts gives `unsupported` for FunctionModel/gateway tools there.
@@ -254,30 +254,35 @@ write our own implementation.
   fixed (CHANGELOG "Security audit"); `scripts/check-supply-chain.sh`
   guards the build and release. New rules below (10–12).
 - **Implemented (Python, TypeScript, Rust): patterns, specialists, web tools (0019).**
-  `criogen.patterns` (12 designs from Google Cloud's agentic-pattern guide
-  as functions, plus `quick("a > b")`), `criogen.specialists` (extendable
-  default agent recipes and a registry), `criogen.web` (Tavily/Brave search,
+  `criogenai.patterns` (12 designs from Google Cloud's agentic-pattern guide
+  as functions, plus `quick("a > b")`), `criogenai.specialists` (extendable
+  default agent recipes and a registry), `criogenai.web` (Tavily/Brave search,
   safe page fetch). Tests: `sdks/python/tests/test_patterns.py`, `test_web.py`;
   `sdks/typescript/test/patterns.test.js`, `web.test.js`;
-  `crates/criogen-agent/tests/patterns.rs`, `web.rs` (feature `web`). Website: `/playground/`,
+  `crates/criogenai-agent/tests/patterns.rs`, `web.rs` (feature `web`). Website: `/playground/`,
   `/demo/` (`demos/feature-tour/`: `tour.py` records scripted and `--live`
   tours into `website/public/demo/`; `chat_server.py` is the chat backend).
-- **Implemented: named providers (0006 §4.1).** `criogen_providers::PRESETS` / `preset(name)`:
+- **Implemented: named providers (0006 §4.1).** `criogenai_providers::PRESETS` / `preset(name)`:
   one table (name, protocol, base URL, key variable, quirks) for openai, anthropic, gemini,
   openrouter, deepseek, mistral, xai, groq, cerebras, together, fireworks, qwen, moonshot, zai,
   ollama, lmstudio. Both SDK bridges and the gateway build named providers only from it; the SDKs'
   key tables are tested against it (`_native.PRESETS`, addon `presets()`). `AnthropicCompatible` /
-  `anthropicCompatible` in the SDKs. Tests: `crates/criogen-providers/tests/presets.rs`,
+  `anthropicCompatible` in the SDKs. Tests: `crates/criogenai-providers/tests/presets.rs`,
   `sdks/python/tests/test_providers.py`, `sdks/typescript/test/providers.test.js` (local servers
   only). Research and what is still missing (Responses API, Azure, Bedrock, Vertex):
   `docs/research/providers-2026.md`.
-- **Implemented: Kaggle's Model Proxy (0020).** `criogen_providers::KaggleModel` mints the
+- **Implemented: Kaggle's Model Proxy (0020).** `criogenai_providers::KaggleModel` mints the
   hourly proxy token from a Kaggle API token and renews it; `kaggle:` model strings in both SDKs
-  and `provider = "kaggle"` in the gateway. Tests: `crates/criogen-providers/tests/kaggle.rs`,
+  and `provider = "kaggle"` in the gateway. Tests: `crates/criogenai-providers/tests/kaggle.rs`,
   `sdks/python/tests/test_kaggle.py`, `sdks/typescript/test/kaggle.test.js` (local servers only).
+- **Renamed (2026-11-12): CriogenAI.** Packages `criogenai` (npm, PyPI), imports `criogenai`, crates
+  `criogenai-*`, site criogenai.com. Kept on purpose: database tables `criogen_*`, formats
+  `criogen-eval/1` and snapshots, `CRIOGEN_*` variables, telemetry keys `criogen.*`, `~/.criogen*`
+  paths, `CriogenError`. Backup ref `refs/backup/pre-criogenai`. Releases below were under the old
+  name `criogen`.
 - **Released (2026-11-01): npm `criogen@0.1.0`** (`latest`) with platform packages
   `criogen-linux-x64`, `-linux-arm64`, `-darwin-arm64`, `-darwin-x64` and `criogen-windows-x64`
-  (npm's spam filter refused `criogen-win32-x64`; the loader maps `win32-x64` to it). Built and
+  (npm's spam filter refused `criogen-win32-x64`; the loader maps `win32-x64` to `-windows-x64`). Built and
   tested per platform by `sdk-packages.yml` (dry run), published from this machine. 0.1.1: serverless
   Linux, lazy loading, `ready()`, run facts, `redact`. 0.1.2 (2026-11-03): metadata only on npm (engine
   packages stay 0.1.1); **PyPI `criogen==0.1.2`** with wheels for the same five platforms, built by
@@ -287,49 +292,49 @@ write our own implementation.
   PyPI wheels for Linux x64/ARM64, macOS ARM64 and Windows x64. The macOS Intel wheel is missing
   (GitHub never gave the `macos-15-intel` job a runner), so pip on Intel Macs installs 0.1.2.
   Check a release with `scripts/smoke-registry.sh <version>`. Site: https://criogenai.com.
-- **Implemented: MCP client (0022).** `criogen_agent::mcp` (feature `mcp`:
+- **Implemented: MCP client (0022).** `criogenai_agent::mcp` (feature `mcp`:
   Streamable HTTP over the providers' `Transport`, also in the browser;
   `mcp-stdio`: servers started as a process): `McpServer::stdio/http/
   from_spec` → `connect()` → `McpClient` (`tools`, `call`, `refresh`,
   `describe`, `close`); MCP 2026-07-28 with `initialize` fallback; tools
-  only. `AgentBuilder::tools`, `Transport::exchange`. Python `criogen.mcp`
-  (`NativeMcp`), TypeScript `mcp` (criogen-js `mcp_*` by handle, both
-  engines). Tests: `criogen-agent/tests/mcp.rs` (harness = false: the test
+  only. `AgentBuilder::tools`, `Transport::exchange`. Python `criogenai.mcp`
+  (`NativeMcp`), TypeScript `mcp` (criogenai-js `mcp_*` by handle, both
+  engines). Tests: `criogenai-agent/tests/mcp.rs` (harness = false: the test
   binary is also the scripted stdio server), `tests/mcp_http.rs`,
   `sdks/python/tests/test_mcp.py`, `sdks/typescript/test/mcp.test.js`.
-- **Implemented: local trace viewer (0023).** `crates/criogen-trace`
-  (lib + binary `criogen-trace`; axum, sqlx SQLite): OTLP/HTTP JSON
+- **Implemented: local trace viewer (0023).** `crates/criogenai-trace`
+  (lib + binary `criogenai-trace`; axum, sqlx SQLite): OTLP/HTTP JSON
   receiver (`POST /v1/traces`), `GET /api/runs[/{id}]`, `DELETE
   /api/runs`, the page (`src/page.html`, embedded, strict CSP, values set
   as text). `Viewer::builder()`, `start`/`RunningViewer`,
   `ViewerBuilder::from_spec` (used by both SDK bridges),
-  `OtlpConfig::local()`. Python `criogen.trace` (`serve`, `python -m
-  criogen.trace`, `Telemetry.local`), TypeScript `serveTraces`,
-  `Telemetry.local`, `npx criogen trace` (`lib/cli.ts`, package `bin`).
-  Tests: `crates/criogen-trace/tests/viewer.rs`, `sdks/python/tests/
+  `OtlpConfig::local()`. Python `criogenai.trace` (`serve`, `python -m
+  criogenai.trace`, `Telemetry.local`), TypeScript `serveTraces`,
+  `Telemetry.local`, `npx criogenai trace` (`lib/cli.ts`, package `bin`).
+  Tests: `crates/criogenai-trace/tests/viewer.rs`, `sdks/python/tests/
   test_trace.py`, `sdks/typescript/test/trace.test.js`, the page in
   Chromium `sdks/typescript/test/browser/trace-page.mjs` (ci-local step
-  `typescript`). Demo: `cargo run -p criogen-trace --example demo`.
+  `typescript`). Demo: `cargo run -p criogenai-trace --example demo`.
 - **Implemented: evals (0024).** Same shapes in three languages: Python
-  `criogen.evals` (`python -m criogen.evals compare`), TypeScript `evals`
-  (`npx criogen eval compare`), Rust `criogen_agent::evals`. Datasets,
+  `criogenai.evals` (`python -m criogenai.evals compare`), TypeScript `evals`
+  (`npx criogenai eval compare`), Rust `criogenai_agent::evals`. Datasets,
   built-in scorers, `judge`, `evaluate` (concurrency, timeouts, repeats),
   `EvalResult` (`criogen-eval/1`, `schemas/eval-result.schema.json`,
   fixture `schemas/fixtures/eval-baseline.json` read by every language),
   `compare`, `check` (`eval_failed`). `validate_json` in both SDK bridges
-  (the engine's validator). Tests: `crates/criogen-agent/tests/evals.rs`,
+  (the engine's validator). Tests: `crates/criogenai-agent/tests/evals.rs`,
   `sdks/python/tests/test_evals.py`, `sdks/typescript/test/evals.test.js`.
-- **Implemented: collections and retrieval (0025).** `criogen_storage::vector`
+- **Implemented: collections and retrieval (0025).** `criogenai_storage::vector`
   (`VectorIndex`, `FlatIndex` exact, `HnswIndex` approximate, our own code),
-  `MemoryStore::embedded` (all backends); `criogen_agent::retrieval`
+  `MemoryStore::embedded` (all backends); `criogenai_agent::retrieval`
   (`Collection` over a memory-store namespace `criogen/collections/<name>`,
   `Document`, `Hit`, `IndexKind`, `Retriever`, `retriever_tool`). Python
-  `criogen.Collection` (`NativeCollection`), TypeScript `Collection`
-  (`NativeStorage.op` `collection_*` in criogen-js, both engines). Tests:
-  `crates/criogen-storage/src/vector.rs`, `crates/criogen-agent/tests/
+  `criogenai.Collection` (`NativeCollection`), TypeScript `Collection`
+  (`NativeStorage.op` `collection_*` in criogenai-js, both engines). Tests:
+  `crates/criogenai-storage/src/vector.rs`, `crates/criogenai-agent/tests/
   retrieval.rs`, `sdks/python/tests/test_collections.py`,
   `sdks/typescript/test/collections.test.js`. Benchmark: `cargo run -p
-  criogen-bench --release --bin vectors [-- --indexes --clustered]`.
+  criogenai-bench --release --bin vectors [-- --indexes --clustered]`.
 - **Not started:** `pgvector` / `sqlite-vec` indexes (not taken: they would
   store vectors unencrypted; see 0025). Do not describe these as existing
   anywhere.
@@ -342,31 +347,31 @@ cargo test                       # unit + integration + doctests
 cargo test --workspace --all-features   # also the SQLite backend
 cargo clippy --all-targets -- -D warnings
 cargo fmt --all --check
-cargo test -p criogen-providers   # one crate
-cargo run -p criogen-core --example basic_workflow -- "some text"
-cargo run -p criogen-core --example approval_workflow -- yes
-cargo run -p criogen-core --example llm_workflow -- "remote work"
-cargo run -p criogen-core --example retry_workflow
-cargo run -p criogen-core --example recover_workflow
-cargo run -p criogen-agent --example approval_agent -- edit   # or approve, reject
-cargo run -p criogen-agent --example thread_agent
-cargo run -p criogen-agent --features sqlite --example durable_agent
+cargo test -p criogenai-providers   # one crate
+cargo run -p criogenai-core --example basic_workflow -- "some text"
+cargo run -p criogenai-core --example approval_workflow -- yes
+cargo run -p criogenai-core --example llm_workflow -- "remote work"
+cargo run -p criogenai-core --example retry_workflow
+cargo run -p criogenai-core --example recover_workflow
+cargo run -p criogenai-agent --example approval_agent -- edit   # or approve, reject
+cargo run -p criogenai-agent --example thread_agent
+cargo run -p criogenai-agent --features sqlite --example durable_agent
 # Langfuse, manual only (needs LANGFUSE_PUBLIC_KEY / LANGFUSE_SECRET_KEY):
-cargo run -p criogen-telemetry --example langfuse
+cargo run -p criogenai-telemetry --example langfuse
 # Real model, manual only (needs a server; default: Ollama on localhost):
-CRIOGEN_MODEL=llama3.2 cargo run -p criogen-providers --example chat -- "hi"
+CRIOGEN_MODEL=llama3.2 cargo run -p criogenai-providers --example chat -- "hi"
 # Claude (needs ANTHROPIC_API_KEY):
-CRIOGEN_PROTOCOL=anthropic CRIOGEN_MODEL=claude-haiku-5-5 cargo run -p criogen-providers --example chat -- "hi"
+CRIOGEN_PROTOCOL=anthropic CRIOGEN_MODEL=claude-haiku-5-5 cargo run -p criogenai-providers --example chat -- "hi"
 RUSTDOCFLAGS="-D warnings" cargo doc --no-deps
 bash scripts/test-package.sh     # package the crate, use it from a separate project
 cargo deny --all-features check  # advisories, licenses, sources (deny.toml)
 bash scripts/ci-local.sh         # the whole CI pipeline, locally (--quick: rust step only)
 bash scripts/test-python.sh      # Python SDK: wheel into a new venv, consumer + pytest
 bash scripts/test-typescript.sh  # TypeScript SDK: npm tarball into a new project, consumer + node --test
-node sdks/typescript/scripts/build-web.mjs   # the engine as WebAssembly: criogen/web (needs the wasm32 target, wasm-bindgen-cli)
+node sdks/typescript/scripts/build-web.mjs   # the engine as WebAssembly: criogenai/web (needs the wasm32 target, wasm-bindgen-cli)
 bash scripts/test-web.sh         # the engine in the browser: WebAssembly tests, the suite on it, 3 browsers, the package
-cargo run -p criogen-bench --release   # benchmarks (docs/benchmarks.md)
-cargo run -p criogen-gateway -- --config crates/criogen-gateway/examples/gateway.toml   # the LLM gateway
+cargo run -p criogenai-bench --release   # benchmarks (docs/benchmarks.md)
+cargo run -p criogenai-gateway -- --config crates/criogenai-gateway/examples/gateway.toml   # the LLM gateway
 bash scripts/get-postgres.sh     # portable PostgreSQL into ~/.criogen/postgres (once)
 bash scripts/with-postgres.sh cargo test --workspace --all-features   # with a throwaway server
 # Every feature against real models, manual only (keys in ~/.criogen-keys.env):
@@ -399,14 +404,14 @@ git-ignored. REA is not registered as an MCP server in any agent config.
    to `docs/design/` first, or in the same change. Number new docs
    sequentially (`0002-…`).
 2. **Keep the core small.** Add a dependency only with a stated reason. Current
-   deps: tokio (`sync`), criogen-rt (tasks and timers: Tokio `rt` + `time`
+   deps: tokio (`sync`), criogenai-rt (tasks and timers: Tokio `rt` + `time`
    on servers, the JavaScript event loop in the browser, design 0021),
    serde, serde_json, thiserror, uuid (v7 run ids). Dev only: tokio
-   `test-util` for the paused clock. `criogen-providers` follows the budget
+   `test-util` for the paused clock. `criogenai-providers` follows the budget
    in research `litellm-providers.md` §10.11 (today: serde, serde_json,
-   thiserror, uuid, criogen-rt, reqwest behind the `http` feature on
+   thiserror, uuid, criogenai-rt, reqwest behind the `http` feature on
    servers, wasm-bindgen/js-sys/web-sys for `fetch` in the browser).
-   Engine crates call `criogen_rt`, never `tokio::spawn` or `tokio::time`
+   Engine crates call `criogenai_rt`, never `tokio::spawn` or `tokio::time`
    (those panic in the browser).
    Transport tests use a scripted local TCP server
    (`tests/transport.rs`), never the network.
@@ -419,17 +424,17 @@ git-ignored. REA is not registered as an MCP server in any agent config.
 6. **Honest docs.** README status tables distinguish implemented from planned.
    No performance claims without benchmarks in the repo.
 7. **Tests with every behaviour change.** Integration tests live in
-   `crates/criogen-core/tests/`. Concurrency claims need tests that would
+   `crates/criogenai-core/tests/`. Concurrency claims need tests that would
    deadlock or time out if the claim were false (see
    `fan_out_runs_nodes_concurrently`).
    **Simulate LLM calls; never call a real model in tests.** Use `FakeLlm`
-   (`crates/criogen-core/tests/support/fake_llm.rs`): it replies after
+   (`crates/criogenai-core/tests/support/fake_llm.rs`): it replies after
    2–3 s (fixed per prompt) and can fail on a marker. Tests run it on Tokio's
    paused clock (`#[tokio::test(start_paused = true)]`) so timing is exact and
    the suite stays fast; examples run it in real time. See
    `tests/llm_simulation.rs`. Code that speaks the model contract
-   (`criogen-providers`, later the agent loop) uses
-   `criogen_providers::FakeModel` instead: the same 2–3 s timing, plus
+   (`criogenai-providers`, later the agent loop) uses
+   `criogenai_providers::FakeModel` instead: the same 2–3 s timing, plus
    scripted tool calls (`FakeReply`) and classified `ModelError`s.
 8. **Public API hygiene.** Public enums and structs that may grow are
    `#[non_exhaustive]`. Public items have docs and implement `Debug`
@@ -497,9 +502,9 @@ git-ignored. REA is not registered as an MCP server in any agent config.
 |---|---|
 | What does a term mean? Naming rules? | `docs/glossary.md` |
 | What does an error code mean? | `docs/errors.md` (from `schemas/error-codes.json`) |
-| How does a run execute? | `docs/architecture.md` §4, `crates/criogen-core/src/runtime.rs` |
+| How does a run execute? | `docs/architecture.md` §4, `crates/criogenai-core/src/runtime.rs` |
 | What are the exact semantics? | `docs/design/0001-execution-model.md` |
 | What's done, what's next, what's undecided? | `docs/progress.md` |
 | How does LangGraph/LangChain do X? | `docs/research/*.md` |
 | How do agents, tools and errors work (design)? | `docs/design/0002`–`0005`, `docs/architecture.md` §7 |
-| Validation rules | `crates/criogen-core/src/graph.rs` (`build`), `src/error.rs` (`ValidationIssue`) |
+| Validation rules | `crates/criogenai-core/src/graph.rs` (`build`), `src/error.rs` (`ValidationIssue`) |

@@ -4,8 +4,8 @@ import os
 
 import pytest
 
-from criogen import OpenAI, env, load_env
-from criogen.models import _KEYS
+from criogenai import OpenAI, env, load_env
+from criogenai.models import _KEYS
 
 
 @pytest.fixture(autouse=True)

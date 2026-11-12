@@ -1,6 +1,6 @@
 # 0001 — Execution model
 
-Status: **Implemented** in `crates/criogen-core`. Pre-1.0; may change.
+Status: **Implemented** in `crates/criogenai-core`. Pre-1.0; may change.
 Extended by [0005](0005-core-runtime-extensions.md) §1–§3 (node context,
 node outcomes, reducers, suspend/resume), §4 (policies), §5 (saved task
 writes, the task memo, snapshots on failure) and §6 (events), which are

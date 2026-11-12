@@ -1,4 +1,4 @@
-//! Package smoke test: uses `criogen-core` from its packaged `.crate`, the
+//! Package smoke test: uses `criogenai-core` from its packaged `.crate`, the
 //! way a downstream project would, through the public API only.
 //!
 //! Run by `scripts/test-package.sh`. Every check panics on failure.
@@ -7,12 +7,12 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use criogen_core::{
+use criogenai_core::{
     CancelToken, END, EventKind, NodeError, NodeOutput, NodePolicy, Reducer, RetryPolicy,
     RunOptions, SNAPSHOT_FORMAT, Snapshot, State, Update, ValidationIssue, WorkflowBuilder,
     node_fn, node_with_context, router_fn,
 };
-use criogen_providers::{
+use criogenai_providers::{
     FakeModel, FakeReply, HttpFailure, Message, Model, ModelErrorKind, ModelRequest, ToolSpec,
     ToolStatus, classify_http, transcript, validate_tools,
 };
@@ -293,8 +293,8 @@ fn provider_errors_and_transcripts() {
     let mut args = serde_json::Map::new();
     args.insert("q".into(), json!("x"));
     let assistant = Message::with_content(
-        criogen_providers::Role::Assistant,
-        vec![criogen_providers::ContentBlock::tool_call("c1", "search", args)],
+        criogenai_providers::Role::Assistant,
+        vec![criogenai_providers::ContentBlock::tool_call("c1", "search", args)],
     );
     let repaired = transcript::repair(vec![Message::user("hi"), assistant]);
     assert_eq!(repaired.changes.len(), 1);
@@ -307,7 +307,7 @@ fn provider_errors_and_transcripts() {
 
 /// Named providers (design 0006 §4.1): one table, an endpoint per name.
 fn named_providers() {
-    use criogen_providers::{PRESETS, ProviderModel, preset, preview_request};
+    use criogenai_providers::{PRESETS, ProviderModel, preset, preview_request};
     let groq = preset("groq").expect("groq is a named provider");
     assert_eq!(groq.key_env, Some("GROQ_API_KEY"));
     assert!(groq.endpoint(None).is_err(), "a hosted provider needs a key");
@@ -327,7 +327,7 @@ fn named_providers() {
 
 /// The Anthropic protocol: the exact body, without sending it.
 fn anthropic_request_body() {
-    use criogen_providers::{
+    use criogenai_providers::{
         AnthropicOptions, ContentBlock, Endpoint, Reasoning, ReasoningEffort, Role, Settings,
         preview_request,
     };
@@ -358,7 +358,7 @@ fn anthropic_request_body() {
 
 /// The agent crate: a model ⇄ tools loop with a validated tool.
 async fn agent_with_tools() {
-    use criogen_agent::{Agent, ToolError, tool_fn};
+    use criogenai_agent::{Agent, ToolError, tool_fn};
 
     let model = FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
         .then(FakeReply::tool_calls([
@@ -389,7 +389,7 @@ async fn agent_with_tools() {
     let statuses: Vec<Option<ToolStatus>> = result
         .messages
         .iter()
-        .filter(|m| m.role == criogen_providers::Role::Tool)
+        .filter(|m| m.role == criogenai_providers::Role::Tool)
         .map(|m| m.status)
         .collect();
     assert_eq!(statuses, [Some(ToolStatus::Success), Some(ToolStatus::Error), Some(ToolStatus::Error)]);
@@ -404,10 +404,10 @@ async fn agent_with_tools() {
     let backup = FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
         .named("fake", "backup")
         .then(FakeReply::text("from the backup"));
-    let model = criogen_agent::ResilientModel::new(std::sync::Arc::new(flaky))
+    let model = criogenai_agent::ResilientModel::new(std::sync::Arc::new(flaky))
         .fallback(std::sync::Arc::new(backup));
-    let request = criogen_providers::ModelRequest::new(vec![criogen_providers::Message::user("hi")]);
-    let response = criogen_providers::Model::invoke(&model, &request)
+    let request = criogenai_providers::ModelRequest::new(vec![criogenai_providers::Message::user("hi")]);
+    let response = criogenai_providers::Model::invoke(&model, &request)
         .await
         .expect("the fallback answers");
     assert_eq!(response.message.text(), "from the backup");
@@ -418,7 +418,7 @@ async fn agent_with_tools() {
 /// The telemetry crate: an exporter whose backend is down must not affect
 /// the run.
 async fn telemetry_never_breaks_a_run() {
-    use criogen_telemetry::{Langfuse, OtlpExporter};
+    use criogenai_telemetry::{Langfuse, OtlpExporter};
 
     let config = Langfuse::config("pk-lf-x", "sk-lf-x", "http://127.0.0.1:9")
         .batching(100, Duration::from_millis(10));
@@ -442,7 +442,7 @@ async fn telemetry_never_breaks_a_run() {
 
 /// Human approval: the run suspends before a gated tool runs.
 async fn approval_before_a_tool_runs() {
-    use criogen_agent::{Agent, Approval, Decision, ToolError, tool_fn};
+    use criogenai_agent::{Agent, Approval, Decision, ToolError, tool_fn};
 
     let model = FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
         .then(FakeReply::tool_call("refund", json!({"amount": 50})))
@@ -481,7 +481,7 @@ async fn approval_before_a_tool_runs() {
 
 /// An agent as a workflow node, and as another agent's tool.
 async fn agents_as_nodes_and_tools() {
-    use criogen_agent::Agent;
+    use criogenai_agent::Agent;
 
     let quick = |replies: Vec<FakeReply>| {
         let mut model = FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1));
@@ -515,7 +515,7 @@ async fn agents_as_nodes_and_tools() {
     let mut stream = lead.stream("go");
     let mut texts = Vec::new();
     while let Some(event) = stream.next().await {
-        if let criogen_agent::AgentEvent::Text { text, .. } = event {
+        if let criogenai_agent::AgentEvent::Text { text, .. } = event {
             texts.push(text);
         }
     }
@@ -528,14 +528,14 @@ async fn agents_as_nodes_and_tools() {
 /// Threads: a conversation and a pending approval kept in storage, used by
 /// a second agent instance (another process, in real life).
 async fn threads_keep_conversations() {
-    use criogen_agent::{Agent, Approval, ToolError, tool_fn};
-    use criogen_storage::{CheckpointStatus, OnBusy, Source, Storage};
+    use criogenai_agent::{Agent, Approval, ToolError, tool_fn};
+    use criogenai_storage::{CheckpointStatus, OnBusy, Source, Storage};
 
     let storage = Storage::in_memory().on_busy(OnBusy::Reject);
     {
         // A lease, its cancel token, and whether it was asked to stop.
         let lease = storage.lease("lease-check").await.unwrap();
-        let token = criogen_core::CancelToken::new();
+        let token = criogenai_core::CancelToken::new();
         lease.set_cancel(token.clone());
         assert!(!lease.interrupted());
         assert!(storage.cancel("lease-check"));
@@ -596,10 +596,10 @@ async fn threads_keep_conversations() {
 }
 
 async fn sqlite_threads_survive_a_restart() {
-    use criogen_agent::Agent;
-    use criogen_storage::{SqliteCheckpointer, Storage};
+    use criogenai_agent::Agent;
+    use criogenai_storage::{SqliteCheckpointer, Storage};
 
-    let path = std::env::temp_dir().join(format!("criogen-package-{}.db", std::process::id()));
+    let path = std::env::temp_dir().join(format!("criogenai-package-{}.db", std::process::id()));
     let fast = || FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1));
     {
         let storage = Storage::connect(&format!("sqlite://{}", path.display()))
@@ -629,8 +629,8 @@ async fn sqlite_threads_survive_a_restart() {
 }
 
 async fn long_term_memory_per_user() {
-    use criogen_agent::{Agent, AgentInput, Memory, REMEMBER_TOOL};
-    use criogen_storage::{Namespace, SearchQuery, SqliteMemoryStore, Storage};
+    use criogenai_agent::{Agent, AgentInput, Memory, REMEMBER_TOOL};
+    use criogenai_storage::{Namespace, SearchQuery, SqliteMemoryStore, Storage};
 
     let storage = Storage::in_memory()
         .with_memory(SqliteMemoryStore::connect("sqlite::memory:").await.expect("open"));
@@ -682,8 +682,8 @@ async fn long_term_memory_per_user() {
 /// Two processes (two `Storage::connect`) on one Postgres thread: the second
 /// send waits its turn. Needs a server (`scripts/with-postgres.sh`).
 async fn postgres_threads_across_processes() {
-    use criogen_agent::Agent;
-    use criogen_storage::{PostgresCheckpointer, PostgresOptions, Storage};
+    use criogenai_agent::Agent;
+    use criogenai_storage::{PostgresCheckpointer, PostgresOptions, Storage};
 
     // Always compiled; run when a server is configured.
     let _options = PostgresOptions::new().max_connections(4).lock_connections(8);
@@ -727,10 +727,10 @@ async fn postgres_threads_across_processes() {
 }
 
 async fn encrypted_storage_with_retention() {
-    use criogen_agent::Agent;
-    use criogen_storage::{EncryptionKey, Keyring, Retention, Storage, ThreadQuery};
+    use criogenai_agent::Agent;
+    use criogenai_storage::{EncryptionKey, Keyring, Retention, Storage, ThreadQuery};
 
-    let path = std::env::temp_dir().join(format!("criogen-package-enc-{}.db", std::process::id()));
+    let path = std::env::temp_dir().join(format!("criogenai-package-enc-{}.db", std::process::id()));
     let url = format!("sqlite://{}", path.display());
     let keys = || Keyring::parse(&format!("k1:{}", "5a".repeat(32))).expect("keys");
     let storage = Storage::connect_encrypted(&url, keys())
@@ -771,9 +771,9 @@ async fn encrypted_storage_with_retention() {
 }
 
 async fn semantic_memory_search() {
-    use criogen_agent::{Agent, AgentInput, Memory, put_embedded};
-    use criogen_providers::FakeEmbedder;
-    use criogen_storage::{Namespace, Storage};
+    use criogenai_agent::{Agent, AgentInput, Memory, put_embedded};
+    use criogenai_providers::FakeEmbedder;
+    use criogenai_storage::{Namespace, Storage};
 
     let storage = Storage::connect("sqlite::memory:").await.expect("open");
     let embedder = FakeEmbedder::new().synonym("antibiotics", "penicillin");
@@ -812,8 +812,8 @@ async fn semantic_memory_search() {
 }
 
 async fn audit_trail() {
-    use criogen_agent::{Agent, Approval, ToolError, tool_fn};
-    use criogen_storage::{AuditQuery, Storage};
+    use criogenai_agent::{Agent, Approval, ToolError, tool_fn};
+    use criogenai_storage::{AuditQuery, Storage};
 
     let storage = Storage::connect("sqlite::memory:")
         .await
@@ -857,7 +857,7 @@ async fn audit_trail() {
 }
 
 async fn thread_stream() {
-    use criogen_agent::{Agent, AgentEvent};
+    use criogenai_agent::{Agent, AgentEvent};
 
     let agent = Agent::builder(
         FakeModel::with_delay(Duration::from_millis(1), Duration::from_millis(1))
@@ -880,8 +880,8 @@ async fn thread_stream() {
 }
 
 async fn llm_gateway() {
-    use criogen_gateway::{BudgetPeriod, Config, Gateway, KeyLimits};
-    use criogen_providers::{Endpoint, Model, ModelRequest, ProviderModel};
+    use criogenai_gateway::{BudgetPeriod, Config, Gateway, KeyLimits};
+    use criogenai_providers::{Endpoint, Model, ModelRequest, ProviderModel};
 
     // A config names environment variables, never secrets.
     let config = Config::parse(
@@ -938,7 +938,7 @@ models = [{ provider = \"ollama\", model = \"llama3.2\" }]",
 }
 
 async fn workflow_threads() {
-    use criogen_storage::Storage;
+    use criogenai_storage::Storage;
 
     // A workflow that asks a human before it finishes.
     let workflow = WorkflowBuilder::new()
@@ -975,8 +975,8 @@ async fn workflow_threads() {
 /// Patterns and specialists (design 0019): ready-made graphs and recipes,
 /// through the public API only.
 async fn patterns_and_specialists() {
-    use criogen_agent::patterns::{self, Step};
-    use criogen_agent::{Agent, PatternStop, ReviewDecision, Specialist, specialists};
+    use criogenai_agent::patterns::{self, Step};
+    use criogenai_agent::{Agent, PatternStop, ReviewDecision, Specialist, specialists};
 
     let instant = |replies: &[&str]| {
         let mut model = FakeModel::with_delay(Duration::ZERO, Duration::ZERO);

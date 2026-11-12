@@ -1,9 +1,9 @@
 # Glossary and naming conventions
 
-The words Criogen uses, what each one means, and the naming rules for
+The words CriogenAI uses, what each one means, and the naming rules for
 code, JSON and docs. Terms marked *(planned)* are designed but not built.
 
-## 1. Workflow engine (`criogen-core`)
+## 1. Workflow engine (`criogenai-core`)
 
 | Term | Meaning | In code |
 |---|---|---|
@@ -47,7 +47,7 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 3. **Model retry** *(planned, agent layer)*: re-sending a model request after
    a transient `ModelError`, per 0003 §5.
 
-## 2. Messages, tools and models (`criogen-providers`)
+## 2. Messages, tools and models (`criogenai-providers`)
 
 | Term | Meaning | In code |
 |---|---|---|
@@ -80,7 +80,7 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Warning** | Something dropped or repaired, never silently. | `Warning` |
 | **Fake model / fake LLM** | Simulated models for tests: 2–3 s replies, scripted tool calls, failures. | `FakeModel`, `FakeLlm` (core tests) |
 
-## 3. Agents (`criogen-agent`; design 0004)
+## 3. Agents (`criogenai-agent`; design 0004)
 
 | Term | Meaning | In code |
 |---|---|---|
@@ -115,7 +115,7 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Actor** | Who acts through a thread handle, as the app names them (`user:dr-rao`); recorded in the audit trail. | `Thread::actor` |
 | **Storage** | A checkpointer plus the busy-thread rules (`wait`, `reject`, `interrupt`) and the durability. | `Storage`, `OnBusy`, `Durability`, `ThreadLease`, error `thread_busy` |
 | **Durability** | When a run is written: `step` (before every step and after every task; a crash loses at most unfinished tasks) or `exit` (once per call). | `Durability`, `Persister`, `RunOptions::persist`, `ThreadWriter` |
-| **Keyframe / delta** | How SQL backends store checkpoints: a delta holds only the changes since the parent (`set`, `append`, `remove`); a keyframe the full state, every 25 checkpoints. | `criogen_storage::delta` |
+| **Keyframe / delta** | How SQL backends store checkpoints: a delta holds only the changes since the parent (`set`, `append`, `remove`); a keyframe the full state, every 25 checkpoints. | `criogenai_storage::delta` |
 | **Interrupted run** | A thread whose head is `in_progress` while no process runs it (e.g. after a crash). `retry` continues it; `send` refuses with `thread_interrupted`. | `Thread::retry` |
 | **Long-term memory** | Facts that outlive a thread (a user's preferences, a patient's allergies), kept in a memory store under a namespace. Recalled before model calls; written by apps or the model's `remember` tool (design 0008 §13). | `MemoryStore`, `MemoryItem`, `Memory` |
 | **Retention** | How long stored data is kept: idle threads expire (`thread_ttl`), long threads keep their last N checkpoints, abandoned branches go. Applied by a prune pass, once or in the background (design 0008 §15.1). | `Retention`, `Storage::prune`, `Storage::spawn_pruner`, `Pruner`, `PruneReport` |
@@ -127,7 +127,7 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 | **Rewind** | Making an older checkpoint the thread's head again (a new `fork` checkpoint); later steps run again. | `Thread::rewind` |
 | **Gateway** | The HTTP server that exposes the provider layer to other apps (design 0006 §7). |
 
-## 4. Observability (`criogen-telemetry`; design 0009)
+## 4. Observability (`criogenai-telemetry`; design 0009)
 
 | Term | Meaning | In code |
 |---|---|---|
@@ -142,8 +142,8 @@ code, JSON and docs. Terms marked *(planned)* are designed but not built.
 
 ### Code (Rust)
 
-- Crates: `criogen-<area>` (`criogen-core`, `criogen-providers`;
-  later `criogen-gateway`, `criogen-py`, `criogen-node`).
+- Crates: `criogenai-<area>` (`criogenai-core`, `criogenai-providers`;
+  later `criogenai-gateway`, `criogenai-py`, `criogenai-node`).
 - Types are nouns in `UpperCamelCase` (`RunOptions`, `ToolSpec`); functions
   and methods are verbs in `snake_case` (`run`, `resume`, `classify_http`).
 - Constructors: `new(...)` for the plain case, named constructors for

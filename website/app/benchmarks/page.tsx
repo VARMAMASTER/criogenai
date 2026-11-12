@@ -14,8 +14,8 @@ import { loadRecorded } from "@/lib/bench-data";
 import type { Recorded as CompareRecorded } from "@/lib/playground";
 
 export const metadata: Metadata = pageMeta({
-  title: "AI agent framework benchmarks: Criogen vs LangGraph vs CrewAI",
-  description: `Which AI agent framework is fastest? Criogen, LangGraph and CrewAI on the same work with the same simulated model: speed, load, memory, reliability and footprint, from the raw results file. ${speedLine()}`,
+  title: "AI agent framework benchmarks: CriogenAI vs LangGraph vs CrewAI",
+  description: `Which AI agent framework is fastest? CriogenAI, LangGraph and CrewAI on the same work with the same simulated model: speed, load, memory, reliability and footprint, from the raw results file. ${speedLine()}`,
   path: "/benchmarks/",
 });
 
@@ -72,21 +72,21 @@ export default function BenchmarksPage() {
       <main id="main" className="lab-main">
         <header className="lab-hero">
           <p className="lab-eyebrow">Benchmark lab</p>
-          <h1>Criogen, LangGraph and CrewAI, on the same work</h1>
+          <h1>CriogenAI, LangGraph and CrewAI, on the same work</h1>
           <p className="lab-lede">
             All three in Python, in the way their own documentation shows, against one simulated model with the same replies and delays.
             Each scenario runs in a fresh process per framework. Everything below is read from one results file: the machine, the versions,
             the command and every measurement.
           </p>
           <p className="lab-muted">
-            For what Criogen&apos;s Rust engine, SDK bridges and gateway cost on their own, see <a href="/docs/reference/benchmarks/">Benchmarks</a> in
+            For what CriogenAI&apos;s Rust engine, SDK bridges and gateway cost on their own, see <a href="/docs/reference/benchmarks/">Benchmarks</a> in
             the docs.
           </p>
         </header>
         <Lab recorded={recorded.data} fixture={recorded.fixture} href={recorded.href} recordedErrors={recorded.errors} runSection={runSection} />
         <header className="lab-hero" id="live">
           <p className="lab-eyebrow">Live comparison</p>
-          <h2 className="pg-title">Criogen and LangChain on one job, side by side</h2>
+          <h2 className="pg-title">CriogenAI and LangChain on one job, side by side</h2>
           <p className="lab-lede">
             Send a message through the same agent in both frameworks and compare latency, throughput, CPU and memory. Each framework runs in its
             own process against one scripted model server, and the measurements are taken from outside by the same code. For exploration on a
@@ -104,7 +104,7 @@ export default function BenchmarksPage() {
             </dd>
             <dt>Agents</dt>
             <dd>
-              Each framework&apos;s standard tool-calling agent with default settings: <code>Agent</code> in Criogen, <code>create_agent</code> in
+              Each framework&apos;s standard tool-calling agent with default settings: <code>Agent</code> in CriogenAI, <code>create_agent</code> in
               LangChain. Both use the same synchronous tools with the same names, arguments and delays.
             </dd>
             <dt>Measurement</dt>
@@ -118,8 +118,8 @@ export default function BenchmarksPage() {
           <h3 className="pg-sub">Known differences and limits</h3>
           <ul>
             <li>
-              Defaults differ. Criogen streams the reply (<code>stream: true</code>) and LangChain requests a complete one (<code>stream: false</code>),
-              which adds parsing work on the Criogen side. This compares defaults, not feature sets.
+              Defaults differ. CriogenAI streams the reply (<code>stream: true</code>) and LangChain requests a complete one (<code>stream: false</code>),
+              which adds parsing work on the CriogenAI side. This compares defaults, not feature sets.
             </li>
             <li>
               With realistic model and tool latency, both spend most of a run waiting, so median run time converges. The differences that remain are

@@ -2,10 +2,10 @@ type Error = Box<dyn std::error::Error>;
 
 pub async fn workflows() -> Result<(), Error> {
     // [show]
-    use criogen_core::{
+    use criogenai_core::{
         END, NodeOutput, State, Update, WorkflowBuilder, node_fn, node_with_context, router_fn,
     };
-    use criogen_storage::Storage;
+    use criogenai_storage::Storage;
     use serde_json::json;
 
     let mut builder = WorkflowBuilder::new();

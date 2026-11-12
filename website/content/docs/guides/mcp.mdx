@@ -1,9 +1,9 @@
 ---
 title: MCP servers' tools
-description: Give a Criogen agent the tools of any MCP server (GitHub, files, databases, browsers, your own services) over stdio or Streamable HTTP, in Python, TypeScript and Rust.
+description: Give a CriogenAI agent the tools of any MCP server (GitHub, files, databases, browsers, your own services) over stdio or Streamable HTTP, in Python, TypeScript and Rust.
 ---
 
-The **Model Context Protocol** is how tool servers are shared. Criogen's MCP
+The **Model Context Protocol** is how tool servers are shared. CriogenAI's MCP
 client gives an agent the tools of any MCP server: a process your app starts
 (**stdio**) or a server at a URL (**Streamable HTTP**). The client runs in the
 Rust engine, so it behaves the same in every language.
@@ -23,7 +23,7 @@ Rust engine, so it behaves the same in every language.
   and the audit trail.
 - A stdio server inherits your environment plus `env`. If it exits, the next
   call starts it again. `close()` stops it (stdin closed, killed after 2 s).
-- In the browser (`criogen/web`), `mcp.http` works; `mcp.stdio` throws
+- In the browser (`criogenai/web`), `mcp.http` works; `mcp.stdio` throws
   `unsupported`.
 
 ## Call a tool yourself
@@ -38,10 +38,10 @@ again.
 ## What a server can and cannot do
 
 The client **uses tools only**. A server cannot sample your model, read your
-files or ask your users anything through Criogen. What it says is data:
+files or ask your users anything through CriogenAI. What it says is data:
 
 - Its behaviour hints decide nothing by default. `destructiveHint` is kept
-  (it only makes Criogen more careful); `readOnlyHint` and `idempotentHint`
+  (it only makes CriogenAI more careful); `readOnlyHint` and `idempotentHint`
   would make failed calls retried, so they count only with
   `trust_annotations` / `trustAnnotations`.
 - Every message read is limited in size (4 MiB by default), every call in
@@ -52,7 +52,7 @@ files or ask your users anything through Criogen. What it says is data:
 
 ## Versions
 
-Criogen speaks MCP **2026-07-28** (stateless, `server/discover`) and falls
+CriogenAI speaks MCP **2026-07-28** (stateless, `server/discover`) and falls
 back to the `initialize` handshake for servers from 2025-11-25 and earlier,
 so current and older servers both work. Not supported yet: resources,
 prompts, sampling, elicitation, OAuth sign-in (pass a token in a header),
@@ -63,7 +63,7 @@ and serving your own tools as an MCP server.
 | Code | When |
 |---|---|
 | `mcp_connect` | The server could not be started or reached, or refused the credentials. |
-| `mcp_protocol` | It answered something the client cannot use, or a version Criogen does not speak. |
+| `mcp_protocol` | It answered something the client cannot use, or a version CriogenAI does not speak. |
 | `mcp_tool_name` | Two of its tools map to the same name: set a `prefix` or leave one out. |
 | `mcp_tool_schema` | A tool's input schema is not an object schema, or is too large or deep. |
 | `mcp_timeout` | It was not ready within the connect timeout (30 s). |

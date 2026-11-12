@@ -1,5 +1,5 @@
 // [show]
-import { Agent, anthropic, anthropicCompatible, gemini, groq, ollama, openai, openaiCompatible, qwen } from "criogen";
+import { Agent, anthropic, anthropicCompatible, gemini, groq, ollama, openai, openaiCompatible, qwen } from "criogenai";
 
 new Agent({ model: "openai:gpt-5-mini" }); // key from OPENAI_API_KEY
 new Agent({ model: anthropic("claude-sonnet-5-5") }); // ANTHROPIC_API_KEY
@@ -22,7 +22,7 @@ new Agent({ model: "openai:gpt-5-mini", fallbacks: [ollama("llama3.2")], modelRe
 // [/show]
 
 // [show direct]
-import { Embedder, Gateway } from "criogen";
+import { Embedder, Gateway } from "criogenai";
 
 const gw = new Gateway({ fallbacks: [ollama("llama3.2")] }); // retries and fallbacks as for an agent
 const reply = await gw.chat("openai:gpt-5-mini", "Summarize: …", { instructions: "Two sentences." });

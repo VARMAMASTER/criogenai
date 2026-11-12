@@ -1,5 +1,5 @@
 /*
- * Criogen's colours are the states of a run: a colour on the site means
+ * CriogenAI's colours are the states of a run: a colour on the site means
  * what it means in a run (running, waiting for a person, done, failed).
  * Graphite surfaces, one green accent (a live run). Dark first; a light
  * theme for every page.

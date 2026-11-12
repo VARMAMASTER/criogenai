@@ -3,7 +3,7 @@ title: Errors and retries
 description: Which failures the engine handles for you, which reach your code, how to tell them apart by code, and how retries, fallbacks and thread retry work.
 ---
 
-Things fail: providers rate-limit, tools time out, processes die. Criogen
+Things fail: providers rate-limit, tools time out, processes die. CriogenAI
 sorts failures into three groups, and handles the first two without your
 code seeing an exception:
 
@@ -15,7 +15,7 @@ code seeing an exception:
 
 ## Every error has a code
 
-Every exception Criogen raises is a `CriogenError` with:
+Every exception CriogenAI raises is a `CriogenError` with:
 
 - `code`: a stable snake_case string, the same in Python, TypeScript and
   Rust (`model_failed`, `limit_exceeded`, `thread_busy`, ...). Write your
@@ -45,7 +45,7 @@ on [Error codes](/docs/reference/errors/).
 
 <Aside type="caution" title="Python: two CancelledErrors">
 Cancelling your own asyncio task raises **asyncio's** `CancelledError`, as
-always. `criogen.CancelledError` (code `cancelled`) is raised when Criogen
+always. `criogenai.CancelledError` (code `cancelled`) is raised when CriogenAI
 cancels the run for another reason: a stream you left, or another process
 that interrupted the thread (`on_busy="interrupt"`). Either way the thread
 is saved, and `retry()` continues it.
@@ -116,7 +116,7 @@ instructions, or tell the user. See [Agents and the loop](/docs/concepts/agent-l
 
 ## What never goes in an error
 
-Criogen keeps secrets and content out of errors: API keys are removed from
+CriogenAI keeps secrets and content out of errors: API keys are removed from
 provider messages, and the gateway and telemetry send no content or error
 text unless you ask. When you return errors to a browser, return the `code`,
 not the message: a message can quote what a tool or the model saw.

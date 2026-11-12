@@ -3,14 +3,14 @@ title: "Python API: Trace viewer"
 description: "Python API reference, trace viewer: serve, TraceViewer, main."
 ---
 
-A local page that shows your runs, with no account. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/trace/).
+A local page that shows your runs, with no account. Generated from the docstrings and type hints of `criogenai` 0.1.7. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/trace/).
 
 The local trace viewer: every run on a page, on your own computer.
 
 ```python
-python -m criogen.trace                # http://127.0.0.1:4318
+python -m criogenai.trace                # http://127.0.0.1:4318
 
-from criogen import Agent, Telemetry
+from criogenai import Agent, Telemetry
 agent = Agent("openai:gpt-5-mini", telemetry=Telemetry.local())
 ```
 
@@ -19,14 +19,14 @@ tokens, cost (from your `prices`) and failures. Prompts and outputs appear
 only with `Telemetry.local(capture_content=True)`; nothing leaves the
 computer either way. It listens on 127.0.0.1 unless given a `token`.
 
-Command-line options of `python -m criogen.trace`: `--port` (default
+Command-line options of `python -m criogenai.trace`: `--port` (default
 4318), `--host` (default 127.0.0.1), `--db FILE`, `--memory` (keep
 runs in memory only), `--keep-runs N`, `--keep-days N`, `--prices FILE` (a JSON file shaped like `serve`'s `prices`) and
 `--token-env NAME` (the environment variable holding the token, needed
 off 127.0.0.1).
 
 ```python
-from criogen import trace
+from criogenai import trace
 
 trace.serve(...)
 ```
@@ -39,7 +39,7 @@ These are used as `trace.<name>`.
 |---|---|---|
 | [`serve`](#serve) | function | Starts the trace viewer in the background and returns once it listens. |
 | [`TraceViewer`](#traceviewer) | class | A trace viewer serving in the background; made by `serve`. |
-| [`main`](#main) | function | The command line, `python -m criogen.trace`: serves until Ctrl+C. |
+| [`main`](#main) | function | The command line, `python -m criogenai.trace`: serves until Ctrl+C. |
 
 ## serve
 
@@ -59,7 +59,7 @@ def serve(
 Starts the trace viewer in the background and returns once it listens.
 
 It receives traces at `/v1/traces` (OTLP/HTTP JSON, what
-`Telemetry.local <criogen.Telemetry.local>` sends) and shows the
+`Telemetry.local <criogenai.Telemetry.local>` sends) and shows the
 runs at its address.
 
 **Parameters**
@@ -81,7 +81,7 @@ runs at its address.
 **Example**
 
 ```python
-from criogen import Agent, FakeModel, Telemetry, trace
+from criogenai import Agent, FakeModel, Telemetry, trace
 
 async with trace.serve(0, db=":memory:") as viewer:
     telemetry = Telemetry.local(url=viewer.url)
@@ -128,7 +128,7 @@ Stops serving.
 def main(argv: Optional[list] = None) -> int
 ```
 
-The command line, `python -m criogen.trace`: serves until Ctrl+C.
+The command line, `python -m criogenai.trace`: serves until Ctrl+C.
 
 **Parameters**
 

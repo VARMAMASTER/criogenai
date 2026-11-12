@@ -1,4 +1,4 @@
-// "Works with your models": the providers Criogen has presets for, with their
+// "Works with your models": the providers CriogenAI has presets for, with their
 // logos (logos.ts), what each count means, and the models a standard Kaggle
 // allowance can call. Numbers carry the date they were checked.
 import Link from "next/link";
@@ -20,7 +20,7 @@ const KAGGLE_MODELS = [
   "ibm/granite-4.0-h-small",
 ];
 
-/** Every provider with a name in criogen_providers::PRESETS, plus Kaggle: [icon slug, name]. */
+/** Every provider with a name in criogenai_providers::PRESETS, plus Kaggle: [icon slug, name]. */
 const NAMED: [slug: string | undefined, name: string][] = [
   [undefined, "OpenAI"],
   ["anthropic", "Anthropic"],
@@ -52,7 +52,7 @@ export default function Providers() {
       </p>
 
       <Reveal>
-        <ul className="logo-grid" aria-label="Providers Criogen calls by name">
+        <ul className="logo-grid" aria-label="Providers CriogenAI calls by name">
           {NAMED.map(([slug, name]) => (
             <li className="logo-tile" key={name}>
               <BrandIcon slug={slug} name={name} className="logo-svg" />
@@ -89,7 +89,7 @@ export default function Providers() {
       <Reveal className="kaggle-models glass" delay={0.1}>
         <h3>Free for prototypes: Kaggle&apos;s model allowance</h3>
         <p>
-          Use <code>&quot;kaggle:&lt;model&gt;&quot;</code>; Criogen gets and renews the hourly token from your Kaggle
+          Use <code>&quot;kaggle:&lt;model&gt;&quot;</code>; CriogenAI gets and renews the hourly token from your Kaggle
           token. For prototypes and tests, not production traffic.{" "}
           <Link href="/docs/guides/models/">How it works</Link>
         </p>
@@ -103,8 +103,8 @@ export default function Providers() {
       </Reveal>
 
       <p className="fine">
-        Logos are trademarks of their owners and are shown only to say which services Criogen works with (icons from
-        Simple Icons, CC0; a plain initial where there is none). Criogen is not affiliated with or endorsed by them.
+        Logos are trademarks of their owners and are shown only to say which services CriogenAI works with (icons from
+        Simple Icons, CC0; a plain initial where there is none). CriogenAI is not affiliated with or endorsed by them.
       </p>
     </section>
   );

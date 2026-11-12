@@ -47,7 +47,7 @@ if (!process.env.CRIOGEN_SKIP_RUST_DOCS || !fs.existsSync(path.join(root, "publi
 }
 
 const env = { BENCH_FIXTURE: fixture ? "1" : "" };
-if (fixture) console.warn("\n[criogen] FIXTURE MODE: the benchmark lab shows fake numbers. Do not deploy this build.\n");
+if (fixture) console.warn("\n[criogenai] FIXTURE MODE: the benchmark lab shows fake numbers. Do not deploy this build.\n");
 
 const next = path.join(root, "node_modules", "next", "dist", "bin", "next");
 if (mode === "dev") {
@@ -56,7 +56,7 @@ if (mode === "dev") {
   run(next, ["build"], env);
   run(path.join(root, "node_modules", "pagefind", "lib", "runner", "bin.cjs"), ["--site", "out"]);
   dottedSegments(path.join(root, "out"));
-  if (fixture) console.warn("\n[criogen] out/ was built with the FIXTURE: do not deploy it.\n");
+  if (fixture) console.warn("\n[criogenai] out/ was built with the FIXTURE: do not deploy it.\n");
 }
 
 // Next writes a page's data for client navigation as

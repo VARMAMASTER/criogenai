@@ -9,6 +9,23 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-11-12
+
+### Changed
+
+- **Renamed: Criogen is now CriogenAI.** Packages: `pip install criogenai`,
+  `npm install criogenai` (engine package `criogenai-windows-x64`), imports
+  `import criogenai` / `from "criogenai"`, `criogenai/web`, the command
+  `npx criogenai`, crates `criogenai-*`, site https://criogenai.com. To move:
+  change the install and replace `criogen` with `criogenai` in imports.
+  Unchanged on purpose, so existing data and settings keep working: database
+  tables (`criogen_*`), saved formats (`criogen-eval/1`, snapshots),
+  `CRIOGEN_*` environment variables, telemetry keys (`criogen.*`), the
+  `~/.criogen` folder, and class names such as `CriogenError`.
+- **Platforms:** this release has engines for Windows x64 and the browser.
+  The Linux and macOS engines for `criogenai` follow with the next build
+  (planned 16 November); until then those systems use `criogen` 0.1.6.
+
 ### Fixed
 
 - **Evals with `repeats`** (Python, TypeScript, Rust): one failed run no longer

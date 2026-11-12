@@ -56,7 +56,7 @@ export default function DocsHeader({ slug }: { slug: string }) {
         </button>
         <Link className="dh-brand" href="/">
           <LogoMark size={32} />
-          <span>criogen</span>
+          <span>criogenai</span>
         </Link>
         <nav className="dh-sections" aria-label="Sections">
           {SECTIONS.map((s) => (
@@ -85,7 +85,7 @@ export default function DocsHeader({ slug }: { slug: string }) {
           <div className="drawer-head">
             <Link className="dh-brand" href="/">
               <LogoMark size={28} />
-              <span>criogen</span>
+              <span>criogenai</span>
             </Link>
             <button type="button" className="icon-button" aria-label="Close the menu" onClick={close}>
               <Close />

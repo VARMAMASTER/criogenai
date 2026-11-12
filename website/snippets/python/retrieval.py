@@ -1,9 +1,9 @@
-from criogen import Storage
+from criogenai import Storage
 
 
 async def main(storage: Storage) -> None:
     # [show]
-    from criogen import Agent, Collection, Embedder
+    from criogenai import Agent, Collection, Embedder
 
     handbook = await Collection.open("handbook", embedder=Embedder.openai(), storage=storage)
     await handbook.add(

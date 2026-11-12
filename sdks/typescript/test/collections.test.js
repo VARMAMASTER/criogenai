@@ -35,7 +35,7 @@ test("documents are found by meaning, filtered and removed", async () => {
 });
 
 test("a collection survives reopening a database", { skip: wasm && "databases need a server" }, async () => {
-  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "criogen-coll-")), "docs.db");
+  const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), "criogenai-coll-")), "docs.db");
   let storage = new Storage({ url: `sqlite://${file}` });
   const docs = await Collection.open("handbook", { embedder: embedder(), storage });
   await docs.add(DOCS);

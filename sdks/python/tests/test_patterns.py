@@ -4,7 +4,7 @@ import asyncio
 
 import pytest
 
-from criogen import Agent, FakeModel, FakeReply, Storage, patterns, specialists, tool
+from criogenai import Agent, FakeModel, FakeReply, Storage, patterns, specialists, tool
 
 
 def run(coroutine):
@@ -188,7 +188,7 @@ def test_a_pattern_can_be_extended_with_more_nodes():
 
 
 def test_custom_wraps_any_workflow():
-    from criogen import END, Workflow
+    from criogenai import END, Workflow
 
     wf = Workflow()
     wf.add_node("only", lambda s: {"output": s["input"].upper()})
@@ -203,7 +203,7 @@ def test_react_caps_model_calls():
         return "again"
 
     looping = patterns.react(FakeModel([FakeReply.tool_call("poke", {})] * 20), [poke], max_steps=3)
-    from criogen import LimitExceededError
+    from criogenai import LimitExceededError
 
     with pytest.raises(LimitExceededError):
         looping.run_sync("go")

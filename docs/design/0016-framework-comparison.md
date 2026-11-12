@@ -1,6 +1,6 @@
-# 0016: Comparing Criogen, LangGraph and CrewAI
+# 0016: Comparing CriogenAI, LangGraph and CrewAI
 
-Status: **Accepted** (the user asked for a benchmark of Criogen against
+Status: **Accepted** (the user asked for a benchmark of CriogenAI against
 LangChain/LangGraph and CrewAI on speed, reliability, memory and resource
 use, with proof, and a page on the website where anyone can explore the
 results and check them on their own machine). Extends
@@ -9,7 +9,7 @@ results and check them on their own machine). Extends
 ## 1. Principles
 
 - **Same work, same language.** All three frameworks run in Python 3.13,
-  in the way their own documentation shows. Criogen runs through its
+  in the way their own documentation shows. CriogenAI runs through its
   Python SDK (agents, and workflows from [0015](0015-sdk-workflows.md)),
   not its Rust core, so the comparison is Python against Python.
 - **Same simulated model.** No network and no API keys. Each framework gets
@@ -60,17 +60,17 @@ records `pass`, `fail` or `partial`, with a reason and the log.
 
 ## 4. The results file
 
-`bench/results/<date>-<machine>.json`, schema `criogen-compare/1`:
+`bench/results/<date>-<machine>.json`, schema `criogenai-compare/1`:
 
 ```json
 {
-  "schema": "criogen-compare/1",
+  "schema": "criogenai-compare/1",
   "recorded": "2026-10-21T10:00:00Z",
   "command": "python benches/compare/run.py",
   "machine": { "cpu": "AMD Ryzen 5 4600H", "cores": 6, "threads": 12, "ram_gb": 15.4, "os": "Windows 11" },
   "python": "3.13.14",
   "frameworks": {
-    "criogen": { "label": "Criogen", "version": "0.1.0" },
+    "criogenai": { "label": "CriogenAI", "version": "0.1.0" },
     "langgraph":  { "label": "LangGraph", "version": "1.2.14", "also": { "langchain": "1.4.4" } },
     "crewai":     { "label": "CrewAI", "version": "…" }
   },

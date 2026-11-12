@@ -13,13 +13,13 @@
       "../../../sdks/typescript/node_modules/@types"
     ],
     "paths": {
-      "criogen": [
+      "criogenai": [
         "../../../sdks/typescript/dist/index.d.ts"
       ],
       "zod": [
         "../../../sdks/typescript/node_modules/zod/index.d.ts"
       ],
-      "criogen/web": [
+      "criogenai/web": [
         "../../../sdks/typescript/dist/index.d.ts"
       ],
       "@/lib/agent": [

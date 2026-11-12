@@ -1,4 +1,4 @@
-// Progress toward the 10,000 installs at which Criogen's code opens
+// Progress toward the 10,000 installs at which CriogenAI's code opens
 // (lib/installs.ts reads the counts at build time). Remove it once reached.
 import { GOAL, type Installs } from "@/lib/installs";
 
@@ -28,7 +28,7 @@ export default function InstallCounter({ installs }: { installs: Installs }) {
         <span className="install-goal-fill" style={{ width: `${Math.max(share * 100, installs.status === "counted" && total > 0 ? 1 : 0)}%` }} />
       </div>
       <p className="install-goal-note">
-        Free to use now. When Criogen reaches 10,000 installs, its source code opens under MIT or Apache-2.0.
+        Free to use now. When CriogenAI reaches 10,000 installs, its source code opens under MIT or Apache-2.0.
         {installs.status === "counted" &&
           ` Counted from PyPI (${installs.pypi.toLocaleString("en-US")}) and npm (${installs.npm.toLocaleString("en-US")}) on ${installs.asOf}.`}
         {installs.status === "unavailable" && " The live count could not be read when this page was built."}

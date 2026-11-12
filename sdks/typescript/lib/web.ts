@@ -1,7 +1,7 @@
 // Internet tools for agents: web search (Tavily or Brave) and reading a page
 // (design 0019).
 //
-//     import { Agent, web } from "criogen";
+//     import { Agent, web } from "criogenai";
 //     const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
 //
 // `web.search()` needs no arguments: it uses TAVILY_API_KEY if set, else
@@ -115,7 +115,7 @@ const clampResults = (n: number | undefined): number => Math.max(1, Math.min(Mat
  * @throws {TypeError} `depth` is not "basic" or "advanced", or `baseUrl` is not https.
  *
  * @example
- * import { Agent, web } from "criogen";
+ * import { Agent, web } from "criogenai";
  *
  * // Needs TAVILY_API_KEY and OPENAI_API_KEY.
  * const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.tavilySearch({ maxResults: 3, depth: "advanced" })] });
@@ -186,7 +186,7 @@ export function braveSearch(options: { apiKey?: string; maxResults?: number; bas
  * @throws {TypeError} `provider` is neither "tavily" nor "brave".
  *
  * @example
- * import { Agent, web } from "criogen";
+ * import { Agent, web } from "criogenai";
  *
  * // Needs TAVILY_API_KEY or BRAVE_API_KEY, and OPENAI_API_KEY.
  * const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.search(), web.fetch()] });
@@ -343,7 +343,7 @@ function htmlToText(html: string): string {
  * @param options `allowPrivate` (default false) and `maxChars`, the most characters returned (200 to 50,000, default 8,000).
  *
  * @example
- * import { Agent, web } from "criogen";
+ * import { Agent, web } from "criogenai";
  *
  * // Needs OPENAI_API_KEY; reading the page needs no key.
  * const agent = new Agent({ model: "openai:gpt-5-mini", tools: [web.fetchPage({ maxChars: 4000 })] });
@@ -365,7 +365,7 @@ export function fetchPage(options: { allowPrivate?: boolean; maxChars?: number }
       }
       if (parts.protocol !== "http:" && parts.protocol !== "https:") throw new ToolError("give a full http or https URL", { retryable: false });
       const address = await checkPublic(parts.hostname, options.allowPrivate ?? false);
-      const body = await pinnedGet(parts, address, { "user-agent": "criogen-web/0.1", accept: "text/html,text/plain" }, MAX_PAGE_BYTES);
+      const body = await pinnedGet(parts, address, { "user-agent": "criogenai-web/0.1", accept: "text/html,text/plain" }, MAX_PAGE_BYTES);
       const text = htmlToText(body.toString("utf8"));
       return { url, text: text.slice(0, cap), truncated: text.length > cap };
     },

@@ -3,14 +3,14 @@ title: "Python API: Usage and cost"
 description: "Python API reference, usage and cost: estimate_cost."
 ---
 
-Tokens and an estimated price for a run. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/usage/).
+Tokens and an estimated price for a run. Generated from the docstrings and type hints of `criogenai` 0.1.7. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/usage/).
 
 What a run cost: which models answered, with their calls and tokens (from
 the engine's per-message metadata), the call's wall time, and a cost estimate
 from prices the caller supplies (they change too often to ship).
 
 ```python
-from criogen import estimate_cost
+from criogenai import estimate_cost
 ```
 
 ## Contents
@@ -30,7 +30,7 @@ def estimate_cost(
 
 Estimates what a run cost in USD, from prices you supply.
 
-Criogen ships no prices (they change too often). Cached input tokens
+CriogenAI ships no prices (they change too often). Cached input tokens
 are charged at `cache_read` (or `input` when it is missing).
 Reasoning tokens count as output tokens.
 
@@ -44,7 +44,7 @@ Reasoning tokens count as output tokens.
 **Example**
 
 ```python
-from criogen import Agent, FakeModel, estimate_cost
+from criogenai import Agent, FakeModel, estimate_cost
 
 result = Agent(FakeModel(["Hello."])).run_sync("Hi")
 cost = estimate_cost(result, {"fake": {"input": 0.25, "output": 2.0}})

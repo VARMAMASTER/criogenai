@@ -66,7 +66,7 @@ export interface StorageOptions {
  * URL everything stays in process memory.
  *
  * @example
- * import { Storage } from "criogen";
+ * import { Storage } from "criogenai";
  *
  * const storage = new Storage(); // or new Storage("sqlite:///data/app.db")
  * await storage.remember("users/u-1", "diet", "vegetarian");
@@ -226,7 +226,7 @@ export interface MemoryOptions {
  * `Memory.shared` (one namespace for every run).
  *
  * @example
- * import { Agent, FakeModel, Memory, Storage } from "criogen";
+ * import { Agent, FakeModel, Memory, Storage } from "criogenai";
  *
  * const storage = new Storage();
  * await storage.remember("users/u-1", "language", "Prefers answers in French.");

@@ -1,9 +1,9 @@
 type Error = Box<dyn std::error::Error>;
-use criogen_agent::Agent;
+use criogenai_agent::Agent;
 
 pub async fn telemetry(agent: Agent) -> Result<(), Error> {
     // [show]
-    use criogen_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
+    use criogenai_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
     use serde_json::json;
 
     // LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY, LANGFUSE_BASE_URL
@@ -24,8 +24,8 @@ pub async fn telemetry(agent: Agent) -> Result<(), Error> {
 
 pub async fn local(agent: Agent) -> Result<(), Error> {
     // [show local]
-    // In a terminal: criogen-trace   (then open http://127.0.0.1:4318)
-    use criogen_telemetry::{OtlpConfig, OtlpExporter};
+    // In a terminal: criogenai-trace   (then open http://127.0.0.1:4318)
+    use criogenai_telemetry::{OtlpConfig, OtlpExporter};
 
     let traces = OtlpExporter::start(OtlpConfig::local())?; // .capture_content(true) for prompts
     agent

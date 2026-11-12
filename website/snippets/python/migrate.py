@@ -1,5 +1,5 @@
 # Docs: from-langgraph. Checked with mypy; run in the docs' checks with FakeModel.
-from criogen import tool
+from criogenai import tool
 
 
 @tool
@@ -10,7 +10,7 @@ def get_weather(city: str) -> str:
 
 async def graph() -> None:
     # [show graph]
-    from criogen import END, Workflow
+    from criogenai import END, Workflow
 
     wf = Workflow(reducers={"log": "append"})  # like an Annotated reducer on a state key
 
@@ -34,7 +34,7 @@ async def graph() -> None:
 
 async def agent() -> None:
     # [show agent]
-    from criogen import Agent, Storage
+    from criogenai import Agent, Storage
 
     agent = Agent(
         "openai:gpt-5-mini",
@@ -50,7 +50,7 @@ async def agent() -> None:
 
 async def interrupt() -> None:
     # [show interrupt]
-    from criogen import Agent, Storage
+    from criogenai import Agent, Storage
 
     agent = Agent(
         "openai:gpt-5-mini",
@@ -67,7 +67,7 @@ async def interrupt() -> None:
 
 async def store() -> None:
     # [show store]
-    from criogen import Agent, Memory, Storage
+    from criogenai import Agent, Memory, Storage
 
     storage = Storage("sqlite://chat.db")
     await storage.remember("users/1", "language", "French")  # namespace as a path, not a tuple

@@ -2,18 +2,18 @@
 # between its `// [show]` and `// [/show]` lines, and compiled here
 # (`cargo check`) so the docs follow the API. Not a workspace member.
 [package]
-name = "criogen-website-snippets"
+name = "criogenai-website-snippets"
 version = "0.0.0"
 edition = "2024"
 publish = false
 
 [dependencies]
-criogen-core = { path = "../../../crates/criogen-core" }
-criogen-providers = { path = "../../../crates/criogen-providers" }
-criogen-agent = { path = "../../../crates/criogen-agent", features = ["sqlite", "postgres", "encryption", "mcp-stdio"] }
-criogen-storage = { path = "../../../crates/criogen-storage", features = ["sqlite", "postgres", "encryption"] }
-criogen-telemetry = { path = "../../../crates/criogen-telemetry" }
-criogen-gateway = { path = "../../../crates/criogen-gateway" }
+criogenai-core = { path = "../../../crates/criogenai-core" }
+criogenai-providers = { path = "../../../crates/criogenai-providers" }
+criogenai-agent = { path = "../../../crates/criogenai-agent", features = ["sqlite", "postgres", "encryption", "mcp-stdio"] }
+criogenai-storage = { path = "../../../crates/criogenai-storage", features = ["sqlite", "postgres", "encryption"] }
+criogenai-telemetry = { path = "../../../crates/criogenai-telemetry" }
+criogenai-gateway = { path = "../../../crates/criogenai-gateway" }
 axum = { version = "0.8", default-features = false, features = ["http1", "tokio"] }
 serde_json = "1"
 tokio = { version = "1.40", features = ["macros", "rt-multi-thread", "net"] }

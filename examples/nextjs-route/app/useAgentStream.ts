@@ -1,5 +1,5 @@
 "use client";
-// Browser side of app/api/agent/stream: plain fetch, no criogen import (the
+// Browser side of app/api/agent/stream: plain fetch, no criogenai import (the
 // engine stays on the server). Copy this hook into your React app.
 //
 //   const { answer, tools, busy, error, ask, stop } = useAgentStream();

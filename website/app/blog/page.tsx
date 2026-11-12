@@ -10,7 +10,7 @@ import { pageMeta } from "@/lib/seo";
 export const metadata: Metadata = {
   ...pageMeta({
     title: "Blog",
-    description: "Releases, guides and engineering notes from Criogen, the fast AI agent framework on a Rust engine.",
+    description: "Releases, guides and engineering notes from CriogenAI, the fast AI agent framework on a Rust engine.",
     path: "/blog/",
   }),
   alternates: { canonical: "/blog/", types: { "application/rss+xml": "/blog/rss.xml" } },
@@ -24,7 +24,7 @@ export default function BlogIndex() {
       <main id="main" className="blog-main">
         <header className="blog-hero">
           <h1>Blog</h1>
-          <p>Releases, guides and engineering notes from the people building Criogen.</p>
+          <p>Releases, guides and engineering notes from the people building CriogenAI.</p>
           <a className="blog-rss" href="/blog/rss.xml">
             Subscribe with RSS
           </a>

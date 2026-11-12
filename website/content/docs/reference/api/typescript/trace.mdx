@@ -3,10 +3,10 @@ title: "TypeScript API: Trace viewer"
 description: "TypeScript API reference, trace viewer: serveTraces, TraceViewer, TraceViewerOptions."
 ---
 
-A local page that shows your runs, with no account. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/trace/).
+A local page that shows your runs, with no account. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/trace/).
 
 ```ts
-import { serveTraces, TraceViewer, TraceViewerOptions } from "criogen";
+import { serveTraces, TraceViewer, TraceViewerOptions } from "criogenai";
 ```
 
 ## Contents
@@ -27,7 +27,7 @@ Starts the local trace viewer in the background.
 
 It receives traces over OTLP/HTTP (`Telemetry.local()` sends there) and
 shows each run on a page at `viewer.url`. Node only; the same viewer runs
-from the command line with `npx criogen trace`.
+from the command line with `npx criogenai trace`.
 
 **Parameters**
 
@@ -43,7 +43,7 @@ from the command line with `npx criogen trace`.
 **Example**
 
 ```ts
-import { Agent, FakeModel, Telemetry, serveTraces } from "criogen";
+import { Agent, FakeModel, Telemetry, serveTraces } from "criogenai";
 
 const viewer = await serveTraces({ port: 0, db: ":memory:" });
 const telemetry = Telemetry.local({ url: viewer.url });

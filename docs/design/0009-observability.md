@@ -1,6 +1,6 @@
 # 0009: Observability: OpenTelemetry export and Langfuse
 
-Status: **Implemented** (`criogen-telemetry`, core observers and run
+Status: **Implemented** (`criogenai-telemetry`, core observers and run
 metadata, agent event payloads). User request, 2026-10-11: "seamless
 connectivity to Langfuse". Verified against Langfuse's ingestion source
 ([research](../research/langfuse.md)); no live Langfuse test yet (no
@@ -49,7 +49,7 @@ and the agent events of [0004 §8](0004-agent-loop.md).
    covers.
 5. **Light.** No OpenTelemetry SDK dependency: OTLP over HTTP/JSON is a
    small, stable format. The exporter is its own crate,
-   `criogen-telemetry`, so the engine does not depend on HTTP.
+   `criogenai-telemetry`, so the engine does not depend on HTTP.
 
 ## 1. Core changes (0005 §6 extension)
 
@@ -79,7 +79,7 @@ events carry (built only when someone listens):
 
 ## 3. Mapping events to spans
 
-| Criogen | OTLP span | Langfuse |
+| CriogenAI | OTLP span | Langfuse |
 |---|---|---|
 | run segment (`run_started` … `run_finished`) | root span `run` (or `metadata.name`) | trace + root observation (`agent` type for agents, else `chain`) |
 | node (`node_started` … `node_finished`/`failed`/`cancelled`) | child span named after the node | `span` observation |

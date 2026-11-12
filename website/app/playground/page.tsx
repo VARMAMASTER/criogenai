@@ -7,7 +7,7 @@ import { GROUPS, PATTERNS } from "@/lib/patterns";
 export const metadata: Metadata = pageMeta({
   title: "Agent pattern playground: ReAct, Reflexion, ReWOO, supervisor, swarm and more",
   description:
-    "Every common AI agent pattern, runnable in your browser: ReAct, Chain and Tree of Thoughts, Plan-and-Solve, ReWOO, Reflexion, router, supervisor, hierarchical teams, collaboration, debate, swarms, human in the loop, and IBM's five agent types. Watch each one step by step, read the Criogen code, or try it with your own key.",
+    "Every common AI agent pattern, runnable in your browser: ReAct, Chain and Tree of Thoughts, Plan-and-Solve, ReWOO, Reflexion, router, supervisor, hierarchical teams, collaboration, debate, swarms, human in the loop, and IBM's five agent types. Watch each one step by step, read the CriogenAI code, or try it with your own key.",
   path: "/playground/",
 });
 
@@ -18,11 +18,11 @@ export default function PlaygroundIndex() {
         <p className="lab-eyebrow">Playground</p>
         <h1>The simplest, fastest way to build AI agents.</h1>
         <p className="lab-lede">
-          Every common agent pattern, one page each. Watch it run step by step, see the Criogen code that builds it, and change the task.
+          Every common agent pattern, one page each. Watch it run step by step, see the CriogenAI code that builds it, and change the task.
           No sign-up and no key needed. Add your own key if you want a real model to make the decisions; it stays in your browser.
         </p>
         <p className="sb-small">
-          “Fastest” is measured: Criogen against LangGraph and CrewAI on the same work, in the <Link href="/benchmarks/">benchmark lab</Link>.
+          “Fastest” is measured: CriogenAI against LangGraph and CrewAI on the same work, in the <Link href="/benchmarks/">benchmark lab</Link>.
         </p>
       </header>
       {GROUPS.map((g) => (
@@ -46,7 +46,7 @@ export default function PlaygroundIndex() {
                   </span>
                   <b>{p.title}</b>
                   <span>{p.short}</span>
-                  <em>{p.usesModel ? (p.criogen.kind === "helper" ? "ready-made in Criogen" : "built from Criogen primitives") : "no model needed"}</em>
+                  <em>{p.usesModel ? (p.criogenai.kind === "helper" ? "ready-made in CriogenAI" : "built from CriogenAI primitives") : "no model needed"}</em>
                 </Link>
               </li>
             ))}

@@ -108,7 +108,7 @@ test("without credentials the error says what to set; the token file is found", 
   const saved = { ...process.env };
   try {
     for (const name of ["MODEL_PROXY_URL", "MODEL_PROXY_API_KEY", "KAGGLE_API_TOKEN"]) delete process.env[name];
-    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "criogen-kaggle-"));
+    const empty = fs.mkdtempSync(path.join(os.tmpdir(), "criogenai-kaggle-"));
     process.env.KAGGLE_CONFIG_DIR = empty;
     // Building the agent fails at once, naming what to set.
     assert.throws(() => new Agent({ model: "kaggle:google/gemini-3.6-flash" }), /KAGGLE_API_TOKEN/);

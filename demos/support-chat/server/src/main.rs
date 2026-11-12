@@ -1,7 +1,7 @@
-//! Support chat demo server: an Criogen agent for "Mugshot", a small
+//! Support chat demo server: an CriogenAI agent for "Mugshot", a small
 //! coffee gear shop, behind a JSON API for the Next.js UI in `../web`.
 //!
-//! - conversations are Criogen threads in a SQLite file (`support.db`)
+//! - conversations are CriogenAI threads in a SQLite file (`support.db`)
 //! - refunds wait for a human (approve / reject in the UI)
 //! - a run that is killed (stop the server mid-answer) continues with retry
 //! - each request may pick the model: OpenAI or Gemini, same thread
@@ -21,11 +21,11 @@ use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use criogen_agent::{
+use criogenai_agent::{
     Agent, AgentError, Approval, ApprovalRule, Decision, Reply, Thread, ToolError, tool_fn,
 };
-use criogen_providers::{Endpoint, ProviderModel, Role, ToolSpec};
-use criogen_storage::Storage;
+use criogenai_providers::{Endpoint, ProviderModel, Role, ToolSpec};
+use criogenai_storage::Storage;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 

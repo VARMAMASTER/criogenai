@@ -1,11 +1,11 @@
 type Error = Box<dyn std::error::Error>;
-use criogen_agent::Agent;
+use criogenai_agent::Agent;
 
 pub async fn evals(agent: Agent) -> Result<(), Error> {
     // [show]
     use std::time::Duration;
 
-    use criogen_agent::evals::{self, Check, Dataset, EvalOptions, EvalResult};
+    use criogenai_agent::evals::{self, Check, Dataset, EvalOptions, EvalResult};
 
     let data = Dataset::load("cases.jsonl")?; // {"input": "...", "expected": "..."} per line
     let result = evals::evaluate(

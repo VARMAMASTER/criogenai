@@ -3,7 +3,7 @@ title: "TypeScript API: Gateway"
 description: "TypeScript API reference, gateway: Gateway, ChatInput, ChatOptions, ChatReply, Chunk, GatewayOptions, ChatStream."
 ---
 
-Chat, stream and embed without an agent, with retries and fallbacks. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/gateway/).
+Chat, stream and embed without an agent, with retries and fallbacks. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/gateway/).
 
 ```ts
 import {
@@ -14,7 +14,7 @@ import {
   Chunk,
   GatewayOptions,
   ChatStream,
-} from "criogen";
+} from "criogenai";
 ```
 
 ## Contents
@@ -54,7 +54,7 @@ any model; each call names its model, and the provider clients are reused.
 **Example**
 
 ```ts
-import { FakeModel, Gateway } from "criogen";
+import { FakeModel, Gateway } from "criogenai";
 
 const gateway = new Gateway({ retry: { maxAttempts: 2 } });
 const reply = await gateway.chat(new FakeModel(["pong"]), "ping"); // or "openai:gpt-5-mini"
@@ -84,7 +84,7 @@ One answer.
 **Example**
 
 ```ts
-import { Gateway } from "criogen";
+import { Gateway } from "criogenai";
 
 const gateway = new Gateway();
 const reply = await gateway.chat<{ label: string }>("openai:gpt-5-mini", "The package arrived broken.", {
@@ -114,7 +114,7 @@ answer over.
 **Example**
 
 ```ts
-import { FakeModel, Gateway } from "criogen";
+import { FakeModel, Gateway } from "criogenai";
 
 const stream = new Gateway().stream(new FakeModel(["Hello there."]), "Say hello.");
 let shown = "";
@@ -145,7 +145,7 @@ The gateway's retries and fallbacks do not apply to embeddings.
 **Example**
 
 ```ts
-import { Embedder, Gateway } from "criogen";
+import { Embedder, Gateway } from "criogenai";
 
 const vectors = await new Gateway().embed(Embedder.fake(), ["red car", "blue car"]); // or Embedder.openai()
 console.log(vectors.length, vectors[0].length);

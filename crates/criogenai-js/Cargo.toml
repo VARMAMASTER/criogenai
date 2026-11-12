@@ -1,0 +1,36 @@
+[package]
+name = "criogenai-js"
+description = "The bridge between CriogenAI's engine and JavaScript, shared by the Node addon and the WebAssembly module"
+readme = "README.md"
+keywords = ["agents", "llm", "javascript", "wasm", "napi"]
+categories = ["api-bindings", "wasm"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# Internal to the TypeScript SDK's two engines (design 0021).
+publish = false
+
+[dependencies]
+criogenai-core = { path = "../criogenai-core", version = "0.1.0" }
+criogenai-providers = { path = "../criogenai-providers", version = "0.1.0" }
+criogenai-storage = { path = "../criogenai-storage", version = "0.1.0" }
+# `mcp`: tools from MCP servers over HTTP (design 0022), in both engines.
+criogenai-agent = { path = "../criogenai-agent", version = "0.1.0", features = ["mcp"] }
+serde.workspace = true
+serde_json.workspace = true
+# `sync`: the streams' channels and locks.
+tokio = { workspace = true, features = ["sync"] }
+
+[features]
+# Encrypted databases (the Node addon; never in the browser).
+encryption = ["criogenai-storage/encryption", "criogenai-agent/encryption"]
+# MCP servers started as a process (the Node addon; never in the browser).
+mcp-stdio = ["criogenai-agent/mcp-stdio"]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "time", "test-util"] }
+
+[lints]
+workspace = true

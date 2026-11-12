@@ -3,12 +3,12 @@ title: "TypeScript API: Patterns"
 description: "TypeScript API reference, patterns: sequential, parallel, loop, custom, CEILING, DEFAULT_MODEL_ENV, Step, PatternResult, and more."
 ---
 
-Ready-made multi-agent designs: sequential, parallel, loops, routers, debates and more. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/patterns/).
+Ready-made multi-agent designs: sequential, parallel, loops, routers, debates and more. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/patterns/).
 
 Design patterns for agentic systems, ready to use.
 
 ```ts
-import { patterns } from "criogen";
+import { patterns } from "criogenai";
 const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
 console.log(String(await flow.run("Write about solar panels")));
 ```
@@ -24,7 +24,7 @@ graph. `react`, `coordinator` and `hierarchical` return an Agent, so they
 nest as steps of other patterns.
 
 ```ts
-import { patterns } from "criogen";
+import { patterns } from "criogenai";
 patterns.sequential
 ```
 
@@ -73,7 +73,7 @@ Runs the steps in a fixed order; each one's output is the next one's input. `qui
 **Example**
 
 ```ts
-import { patterns } from "criogen";
+import { patterns } from "criogenai";
 
 const flow = patterns.sequential([
   ["trim", (text: string) => text.trim()],
@@ -106,7 +106,7 @@ or as a titled list in branch order.
 **Example**
 
 ```ts
-import { patterns } from "criogen";
+import { patterns } from "criogenai";
 
 const flow = patterns.parallel({
   words: (text: string) => `${text.split(" ").length} words`,
@@ -142,7 +142,7 @@ Repeats the steps (a chain) until `until(text, round)` is true or
 **Example**
 
 ```ts
-import { patterns } from "criogen";
+import { patterns } from "criogenai";
 
 const flow = patterns.loop([(text: string) => text + "!"], (text) => text.endsWith("!!!"), { maxIterations: 10 });
 const result = await flow.run("go");
@@ -165,7 +165,7 @@ Custom logic: any Workflow, with the same `run` / `compile` as the ready-made pa
 **Example**
 
 ```ts
-import { END, Workflow, patterns } from "criogen";
+import { END, Workflow, patterns } from "criogenai";
 
 const wf = new Workflow()
   .node("shout", (state) => ({ output: String(state.input).toUpperCase() }))
@@ -333,7 +333,7 @@ Improves a result step by step: `refine` gets the current text and returns a bet
 **Example**
 
 ```ts
-import { patterns } from "criogen";
+import { patterns } from "criogenai";
 
 const flow = patterns.iterativeRefinement(
   (text: string) => text + " More detail.",
@@ -366,7 +366,7 @@ generator revises. Ends on approval or after `maxRounds` (default 3, at most
 **Example**
 
 ```ts
-import { Agent, FakeModel, patterns } from "criogen";
+import { Agent, FakeModel, patterns } from "criogenai";
 
 const writer = new Agent({ model: new FakeModel(["Draft one.", "Draft two, with sources."]) });
 const critic = new Agent({ model: new FakeModel(["Add sources.", "APPROVED"]) });
@@ -400,7 +400,7 @@ unknown name ends the run with stopReason "unknown_handoff".
 **Example**
 
 ```ts
-import { Agent, FakeModel, patterns } from "criogen";
+import { Agent, FakeModel, patterns } from "criogenai";
 
 const triage = new Agent({ model: new FakeModel(["This is a billing question.\nHANDOFF: billing"]) });
 const billing = new Agent({ model: new FakeModel(["Your invoice was sent on Monday.\nFINAL"]) });
@@ -428,7 +428,7 @@ While paused, `waitingFor` is `{ draft, question }`.
 **Example**
 
 ```ts
-import { patterns } from "criogen";
+import { patterns } from "criogenai";
 
 const flow = patterns.humanReview((text: string) => `Reply: ${text}`);
 const paused = await flow.run("Thanks for your order.");
@@ -469,7 +469,7 @@ environment variable.
 **Example**
 
 ```ts
-import { patterns } from "criogen";
+import { patterns } from "criogenai";
 
 // Needs OPENAI_API_KEY.
 const flow = patterns.quick("researcher > writer", { model: "openai:gpt-5-mini" });
@@ -501,7 +501,7 @@ Returns an `Agent`, so it can be a step of another pattern.
 **Example**
 
 ```ts
-import { FakeModel, FakeReply, patterns, tool } from "criogen";
+import { FakeModel, FakeReply, patterns, tool } from "criogenai";
 
 const lookup = tool({
   name: "order_status",
@@ -540,7 +540,7 @@ Returns an `Agent`; each specialist becomes one of its tools.
 **Example**
 
 ```ts
-import { Agent, FakeModel, FakeReply, patterns } from "criogen";
+import { Agent, FakeModel, FakeReply, patterns } from "criogenai";
 
 const billing = new Agent({ model: new FakeModel(["Your invoice was sent on Monday."]) });
 const lead = patterns.coordinator(
@@ -572,7 +572,7 @@ Returns the root coordinator, an `Agent`.
 **Example**
 
 ```ts
-import { patterns } from "criogen";
+import { patterns } from "criogenai";
 
 // Needs OPENAI_API_KEY; "researcher" and "writer" are registered specialists.
 const lead = patterns.hierarchical("openai:gpt-5-mini", {

@@ -6,7 +6,7 @@ import tempfile
 
 import pytest
 
-from criogen import Agent, Collection, CriogenError, Document, Embedder, FakeModel, FakeReply, Storage
+from criogenai import Agent, Collection, CriogenError, Document, Embedder, FakeModel, FakeReply, Storage
 
 DOCS = [
     {"id": "leave", "text": "Annual leave is 25 days a year.", "metadata": {"section": "hr"}},

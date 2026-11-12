@@ -1,4 +1,4 @@
-import { Agent } from "criogen";
+import { Agent } from "criogenai";
 
 declare const agent: Agent;
 
@@ -22,7 +22,7 @@ await chat.delete();
 export {};
 
 // [show recover]
-import { CriogenError, ThreadSuspendedError } from "criogen";
+import { CriogenError, ThreadSuspendedError } from "criogenai";
 
 const thread = agent.thread("user-42");
 let answer;

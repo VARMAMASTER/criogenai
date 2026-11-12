@@ -9,11 +9,11 @@ const size = { width: 1200, height: 630 };
 export function GET() {
   const f = facts();
   const bars = [
-    { name: "Criogen", value: f.turn.criogen, color: "#3ecf8e" },
+    { name: "CriogenAI", value: f.turn.criogen, color: "#3ecf8e" },
     { name: "LangGraph", value: f.turn.langgraph, color: "#6b7280" },
     { name: "CrewAI", value: f.turn.crewai, color: "#6b7280" },
   ];
-  // Log scale: CrewAI is ~100× Criogen, a linear bar would hide Criogen.
+  // Log scale: CrewAI is ~100× CriogenAI, a linear bar would hide CriogenAI.
   const max = Math.log10(Math.max(...bars.map((b) => b.value)) * 10);
   const width = (v: number) => Math.max(4, (Math.log10(v * 10) / max) * 560);
   return new ImageResponse(
@@ -27,7 +27,7 @@ export function GET() {
             <path d={MARK.fins} stroke={MARK.green} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             <circle cx={MARK.core.cx} cy={MARK.core.cy} r={MARK.core.r} fill={MARK.amber} />
           </svg>
-          <div style={{ fontSize: 52, fontWeight: 700 }}>Criogen</div>
+          <div style={{ fontSize: 52, fontWeight: 700 }}>CriogenAI</div>
         </div>
         <div style={{ fontSize: 58, fontWeight: 700, marginTop: 36, lineHeight: 1.1 }}>The fast AI agent framework</div>
         <div style={{ fontSize: 30, color: "#9aa0a6", marginTop: 14 }}>A LangChain alternative on a Rust engine, for Python and TypeScript</div>
@@ -37,11 +37,11 @@ export function GET() {
             <div key={b.name} style={{ display: "flex", alignItems: "center", gap: 18 }}>
               <div style={{ width: 150, fontSize: 26 }}>{b.name}</div>
               <div style={{ width: width(b.value), height: 26, background: b.color, borderRadius: 6 }} />
-              <div style={{ fontSize: 26, color: b.name === "Criogen" ? "#3ecf8e" : "#e8eaed" }}>{ms(b.value)}</div>
+              <div style={{ fontSize: 26, color: b.name === "CriogenAI" ? "#3ecf8e" : "#e8eaed" }}>{ms(b.value)}</div>
             </div>
           ))}
         </div>
-        <div style={{ marginTop: "auto", fontSize: 24, color: "#9aa0a6" }}>criogenai.com · npm install criogen</div>
+        <div style={{ marginTop: "auto", fontSize: 24, color: "#9aa0a6" }}>criogenai.com · npm install criogenai</div>
       </div>
     ),
     size,

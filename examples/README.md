@@ -1,8 +1,8 @@
 # Examples
 
-Small, copyable server setups for the `criogen` npm package. The engine is native
+Small, copyable server setups for the `criogenai` npm package. The engine is native
 code: it runs on your server (Node.js 18+, the Node runtime, never Edge or the
-browser). See the guide "Using Criogen in your app" on the website.
+browser). See the guide "Using CriogenAI in your app" on the website.
 
 | Folder | What it shows |
 |---|---|

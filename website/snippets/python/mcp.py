@@ -1,6 +1,6 @@
 import os
 
-from criogen import Agent, mcp
+from criogenai import Agent, mcp
 
 
 async def main() -> None:

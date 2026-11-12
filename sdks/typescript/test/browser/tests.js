@@ -3,7 +3,7 @@
 // models (FakeModel) and a local mock provider only. Each timing claim is
 // one that would fail if it were false (rule 7).
 
-import * as criogen from "/criogen.js";
+import * as criogenai from "/criogenai.js";
 
 const {
   Agent,
@@ -23,7 +23,7 @@ const {
   ready,
   tool,
   web,
-} = criogen;
+} = criogenai;
 
 /** The mock provider's key (a test value, see server.mjs). */
 const KEY = "sk-browser-test-key-0123456789abcdef";

@@ -1,7 +1,7 @@
 // Docs: guides/testing. Type-checked; every block runs with node --test.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Agent, FakeModel, FakeReply, Storage, tool } from "criogen";
+import { Agent, FakeModel, FakeReply, Storage, tool } from "criogenai";
 
 const getOrder = tool<{ orderId: string }>({
   name: "get_order",

@@ -7,7 +7,7 @@ source for numbers we publish.
 
 ## 1. What is measured
 
-**Criogen's own cost**, not a model's. Every scenario uses a model that
+**CriogenAI's own cost**, not a model's. Every scenario uses a model that
 answers at once (no network, no timer), so what is left is the engine,
 the agent loop, storage, the gateway and the SDK bridges. Real model calls
 take hundreds of milliseconds to seconds; these numbers say how much we
@@ -25,7 +25,7 @@ add on top.
 
 ## 2. Method
 
-- `crates/criogen-bench` (release build): each scenario warms up,
+- `crates/criogenai-bench` (release build): each scenario warms up,
   then is timed run by run; the median and the 95th percentile are
   reported. `quick` runs a tenth of the iterations for a smoke test (the
   `package` step of `scripts/ci-local.sh` runs it so the benchmark keeps
@@ -43,8 +43,8 @@ add on top.
 
 - Say what was measured: "per step with trivial nodes on <machine>", not
   "N times faster".
-- The LangGraph comparison is Criogen's Rust core against LangGraph in
-  Python. A workflow written in Python on Criogen would add the bridge
+- The LangGraph comparison is CriogenAI's Rust core against LangGraph in
+  Python. A workflow written in Python on CriogenAI would add the bridge
   cost per node (the Python bridge rows); SDK workflows do not exist yet.
 - Not measured yet: the gateway against other gateways (LiteLLM proxy),
   Postgres, memory use, many concurrent threads.

@@ -1,6 +1,6 @@
 {
-  "name": "criogen",
-  "version": "0.1.6",
+  "name": "criogenai",
+  "version": "0.1.7",
   "description": "The fast AI agent framework for TypeScript and Node.js, a LangChain and LangGraph alternative on a Rust engine: tool calling, multi-agent workflows, human approval, durable threads, memory and an LLM gateway",
   "license": "SEE LICENSE IN LICENSE",
   "keywords": [
@@ -35,20 +35,20 @@
     },
     "./web": {
       "types": "./dist-web/types/browser/index.d.ts",
-      "default": "./dist-web/criogen.js"
+      "default": "./dist-web/criogenai.js"
     },
-    "./web/criogen_bg.wasm": "./dist-web/criogen_bg.wasm",
+    "./web/criogenai_bg.wasm": "./dist-web/criogenai_bg.wasm",
     "./dist/*.js": "./dist/*.js",
     "./dist/*": "./dist/*.js",
     "./package.json": "./package.json"
   },
   "bin": {
-    "criogen": "dist/cli.js"
+    "criogenai": "dist/cli.js"
   },
   "files": [
     "dist",
     "dist-web",
-    "native/criogen.node",
+    "native/criogenai.node",
     "README.md",
     "LICENSE"
   ],

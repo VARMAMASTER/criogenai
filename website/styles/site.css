@@ -111,7 +111,7 @@ html:has(.site) {
   color: var(--ab-fine);
 }
 
-/* Footer: one glass sheet. The brand (what Criogen is, the install
+/* Footer: one glass sheet. The brand (what CriogenAI is, the install
    commands, what the colours mean), three columns of links, then the
    licence line. */
 .bottom {

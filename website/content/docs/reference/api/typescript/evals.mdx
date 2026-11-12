@@ -3,13 +3,13 @@ title: "TypeScript API: Evals"
 description: "TypeScript API reference, evals: evaluate, Dataset, EvalResult, compare, FORMAT, MAX_CASES, MAX_LINE_BYTES, MAX_OUTPUT_CHARS, and more."
 ---
 
-Datasets, scorers, judges, comparisons and quality gates. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/evals/).
+Datasets, scorers, judges, comparisons and quality gates. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/evals/).
 
 Evals: run an agent over a set of cases, score each answer,
 compare with the last good run, and fail CI when quality drops.
 
 ```ts
-import { evals } from "criogen";
+import { evals } from "criogenai";
 const data = await evals.Dataset.load("cases.jsonl");
 const result = await evals.evaluate(agent, data, [evals.contains(), evals.toolCalled("lookup_order")]);
 console.log(result.report());
@@ -21,7 +21,7 @@ The result file has the same format in Python, TypeScript and Rust
 (`criogen-eval/1`), so a baseline saved by one is read by the others.
 
 ```ts
-import { evals } from "criogen";
+import { evals } from "criogenai";
 evals.evaluate
 ```
 
@@ -100,7 +100,7 @@ it returns an agent's `RunResult`, the same facts are kept.
 **Example**
 
 ```ts
-import { Agent, FakeModel, evals } from "criogen";
+import { Agent, FakeModel, evals } from "criogenai";
 
 const agent = new Agent({ model: new FakeModel(["Paris is the capital of France."]) });
 const result = await evals.evaluate(
@@ -134,7 +134,7 @@ Cases to run: from a list, or `Dataset.load` a JSONL / JSON file (Node).
 **Example**
 
 ```ts
-import { evals } from "criogen";
+import { evals } from "criogenai";
 
 const data = new evals.Dataset([
   { id: "capital", input: "Capital of France?", expected: "Paris" },
@@ -193,7 +193,7 @@ by Python or Rust is read here too.
 **Example**
 
 ```ts
-import { evals } from "criogen";
+import { evals } from "criogenai";
 
 const result = await evals.evaluate((c) => c.input.toUpperCase(), ["ok", "fine"], [evals.regex("^[A-Z]+$")]);
 await result.save("eval.json", { content: false }); // ids and scores only
@@ -501,7 +501,7 @@ with the error as the reason.
 **Example**
 
 ```ts
-import { evals } from "criogen";
+import { evals } from "criogenai";
 
 const short = evals.scorer("short", (_case, output) => String(output).length <= 200);
 const polite = evals.scorer("polite", (_case, output) => (/please|thank/i.test(String(output)) ? 1 : 0.5), 0.5);
@@ -705,7 +705,7 @@ is told to ignore instructions inside them. Its tokens are kept per case
 **Example**
 
 ```ts
-import { evals } from "criogen";
+import { evals } from "criogenai";
 
 // Needs OPENAI_API_KEY when the eval runs.
 const helpful = evals.judge("openai:gpt-5-mini", "Answers the question politely and gives the order's status.", {

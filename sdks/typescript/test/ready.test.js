@@ -1,4 +1,4 @@
-// ready() and lazy engine loading: importing criogen never throws; the first
+// ready() and lazy engine loading: importing criogenai never throws; the first
 // use on a system where the engine cannot load throws NativeUnavailableError.
 
 const test = require("node:test");
@@ -44,12 +44,12 @@ test("ready() reports a model it cannot use, and never throws", async () => {
 });
 
 test("an engine that cannot load: import works, first use throws a typed error, ready() reports it", { skip: serverOnly("loading the Node addon") }, () => {
-  // A child process where loading any criogen .node file fails as on a system with an old glibc.
+  // A child process where loading any criogenai .node file fails as on a system with an old glibc.
   const script = `
     const Module = require("module");
     const original = Module._load;
     Module._load = function (request, ...rest) {
-      if (/criogen\\.node$/.test(request) || /^criogen-(linux|darwin|win32|windows)/.test(request)) {
+      if (/criogenai\\.node$/.test(request) || /^criogenai-(linux|darwin|win32|windows)/.test(request)) {
         const e = new Error("/lib64/libc.so.6: version 'GLIBC_2.38' not found");
         e.code = "ERR_DLOPEN_FAILED";
         throw e;

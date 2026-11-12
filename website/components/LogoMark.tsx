@@ -1,4 +1,4 @@
-// The Criogen mark (lib/mark.ts): a hex-cell rocket with an amber core and
+// The CriogenAI mark (lib/mark.ts): a hex-cell rocket with an amber core and
 // flame. Colours follow the theme (--ab-running, --ab-waiting). On load the
 // outline draws itself, the core pops in and the engine ignites; after that
 // the flame flickers. Hovering the brand link launches it: the rocket shakes

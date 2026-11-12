@@ -1,6 +1,6 @@
 // Provider logos for the landing page, from Simple Icons 16.34.0
 // (https://simpleicons.org, icon data CC0-1.0). The logos are trademarks of
-// their owners, shown only to say which services Criogen works with. Some
+// their owners, shown only to say which services CriogenAI works with. Some
 // makers have no entry there (OpenAI, Microsoft, xAI, Groq and others), so
 // they are shown as a plain initial, never as an imitation of their logo.
 

@@ -1,7 +1,7 @@
 # 0006: Provider layer and embeddable gateway
 
 Status: **Approved; §11 steps 1–3 built.** Built so far in
-`crates/criogen-providers`: the 0002 types, `ModelError` and the HTTP
+`crates/criogenai-providers`: the 0002 types, `ModelError` and the HTTP
 error classifier (§6), the `Model` trait (§3), a `FakeModel` for tests, the
 incremental SSE parser, the stream assembler (§5), the HTTP transport, the
 `openai_chat` and `anthropic_messages` protocols with endpoint presets (§4)
@@ -157,11 +157,11 @@ only, never ported.
 ## 2. Crates
 
 ```
-criogen-providers   library: Model trait, protocols, transport, catalog   (modes 1–2)
-criogen-gateway     HTTP server on top: axum router + standalone binary   (modes 3–4)
+criogenai-providers   library: Model trait, protocols, transport, catalog   (modes 1–2)
+criogenai-gateway     HTTP server on top: axum router + standalone binary   (modes 3–4)
 ```
 
-The agent engine depends only on `criogen-providers`. The gateway crate is
+The agent engine depends only on `criogenai-providers`. The gateway crate is
 optional and adds axum. Module layout: research §10.2.
 
 ## 3. Core types (our own design; sketch in research §10.3)
@@ -215,7 +215,7 @@ becomes a golden test case (§8).
 ### 4.1 Named providers (2026-11-04)
 
 Research: [providers-2026.md](../research/providers-2026.md). One table,
-`criogen_providers::PRESETS`, holds every provider Criogen knows by name:
+`criogenai_providers::PRESETS`, holds every provider CriogenAI knows by name:
 its name in model strings, wire protocol, base URL, the environment variable
 its key usually lives in, and its quirks. `Preset::endpoint(api_key)` builds
 the `Endpoint`. Both SDK bridges and the gateway build named providers from
@@ -256,7 +256,7 @@ and the message names the variable, never a value. A `base_url` overrides the
 preset's (the China endpoints of Qwen, Kimi and GLM, a proxy); the key stays
 the provider's. `openai_compatible` and `anthropic_compatible` (both SDKs, the
 gateway) take any `base_url` for servers with no name here. Model names are
-passed through unchanged; Criogen keeps no list of models.
+passed through unchanged; CriogenAI keeps no list of models.
 
 Checked against scripted local servers (`tests/presets.rs`, both SDKs'
 provider tests); not yet live against each provider (manual, like
@@ -306,7 +306,7 @@ the research:
   are gateway concerns (§7), and users can also point an endpoint at an
   external gateway that has them.
 
-## 7. The gateway (`criogen-gateway`)
+## 7. The gateway (`criogenai-gateway`)
 
 A thin HTTP layer around the same library. Modes 3 and 4 (architecture §1).
 
@@ -315,7 +315,7 @@ flowchart LR
     C["Client<br/>(OpenAI SDK, Anthropic SDK, curl)"] --> R["axum router<br/>/v1/chat/completions<br/>/v1/messages<br/>/v1/models"]
     R --> IN["inbound codec<br/>wire → 0002"]
     IN --> PL["plugins (optional)<br/>keys · budgets · rate limits · logging"]
-    PL --> P["criogen-providers<br/>retry · fallback · protocol adapters"]
+    PL --> P["criogenai-providers<br/>retry · fallback · protocol adapters"]
     P --> UP[(Upstream providers)]
     P --> OUT["outbound codec<br/>0002 → client wire"]
     OUT --> C
@@ -405,7 +405,7 @@ flowchart LR
 3. `anthropic_messages`, native.
 4. Structured output, images and files, catalog subset, capability resolution.
 5. Python/TS `Gateway` bindings (mode 2).
-6. `criogen-gateway`: router, inbound codecs, relay path, YAML config,
+6. `criogenai-gateway`: router, inbound codecs, relay path, YAML config,
    benchmark vs LiteLLM proxy (modes 3–4).
 7. Plugins (keys, budgets, logging, sticky routing), then `openai_responses`
    and Gemini.
@@ -413,14 +413,14 @@ flowchart LR
 ## 12. The gateway as built (first slice)
 
 Task 7 of the roadmap: §7's gateway, the part that lets any OpenAI client
-use every provider Criogen speaks, with keys and usage records. The
+use every provider CriogenAI speaks, with keys and usage records. The
 relay fast path, `/v1/messages` inbound and the plugins beyond keys come
 in later slices (§12.6).
 
 ### 12.1 Shape
 
-`crates/criogen-gateway` (workspace member): a library that builds an
-axum `Router`, and a binary `criogen-gateway` that serves one from a
+`crates/criogenai-gateway` (workspace member): a library that builds an
+axum `Router`, and a binary `criogenai-gateway` that serves one from a
 TOML file. New dependencies, in this crate only: axum 0.8 (the server),
 toml (the config file; TOML instead of §7's YAML because the maintained
 YAML crates are in flux, and TOML is what Rust tools already use).
@@ -436,7 +436,7 @@ axum::serve(listener, gateway.router()).await?;
 ```
 
 ```toml
-# gateway.toml — `criogen-gateway --config gateway.toml --listen 127.0.0.1:4000`
+# gateway.toml — `criogenai-gateway --config gateway.toml --listen 127.0.0.1:4000`
 [[routes]]
 name = "support"
 models = [{ provider = "openai", model = "gpt-5-mini", api_key_env = "OPENAI_API_KEY" },
@@ -498,7 +498,7 @@ benchmark against the LiteLLM proxy (roadmap task 10).
 ### 12.7 Tests
 
 Gateway tests run the server on `127.0.0.1:0` with `FakeModel` upstreams
-and call it with Criogen's own OpenAI-compatible client
+and call it with CriogenAI's own OpenAI-compatible client
 (`ProviderModel`), so both codecs are exercised end to end, plus raw
 HTTP for the wire details (SSE framing, `[DONE]`, error bodies, keys).
 A manual check runs the official `openai` Python SDK against the gateway
@@ -588,7 +588,7 @@ empty `model` and `outcome` `key_rate_limited` or `budget_exceeded`.
 On the paused clock: buckets refill at the configured rate; a refused
 request carries `Retry-After`; tokens charged after an answer hold back
 the next request; a budget refuses the request after the one that spent
-it, and a new period (day) starts over. `/v1/messages`: Criogen's own
+it, and a new period (day) starts over. `/v1/messages`: CriogenAI's own
 Anthropic client (`ProviderModel` with the Anthropic protocol) against the
 gateway, so both codecs run end to end (text, tools, tool results,
 streaming with tool calls), plus raw HTTP for event names, error bodies,
@@ -658,7 +658,7 @@ key): over the limit is 429 `concurrency_limited` with `Retry-After: 1`.
 bounded (256 events); a client that stops reading is cut off and recorded
 as `client_stalled`. Clients are shown the text of upstream errors they can
 act on (invalid request, context overflow, content filter, rate limit,
-timeout) and only the kind of the rest; the `x-criogen-model` header is
+timeout) and only the kind of the rest; the `x-criogenai-model` header is
 sent only with `expose_model_header`.
 
 **Telemetry** (design 0009): with content capture off (now the default in

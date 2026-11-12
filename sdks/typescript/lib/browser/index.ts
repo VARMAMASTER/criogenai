@@ -1,7 +1,7 @@
-// Criogen in the browser and other JavaScript hosts (design 0021): the same
+// CriogenAI in the browser and other JavaScript hosts (design 0021): the same
 // API as on servers, on the same Rust engine compiled to WebAssembly.
 //
-//   import { Agent, FakeModel, ready } from "criogen/web";
+//   import { Agent, FakeModel, ready } from "criogenai/web";
 //   await ready();                  // loads the engine, once
 //   const agent = new Agent({ model: new FakeModel(["hi"]) });
 //   console.log((await agent.run("hello")).text);
@@ -11,7 +11,7 @@
 // (no environment variables), and model calls go through `fetch` (the
 // provider must accept calls from a browser page). A key in a page is visible
 // to whoever uses the page: in a product, point models at your own server or
-// a Criogen gateway with per-user keys.
+// a CriogenAI gateway with per-user keys.
 
 import { useEngineLoader } from "../native";
 import { webLoader } from "./engine";

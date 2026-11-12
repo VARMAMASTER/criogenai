@@ -64,7 +64,7 @@ test("an http server gets the protocol headers; the token stays private", async 
 
 test("failures have stable codes", async () => {
   if (!wasm) {
-    await assert.rejects(mcp.stdio("criogen-no-such-command-xyz"), (e) => isCriogenError(e, "mcp_connect"));
+    await assert.rejects(mcp.stdio("criogenai-no-such-command-xyz"), (e) => isCriogenError(e, "mcp_connect"));
   } else {
     await assert.rejects(mcp.stdio("node"), (e) => isCriogenError(e, "unsupported"));
   }

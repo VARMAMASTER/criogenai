@@ -2,7 +2,7 @@
 // provider: "openai:gpt-5-mini" reads OPENAI_API_KEY. The playground runs the
 // same samples on the engine in the browser (design 0021) and swaps in a
 // scripted model, or the visitor's own.
-import type { Model } from "criogen";
+import type { Model } from "criogenai";
 
 export let MODEL: Model = "openai:gpt-5-mini";
 

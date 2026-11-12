@@ -14,4 +14,4 @@ export {
   openai,
   openrouter,
   ready,
-} from "./criogen.js";
+} from "./criogenai.js";

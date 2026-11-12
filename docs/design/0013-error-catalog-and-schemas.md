@@ -17,7 +17,7 @@ tables that can drift apart. After this:
   code, and tests fail if Rust raises a code the catalog lacks, if the
   docs table differs from the catalog, or if an SDK maps a code to the
   wrong error class;
-- one **schema bundle** (`schemas/criogen.schema.json`) describes the
+- one **schema bundle** (`schemas/criogenai.schema.json`) describes the
   JSON every language exchanges, and tests validate real serialized Rust
   values against it.
 
@@ -45,7 +45,7 @@ tables that can drift apart. After this:
 rewrites it when `CRIOGEN_UPDATE_DOCS=1`); 0003 §9 points to it instead
 of keeping its own table.
 
-**Checks** (in `crates/criogen-agent/tests/catalog.rs`):
+**Checks** (in `crates/criogenai-agent/tests/catalog.rs`):
 
 1. Every code the Rust enums produce (`RunErrorKind`, `ModelErrorKind`,
    `StorageErrorKind`, each built and asked for `code()`) is in the
@@ -75,14 +75,14 @@ values; objects allow unknown fields where the Rust type is
 breaking change for readers (0003 rule "strict now" applies to what we
 *write*, not to what we accept).
 
-**Checks** (`crates/criogen-agent/tests/schemas.rs`): real values,
+**Checks** (`crates/criogenai-agent/tests/schemas.rs`): real values,
 built with the public API and serialized by serde, covering every
 content block, delta, decision and error kind, validate against their
 `$defs`; hand-made invalid values are rejected with useful paths.
 
 ## 4. The validator grows the keywords the schemas need
 
-`criogen_agent::validate_arguments` (0002 §5.1) gains `anyOf`,
+`criogenai_agent::validate_arguments` (0002 §5.1) gains `anyOf`,
 `oneOf`, `allOf` and local `$ref` (`#/$defs/…`, `#/definitions/…`).
 The same validator checks tool arguments, so tool schemas that use them
 are now enforced: Pydantic writes `anyOf` for every `Optional` parameter

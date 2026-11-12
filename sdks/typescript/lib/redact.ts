@@ -16,7 +16,7 @@ import type { Hook, HookContext } from "./hooks";
  * saves. Tool names, call ids and arguments are not passed through it.
  *
  * @example
- * import { Agent, type Redactor } from "criogen";
+ * import { Agent, type Redactor } from "criogenai";
  *
  * // Replace ids shaped like 123-45-6789 before anything leaves the process.
  * const redact: Redactor = (text) => text.replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[id]");

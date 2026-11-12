@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://criogenai.com/schemas/eval-result.schema.json",
-  "title": "Criogen eval result (criogen-eval/1, design 0024)",
+  "title": "CriogenAI eval result (criogen-eval/1, design 0024)",
   "description": "What evaluate() returns and save() writes, the same in Python, TypeScript and Rust.",
   "type": "object",
   "required": ["format", "name", "started_at", "duration_ms", "target", "scorers", "summary", "cases"],

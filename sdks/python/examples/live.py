@@ -10,7 +10,7 @@ import os
 import sys
 import time
 
-from criogen import Agent, Gemini, OpenAI, Storage, tool
+from criogenai import Agent, Gemini, OpenAI, Storage, tool
 
 
 def load_keys():

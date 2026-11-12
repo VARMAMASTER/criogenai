@@ -18,7 +18,7 @@ node "$sdk/scripts/copy-native.js" release
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 (cd "$sdk" && npm pack --silent --pack-destination "$work" >/dev/null)
-tarball="$(ls "$work"/criogen-*.tgz | head -1)"
+tarball="$(ls "$work"/criogenai-*.tgz | head -1)"
 echo "packed $(basename "$tarball")"
 
 mkdir "$work/consumer"
@@ -31,4 +31,4 @@ npm install --silent --ignore-scripts --no-audit --no-fund "$tarball" "$zod"
 cp "$sdk/examples/consumer.mjs" .
 node consumer.mjs
 cp -r "$sdk/test" ./test
-CRIOGEN_ERROR_CATALOG="$root/schemas/error-codes.json" CRIOGEN_SDK=criogen node --test test/*.test.js
+CRIOGEN_ERROR_CATALOG="$root/schemas/error-codes.json" CRIOGEN_SDK=criogenai node --test test/*.test.js

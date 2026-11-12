@@ -12,7 +12,7 @@
  * as the agent's `onToolException` option says.
  *
  * @example
- * import { tool, ToolError } from "criogen";
+ * import { tool, ToolError } from "criogenai";
  *
  * const lookup = tool<{ orderId: string }>({
  *   name: "lookup",
@@ -242,7 +242,7 @@ export class Tool<Args = Record<string, unknown>> {
  * @returns A `Tool` for an agent's `tools`.
  * @throws {TypeError} An invalid name, a missing `run`, or a Standard Schema with no JSON Schema.
  * @example
- * import { tool } from "criogen";
+ * import { tool } from "criogenai";
  *
  * const weather = tool<{ city: string }>({
  *   name: "get_weather",
@@ -254,7 +254,7 @@ export class Tool<Args = Record<string, unknown>> {
  * @example
  * // With Zod 4 (or another Standard Schema library): the model sees its JSON Schema.
  * import { z } from "zod";
- * import { tool } from "criogen";
+ * import { tool } from "criogenai";
  *
  * const order = tool({
  *   name: "order",

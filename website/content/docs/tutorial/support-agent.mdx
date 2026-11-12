@@ -33,7 +33,7 @@ step 9 need no key at all.
 mkdir support-desk && cd support-desk
 python -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install criogen pytest
+pip install criogenai pytest
 ```
 
 </TabItem>
@@ -43,7 +43,7 @@ pip install criogen pytest
 mkdir support-desk && cd support-desk
 npm init -y
 npm pkg set type=module
-npm install criogen
+npm install criogenai
 npm install --save-dev tsx typescript @types/node
 ```
 
@@ -65,7 +65,7 @@ OPENAI_API_KEY=sk-...
 echo ".env" >> .gitignore
 ```
 
-Criogen reads keys only from the environment. `load_env()` / `loadEnv()`
+CriogenAI reads keys only from the environment. `load_env()` / `loadEnv()`
 (used in step 5) copies the `.env` file into the environment; it never
 prints a value and never replaces a variable that is already set.
 

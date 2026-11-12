@@ -1,4 +1,4 @@
-import { END, Storage, Workflow, suspend } from "criogen";
+import { END, Storage, Workflow, suspend } from "criogenai";
 
 // [show]
 const app = new Workflow()
@@ -44,7 +44,7 @@ console.log(checked.state.report, checked.steps); // 3 steps: intake, both check
 // [/show parallel]
 
 // [show loop]
-import { goto } from "criogen";
+import { goto } from "criogenai";
 
 const drafting = new Workflow()
   .node("draft", (state) => {
@@ -64,7 +64,7 @@ console.log(drafted.state.text); // "draft 3"
 // [/show loop]
 
 // [show agents]
-import { Agent } from "criogen";
+import { Agent } from "criogenai";
 
 const triage = new Agent({ model: "openai:gpt-5-mini", instructions: "Classify the request in one word." });
 const writer = new Agent({ model: "openai:gpt-5-mini", instructions: "Write a short, kind reply." });

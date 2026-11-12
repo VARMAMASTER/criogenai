@@ -78,7 +78,7 @@ export class CollectionTool {
  * collection opens. Give it to an agent with `asTool`.
  *
  * @example
- * import { Collection, Embedder } from "criogen";
+ * import { Collection, Embedder } from "criogenai";
  *
  * const docs = await Collection.open("handbook", { embedder: Embedder.fake() });
  * await docs.add([
@@ -191,7 +191,7 @@ export class Collection {
    * @param description What it searches, so the model knows when to call it.
    *
    * @example
-   * import { Agent, Collection, Embedder, FakeModel } from "criogen";
+   * import { Agent, Collection, Embedder, FakeModel } from "criogenai";
    *
    * const docs = await Collection.open("handbook", { embedder: Embedder.fake() });
    * await docs.add([{ id: "leave", text: "Annual leave is 25 days a year." }]);

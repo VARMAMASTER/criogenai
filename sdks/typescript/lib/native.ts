@@ -1,7 +1,7 @@
 // The engine (design 0012 §4, design 0021): the Node addon on servers, the
 // same engine as WebAssembly in the browser. Loaded on first use, never at
 // import, so a system it cannot run on gets a NativeUnavailableError where it
-// is used. Both engines have this interface (one Rust bridge, criogen-js).
+// is used. Both engines have this interface (one Rust bridge, criogenai-js).
 
 import * as node from "./native-node";
 
@@ -87,7 +87,7 @@ export interface EngineLoader {
   host(): HostInfo;
 }
 
-/** Platform packages whose name differs from criogen-<platform>-<arch>. */
+/** Platform packages whose name differs from criogenai-<platform>-<arch>. */
 export const PLATFORM_PACKAGES: Record<string, string> = node.PLATFORM_PACKAGES;
 
 let loader: EngineLoader = node.nodeLoader;
@@ -125,7 +125,7 @@ export async function prepareNative(source?: unknown): Promise<void> {
   if (!loaded) failure = undefined;
 }
 
-/** The engine. Importing criogen never loads it; the first property access does. */
+/** The engine. Importing criogenai never loads it; the first property access does. */
 export const native: Addon = new Proxy({} as Addon, {
   get: (_target, property) => Reflect.get(loadNative() as object, property),
 });

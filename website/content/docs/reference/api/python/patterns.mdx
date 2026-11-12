@@ -3,18 +3,18 @@ title: "Python API: Patterns"
 description: "Python API reference, patterns: sequential, parallel, loop, custom, PatternResult, Pattern, iterative_refinement, review_and_critique, and more."
 ---
 
-Ready-made multi-agent designs: sequential, parallel, loops, routers, debates and more. Generated from the docstrings and type hints of `criogen` 0.1.6. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/patterns/).
+Ready-made multi-agent designs: sequential, parallel, loops, routers, debates and more. Generated from the docstrings and type hints of `criogenai` 0.1.7. See also: [Python API overview](/docs/reference/api/python/), the same module in [TypeScript](/docs/reference/api/typescript/patterns/).
 
 Ready-made designs for agentic systems: chains, fan-outs, loops, reviews, hand-offs and human review.
 
 ```python
-from criogen import patterns
+from criogenai import patterns
 
 flow = patterns.sequential(["researcher", "writer"], model="openai:gpt-5-mini")
 print((await flow.run("Write about solar panels")).output)
 ```
 
-Steps can be an `Agent`, a `~criogen.specialists.Specialist` or
+Steps can be an `Agent`, a `~criogenai.specialists.Specialist` or
 the name it is registered under (a string), a plain function `text -> text`
 (sync or async), or a `(name, step)` tuple to name the step yourself.
 The model for specialists comes from `model=` or the `CRIOGEN_MODEL`
@@ -27,7 +27,7 @@ answer, `compile(storage)` for durable threads, approvals and an audit trail,
 return an `Agent`, so they nest as steps of other patterns.
 
 ```python
-from criogen import patterns
+from criogenai import patterns
 
 patterns.sequential(...)
 ```
@@ -41,7 +41,7 @@ These are used as `patterns.<name>`.
 | [`sequential`](#sequential) | function | Runs the steps in a fixed order; each step's output is the next step's input. |
 | [`parallel`](#parallel) | function | Runs the branches at the same time on the same input, then combines their answers. |
 | [`loop`](#loop) | function | Repeats the steps until a condition holds or the round limit is reached. |
-| [`custom`](#custom) | function | Wraps any `~criogen.Workflow` as a `Pattern`, with the same `run` and `compile` as the ready-made ones. |
+| [`custom`](#custom) | function | Wraps any `~criogenai.Workflow` as a `Pattern`, with the same `run` and `compile` as the ready-made ones. |
 | [`PatternResult`](#patternresult) | class | What a pattern run produced. |
 | [`Pattern`](#pattern) | class | A workflow pattern: run it, compile it for durable threads, or extend it. |
 | [`iterative_refinement`](#iterative_refinement) | function | Improves a text round by round until a score is high enough. |
@@ -61,7 +61,7 @@ def sequential(steps: Sequence[Step], *, model: Any = None) -> Pattern
 
 Runs the steps in a fixed order; each step's output is the next step's input.
 
-Steps can be an `Agent`, a `~criogen.specialists.Specialist` or
+Steps can be an `Agent`, a `~criogenai.specialists.Specialist` or
 the name it is registered under (a string), a plain function `text -> text`
 (sync or async), or a `(name, step)` tuple to name the step yourself.
 
@@ -79,7 +79,7 @@ the name it is registered under (a string), a plain function `text -> text`
 **Example**
 
 ```python
-from criogen import patterns
+from criogenai import patterns
 
 def outline(text):
     return f"Outline: {text}"
@@ -120,7 +120,7 @@ answers as a list with a `## <name>` heading each, in branch order.
 **Example**
 
 ```python
-from criogen import patterns
+from criogenai import patterns
 
 flow = patterns.parallel({
     "upper": str.upper,
@@ -162,7 +162,7 @@ first step of the next round gets the last step's output.
 **Example**
 
 ```python
-from criogen import patterns
+from criogenai import patterns
 
 flow = patterns.loop([lambda t: t + "!"], until=lambda text, n: text.count("!") >= 3)
 result = flow.run_sync("Go")
@@ -175,7 +175,7 @@ result.output, result.stop_reason   # ("Go!!!", "condition")
 def custom(workflow: Workflow, *, name: str = 'custom', max_steps: int = 64) -> Pattern
 ```
 
-Wraps any `~criogen.Workflow` as a `Pattern`, with the same `run` and `compile` as the ready-made ones.
+Wraps any `~criogenai.Workflow` as a `Pattern`, with the same `run` and `compile` as the ready-made ones.
 
 The workflow starts with the state `{"input": text}` and should write
 its answer to `state["output"]` (and a `stop_reason` if you like).
@@ -191,7 +191,7 @@ its answer to `state["output"]` (and a `stop_reason` if you like).
 **Example**
 
 ```python
-from criogen import END, Workflow, patterns
+from criogenai import END, Workflow, patterns
 
 wf = Workflow()
 wf.add_node("shout", lambda state: {"output": state["input"].upper()})
@@ -225,7 +225,7 @@ What a pattern run produced.
 - `stop_reason` (`str`): Why it ended: `"done"`, `"condition"`, `"approved"`, `"max_iterations"`, `"max_rounds"`, `"final"`, `"max_handoffs"`, `"unknown_handoff"`, `"rejected"` or `"suspended"`.
 - `suspended` (`bool`, default `False`): `True` while a `human_review` run waits for a person; continue with `Pattern.resume`.
 - `waiting_for` (`Any`, default `None`): What the person is asked when `suspended` (for `human_review`: `{"draft", "question"}`), else `None`.
-- `raw` (`Optional[WorkflowResult]`, default `field(default=None, repr=False)`): The underlying `~criogen.WorkflowResult` (snapshot, interrupts, run id).
+- `raw` (`Optional[WorkflowResult]`, default `field(default=None, repr=False)`): The underlying `~criogenai.WorkflowResult` (snapshot, interrupts, run id).
 
 **Example**
 
@@ -261,13 +261,13 @@ and the answer is `state["output"]`.
 **Parameters**
 
 - `name` (`str`): The pattern's name, e.g. `"sequential"`.
-- `workflow` (`Workflow`): The `~criogen.Workflow` it runs. Available as `pattern.workflow`: add nodes and edges to extend it before the first run.
+- `workflow` (`Workflow`): The `~criogenai.Workflow` it runs. Available as `pattern.workflow`: add nodes and edges to extend it before the first run.
 - `budget` (`int`): The step limit `run` uses unless given `max_steps`.
 
 **Example**
 
 ```python
-from criogen import patterns
+from criogenai import patterns
 
 flow = patterns.sequential([lambda t: f"Outline: {t}", lambda t: t + " (expanded)"])
 result = flow.run_sync("solar panels")
@@ -289,9 +289,9 @@ default 64 steps. A `human_review` pause is answered with
 
 **Parameters**
 
-- `storage` (`Union[None, str, Storage]`, default `None`): A `~criogen.Storage` or a storage URL. Default: process memory.
+- `storage` (`Union[None, str, Storage]`, default `None`): A `~criogenai.Storage` or a storage URL. Default: process memory.
 
-**Returns:** A `~criogen.CompiledWorkflow`.
+**Returns:** A `~criogenai.CompiledWorkflow`.
 
 **Example**
 
@@ -316,7 +316,7 @@ with `resume`.
 **Parameters**
 
 - `text` (`str`): The input, given to the first step.
-- `**options` (`Any`): `max_steps` (default: the pattern's own budget, sized from its steps and caps) and `deadline` (seconds), as for `CompiledWorkflow.run <criogen.CompiledWorkflow.run>`.
+- `**options` (`Any`): `max_steps` (default: the pattern's own budget, sized from its steps and caps) and `deadline` (seconds), as for `CompiledWorkflow.run <criogenai.CompiledWorkflow.run>`.
 
 **Returns:** The output, each step's trace and why the run ended.
 
@@ -384,7 +384,7 @@ step: `stop_reason` is `"condition"` or `"max_iterations"`.
 **Example**
 
 ```python
-from criogen import patterns
+from criogenai import patterns
 
 flow = patterns.iterative_refinement(
     "writer",
@@ -427,7 +427,7 @@ draft.
 **Example**
 
 ```python
-from criogen import patterns
+from criogenai import patterns
 
 flow = patterns.review_and_critique("writer", "critic", max_rounds=3, model="openai:gpt-5-mini")
 result = await flow.run("A two-line product description for a desk lamp")
@@ -468,7 +468,7 @@ request and the work so far.
 **Example**
 
 ```python
-from criogen import patterns
+from criogenai import patterns
 
 flow = patterns.swarm({
     "triage": lambda text: "Looks like billing.\nHANDOFF: billing",
@@ -501,7 +501,7 @@ days later with `thread.resume({"review": decision})`.
 **Example**
 
 ```python
-from criogen import patterns
+from criogenai import patterns
 
 flow = patterns.human_review(lambda text: f"Draft reply to: {text}")
 paused = await flow.run("Can I change my booking?")
@@ -537,7 +537,7 @@ combine patterns with the functions above.
 **Example**
 
 ```python
-from criogen import patterns
+from criogenai import patterns
 
 flow = patterns.quick("researcher > writer", model="openai:gpt-5-mini")
 result = await flow.run("Write about solar panels")
@@ -574,7 +574,7 @@ the limit.
 **Example**
 
 ```python
-from criogen import patterns, tool
+from criogenai import patterns, tool
 
 @tool
 def lookup_order(order_id: str) -> str:
@@ -619,7 +619,7 @@ costs more model calls.
 **Example**
 
 ```python
-from criogen import Agent, patterns
+from criogenai import Agent, patterns
 
 orders = Agent("openai:gpt-5-mini", instructions="You answer order questions.")
 triage = patterns.coordinator(
@@ -654,7 +654,7 @@ A coordinator of coordinators: the root splits the work, each level hands it fur
 **Example**
 
 ```python
-from criogen import patterns
+from criogenai import patterns
 
 lead = patterns.hierarchical("openai:gpt-5-mini", {
     "research": {"_description": "Gathers facts", "web": "researcher", "check": "fact_checker"},

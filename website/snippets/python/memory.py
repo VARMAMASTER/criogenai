@@ -1,6 +1,6 @@
 async def main() -> None:
     # [show]
-    from criogen import Agent, Memory, Storage
+    from criogenai import Agent, Memory, Storage
 
     storage = Storage("sqlite://agent.db")
     agent = Agent(
@@ -24,7 +24,7 @@ async def main() -> None:
 
 def semantic() -> None:
     # [show semantic]
-    from criogen import Agent, Embedder, Memory
+    from criogenai import Agent, Embedder, Memory
 
     memory = Memory.by_state("patient", "patients").semantic(Embedder.openai("text-embedding-3-small"))
     # Or keep everything on your own servers: Embedder.ollama("nomic-embed-text")

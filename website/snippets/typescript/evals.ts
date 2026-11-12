@@ -1,5 +1,5 @@
 // The evals guide's samples (content/docs/guides/evals.mdx), design 0024.
-import { Agent, evals } from "criogen";
+import { Agent, evals } from "criogenai";
 
 export async function basics(agent: Agent) {
   // [show]

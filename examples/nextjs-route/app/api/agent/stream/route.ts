@@ -2,7 +2,7 @@
 // Each event is one line `data: {...}`: text pieces, tool calls as they start
 // and finish, then `done` with the run facts (or `error` with a stable code).
 // The browser side is in app/useAgentStream.ts. Node runtime only.
-import { Agent, isCriogenError, kaggle, openai, tool } from "criogen";
+import { Agent, isCriogenError, kaggle, openai, tool } from "criogenai";
 
 export const runtime = "nodejs";
 

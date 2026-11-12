@@ -1,4 +1,4 @@
-//! Live check: exercises every Criogen feature against real model APIs
+//! Live check: exercises every CriogenAI feature against real model APIs
 //! and prints a PASS/FAIL table per provider.
 //!
 //! Usage: `cargo run -- [openai] [gemini] [ollama]` (default: every provider
@@ -21,22 +21,22 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use criogen_agent::{
+use criogenai_agent::{
     Agent, AgentEvent, AgentInput, AgentResult, Approval, Decision, Hook, HookAction, HookContext,
     HookError, Limits, Memory, OnLimit, StopReason, ToolCallRequest, ToolError, ToolNext,
     ToolOutput, put_embedded, tool_fn,
 };
-use criogen_core::{
+use criogenai_core::{
     BoxFuture, END, NodeError, RunOptions, State, Update, WorkflowBuilder, node_fn, router_fn,
 };
-use criogen_providers::{
+use criogenai_providers::{
     BlockDelta, Embedder, Endpoint, Message, MessageDelta, Model, ModelErrorKind, ModelRequest,
     OutputStrategy, ProviderEmbedder, ProviderModel, ToolSpec,
 };
-use criogen_storage::{
+use criogenai_storage::{
     CheckpointStatus, Embedding, Namespace, SearchQuery, SqliteCheckpointer, Storage,
 };
-use criogen_telemetry::{OtlpConfig, OtlpExporter};
+use criogenai_telemetry::{OtlpConfig, OtlpExporter};
 use serde_json::{Map, Value, json};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -62,7 +62,7 @@ impl Provider {
     /// The same provider with a bad key (for error and fallback checks).
     fn broken(&self) -> ProviderModel {
         let mut endpoint = self.endpoint.clone();
-        endpoint.api_key = Some("invalid-key-for-criogen-live-check".into());
+        endpoint.api_key = Some("invalid-key-for-criogenai-live-check".into());
         ProviderModel::new(endpoint, &self.model).expect("HTTP client")
     }
 }
@@ -285,7 +285,7 @@ fn err<E: std::fmt::Display>(e: E) -> String {
 }
 
 /// A tool that records its calls.
-fn weather(calls: &Arc<Mutex<Vec<Map<String, Value>>>>) -> impl criogen_agent::Tool {
+fn weather(calls: &Arc<Mutex<Vec<Map<String, Value>>>>) -> impl criogenai_agent::Tool {
     let calls = calls.clone();
     tool_fn(
         ToolSpec::new(
@@ -391,21 +391,21 @@ impl Model for WithEffort {
         self.0.model()
     }
 
-    fn capabilities(&self) -> criogen_providers::Capabilities {
+    fn capabilities(&self) -> criogenai_providers::Capabilities {
         self.0.capabilities()
     }
 
     fn invoke<'a>(
         &'a self,
         request: &'a ModelRequest,
-    ) -> criogen_providers::BoxFuture<
+    ) -> criogenai_providers::BoxFuture<
         'a,
-        Result<criogen_providers::ModelResponse, criogen_providers::ModelError>,
+        Result<criogenai_providers::ModelResponse, criogenai_providers::ModelError>,
     > {
         Box::pin(async move {
             let mut request = request.clone();
-            request.settings.reasoning = Some(criogen_providers::Reasoning::Effort {
-                effort: criogen_providers::ReasoningEffort::Medium,
+            request.settings.reasoning = Some(criogenai_providers::Reasoning::Effort {
+                effort: criogenai_providers::ReasoningEffort::Medium,
             });
             self.0.invoke(&request).await
         })
@@ -429,7 +429,7 @@ async fn reasoning_with_tools(p: &Provider) -> Outcome {
         .messages
         .iter()
         .flat_map(|m| &m.content)
-        .filter(|b| matches!(b, criogen_providers::ContentBlock::Reasoning { .. }))
+        .filter(|b| matches!(b, criogenai_providers::ContentBlock::Reasoning { .. }))
         .count();
     Ok(format!(
         "{} model / {} tool calls, {reasoning} reasoning block(s), {} reasoning tokens",
@@ -808,7 +808,7 @@ async fn semantic_memory(p: &Provider) -> Outcome {
 }
 
 fn temp_db(name: &str) -> std::path::PathBuf {
-    std::env::temp_dir().join(format!("criogen-live-{name}-{}.db", std::process::id()))
+    std::env::temp_dir().join(format!("criogenai-live-{name}-{}.db", std::process::id()))
 }
 
 fn remove_db(path: &std::path::Path) {
@@ -1108,7 +1108,7 @@ async fn bad_key(p: &Provider) -> Outcome {
         format!("kind {kind}: {}", error.message),
     )?;
     ensure(
-        !error.message.contains("invalid-key-for-criogen"),
+        !error.message.contains("invalid-key-for-criogenai"),
         "the key leaked into the error message",
     )?;
     Ok(format!("model_failed / {kind}, key redacted"))

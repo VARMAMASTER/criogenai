@@ -3,13 +3,13 @@ title: Deploying
 description: Run agents behind a web server (FastAPI, Next.js), stream to a browser, choose storage for one or many processes, keep keys in the environment, and what works on serverless.
 ---
 
-Criogen runs inside your server process: there is no Criogen service to
+CriogenAI runs inside your server process: there is no CriogenAI service to
 deploy. Your web app imports the package, builds its agents once, and calls
 them from request handlers; the browser talks to your server, never to the
 engine or a model provider. This page shows that setup with FastAPI and
 Next.js, then covers storage, keys, serverless and the gateway. For health
 checks, redaction, cost and tracing, see
-[Using Criogen in your app](/docs/guides/production/).
+[Using CriogenAI in your app](/docs/guides/production/).
 
 ## The shape of a deployment
 
@@ -42,7 +42,7 @@ authentication.
 <Sample name="deploy" only={["python"]} />
 
 ```sh
-pip install criogen fastapi uvicorn
+pip install criogenai fastapi uvicorn
 DATABASE_URL=postgres://app:secret@db.internal/agents uvicorn deploy:app --workers 4
 ```
 
@@ -64,7 +64,7 @@ Edge, and the package stays out of the bundle:
 
 ```js
 // next.config.mjs
-export default { serverExternalPackages: ["criogen"] };
+export default { serverExternalPackages: ["criogenai"] };
 ```
 
 `request.signal` cancels the run when the client goes away; on a thread the
@@ -77,7 +77,7 @@ agent once, call it in the handler, map `CriogenError.code` to a status.
 ## Stream to a browser
 
 Forward stream events as Server-Sent Events. The browser reads them with
-`fetch` (or `EventSource` for GET routes) and needs no Criogen package.
+`fetch` (or `EventSource` for GET routes) and needs no CriogenAI package.
 
 <Tabs syncKey="lang">
 <TabItem label="Python">
@@ -129,7 +129,7 @@ TLS for a database on another machine. More in
 answers (one tiny call). It never throws, so it fits a `/health` route:
 
 ```python
-report = await criogen.ready("openai:gpt-5-mini")   # {"ok": ..., "engine": {...}, "model": {...}}
+report = await criogenai.ready("openai:gpt-5-mini")   # {"ok": ..., "engine": {...}, "model": {...}}
 ```
 
 ```ts
@@ -144,7 +144,7 @@ frequent liveness probes, and the model check less often.
 | Platform | Works |
 |---|---|
 | Functions on **Node.js 18+** or **Python 3.9+**, Linux x64 or ARM64 with glibc 2.28 or newer (the Node.js runtimes of AWS Lambda and Vercel, for example) | yes |
-| Edge runtimes (Vercel Edge, Cloudflare Workers) | not with the native package; `criogen/web` runs the engine as WebAssembly but is not yet tested there ([In the browser](/docs/guides/browser/)) |
+| Edge runtimes (Vercel Edge, Cloudflare Workers) | not with the native package; `criogenai/web` runs the engine as WebAssembly but is not yet tested there ([In the browser](/docs/guides/browser/)) |
 | Alpine Linux (musl) images | not yet: use a Debian or Ubuntu based image |
 
 On serverless:
@@ -168,10 +168,10 @@ deploy to a Linux server.
 
 ## The LLM gateway
 
-`criogen-gateway` is a separate server that speaks the OpenAI and Anthropic
+`criogenai-gateway` is a separate server that speaks the OpenAI and Anthropic
 APIs in front of any provider, with virtual keys, rate limits, token budgets
 and usage records ([The LLM gateway](/docs/guides/gateway/)). It is part of
-the Rust crates, which are published when Criogen's code opens; from Python
+the Rust crates, which are published when CriogenAI's code opens; from Python
 and TypeScript today, the `Gateway` class gives the same routing, retries and
 fallbacks inside your process
 ([Models: call a model directly](/docs/guides/models/#call-a-model-directly)).
@@ -189,6 +189,6 @@ fallbacks inside your process
 
 ## Next
 
-- [Using Criogen in your app](/docs/guides/production/): health, typed output, cost, redaction, tracing.
+- [Using CriogenAI in your app](/docs/guides/production/): health, typed output, cost, redaction, tracing.
 - [Storage](/docs/guides/storage/) and [Encryption, audit, retention](/docs/guides/compliance/).
 - [Troubleshooting and FAQ](/docs/troubleshooting/).

@@ -12,12 +12,12 @@ server, nothing leaving the computer.
 
 ## Design: an OTLP receiver with a page
 
-Criogen already exports every run as OpenTelemetry spans (design 0009). The
+CriogenAI already exports every run as OpenTelemetry spans (design 0009). The
 viewer **receives those spans** instead of adding a second way of recording
 runs:
 
 ```
-agent / workflow ──(OTLP/HTTP JSON, the existing exporter)──▶ criogen-trace
+agent / workflow ──(OTLP/HTTP JSON, the existing exporter)──▶ criogenai-trace
                                                                ├─ stores spans (SQLite or memory)
                                                                ├─ /api/runs, /api/runs/{id}
                                                                └─ /  the page
@@ -28,12 +28,12 @@ and TypeScript alike, and any other OTLP JSON producer can send to it too.
 
 ## The crate
 
-`crates/criogen-trace` (library and binary `criogen-trace`), axum and sqlx
+`crates/criogenai-trace` (library and binary `criogenai-trace`), axum and sqlx
 (both already in the tree through the gateway and storage):
 
 - `POST /v1/traces`: OTLP/HTTP with a JSON body (`Content-Type:
   application/json`); protobuf gets 415 with a message saying to send JSON
-  (Criogen's exporter always does). Body limit 16 MiB. Spans are grouped by
+  (CriogenAI's exporter always does). Body limit 16 MiB. Spans are grouped by
   trace id: one trace is one run (0009).
 - `GET /api/runs?limit&before&q`: newest first: id, name, start, duration,
   status, model calls, tool calls, tokens (input, output), cost, models used.
@@ -50,7 +50,7 @@ default (`--keep-runs`, `--keep-days`), pruned on insert.
 
 Cost: from a price file (`--prices prices.json`: USD per million tokens by
 `provider:model` or model name, the same shape as `estimate_cost`). Without
-one, cost is not shown; tokens always are. Criogen ships no price list (prices
+one, cost is not shown; tokens always are. CriogenAI ships no price list (prices
 change; a stale price is worse than none).
 
 ## Security (rules 10–12)
@@ -75,16 +75,16 @@ change; a stale price is worse than none).
   model calls, tool calls, tokens, cost; a search box (name, model, run id).
 - **A run**: a waterfall: each span a bar on the run's time axis, indented by
   parent, coloured by kind, failures red; a summary line (time in model calls,
-  in tools, in Criogen, like the playground's split); click a span for its
+  in tools, in CriogenAI, like the playground's split); click a span for its
   attributes, tokens and (if captured) input and output.
 - Light and dark, keyboard navigable, works offline.
 
 ## SDKs
 
-- Python: `python -m criogen.trace` (or `criogen.trace.serve(port=…,
+- Python: `python -m criogenai.trace` (or `criogenai.trace.serve(port=…,
   db=…)`), and `Telemetry.local()` (OTLP to `http://127.0.0.1:4318`).
-- TypeScript: `npx criogen trace`, `serveTraces({...})`, `Telemetry.local()`.
-- Rust: `criogen-trace` binary; `criogen_trace::Viewer` as a library (an
+- TypeScript: `npx criogenai trace`, `serveTraces({...})`, `Telemetry.local()`.
+- Rust: `criogenai-trace` binary; `criogenai_trace::Viewer` as a library (an
   axum `Router`), `OtlpConfig::local()`.
 
 The SDKs run the same Rust server inside the engine's runtime; nothing is

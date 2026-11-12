@@ -8,10 +8,10 @@ import threading
 
 import pytest
 
-import criogen
-from criogen import Agent, AnthropicCompatible, DeepSeek, env
-from criogen import _native
-from criogen.models import _KEYS, model_spec
+import criogenai
+from criogenai import Agent, AnthropicCompatible, DeepSeek, env
+from criogenai import _native
+from criogenai.models import _KEYS, model_spec
 
 PRESETS = json.loads(_native.PRESETS)
 
@@ -100,7 +100,7 @@ def test_every_named_provider_works_as_a_string(base, monkeypatch):
 
 def test_every_named_provider_answers_through_its_class(base):
     classes = {
-        name: cls for name, cls in vars(criogen).items()
+        name: cls for name, cls in vars(criogenai).items()
         if isinstance(cls, type) and getattr(cls, "kind", None)
     }
     by_kind = {cls.kind: cls for cls in classes.values()}
@@ -124,14 +124,14 @@ def test_a_missing_key_names_the_variable(monkeypatch):
     with pytest.raises(ValueError, match="DEEPSEEK_API_KEY") as caught:
         Agent("deepseek:deepseek-chat")
     # Also a coded error: catchable like every other configuration error.
-    from criogen import ValidationError
+    from criogenai import ValidationError
 
     assert isinstance(caught.value, ValidationError) and caught.value.code == "invalid_value"
     assert caught.value.details == {"provider": "deepseek", "variable": "DEEPSEEK_API_KEY"}
 
 
 def test_an_embedder_without_its_key_fails_when_made(monkeypatch):
-    from criogen import Embedder, ValidationError
+    from criogenai import Embedder, ValidationError
 
     monkeypatch.delenv("OPENAI_API_KEY", raising=False)
     monkeypatch.delenv("GEMINI_API_KEY", raising=False)

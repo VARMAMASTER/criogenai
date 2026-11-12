@@ -4,7 +4,7 @@ import asyncio
 import json
 import urllib.request
 
-from criogen import Agent, FakeModel, FakeReply, Telemetry, tool, trace
+from criogenai import Agent, FakeModel, FakeReply, Telemetry, tool, trace
 
 
 @tool

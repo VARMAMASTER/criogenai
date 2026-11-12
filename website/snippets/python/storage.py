@@ -1,6 +1,6 @@
 async def main() -> None:
     # [show]
-    from criogen import Storage
+    from criogenai import Storage
 
     # One process: a SQLite file. Tables are created on first use.
     storage = Storage("sqlite://agent.db")

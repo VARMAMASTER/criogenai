@@ -12,9 +12,9 @@ import { ICON_VERSION, KEYWORDS, OG_IMAGE } from "@/lib/seo";
 
 export const metadata: Metadata = {
   metadataBase: new URL(SITE.url),
-  title: { default: "Criogen: fast AI agent framework on a Rust engine", template: "%s | Criogen" },
+  title: { default: "CriogenAI: fast AI agent framework on a Rust engine", template: "%s | CriogenAI" },
   description: SITE.description,
-  applicationName: "Criogen",
+  applicationName: "CriogenAI",
   keywords: KEYWORDS,
   category: "technology",
   // Every icon is drawn from lib/mark.ts (scripts/icons.mjs); `?v=` makes
@@ -31,7 +31,7 @@ export const metadata: Metadata = {
   manifest: `/manifest.webmanifest?v=${ICON_VERSION}`,
   // Each page sets its own canonical URL and card text (pageMeta in lib/seo.ts);
   // pages without their own metadata keep these.
-  openGraph: { type: "website", siteName: "Criogen", locale: "en_US", images: [OG_IMAGE] },
+  openGraph: { type: "website", siteName: "CriogenAI", locale: "en_US", images: [OG_IMAGE] },
   twitter: { card: "summary_large_image", images: [OG_IMAGE.url] },
   robots: { index: true, follow: true, googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 } },
 };

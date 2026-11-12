@@ -2,7 +2,7 @@
 # [show]
 import asyncio
 
-from criogen import FakeModel, FakeReply, Storage
+from criogenai import FakeModel, FakeReply, Storage
 from support_agent import build_agent
 
 

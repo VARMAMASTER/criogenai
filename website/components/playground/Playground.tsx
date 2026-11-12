@@ -1,5 +1,5 @@
 "use client";
-// The playground: the same job in Criogen and in LangChain, each in its own
+// The playground: the same job in CriogenAI and in LangChain, each in its own
 // process against one fake model server, measured from outside. With a
 // playground server running on this computer (playground/server.py) the page
 // runs jobs there and streams the results; without one it replays recordings
@@ -280,7 +280,7 @@ export default function Playground({ recorded }: { recorded: Recorded | null }) 
               </span>
             </div>
             <p className="lab-muted pg-small">
-              <b>Benchmark</b> runs Criogen, LangChain, LangChain, Criogen and averages each framework&apos;s two passes, so order and background load
+              <b>Benchmark</b> runs CriogenAI, LangChain, LangChain, CriogenAI and averages each framework&apos;s two passes, so order and background load
               cancel out; use it for numbers you intend to quote. <b>Run both at once</b> starts both together for a side-by-side view; they compete for the
               same CPU, so do not quote it.
             </p>
@@ -376,7 +376,7 @@ export default function Playground({ recorded }: { recorded: Recorded | null }) 
             <thead>
               <tr>
                 <th scope="col">Measurement</th>
-                <th scope="col">Criogen</th>
+                <th scope="col">CriogenAI</th>
                 <th scope="col">LangChain</th>
                 <th scope="col">Difference</th>
               </tr>

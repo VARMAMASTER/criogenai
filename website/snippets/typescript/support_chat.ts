@@ -1,7 +1,7 @@
 // The tutorial's terminal chat (docs: tutorial/support-agent).
 // [show]
 import * as readline from "node:readline/promises";
-import { Storage, loadEnv, type Reply, type Thread } from "criogen";
+import { Storage, loadEnv, type Reply, type Thread } from "criogenai";
 import { buildAgent } from "./support_agent.js";
 
 loadEnv(); // OPENAI_API_KEY from .env, if there is one

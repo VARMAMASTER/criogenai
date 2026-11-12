@@ -11,10 +11,10 @@ slices (§8).
 
 ```
 sdks/python/
-  Cargo.toml          crate `criogen-python` (cdylib, not a workspace member)
-  pyproject.toml      maturin; wheel `criogen`, module `criogen._native`
+  Cargo.toml          crate `criogenai-python` (cdylib, not a workspace member)
+  pyproject.toml      maturin; wheel `criogenai`, module `criogenai._native`
   src/lib.rs          the bridge: PyO3, one Tokio runtime per process
-  python/criogen/  the Python API (pure Python over `_native`)
+  python/criogenai/  the Python API (pure Python over `_native`)
   tests/              pytest, simulated models only
 ```
 
@@ -30,7 +30,7 @@ sdks/python/
 ## 2. The API
 
 ```python
-from criogen import Agent, tool, ToolError, Storage, Memory
+from criogenai import Agent, tool, ToolError, Storage, Memory
 
 @tool
 async def get_order(order_id: str) -> dict:

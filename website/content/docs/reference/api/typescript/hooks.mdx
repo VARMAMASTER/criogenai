@@ -3,10 +3,10 @@ title: "TypeScript API: Hooks"
 description: "TypeScript API reference, hooks: HookContext, HookAction, ToolCall, ToolResult, Hook."
 ---
 
-Your code around the agent loop: before and after model and tool calls. Generated from the declarations and doc comments of `criogen` 0.1.6. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/hooks/).
+Your code around the agent loop: before and after model and tool calls. Generated from the declarations and doc comments of `criogenai` 0.1.7. See also: [TypeScript API overview](/docs/reference/api/typescript/), the same module in [Python](/docs/reference/api/python/hooks/).
 
 ```ts
-import { HookContext, HookAction, ToolCall, ToolResult, Hook } from "criogen";
+import { HookContext, HookAction, ToolCall, ToolResult, Hook } from "criogenai";
 ```
 
 ## Contents
@@ -100,7 +100,7 @@ Returned by `beforeTool`: use `value` as the result and skip the tool (e.g. a ca
 **Example**
 
 ```ts
-import { ToolResult, type Hook } from "criogen";
+import { ToolResult, type Hook } from "criogenai";
 
 const cache = new Map<string, unknown>([["get_weather:Paris", { forecast: "sunny" }]]);
 const cached: Hook = {
@@ -150,7 +150,7 @@ reverse. A throw in `onStart`, `beforeModel` or `afterModel` fails the run
 **Example**
 
 ```ts
-import { Agent, type Hook } from "criogen";
+import { Agent, type Hook } from "criogenai";
 
 const logTools: Hook = {
   name: "log-tools",

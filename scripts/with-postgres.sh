@@ -65,7 +65,7 @@ tls=""
 make_certs() (
   cd "$data" || exit 1
   export MSYS_NO_PATHCONV=1
-  openssl req -new -x509 -days 2 -nodes -subj "/CN=criogen test CA" \
+  openssl req -new -x509 -days 2 -nodes -subj "/CN=criogenai test CA" \
     -keyout ca.key -out ca.crt &&
     openssl req -new -nodes -subj "/CN=localhost" -keyout server.key -out server.csr &&
     printf 'basicConstraints=CA:FALSE\nsubjectAltName=IP:127.0.0.1,DNS:localhost\n' >server.ext &&

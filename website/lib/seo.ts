@@ -1,4 +1,4 @@
-// What search engines and AI assistants read about Criogen: the claims come
+// What search engines and AI assistants read about CriogenAI: the claims come
 // from the recorded benchmark file (public/bench/results.json), so a page can
 // never say more than was measured. Build time only.
 import fs from "node:fs";
@@ -97,17 +97,17 @@ export const OG_IMAGE = {
   url: `/og.png?v=${ICON_VERSION}`,
   width: 1200,
   height: 630,
-  alt: "Criogen: the fast AI agent framework, a LangChain alternative",
+  alt: "CriogenAI: the fast AI agent framework, a LangChain alternative",
   type: "image/png",
 };
 
 export function pageMeta(options: { title: string; description: string; path: string; absolute?: boolean; type?: "website" | "article" }): Metadata {
-  const shown = options.absolute ? options.title : `${options.title} | Criogen`;
+  const shown = options.absolute ? options.title : `${options.title} | CriogenAI`;
   return {
     title: options.absolute ? { absolute: options.title } : options.title,
     description: options.description,
     alternates: { canonical: options.path },
-    openGraph: { type: options.type ?? "website", siteName: "Criogen", locale: "en_US", url: options.path, title: shown, description: options.description, images: [OG_IMAGE] },
+    openGraph: { type: options.type ?? "website", siteName: "CriogenAI", locale: "en_US", url: options.path, title: shown, description: options.description, images: [OG_IMAGE] },
     twitter: { card: "summary_large_image", title: shown, description: options.description, images: [OG_IMAGE.url] },
   };
 }
@@ -119,7 +119,7 @@ export function jsonLd(): string {
     {
       "@type": "SoftwareApplication",
       "@id": `${SITE.url}/#software`,
-      name: "Criogen",
+      name: "CriogenAI",
       applicationCategory: "DeveloperApplication",
       applicationSubCategory: "AI agent framework",
       operatingSystem: "Linux, macOS, Windows",
@@ -142,12 +142,12 @@ export function jsonLd(): string {
         "LLM gateway with OpenAI and Anthropic wire formats",
       ],
     },
-    { "@type": "WebSite", "@id": `${SITE.url}/#website`, name: "Criogen", url: `${SITE.url}/`, about: { "@id": `${SITE.url}/#software` }, publisher: { "@id": `${SITE.url}/#org` } },
+    { "@type": "WebSite", "@id": `${SITE.url}/#website`, name: "CriogenAI", url: `${SITE.url}/`, about: { "@id": `${SITE.url}/#software` }, publisher: { "@id": `${SITE.url}/#org` } },
     // The logo search engines show with results (at least 112 px, raster).
     {
       "@type": "Organization",
       "@id": `${SITE.url}/#org`,
-      name: "Criogen",
+      name: "CriogenAI",
       url: `${SITE.url}/`,
       logo: { "@type": "ImageObject", url: `${SITE.url}/icon-512.png`, width: 512, height: 512 },
       sameAs: ["https://www.npmjs.com/package/criogen", "https://pypi.org/project/criogen/"],

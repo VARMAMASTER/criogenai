@@ -17,7 +17,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
   if (!p) return {};
   return pageMeta({
     title: `${p.title}: ${p.group === "IBM agent types" ? "AI agent type" : "agent pattern"}, explained and runnable`,
-    description: `${p.short} ${p.what[0]} Run it in your browser step by step and see the Criogen code in Python and TypeScript.`,
+    description: `${p.short} ${p.what[0]} Run it in your browser step by step and see the CriogenAI code in Python and TypeScript.`,
     path: `/playground/${p.id}/`,
     type: "article",
   });

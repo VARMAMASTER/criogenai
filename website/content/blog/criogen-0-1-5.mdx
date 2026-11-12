@@ -1,12 +1,12 @@
 ---
-title: "Criogen 0.1.5: MCP tools, a local trace viewer, evals and collections"
+title: "CriogenAI 0.1.5: MCP tools, a local trace viewer, evals and collections"
 description: Four features in one release. Agents can use tools from any MCP server. Every run can be watched on a page on your own computer. Quality checks can fail CI. Documents can be searched by meaning. All of it works in Python, TypeScript and Rust.
 date: 2026-11-09
-author: The Criogen team
+author: The CriogenAI team
 tags: release, mcp, tracing, evals, retrieval
 ---
 
-Criogen 0.1.5 is on npm and PyPI. It adds four things that real agent apps
+CriogenAI 0.1.5 is on npm and PyPI. It adds four things that real agent apps
 need sooner or later:
 
 - **tools from MCP servers**;
@@ -18,13 +18,13 @@ As always, the logic lives once in the Rust engine. Python, TypeScript and
 the browser build all get the same behaviour.
 
 ```sh
-pip install -U criogen
-npm install criogen@latest
+pip install -U criogenai
+npm install criogenai@latest
 ```
 
 ## Tools from MCP servers
 
-The Model Context Protocol is how tool servers are shared. Criogen can now:
+The Model Context Protocol is how tool servers are shared. CriogenAI can now:
 
 - start a server as a process (**stdio**);
 - reach a server at a URL (**Streamable HTTP**).
@@ -37,10 +37,10 @@ MCP tools are ordinary tools. Approvals, timeouts, hooks, streaming and the
 audit trail all apply to them.
 
 The client only uses tools. A server cannot sample your model or read your
-files through Criogen. Every message is bounded in size and time, and tokens
+files through CriogenAI. Every message is bounded in size and time, and tokens
 in headers never show up in an error or a log.
 
-Criogen speaks MCP 2026-07-28 and falls back to the older handshake, so
+CriogenAI speaks MCP 2026-07-28 and falls back to the older handshake, so
 current and older servers both work. Details are in the
 [MCP guide](/docs/guides/mcp/).
 
@@ -50,7 +50,7 @@ Langfuse and any OpenTelemetry backend still work. For day-to-day
 development there is now a viewer that runs on your own machine:
 
 ```sh
-python -m criogen.trace     # or: npx criogen trace
+python -m criogenai.trace     # or: npx criogenai trace
 ```
 
 <Sample name="telemetry" region="local" />
@@ -92,7 +92,7 @@ closest to a question. It can also hand an agent a search tool:
 
 <Sample name="retrieval" />
 
-Documents live in your Criogen storage, so they are encrypted when your
+Documents live in your CriogenAI storage, so they are encrypted when your
 database is. The default index is exact: 17 ms a query at 100,000
 documents on our test machine (see the [benchmarks](/benchmarks/)). An HNSW
 index is available as an option for large collections.
@@ -111,7 +111,7 @@ was built on Windows:
   error.
 - **PyPI:** there is a 0.1.5 wheel for Windows. On Linux and macOS, pip
   installs 0.1.3.
-- **Browser:** the build for the browser (`criogen/web`) has everything.
+- **Browser:** the build for the browser (`criogenai/web`) has everything.
 
 The other platforms will catch up as soon as the release workflow can run
 again.

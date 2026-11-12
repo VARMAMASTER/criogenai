@@ -1,7 +1,7 @@
 // Evals (design 0024): run an agent over a set of cases, score each answer,
 // compare with the last good run, and fail CI when quality drops.
 //
-//     import { evals } from "criogen";
+//     import { evals } from "criogenai";
 //     const data = await evals.Dataset.load("cases.jsonl");
 //     const result = await evals.evaluate(agent, data, [evals.contains(), evals.toolCalled("lookup_order")]);
 //     console.log(result.report());
@@ -75,7 +75,7 @@ function toCase(raw: unknown, where: string): Case {
  * Cases to run: from a list, or `Dataset.load` a JSONL / JSON file (Node).
  *
  * @example
- * import { evals } from "criogen";
+ * import { evals } from "criogenai";
  *
  * const data = new evals.Dataset([
  *   { id: "capital", input: "Capital of France?", expected: "Paris" },
@@ -191,7 +191,7 @@ export interface Scorer {
  * @param threshold For numbers: the value a case needs to pass.
  *
  * @example
- * import { evals } from "criogen";
+ * import { evals } from "criogenai";
  *
  * const short = evals.scorer("short", (_case, output) => String(output).length <= 200);
  * const polite = evals.scorer("polite", (_case, output) => (/please|thank/i.test(String(output)) ? 1 : 0.5), 0.5);
@@ -448,7 +448,7 @@ export const block = (label: string, data: string): string => `<<<${label}\n${da
  * @param options `threshold` (default 0.7), `gateway` (default a new `Gateway`), `name` (default "judge"; give each judge its own name when you use several).
  *
  * @example
- * import { evals } from "criogen";
+ * import { evals } from "criogenai";
  *
  * // Needs OPENAI_API_KEY when the eval runs.
  * const helpful = evals.judge("openai:gpt-5-mini", "Answers the question politely and gives the order's status.", {
@@ -619,7 +619,7 @@ export interface EvalData {
  * @throws {Error} No scorers, or two scorers with the same name.
  *
  * @example
- * import { Agent, FakeModel, evals } from "criogen";
+ * import { Agent, FakeModel, evals } from "criogenai";
  *
  * const agent = new Agent({ model: new FakeModel(["Paris is the capital of France."]) });
  * const result = await evals.evaluate(
@@ -760,7 +760,7 @@ export interface CheckOptions {
  * by Python or Rust is read here too.
  *
  * @example
- * import { evals } from "criogen";
+ * import { evals } from "criogenai";
  *
  * const result = await evals.evaluate((c) => c.input.toUpperCase(), ["ok", "fine"], [evals.regex("^[A-Z]+$")]);
  * await result.save("eval.json", { content: false }); // ids and scores only

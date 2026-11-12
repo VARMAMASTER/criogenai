@@ -1,7 +1,7 @@
 // The Rust API reference: rustdoc's own pages for the public crates, copied
 // into public/rustdoc (served at /rustdoc/…).
 //
-// Source stays private until Criogen reaches 10,000 installs, so only the API
+// Source stays private until CriogenAI reaches 10,000 installs, so only the API
 // pages are published: rustdoc's `src/` pages (every crate's source code) are
 // never copied, the "Source" links are removed, and the build fails if a link
 // to them is left. Documentation comments and signatures are the API itself.
@@ -15,10 +15,10 @@ export const RUST_CRATES = ["agent", "core", "providers", "storage", "telemetry"
 
 export function rustCrates(repo) {
   return RUST_CRATES.map((short) => {
-    const toml = fs.readFileSync(path.join(repo, "crates", `criogen-${short}`, "Cargo.toml"), "utf8");
+    const toml = fs.readFileSync(path.join(repo, "crates", `criogenai-${short}`, "Cargo.toml"), "utf8");
     const description = /^description\s*=\s*"([^"]*)"/m.exec(toml)?.[1] ?? "";
     return {
-      name: `criogen-${short}`,
+      name: `criogenai-${short}`,
       module: `criogen_${short}`,
       // Design numbers are for the repository's own notes.
       description: description.replace(/\s*\((?:designs?)\s[^)]*\)/gi, ""),

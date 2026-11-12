@@ -11,7 +11,7 @@ export interface TelemetryOptions {
   captureContent?: boolean;
   /**
    * The `service.name` of the traces.
-   * @default "criogen"
+   * @default "criogenai"
    */
   serviceName?: string;
 }
@@ -26,9 +26,9 @@ export interface TelemetryOptions {
  * counts and error codes, not prompts or outputs.
  *
  * @example
- * import { Agent, FakeModel, Telemetry } from "criogen";
+ * import { Agent, FakeModel, Telemetry } from "criogenai";
  *
- * // Sends to the local trace viewer: start it first with `npx criogen trace`.
+ * // Sends to the local trace viewer: start it first with `npx criogenai trace`.
  * const telemetry = Telemetry.local();
  * const agent = new Agent({ model: new FakeModel(["Hello."]), telemetry });
  * await agent.run("Hi");
@@ -62,7 +62,7 @@ export class Telemetry {
    * @throws {ValidationError} Only one key was passed, or none and the environment variables are not set (`invalid_value`).
    *
    * @example
-   * import { Agent, Telemetry } from "criogen";
+   * import { Agent, Telemetry } from "criogenai";
    *
    * // Reads LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY and LANGFUSE_BASE_URL.
    * const telemetry = Telemetry.langfuse({ serviceName: "support-bot" });
@@ -81,7 +81,7 @@ export class Telemetry {
    * @param options `headers` sent with every export (e.g. an API key), plus `captureContent` and `serviceName`.
    *
    * @example
-   * import { Telemetry } from "criogen";
+   * import { Telemetry } from "criogenai";
    *
    * const telemetry = Telemetry.otlp("https://otel.example.com/v1/traces", {
    *   headers: { authorization: `Bearer ${process.env.OTEL_TOKEN}` },
@@ -93,7 +93,7 @@ export class Telemetry {
   }
 
   /**
-   * The local trace viewer (`npx criogen trace`, `serveTraces()`, design 0023).
+   * The local trace viewer (`npx criogenai trace`, `serveTraces()`, design 0023).
    * Content only with `captureContent: true`; it stays on this computer either way.
    *
    * @param options `url`: the viewer's address (default `http://127.0.0.1:4318`; `/v1/traces` is added), plus `captureContent` and `serviceName`.

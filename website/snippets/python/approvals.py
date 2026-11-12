@@ -1,4 +1,4 @@
-from criogen import tool
+from criogenai import tool
 
 
 @tool
@@ -9,7 +9,7 @@ def issue_refund(order_id: str, amount: float) -> str:
 
 async def main() -> None:
     # [show]
-    from criogen import Agent, Decision, Storage
+    from criogenai import Agent, Decision, Storage
 
     agent = Agent(
         "openai:gpt-5-mini",
@@ -33,7 +33,7 @@ async def main() -> None:
 
 
 async def per_call(agent: "Agent") -> None:
-    from criogen import Decision
+    from criogenai import Decision
 
     chat = agent.thread("ticket-9", actor="user:dr-rao")
     # [show decide]
@@ -52,4 +52,4 @@ async def per_call(agent: "Agent") -> None:
     # [/show decide]
 
 
-from criogen import Agent  # noqa: E402
+from criogenai import Agent  # noqa: E402

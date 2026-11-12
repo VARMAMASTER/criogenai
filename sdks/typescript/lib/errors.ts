@@ -2,7 +2,7 @@
 // the Rust engine uses (design 0003).
 
 /**
- * Any Criogen failure. `code` is stable across languages.
+ * Any CriogenAI failure. `code` is stable across languages.
  *
  * Every error the engine raises is a `CriogenError` or one of its
  * subclasses, chosen by `code`. The message starts with the code
@@ -10,7 +10,7 @@
  * message text.
  *
  * @example
- * import { Agent, FakeModel, FakeReply, LimitExceededError, tool } from "criogen";
+ * import { Agent, FakeModel, FakeReply, LimitExceededError, tool } from "criogenai";
  *
  * const ping = tool({ name: "ping", description: "Ping.", input: { type: "object" }, run: () => "pong" });
  * const agent = new Agent({ model: new FakeModel([FakeReply.toolCall("ping")]), tools: [ping], limits: { modelCalls: 1 } });
@@ -95,12 +95,12 @@ export function errorFor(code: string, message: string, details?: Record<string,
 }
 
 /**
- * `true` if `error` is a Criogen error, with `code` if given.
+ * `true` if `error` is a CriogenAI error, with `code` if given.
  *
  * @param error Any caught value.
  * @param code Also require this error code, e.g. "thread_busy".
  * @example
- * import { isCriogenError } from "criogen";
+ * import { isCriogenError } from "criogenai";
  *
  * try {
  *   await thread.send("Hello");

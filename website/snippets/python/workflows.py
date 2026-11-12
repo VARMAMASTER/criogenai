@@ -1,4 +1,4 @@
-from criogen import END, NodeContext, Storage, Workflow, suspend
+from criogenai import END, NodeContext, Storage, Workflow, suspend
 
 
 async def main() -> None:
@@ -35,7 +35,7 @@ async def main() -> None:
 
 async def parallel() -> None:
     # [show parallel]
-    from criogen import END, Workflow
+    from criogenai import END, Workflow
 
     # Two checks run at the same time; "summary" waits for both.
     wf = Workflow(reducers={"findings": "append"})  # both write "findings": append, not replace
@@ -68,7 +68,7 @@ async def parallel() -> None:
 
 async def loop() -> None:
     # [show loop]
-    from criogen import END, Workflow, goto
+    from criogenai import END, Workflow, goto
 
     wf = Workflow()
 
@@ -94,7 +94,7 @@ async def loop() -> None:
 
 async def with_agents() -> None:
     # [show agents]
-    from criogen import END, Agent, Workflow
+    from criogenai import END, Agent, Workflow
 
     triage = Agent("openai:gpt-5-mini", instructions="Classify the request in one word.")
     writer = Agent("openai:gpt-5-mini", instructions="Write a short, kind reply.")

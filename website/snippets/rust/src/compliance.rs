@@ -4,7 +4,7 @@ pub async fn compliance() -> Result<(), Error> {
     // [show]
     use std::time::Duration;
 
-    use criogen_storage::{AuditQuery, Keyring, Retention, Storage};
+    use criogenai_storage::{AuditQuery, Keyring, Retention, Storage};
 
     // CRIOGEN_ENCRYPTION_KEYS="k1:<64 hex digits>"  (openssl rand -hex 32)
     let keys = Keyring::from_env("CRIOGEN_ENCRYPTION_KEYS")?;

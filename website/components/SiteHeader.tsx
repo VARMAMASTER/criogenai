@@ -9,7 +9,7 @@ export default function SiteHeader({ current }: { current?: "benchmarks" | "play
     <header className="top glass">
       <Link className="brand" href="/">
         <LogoMark size={28} />
-        <span>criogen</span>
+        <span>criogenai</span>
       </Link>
       <div className="top-right">
         <nav aria-label="Main">
@@ -40,7 +40,7 @@ const footerColumns = [
   {
     title: "Get started",
     links: [
-      { label: "What Criogen is", href: "/docs/" },
+      { label: "What CriogenAI is", href: "/docs/" },
       { label: "Install", href: "/docs/install/" },
       { label: "Quickstart", href: "/docs/quickstart/" },
       { label: "Playground", href: "/playground/" },
@@ -79,7 +79,7 @@ const states = [
   { state: "failed", label: "failed" },
 ];
 
-const installs = ["pip install criogen", "npm install criogen"];
+const installs = ["pip install criogenai", "npm install criogenai"];
 
 export function SiteFooter() {
   return (
@@ -88,7 +88,7 @@ export function SiteFooter() {
         <div className="bottom-brand">
           <Link className="brand" href="/">
             <LogoMark size={26} />
-            <span>criogen</span>
+            <span>criogenai</span>
           </Link>
           <p>AI agents and workflows on a Rust engine, from Python or TypeScript.</p>
           <ul className="bottom-install" aria-label="Install">
@@ -124,10 +124,10 @@ export function SiteFooter() {
       <div className="bottom-fine">
         <p>Free to use, also commercially. The source code opens under MIT or Apache-2.0 at 10,000 installs.</p>
         <nav aria-label="Packages">
-          <a href="https://www.npmjs.com/package/criogen" rel="noopener">
+          <a href="https://www.npmjs.com/package/criogenai" rel="noopener">
             npm
           </a>
-          <a href="https://pypi.org/project/criogen/" rel="noopener">
+          <a href="https://pypi.org/project/criogenai/" rel="noopener">
             PyPI
           </a>
         </nav>

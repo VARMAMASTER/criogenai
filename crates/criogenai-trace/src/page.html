@@ -1,0 +1,315 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CriogenAI traces</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22 fill=%22none%22 role=%22img%22 aria-label=%22Criogen%22%3E%0A  %3Cg stroke-linecap=%22round%22 stroke-linejoin=%22round%22%3E%0A    %3Cpath d=%22M12.4 24.4 C12.8 27 14.4 28.4 16 31.2 C17.6 28.4 19.2 27 19.6 24.4%22 fill=%22%23f5b544%22 fill-opacity=%22.4%22 stroke=%22%23f5b544%22 stroke-width=%222%22/%3E%0A    %3Cpath d=%22M14.4 24.6 C14.7 26.5 15.3 27.6 16 29.2 C16.7 27.6 17.3 26.5 17.6 24.6 Z%22 fill=%22%23fbd38a%22/%3E%0A    %3Cpath d=%22M16 2.5 L21.5 8.5 V22 L16 25 L10.5 22 V8.5 Z%22 fill=%22%233ecf8e%22 fill-opacity=%22.2%22 stroke=%22%233ecf8e%22 stroke-width=%222.4%22/%3E%0A    %3Cpath d=%22M10.5 16 L6.5 20.5 V24.5 L10.5 22.5 M21.5 16 L25.5 20.5 V24.5 L21.5 22.5%22 stroke=%22%233ecf8e%22 stroke-width=%222.2%22/%3E%0A    %3Ccircle cx=%2216%22 cy=%2212.5%22 r=%222.7%22 fill=%22%23f5b544%22/%3E%0A  %3C/g%3E%0A%3C/svg%3E">
+<style>
+:root {
+  --bg: #f7f7f5; --panel: #ffffff; --text: #1d1d1b; --muted: #6b6b66; --line: #e4e3df;
+  --accent: #2f6fde; --model: #7c4dff; --tool: #0f9d76; --node: #8a8a83; --event: #d38b00;
+  --error: #d6334a; --warn: #c27c00; --hover: #f0efeb;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121211; --panel: #1b1b1a; --text: #ecebe7; --muted: #9b9a94; --line: #2d2d2b;
+    --accent: #6e9cff; --model: #a98bff; --tool: #3cc79c; --node: #8f8f88; --event: #f0b13a;
+    --error: #ff6b7f; --warn: #f0b13a; --hover: #242422;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+header h1 { font-size: 16px; margin: 0 12px 0 0; }
+header h1 a { color: inherit; text-decoration: none; }
+input, button { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 10px; }
+button { cursor: pointer; }
+button:hover { background: var(--hover); }
+button:focus-visible, input:focus-visible, tr:focus-visible, .row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.grow { flex: 1; }
+.muted { color: var(--muted); }
+main { padding: 16px 20px 40px; max-width: 1400px; margin: 0 auto; }
+table { width: 100%; border-collapse: collapse; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+th, td { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font-weight: 600; color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tbody tr { cursor: pointer; }
+tbody tr:hover { background: var(--hover); }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; border: 1px solid currentColor; }
+.ok { color: var(--tool); } .failed, .error { color: var(--error); } .warning, .suspended { color: var(--warn); }
+td.run { white-space: normal; max-width: 420px; }
+.small { font-size: 12px; }
+.badge + .badge { margin-left: 6px; }
+.empty { padding: 40px; text-align: center; background: var(--panel); border: 1px dashed var(--line); border-radius: 8px; }
+.empty code { background: var(--bg); padding: 2px 6px; border-radius: 4px; }
+.summary { display: flex; flex-wrap: wrap; gap: 8px 20px; margin: 4px 0 14px; }
+.summary b { font-variant-numeric: tabular-nums; }
+.split { display: flex; height: 10px; border-radius: 5px; overflow: hidden; background: var(--line); margin-bottom: 6px; }
+.legend { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 16px; align-items: start; }
+@media (max-width: 960px) { .layout { grid-template-columns: 1fr; } }
+.waterfall { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.row { display: grid; grid-template-columns: minmax(160px, 34%) 1fr 80px; align-items: center; gap: 10px; padding: 4px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.row:hover, .row.selected { background: var(--hover); }
+.label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.track { position: relative; height: 14px; }
+.bar { position: absolute; top: 2px; height: 10px; border-radius: 3px; min-width: 2px; }
+.dur { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+.k-model { background: var(--model); } .k-tool { background: var(--tool); } .k-node, .k-run { background: var(--node); } .k-event { background: var(--event); }
+.bar.error { background: var(--error); }
+aside { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; position: sticky; top: 70px; max-height: calc(100vh - 90px); overflow: auto; }
+aside h2 { font-size: 15px; margin: 0 0 8px; word-break: break-word; }
+dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 13px; }
+dt { color: var(--muted); } dd { margin: 0; word-break: break-word; }
+pre { white-space: pre-wrap; word-break: break-word; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px; font-size: 12px; max-height: 320px; overflow: auto; }
+.back { margin-bottom: 10px; }
+.notice { padding: 10px 14px; border-radius: 8px; border: 1px solid var(--warn); color: var(--warn); margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<header>
+  <h1><a href="#">CriogenAI traces</a></h1>
+  <input id="search" type="search" placeholder="Search runs (name, model, id)" aria-label="Search runs" class="grow">
+  <label class="muted"><input id="live" type="checkbox" checked> Live</label>
+  <button id="clear" type="button">Clear all</button>
+</header>
+<main id="main"></main>
+<script>
+"use strict";
+// Every value from a span is shown with textContent: nothing from a run is
+// ever read as HTML.
+const main = document.getElementById("main");
+const search = document.getElementById("search");
+const live = document.getElementById("live");
+let token = null;
+try { token = sessionStorage.getItem("criogenai-trace-token"); } catch (e) {}
+let timer = null;
+let selected = null;
+let shown = "";
+
+function el(tag, attrs, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") node.className = v;
+    else if (k === "style") node.setAttribute("style", v);
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c === null || c === undefined || c === false) continue;
+    node.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return node;
+}
+
+async function api(path, options) {
+  const headers = token ? { Authorization: "Bearer " + token } : {};
+  const response = await fetch(path, { ...(options || {}), headers });
+  if (response.status === 401) {
+    const given = prompt("This viewer needs its token:");
+    if (given) {
+      token = given;
+      try { sessionStorage.setItem("criogenai-trace-token", given); } catch (e) {}
+      return api(path, options);
+    }
+    throw new Error("a token is needed");
+  }
+  if (!response.ok) throw new Error((await response.json().catch(() => ({}))).error || response.statusText);
+  return response.json();
+}
+
+function ms(v) {
+  if (v === null || v === undefined) return "";
+  if (v < 1) return v.toFixed(2) + " ms";
+  if (v < 1000) return Math.round(v) + " ms";
+  if (v < 60000) return (v / 1000).toFixed(v < 10000 ? 2 : 1) + " s";
+  return (v / 60000).toFixed(1) + " min";
+}
+const num = (n) => (n || 0).toLocaleString();
+const money = (c) => (c === null || c === undefined ? "" : "$" + (c < 0.01 ? c.toFixed(5) : c.toFixed(3)));
+const when = (t) => (t ? new Date(t).toLocaleString() : "");
+
+function statusBadge(status, failed) {
+  const s = failed && status !== "failed" ? "failed" : status || "ok";
+  const cls = s === "completed" || s === "ok" ? "ok" : s;
+  return el("span", { class: "badge " + cls }, s);
+}
+
+async function showRuns() {
+  selected = null;
+  let data;
+  try {
+    data = await api("/api/runs?limit=200" + (search.value.trim() ? "&q=" + encodeURIComponent(search.value.trim()) : ""));
+  } catch (e) {
+    main.replaceChildren(el("div", { class: "empty" }, "Could not load runs: ", e.message));
+    return;
+  }
+  if (location.hash.startsWith("#/run/")) return;
+  // Re-render only when something changed: rows stay put under the pointer
+  // and keyboard focus is kept.
+  const key = JSON.stringify(data);
+  if (key === shown && main.firstChild) return;
+  shown = key;
+  if (!data.runs.length) {
+    main.replaceChildren(el("div", { class: "empty" },
+      el("p", {}, el("b", {}, "No runs yet.")),
+      el("p", { class: "muted" }, "Send CriogenAI's traces here: ",
+        el("code", {}, "Telemetry.local()"), " in Python and TypeScript, ",
+        el("code", {}, "OtlpConfig::local()"), " in Rust. Runs appear as they finish.")));
+    return;
+  }
+  const head = el("tr", {}, el("th", {}, "Started"), el("th", {}, "Run"), el("th", {}, "Status"),
+    el("th", { class: "num" }, "Duration"), el("th", { class: "num" }, "Model calls"), el("th", { class: "num" }, "Tool calls"),
+    el("th", { class: "num" }, "Tokens in / out"), data.costs ? el("th", { class: "num" }, "Cost") : null, el("th", {}, "Models"));
+  const rows = data.runs.map((r) => {
+    const open = () => { location.hash = "#/run/" + r.id; };
+    return el("tr", { tabindex: "0", onclick: open, onkeydown: (e) => { if (e.key === "Enter") open(); } },
+      el("td", { class: "muted" }, when(r.start_ms)),
+      el("td", { class: "run" }, r.name, r.input ? el("div", { class: "muted small" }, r.input) : null),
+      el("td", {}, statusBadge(r.status, r.failed), r.warnings ? el("span", { class: "badge warning", title: "Steps the run recovered from, such as a tool error the model saw" }, r.warnings + (r.warnings === 1 ? " warning" : " warnings")) : null),
+      el("td", { class: "num" }, ms(r.duration_ms)), el("td", { class: "num" }, num(r.model_calls)),
+      el("td", { class: "num" }, num(r.tool_calls)), el("td", { class: "num" }, num(r.input_tokens) + " / " + num(r.output_tokens)),
+      data.costs ? el("td", { class: "num" }, money(r.cost)) : null, el("td", { class: "muted" }, (r.models || []).join(", ")));
+  });
+  main.replaceChildren(el("table", {}, el("thead", {}, head), el("tbody", {}, rows)));
+}
+
+// Wall-clock split of a run: a model answering wins, then a tool, the rest is
+// CriogenAI and your code (parallel calls are not counted twice).
+function split(spans, start, end) {
+  const kinds = ["model", "tool"];
+  const points = [...new Set([start, end, ...spans.flatMap((s) => [s.start_ms, s.end_ms])])]
+    .filter((t) => t >= start && t <= end).sort((a, b) => a - b);
+  const out = { model: 0, tool: 0, other: 0 };
+  for (let i = 0; i < points.length - 1; i++) {
+    const mid = (points[i] + points[i + 1]) / 2;
+    const on = (k) => spans.some((s) => s.kind === k && s.start_ms <= mid && s.end_ms >= mid);
+    out[on(kinds[0]) ? "model" : on(kinds[1]) ? "tool" : "other"] += points[i + 1] - points[i];
+  }
+  return out;
+}
+
+function details(span) {
+  const attrs = span.attributes || {};
+  const pick = (k) => attrs[k];
+  const rows = [
+    ["Kind", span.kind], ["Status", span.status], ["Duration", ms(span.end_ms - span.start_ms)],
+    ["Model", pick("gen_ai.request.model")], ["Provider", pick("gen_ai.system")],
+    ["Tokens in", pick("gen_ai.usage.input_tokens")], ["Tokens out", pick("gen_ai.usage.output_tokens")],
+    ["Tool", pick("gen_ai.tool.name")], ["Call id", pick("gen_ai.tool.call.id")],
+    ["Error code", pick("criogen.error_code")], ["Message", span.message],
+  ].filter(([, v]) => v !== undefined && v !== null && v !== "");
+  const input = pick("langfuse.observation.input");
+  const output = pick("langfuse.observation.output");
+  const rest = Object.fromEntries(Object.entries(attrs).filter(([k]) => k !== "langfuse.observation.input" && k !== "langfuse.observation.output"));
+  return el("aside", { "aria-live": "polite" },
+    el("h2", {}, span.name),
+    el("dl", {}, rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])),
+    input ? [el("h3", {}, "Input"), el("pre", {}, input)] : null,
+    output ? [el("h3", {}, "Output"), el("pre", {}, output)] : null,
+    !input && !output && (span.kind === "model" || span.kind === "tool")
+      ? el("p", { class: "muted" }, "Content is not captured (the exporter's capture_content is off).") : null,
+    el("details", {}, el("summary", {}, "All attributes"), el("pre", {}, JSON.stringify(rest, null, 2))));
+}
+
+async function showRun(id) {
+  let data;
+  try {
+    data = await api("/api/runs/" + encodeURIComponent(id));
+  } catch (e) {
+    main.replaceChildren(el("div", { class: "empty" }, "Could not load the run: ", e.message));
+    return;
+  }
+  const { run, spans } = data;
+  const start = Math.min(...spans.map((s) => s.start_ms));
+  const end = Math.max(...spans.map((s) => s.end_ms));
+  const total = Math.max(end - start, 0.001);
+  const byId = new Map(spans.map((s) => [s.id, s]));
+  const depth = (s) => { let d = 0, p = s.parent; while (p && byId.has(p) && d < 32) { d++; p = byId.get(p).parent; } return d; };
+  // Parents before children, siblings by start.
+  const children = new Map();
+  for (const s of spans) {
+    const key = s.parent && byId.has(s.parent) ? s.parent : null;
+    if (!children.has(key)) children.set(key, []);
+    children.get(key).push(s);
+  }
+  const ordered = [];
+  const walk = (key, guard) => {
+    if (guard > 64) return;
+    for (const s of (children.get(key) || []).sort((a, b) => a.start_ms - b.start_ms)) { ordered.push(s); walk(s.id, guard + 1); }
+  };
+  walk(null, 0);
+  const parts = split(spans, start, end);
+  const pct = (v) => (100 * v / total).toFixed(2) + "%";
+  const panel = el("div", {});
+  const rows = ordered.map((s) => {
+    const row = el("div", { class: "row", tabindex: "0", role: "button" },
+      el("div", { class: "label", style: "padding-left:" + depth(s) * 14 + "px" },
+        el("span", { class: "dot k-" + s.kind }), s.name, s.status !== "ok" ? el("span", { class: s.status }, " ●") : null),
+      el("div", { class: "track" }, el("div", {
+        class: "bar k-" + s.kind + (s.status === "error" ? " error" : ""),
+        style: "left:" + pct(s.start_ms - start) + ";width:" + pct(Math.max(s.end_ms - s.start_ms, 0)),
+      })),
+      el("div", { class: "dur" }, ms(s.end_ms - s.start_ms)));
+    const choose = () => {
+      for (const r of document.querySelectorAll(".row.selected")) r.classList.remove("selected");
+      row.classList.add("selected");
+      selected = s.id;
+      panel.replaceChildren(details(s));
+    };
+    row.addEventListener("click", choose);
+    row.addEventListener("keydown", (e) => { if (e.key === "Enter") choose(); });
+    if (s.id === selected) queueMicrotask(choose);
+    return row;
+  });
+  if (!selected) panel.replaceChildren(el("aside", {}, el("p", { class: "muted" }, "Choose a step to see its details.")));
+  main.replaceChildren(
+    el("button", { class: "back", type: "button", onclick: () => { location.hash = ""; } }, "← All runs"),
+    el("h2", {}, run.name, " ", statusBadge(run.status, run.failed),
+      run.warnings ? el("span", { class: "badge warning" }, run.warnings + (run.warnings === 1 ? " warning" : " warnings")) : null),
+    run.input ? el("p", { class: "muted" }, run.input) : null,
+    el("div", { class: "summary muted" },
+      el("span", {}, "Started ", el("b", {}, when(run.start_ms))),
+      el("span", {}, "Duration ", el("b", {}, ms(run.duration_ms))),
+      el("span", {}, "Model calls ", el("b", {}, num(run.model_calls))),
+      el("span", {}, "Tool calls ", el("b", {}, num(run.tool_calls))),
+      el("span", {}, "Tokens ", el("b", {}, num(run.input_tokens) + " in / " + num(run.output_tokens) + " out")),
+      run.cost !== null && run.cost !== undefined ? el("span", {}, "Cost ", el("b", {}, money(run.cost))) : null,
+      run.run_id ? el("span", {}, "Run id ", el("b", {}, run.run_id)) : null),
+    el("div", { class: "split", role: "img", "aria-label": "Where the time went" },
+      el("div", { class: "k-model", style: "width:" + pct(parts.model) }),
+      el("div", { class: "k-tool", style: "width:" + pct(parts.tool) }),
+      el("div", { class: "k-node", style: "width:" + pct(parts.other) })),
+    el("div", { class: "legend" },
+      el("span", {}, el("span", { class: "dot k-model" }), "Model calls " + ms(parts.model)),
+      el("span", {}, el("span", { class: "dot k-tool" }), "Tools " + ms(parts.tool)),
+      el("span", {}, el("span", { class: "dot k-node" }), "CriogenAI and your code " + ms(parts.other))),
+    el("div", { class: "layout" }, el("div", { class: "waterfall" }, rows), panel));
+}
+
+function route() {
+  const m = location.hash.match(/^#\/run\/([0-9a-fA-F]{32})$/);
+  shown = "";
+  if (m) showRun(m[1]); else showRuns();
+}
+
+function schedule() {
+  clearInterval(timer);
+  timer = setInterval(() => { if (live.checked && !document.hidden && !location.hash) showRuns(); }, 2000);
+}
+
+window.addEventListener("hashchange", route);
+search.addEventListener("input", () => { if (location.hash) location.hash = ""; else showRuns(); });
+document.getElementById("clear").addEventListener("click", async () => {
+  if (!confirm("Delete every run in this viewer?")) return;
+  await api("/api/runs", { method: "DELETE" });
+  location.hash = "";
+  showRuns();
+});
+route();
+schedule();
+</script>
+</body>
+</html>

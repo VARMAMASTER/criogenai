@@ -3,7 +3,7 @@
 # [show tools]
 from typing import Any, Dict
 
-from criogen import ToolError, tool
+from criogenai import ToolError, tool
 
 # A stand-in for your order database.
 ORDERS: Dict[str, Dict[str, Any]] = {
@@ -35,7 +35,7 @@ def issue_refund(order_id: str, amount: float, reason: str) -> dict:
 
 
 # [show agent]
-from criogen import Agent, Memory, Storage
+from criogenai import Agent, Memory, Storage
 
 INSTRUCTIONS = """You are the support assistant of an online shop.
 Look an order up before you answer a question about it.

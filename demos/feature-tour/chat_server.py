@@ -1,7 +1,7 @@
 """A small chat backend for the website's demo page: a support agent built on
-the real Criogen SDK, so visitors can try the features themselves.
+the real CriogenAI SDK, so visitors can try the features themselves.
 
-    <python with criogen> demos/feature-tour/chat_server.py     # http://127.0.0.1:4700
+    <python with criogenai> demos/feature-tour/chat_server.py     # http://127.0.0.1:4700
 
 The agent has tools (look up an order, refund it), pauses before a refund for a
 person to decide, remembers facts per visitor, writes an audit trail, saves
@@ -22,11 +22,11 @@ import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
-from criogen import Agent, Decision, Gemini, Memory, OpenAI, OpenRouter, Retry, Storage, ToolError, tool
+from criogenai import Agent, Decision, Gemini, Memory, OpenAI, OpenRouter, Retry, Storage, ToolError, tool
 
 PORT = int(os.environ.get("PORT", "4700"))
 ALLOWED_ORIGINS = {
-    "http://localhost:4400", "http://127.0.0.1:4400", "https://criogen.vercel.app", "https://criogenai.com", "https://www.criogenai.com",
+    "http://localhost:4400", "http://127.0.0.1:4400", "https://criogenai.vercel.app", "https://criogenai.com", "https://www.criogenai.com",
     *filter(None, os.environ.get("PLAYGROUND_ORIGINS", "").split(",")),
 }
 
@@ -87,7 +87,7 @@ INSTRUCTIONS = (
 # One dedicated event loop runs every SDK call; request threads submit to it.
 LOOP = asyncio.new_event_loop()
 threading.Thread(target=LOOP.run_forever, daemon=True).start()
-DB = os.path.join(tempfile.gettempdir(), f"criogen-demo-chat-{uuid.uuid4().hex}.db")
+DB = os.path.join(tempfile.gettempdir(), f"criogenai-demo-chat-{uuid.uuid4().hex}.db")
 STORAGE: Storage = None  # type: ignore[assignment]
 AGENTS: dict = {}
 

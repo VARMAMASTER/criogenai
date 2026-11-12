@@ -5,7 +5,7 @@ Extends 0008 §16 (semantic memory search). The base of the RAG kit (task 24).
 
 ## What the benchmark showed
 
-`cargo run -p criogen-bench --release --bin vectors` (one machine,
+`cargo run -p criogenai-bench --release --bin vectors` (one machine,
 2026-11-07; random 768-dimension vectors, top 5, median of 15 queries):
 
 | Items in a namespace | In memory | SQLite file |
@@ -24,7 +24,7 @@ The roadmap named `sqlite-vec` and `pgvector`. Neither is taken now:
 
 - **Encryption at rest (0008 §15).** Both keep vectors in the database in a
   form the database can compare, so unencrypted. Embeddings can be inverted
-  into text, and Criogen encrypts them today. A hospital deployment (Axon
+  into text, and CriogenAI encrypts them today. A hospital deployment (Axon
   Health) must not lose that.
 - **Packaging.** `sqlite-vec` is a C extension: every wheel and npm engine
   package (five platforms) would compile and ship it. `pgvector` must be
@@ -39,7 +39,7 @@ when it opens and updated as documents are added. `pgvector` remains an
 option for unencrypted Postgres deployments with many millions of vectors,
 when someone needs it.
 
-## The index (`criogen_storage::vector`)
+## The index (`criogenai_storage::vector`)
 
 ```rust
 trait VectorIndex: Send + Sync {
@@ -89,7 +89,7 @@ Two changes made the index fast: the dot product works in blocks of eight
 values without index checks (the compiler turns it into vector
 instructions), and HNSW keeps visited nodes in a plain array.
 
-## Collections and retrievers (`criogen_agent::retrieval`)
+## Collections and retrievers (`criogenai_agent::retrieval`)
 
 ```rust
 let docs = Collection::open(storage.memory(), "handbook", embedder).await?; // loads, builds the index
@@ -98,7 +98,7 @@ let hits = docs.search("How many vacation days?", 5).await?;        // Vec<Hit {
 let agent = Agent::builder(model).tool(docs.as_tool("search_handbook", "Search the staff handbook.")).build()?;
 ```
 
-- A collection is a namespace of the memory store (`criogen` /
+- A collection is a namespace of the memory store (`criogenai` /
   `collections` / name): each document is an item with its text, metadata
   and vector, so it is saved, encrypted and retained like any memory.
 - `Collection::open` reads every vector once (`MemoryStore::embedded`, a
@@ -119,7 +119,7 @@ let agent = Agent::builder(model).tool(docs.as_tool("search_handbook", "Search t
 - Limits: a document's text up to 100 000 characters (split longer ones;
   the RAG kit will), metadata up to 8 KB, ids up to 256 bytes.
 
-Python `criogen.Collection` and TypeScript `Collection` wrap the same Rust
+Python `criogenai.Collection` and TypeScript `Collection` wrap the same Rust
 collection (`open`, `add`, `remove`, `search`, `reload`, `count`,
 `as_tool`). In TypeScript the operations go through `NativeStorage.op`
 (`collection_*`), so both engines have them; in the browser the collection

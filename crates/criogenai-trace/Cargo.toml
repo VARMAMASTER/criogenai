@@ -1,0 +1,34 @@
+[package]
+name = "criogenai-trace"
+description = "A local trace viewer for CriogenAI runs: an OTLP receiver with a page (design 0023)"
+readme = "README.md"
+keywords = ["agents", "tracing", "opentelemetry", "llm", "observability"]
+categories = ["development-tools::debugging", "web-programming::http-server"]
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+# Not published until the package name is confirmed.
+publish = false
+
+[dependencies]
+# The HTTP server (as the gateway's; already in the tree).
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "tokio"] }
+serde.workspace = true
+serde_json.workspace = true
+# Spans are kept in SQLite (a file, or in memory); as criogenai-storage's.
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "sqlite"] }
+thiserror.workspace = true
+# `rt-multi-thread`, `net`, `signal`, `macros`: the binary and the server.
+tokio = { workspace = true, features = ["rt-multi-thread", "net", "signal", "sync", "time", "macros"] }
+
+[dev-dependencies]
+criogenai-agent = { path = "../criogenai-agent" }
+criogenai-core = { path = "../criogenai-core" }
+criogenai-providers = { path = "../criogenai-providers" }
+criogenai-telemetry = { path = "../criogenai-telemetry" }
+reqwest = { version = "0.13", default-features = false, features = ["rustls", "json"] }
+
+[lints]
+workspace = true

@@ -6,8 +6,8 @@ import os
 
 import pytest
 
-from criogen import Agent, FakeModel, FakeReply, _native, evals, tool
-from criogen.evals import Case, Dataset, EvalFailed, EvalResult
+from criogenai import Agent, FakeModel, FakeReply, _native, evals, tool
+from criogenai.evals import Case, Dataset, EvalFailed, EvalResult
 
 # scripts/test-python.sh runs a copy of the tests and says where the catalog is.
 _CATALOG = os.environ.get("CRIOGEN_ERROR_CATALOG")

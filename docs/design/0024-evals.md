@@ -73,17 +73,17 @@ out for files that go elsewhere.
   max_regressions=0, tolerance=0.02)` raises `EvalFailed` (code
   `eval_failed`) with a readable report when a bar is missed: what fell, by
   how much, and the regressed cases.
-- CLI: `python -m criogen.evals compare base.json new.json [--fail-on-regression]`
-  and `npx criogen eval compare …`: print the comparison, exit 1 on a
+- CLI: `python -m criogenai.evals compare base.json new.json [--fail-on-regression]`
+  and `npx criogenai eval compare …`: print the comparison, exit 1 on a
   regression. Running an eval is code (it needs your agent), so there is no
   `run` command: write a test with `evaluate(...)` and `check(...)`.
 - `report()` / `markdown()`: a table for a terminal or a pull request.
 
 ## Names, as built
 
-Python `criogen.evals` (`eval` is a Python built-in), TypeScript `evals`
+Python `criogenai.evals` (`eval` is a Python built-in), TypeScript `evals`
 (camelCase: `exactMatch`, `toolCalled`, `jsonSchema`, ...), Rust
-`criogen_agent::evals` (`exact_match(ignore_case)`, `contains()` /
+`criogenai_agent::evals` (`exact_match(ignore_case)`, `contains()` /
 `contains_these(...)`, `Check::new().min_pass_rate(..)`). Scorer names in
 result files are the same everywhere (`exact_match`, `tool_called:<tool>`,
 `judge`), so results compare across languages. A judge's tokens are kept per

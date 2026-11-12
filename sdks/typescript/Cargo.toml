@@ -1,8 +1,8 @@
 # The TypeScript SDK's native addon (design 0012). Not a workspace member:
 # building it needs Node. Built with @napi-rs/cli (see package.json).
 [package]
-name = "criogen-node"
-version = "0.1.6"
+name = "criogenai-node"
+version = "0.1.7"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT OR Apache-2.0"
@@ -12,15 +12,15 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-criogen-core = { path = "../../crates/criogen-core" }
-criogen-providers = { path = "../../crates/criogen-providers" }
-criogen-storage = { path = "../../crates/criogen-storage", features = ["sqlite", "postgres", "encryption"] }
-criogen-agent = { path = "../../crates/criogen-agent", features = ["sqlite", "postgres", "encryption"] }
+criogenai-core = { path = "../../crates/criogenai-core" }
+criogenai-providers = { path = "../../crates/criogenai-providers" }
+criogenai-storage = { path = "../../crates/criogenai-storage", features = ["sqlite", "postgres", "encryption"] }
+criogenai-agent = { path = "../../crates/criogenai-agent", features = ["sqlite", "postgres", "encryption"] }
 # The local trace viewer (design 0023); not in the WebAssembly engine.
-criogen-trace = { path = "../../crates/criogen-trace" }
-criogen-telemetry = { path = "../../crates/criogen-telemetry" }
+criogenai-trace = { path = "../../crates/criogenai-trace" }
+criogenai-telemetry = { path = "../../crates/criogenai-telemetry" }
 # The bridge shared with the browser engine (design 0021).
-criogen-js = { path = "../../crates/criogen-js", features = ["encryption", "mcp-stdio"] }
+criogenai-js = { path = "../../crates/criogenai-js", features = ["encryption", "mcp-stdio"] }
 napi = { version = "3", default-features = false, features = ["napi6", "tokio_rt", "serde-json"] }
 napi-derive = "3"
 serde = "1"
@@ -30,7 +30,7 @@ tokio = { version = "1.45", features = ["rt-multi-thread", "sync", "time"] }
 [build-dependencies]
 napi-build = "2"
 
-# Stand-alone: never part of the Criogen workspace.
+# Stand-alone: never part of the CriogenAI workspace.
 [workspace]
 
 # Published binaries carry no symbol table. (Fat LTO made the addon 21%

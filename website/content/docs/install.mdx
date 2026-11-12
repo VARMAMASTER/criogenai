@@ -1,16 +1,17 @@
 ---
 title: Install
-description: Criogen for Python, TypeScript and Rust, on Linux, macOS and Windows.
+description: CriogenAI for Python, TypeScript and Rust, on Linux, macOS and Windows.
 ---
 
 
 <Aside type="note" title="Versions by platform">
-The Python and TypeScript packages are on PyPI and npm as `criogen`. The newest
-engine (0.1.6) is built for Windows x64 and the browser; on Linux and macOS,
-pip installs 0.1.3 (0.1.2 on Intel Macs) and npm runs the 0.1.3 engine until
-their next build. Features marked 0.1.4 or later on the [status page](/docs/status/)
-need the newer engine. The Rust crates are published when Criogen's code opens,
-at 10,000 installs.
+The Python and TypeScript packages are on PyPI and npm as `criogenai` (until
+0.1.6 they were called `criogen`). `criogenai` 0.1.7 has engines for Windows
+x64 and the browser (`criogenai/web`); the Linux and macOS engines follow with
+the next build, planned for 16 November. Until then, on Linux and macOS, use
+the old package (`pip install criogen` / `npm install criogen`, `import
+criogen`), which runs the 0.1.3 engine (0.1.2 on Intel Macs). The Rust crates
+are published when CriogenAI's code opens, at 10,000 installs.
 </Aside>
 
 ## Supported platforms
@@ -20,7 +21,8 @@ at 10,000 installs.
 | Python 3.9+ (one wheel per platform) | yes | yes | yes | yes | yes |
 | Node.js 18+ (a prebuilt addon per platform) | yes | yes | yes | yes | yes |
 | Rust 1.88+ (crates published when the code opens) | later | later | later | later | later |
-| Newest engine on the registry (Python / Node.js) | 0.1.3 / 0.1.3 | 0.1.3 / 0.1.3 | 0.1.3 / 0.1.3 | 0.1.2 / 0.1.3 | 0.1.6 / 0.1.6 |
+| `criogenai` engine on the registry (Python / Node.js) | from 16 Nov | from 16 Nov | from 16 Nov | from 16 Nov | 0.1.7 / 0.1.7 |
+| Until then: the old `criogen` package | 0.1.3 / 0.1.3 | 0.1.3 / 0.1.3 | 0.1.3 / 0.1.3 | 0.1.2 / 0.1.3 | – |
 
 Other platforms (Windows on ARM, Alpine/musl, 32-bit) are not supported yet.
 
@@ -30,12 +32,12 @@ Other platforms (Windows on ARM, Alpine/musl, 32-bit) are not supported yet.
 <TabItem label="Python">
 
 ```sh
-pip install criogen
+pip install criogenai
 # with Pydantic models as tool arguments and typed output:
-pip install "criogen[pydantic]"
+pip install "criogenai[pydantic]"
 ```
 
-The package is called `criogen`; in code you `import criogen`.
+The package is called `criogenai`; in code you `import criogenai`.
 The wheel contains the Rust engine, so nothing else is needed. It is typed
 (`py.typed`): mypy and your editor know every type.
 
@@ -43,42 +45,42 @@ The wheel contains the Rust engine, so nothing else is needed. It is typed
 <TabItem label="TypeScript">
 
 ```sh
-npm install criogen
+npm install criogenai
 # or, with another package manager (they all use the npm registry):
-pnpm add criogen
-yarn add criogen
-bun add criogen
+pnpm add criogenai
+yarn add criogenai
+bun add criogenai
 ```
 
 npm installs the engine for your platform automatically
-(`criogen-linux-x64`, `-darwin-arm64`, `-windows-x64`, …). Works from
+(`criogenai-linux-x64`, `-darwin-arm64`, `-windows-x64`, …). Works from
 TypeScript and JavaScript, as CommonJS or ES modules.
 
 </TabItem>
 <TabItem label="Rust">
 
-The Rust crates are published when Criogen's code opens, at 10,000
+The Rust crates are published when CriogenAI's code opens, at 10,000
 installs (a Rust crate ships its source). Until then, use the Python or
 TypeScript package; they run the same Rust engine. This is what you will
 add then:
 
 ```toml
 [dependencies]
-criogen-agent = { version = "0.1", features = ["sqlite"] }
-criogen-providers = "0.1"
-criogen-storage = { version = "0.1", features = ["sqlite"] }
+criogenai-agent = { version = "0.1", features = ["sqlite"] }
+criogenai-providers = "0.1"
+criogenai-storage = { version = "0.1", features = ["sqlite"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 ```
 
 | Crate | What it gives you |
 |---|---|
-| `criogen-core` | The workflow engine: steps, edges, routers, state, pauses, retries |
-| `criogen-providers` | Messages, tools and models (OpenAI, Anthropic, Gemini, Ollama, vLLM, …) |
-| `criogen-agent` | Agents: tools, approvals, structured output, hooks, threads, memory |
-| `criogen-storage` | In memory, SQLite (`sqlite`), Postgres (`postgres`), encryption (`encryption`) |
-| `criogen-telemetry` | OpenTelemetry and Langfuse export |
-| `criogen-gateway` | The OpenAI-compatible LLM gateway (library and binary) |
+| `criogenai-core` | The workflow engine: steps, edges, routers, state, pauses, retries |
+| `criogenai-providers` | Messages, tools and models (OpenAI, Anthropic, Gemini, Ollama, vLLM, …) |
+| `criogenai-agent` | Agents: tools, approvals, structured output, hooks, threads, memory |
+| `criogenai-storage` | In memory, SQLite (`sqlite`), Postgres (`postgres`), encryption (`encryption`) |
+| `criogenai-telemetry` | OpenTelemetry and Langfuse export |
+| `criogenai-gateway` | The OpenAI-compatible LLM gateway (library and binary) |
 
 </TabItem>
 </Tabs>
@@ -88,7 +90,7 @@ tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 Models read their keys from environment variables: `OPENAI_API_KEY`,
 `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `OPENROUTER_API_KEY`. Self-hosted
 models (Ollama, vLLM, LM Studio) need none. Keys never appear in errors or
-logs: Criogen removes them from provider error messages.
+logs: CriogenAI removes them from provider error messages.
 
 ## Check the install
 
@@ -96,14 +98,14 @@ logs: Criogen removes them from provider error messages.
 <TabItem label="Python">
 
 ```sh
-python -c "import criogen; print(criogen.__version__, criogen.ready_sync())"
+python -c "import criogenai; print(criogenai.__version__, criogenai.ready_sync())"
 ```
 
 </TabItem>
 <TabItem label="TypeScript">
 
 ```sh
-node -e "import('criogen').then(async (c) => console.log(await c.ready()))"
+node -e "import('criogenai').then(async (c) => console.log(await c.ready()))"
 ```
 
 </TabItem>

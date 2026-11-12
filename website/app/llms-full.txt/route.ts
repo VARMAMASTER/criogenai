@@ -35,6 +35,6 @@ export function GET() {
     const url = `${SITE.url}/docs/${d.slug ? `${d.slug}/` : ""}`;
     return `# ${d.title}\n\nSource: ${url}\n${d.description ? `\n> ${d.description}\n` : ""}\n${plain(d.body)}\n`;
   });
-  const text = `# Criogen documentation\n\n> ${SITE.description}\n\n${parts.join("\n---\n\n")}`;
+  const text = `# CriogenAI documentation\n\n> ${SITE.description}\n\n${parts.join("\n---\n\n")}`;
   return new Response(text, { headers: { "Content-Type": "text/plain; charset=utf-8" } });
 }

@@ -1,4 +1,4 @@
-from criogen import Agent
+from criogenai import Agent
 
 
 async def main(agent: Agent) -> None:

@@ -1,4 +1,4 @@
-# A demo app on Criogen: a support agent behind an HTTP API, with
+# A demo app on CriogenAI: a support agent behind an HTTP API, with
 # threads in SQLite and human approval for refunds. Uses real models (OpenAI
 # or Gemini), so it is run by hand, never in CI. Not a workspace member.
 [package]
@@ -8,13 +8,13 @@ edition = "2024"
 publish = false
 
 [dependencies]
-criogen-agent = { path = "../../../crates/criogen-agent", features = ["sqlite"] }
-criogen-providers = { path = "../../../crates/criogen-providers" }
-criogen-storage = { path = "../../../crates/criogen-storage", features = ["sqlite"] }
+criogenai-agent = { path = "../../../crates/criogenai-agent", features = ["sqlite"] }
+criogenai-providers = { path = "../../../crates/criogenai-providers" }
+criogenai-storage = { path = "../../../crates/criogenai-storage", features = ["sqlite"] }
 axum = "0.8.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1.45", features = ["macros", "rt-multi-thread", "net", "time", "signal"] }
 
-# Stand-alone: never part of the Criogen workspace.
+# Stand-alone: never part of the CriogenAI workspace.
 [workspace]

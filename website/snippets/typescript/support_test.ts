@@ -2,7 +2,7 @@
 // [show]
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { FakeModel, FakeReply, Storage } from "criogen";
+import { FakeModel, FakeReply, Storage } from "criogenai";
 import { buildAgent } from "./support_agent.js";
 
 test("a refund waits for a person", async () => {

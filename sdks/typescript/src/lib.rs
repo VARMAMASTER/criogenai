@@ -3,7 +3,7 @@
 //! the user's tools; the agent loop, validation, storage and approvals run
 //! in Rust.
 //!
-//! The bridge itself (configurations, envelopes, results) is `criogen-js`,
+//! The bridge itself (configurations, envelopes, results) is `criogenai-js`,
 //! shared with the WebAssembly module for the browser (design 0021); this
 //! file adapts it to napi: async methods return Promises on napi's Tokio
 //! runtime, and JavaScript functions are called through thread-safe
@@ -13,12 +13,12 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, OnceLock};
 
-use criogen_agent::Agent;
-use criogen_core::Workflow;
-use criogen_js::{CallError, ChatStream, EventStream, Failure, Gateway, JsFn, JsFunction};
-use criogen_providers::BoxFuture;
-use criogen_storage::Storage;
-use criogen_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
+use criogenai_agent::Agent;
+use criogenai_core::Workflow;
+use criogenai_js::{CallError, ChatStream, EventStream, Failure, Gateway, JsFn, JsFunction};
+use criogenai_providers::BoxFuture;
+use criogenai_storage::Storage;
+use criogenai_telemetry::{Langfuse, OtlpConfig, OtlpExporter};
 use napi::Status;
 use napi::bindgen_prelude::{Promise, block_on, within_runtime_if_available};
 use napi::threadsafe_function::ThreadsafeFunction;
@@ -63,7 +63,7 @@ fn to_napi(failure: Failure) -> napi::Error {
 }
 
 fn bad(message: impl Into<String>) -> napi::Error {
-    to_napi(criogen_js::failure("invalid_value", message, None))
+    to_napi(criogenai_js::failure("invalid_value", message, None))
 }
 
 // ---------- cancellation and presets ----------
@@ -72,13 +72,13 @@ fn bad(message: impl Into<String>) -> napi::Error {
 /// the call starts is not lost.
 #[napi]
 pub fn new_cancel_id() -> u32 {
-    criogen_js::new_cancel_id()
+    criogenai_js::new_cancel_id()
 }
 
 /// Cancels the call registered under `id` (no-op once it ended).
 #[napi]
 pub fn cancel_call(id: u32) {
-    criogen_js::cancel_call(id);
+    criogenai_js::cancel_call(id);
 }
 
 /// The engine's version. Present from 0.1.6 on: the TypeScript layer uses
@@ -93,26 +93,26 @@ pub fn engine_version() -> String {
 /// against it in the tests.
 #[napi]
 pub fn presets() -> String {
-    criogen_js::presets()
+    criogenai_js::presets()
 }
 
 /// Forgets an id whose call never started.
 #[napi]
 pub fn release_cancel_id(id: u32) {
-    criogen_js::release_cancel_id(id);
+    criogenai_js::release_cancel_id(id);
 }
 
 /// Registers a JavaScript model function (design 0021 §7); the handle
 /// names it in model specs.
 #[napi]
 pub fn register_function(function: JsTool) -> u32 {
-    criogen_js::register_function(Arc::new(NodeFunction(Arc::new(function))))
+    criogenai_js::register_function(Arc::new(NodeFunction(Arc::new(function))))
 }
 
 /// Forgets a model function (models built from it keep working).
 #[napi]
 pub fn release_function(handle: u32) {
-    criogen_js::release_function(handle);
+    criogenai_js::release_function(handle);
 }
 
 // ---------- storage ----------
@@ -129,8 +129,8 @@ impl NativeStorage {
     /// Connects (blocks briefly: SQLite opens a file, Postgres connects).
     #[napi(constructor)]
     pub fn new(spec: String) -> napi::Result<Self> {
-        let spec = criogen_js::parse(&spec).map_err(to_napi)?;
-        let storage = block_on(criogen_js::open_storage(&spec)).map_err(to_napi)?;
+        let spec = criogenai_js::parse(&spec).map_err(to_napi)?;
+        let storage = block_on(criogenai_js::open_storage(&spec)).map_err(to_napi)?;
         Ok(Self { storage })
     }
 
@@ -143,8 +143,8 @@ impl NativeStorage {
     /// A storage operation (memory, prune, audit); the result as JSON.
     #[napi]
     pub async fn op(&self, op: String, payload: String) -> napi::Result<String> {
-        let payload = criogen_js::parse(&payload).map_err(to_napi)?;
-        criogen_js::storage_operation(self.storage.clone(), &op, payload)
+        let payload = criogenai_js::parse(&payload).map_err(to_napi)?;
+        criogenai_js::storage_operation(self.storage.clone(), &op, payload)
             .await
             .map(|v| v.to_string())
             .map_err(to_napi)
@@ -180,7 +180,7 @@ impl NativeTelemetry {
     /// headers}`; both take `serviceName` and `captureContent`.
     #[napi(constructor)]
     pub fn new(spec: String) -> napi::Result<Self> {
-        let spec = criogen_js::parse(&spec).map_err(to_napi)?;
+        let spec = criogenai_js::parse(&spec).map_err(to_napi)?;
         let text = |key: &str| spec.get(key).and_then(serde_json::Value::as_str);
         let mut config = match text("kind") {
             Some("langfuse") => {
@@ -255,7 +255,7 @@ pub struct NativeAgent {
 
 impl Drop for NativeAgent {
     fn drop(&mut self) {
-        criogen_js::forget_agent(self.handle);
+        criogenai_js::forget_agent(self.handle);
     }
 }
 
@@ -270,9 +270,9 @@ impl NativeAgent {
         storage: &NativeStorage,
         hooks: Vec<JsTool>,
     ) -> napi::Result<Self> {
-        let config = criogen_js::parse(&config).map_err(to_napi)?;
+        let config = criogenai_js::parse(&config).map_err(to_napi)?;
         let telemetry = config["telemetry"].as_u64();
-        let (agent, handle) = criogen_js::build_agent(
+        let (agent, handle) = criogenai_js::build_agent(
             &config,
             functions(tools),
             &storage.storage,
@@ -284,7 +284,7 @@ impl NativeAgent {
                         .get(&(handle as u32))
                         .cloned()
                         .ok_or_else(|| {
-                            criogen_js::failure(
+                            criogenai_js::failure(
                                 "invalid_value",
                                 "the telemetry exporter is gone",
                                 None,
@@ -309,7 +309,7 @@ impl NativeAgent {
     /// [`new_cancel_id`].
     #[napi]
     pub async fn run(&self, payload: String, cancel_id: u32) -> napi::Result<String> {
-        criogen_js::agent_run(self.agent.clone(), payload, cancel_id)
+        criogenai_js::agent_run(self.agent.clone(), payload, cancel_id)
             .await
             .map_err(to_napi)
     }
@@ -322,7 +322,7 @@ impl NativeAgent {
         payload: String,
         cancel_id: u32,
     ) -> napi::Result<String> {
-        criogen_js::agent_thread(self.agent.clone(), op, payload, cancel_id)
+        criogenai_js::agent_thread(self.agent.clone(), op, payload, cancel_id)
             .await
             .map_err(to_napi)
     }
@@ -331,7 +331,7 @@ impl NativeAgent {
     /// `retry`).
     #[napi]
     pub fn stream(&self, op: String, payload: String) -> napi::Result<NativeStream> {
-        within_runtime_if_available(|| criogen_js::agent_stream(&self.agent, &op, &payload))
+        within_runtime_if_available(|| criogenai_js::agent_stream(&self.agent, &op, &payload))
             .map(|inner| NativeStream { inner })
             .map_err(to_napi)
     }
@@ -367,29 +367,29 @@ impl NativeStream {
 /// Problems with a value against a JSON Schema (evals, design 0024).
 #[napi]
 pub fn validate_json(schema: String, value: String) -> napi::Result<String> {
-    criogen_js::validate_json(&schema, &value).map_err(to_napi)
+    criogenai_js::validate_json(&schema, &value).map_err(to_napi)
 }
 
 // ---------- the trace viewer (design 0023) ----------
 
-fn viewers() -> &'static Mutex<HashMap<u32, criogen_trace::RunningViewer>> {
-    static VIEWERS: OnceLock<Mutex<HashMap<u32, criogen_trace::RunningViewer>>> = OnceLock::new();
+fn viewers() -> &'static Mutex<HashMap<u32, criogenai_trace::RunningViewer>> {
+    static VIEWERS: OnceLock<Mutex<HashMap<u32, criogenai_trace::RunningViewer>>> = OnceLock::new();
     VIEWERS.get_or_init(Mutex::default)
 }
 
 /// Starts the local trace viewer: `{handle, url}`. Spec as
-/// `criogen_trace::ViewerBuilder::from_spec`.
+/// `criogenai_trace::ViewerBuilder::from_spec`.
 #[napi]
 pub async fn trace_start(spec: String) -> napi::Result<String> {
     let spec: Value =
         serde_json::from_str(&spec).map_err(|e| napi::Error::from_reason(e.to_string()))?;
     let start = async {
-        let (builder, address) = criogen_trace::ViewerBuilder::from_spec(&spec)?;
-        criogen_trace::start(builder, address).await
+        let (builder, address) = criogenai_trace::ViewerBuilder::from_spec(&spec)?;
+        criogenai_trace::start(builder, address).await
     };
     let running = start
         .await
-        .map_err(|e| to_napi(criogen_js::failure("invalid_value", e.to_string(), None)))?;
+        .map_err(|e| to_napi(criogenai_js::failure("invalid_value", e.to_string(), None)))?;
     static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
     let handle = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let url = running.url();
@@ -411,19 +411,19 @@ pub async fn trace_stop(handle: u32) {
 /// Starts or reaches an MCP server: `{handle, info, tools}`.
 #[napi]
 pub async fn mcp_connect(spec: String) -> napi::Result<String> {
-    criogen_js::mcp_connect(spec).await.map_err(to_napi)
+    criogenai_js::mcp_connect(spec).await.map_err(to_napi)
 }
 
 /// Lists a server's tools again.
 #[napi]
 pub async fn mcp_refresh(handle: u32) -> napi::Result<String> {
-    criogen_js::mcp_refresh(handle).await.map_err(to_napi)
+    criogenai_js::mcp_refresh(handle).await.map_err(to_napi)
 }
 
 /// Calls a server's tool: `{ok, text | value | content | error}`.
 #[napi]
 pub async fn mcp_call(handle: u32, name: String, args: String) -> napi::Result<String> {
-    criogen_js::mcp_call(handle, name, args)
+    criogenai_js::mcp_call(handle, name, args)
         .await
         .map_err(to_napi)
 }
@@ -431,7 +431,7 @@ pub async fn mcp_call(handle: u32, name: String, args: String) -> napi::Result<S
 /// Stops a server.
 #[napi]
 pub async fn mcp_close(handle: u32) {
-    criogen_js::mcp_close(handle).await;
+    criogenai_js::mcp_close(handle).await;
 }
 
 // ---------- the gateway (design 0018) ----------
@@ -528,7 +528,7 @@ impl NativeWorkflow {
         routers: Vec<JsTool>,
         storage: &NativeStorage,
     ) -> napi::Result<Self> {
-        let workflow = criogen_js::build_workflow(&config, functions(nodes), functions(routers))
+        let workflow = criogenai_js::build_workflow(&config, functions(nodes), functions(routers))
             .map_err(to_napi)?;
         Ok(Self {
             workflow,
@@ -539,7 +539,7 @@ impl NativeWorkflow {
     /// Runs once: payload `{input, maxSteps, deadlineMs}`.
     #[napi]
     pub async fn run(&self, payload: String, cancel_id: u32) -> napi::Result<String> {
-        criogen_js::workflow_run(self.workflow.clone(), payload, cancel_id)
+        criogenai_js::workflow_run(self.workflow.clone(), payload, cancel_id)
             .await
             .map_err(to_napi)
     }
@@ -547,7 +547,7 @@ impl NativeWorkflow {
     /// Continues a snapshot (no storage): payload `{snapshot, values}`.
     #[napi]
     pub async fn resume(&self, payload: String, cancel_id: u32) -> napi::Result<String> {
-        criogen_js::workflow_resume(self.workflow.clone(), payload, cancel_id)
+        criogenai_js::workflow_resume(self.workflow.clone(), payload, cancel_id)
             .await
             .map_err(to_napi)
     }
@@ -560,7 +560,7 @@ impl NativeWorkflow {
         payload: String,
         cancel_id: u32,
     ) -> napi::Result<String> {
-        criogen_js::workflow_thread(
+        criogenai_js::workflow_thread(
             self.workflow.clone(),
             self.storage.clone(),
             op,

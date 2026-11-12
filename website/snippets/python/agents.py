@@ -3,7 +3,7 @@ from typing import Literal, Optional
 from pydantic import BaseModel
 
 # [show]
-from criogen import Agent, FakeModel, FakeReply, ToolContext, ToolError, tool
+from criogenai import Agent, FakeModel, FakeReply, ToolContext, ToolError, tool
 
 
 @tool(destructive=True)
@@ -40,7 +40,7 @@ assert result.text == "Refunded."
 
 def subagents() -> None:
     # [show subagents]
-    from criogen import Agent
+    from criogenai import Agent
 
     researcher = Agent("openai:gpt-5-mini", instructions="Find facts about orders. Be precise.")
     support = Agent(
@@ -54,7 +54,7 @@ def subagents() -> None:
 
 def hooks() -> None:
     # [show hooks]
-    from criogen import Agent, HookAction, HookContext, ToolCall, ToolError
+    from criogenai import Agent, HookAction, HookContext, ToolCall, ToolError
 
     class Guard:
         """Blocks large refunds, hides card numbers, stops long runs."""

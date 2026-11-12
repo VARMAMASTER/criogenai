@@ -11,7 +11,7 @@ from typing import List, Literal, Optional
 
 import pytest
 
-from criogen import (
+from criogenai import (
     Agent,
     HookAction,
     ToolResult,
@@ -302,7 +302,7 @@ def test_reject_decide_and_rewind():
 
 
 def test_sqlite_threads_survive_a_new_agent_and_storage_has_memory_retention_and_audit():
-    path = os.path.join(tempfile.gettempdir(), f"criogen-py-{uuid.uuid4().hex}.db")
+    path = os.path.join(tempfile.gettempdir(), f"criogenai-py-{uuid.uuid4().hex}.db")
     url = f"sqlite:///{path}"
     try:
         first = Agent(FakeModel(["Hello Ada"]), storage=Storage(url, audit=True))
@@ -353,7 +353,7 @@ def test_sqlite_threads_survive_a_new_agent_and_storage_has_memory_retention_and
 
 
 def test_encrypted_storage_refuses_to_open_without_its_keys():
-    path = os.path.join(tempfile.gettempdir(), f"criogen-py-enc-{uuid.uuid4().hex}.db")
+    path = os.path.join(tempfile.gettempdir(), f"criogenai-py-enc-{uuid.uuid4().hex}.db")
     url = f"sqlite:///{path}"
     keys = "k1:" + "ab" * 32
     try:
@@ -682,8 +682,8 @@ def test_limits_errors_and_the_sync_wrappers():
 
 
 def test_models_by_name_read_keys_from_the_environment_and_never_show_them():
-    from criogen import OpenAI
-    from criogen.models import model_spec
+    from criogenai import OpenAI
+    from criogenai.models import model_spec
 
     os.environ["OPENAI_API_KEY"] = "sk-test-not-real"
     try:
@@ -721,23 +721,23 @@ def test_every_catalog_code_raises_its_family_class():
     import json
     import pathlib
 
-    import criogen
-    from criogen.errors import error_for
+    import criogenai
+    from criogenai.errors import error_for
 
     path = os.environ.get("CRIOGEN_ERROR_CATALOG") or str(
         pathlib.Path(__file__).resolve().parents[3] / "schemas" / "error-codes.json"
     )
     catalog = json.load(open(path, encoding="utf-8"))
     classes = {
-        "model": criogen.ModelError,
-        "tool": criogen.ToolExecutionError,
-        "limit": criogen.LimitExceededError,
-        "busy": criogen.ThreadBusyError,
-        "suspended": criogen.ThreadSuspendedError,
-        "storage": criogen.StorageError,
-        "validation": criogen.ValidationError,
-        "cancelled": criogen.CancelledError,
-        "other": criogen.CriogenError,
+        "model": criogenai.ModelError,
+        "tool": criogenai.ToolExecutionError,
+        "limit": criogenai.LimitExceededError,
+        "busy": criogenai.ThreadBusyError,
+        "suspended": criogenai.ThreadSuspendedError,
+        "storage": criogenai.StorageError,
+        "validation": criogenai.ValidationError,
+        "cancelled": criogenai.CancelledError,
+        "other": criogenai.CriogenError,
     }
     checked = 0
     for entry in catalog["codes"]:
@@ -773,7 +773,7 @@ def test_concurrent_runs_get_their_own_hook_exception():
 
 
 def test_credentials_are_not_sent_over_plain_http_to_another_machine():
-    from criogen import OpenAICompatible
+    from criogenai import OpenAICompatible
 
     with pytest.raises(CriogenError) as refused:
         Agent(OpenAICompatible("m", base_url="http://gpu-box:8000/v1", api_key="a-secret-key-1234"))

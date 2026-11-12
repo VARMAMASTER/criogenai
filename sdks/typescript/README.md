@@ -1,4 +1,4 @@
-# criogen
+# criogenai
 
 **The fast AI agent framework for TypeScript and Node.js.** Build agents that call
 tools, wait for a person's approval, remember users, and survive crashes, on a Rust
@@ -6,7 +6,7 @@ engine that adds almost nothing to each step. A LangChain and LangGraph alternat
 with one package and no dependency tree.
 
 ```sh
-npm install criogen        # or: pnpm add criogen · yarn add criogen · bun add criogen
+npm install criogenai        # or: pnpm add criogenai · yarn add criogenai · bun add criogenai
 ```
 
 Node 18+ · Linux (x64, ARM64) · macOS (Apple Silicon, Intel) · Windows (x64) ·
@@ -16,9 +16,9 @@ serverless (Vercel, AWS Lambda) · free to use, also commercially
 [Docs](https://criogenai.com/docs/) ·
 [Quickstart](https://criogenai.com/docs/quickstart/) ·
 [Benchmarks](https://criogenai.com/benchmarks/) ·
-[PyPI package](https://pypi.org/project/criogen/)
+[PyPI package](https://pypi.org/project/criogenai/)
 
-## Why Criogen
+## Why CriogenAI
 
 The scheduling, tool-call checks, retries and saving run in compiled Rust; the
 engine for your platform installs with the package, with no build step. Your agents,
@@ -28,7 +28,7 @@ Measured on one machine (AMD Ryzen 5 4600H, Windows 11, 2026-10-21). The compari
 runs from Python, where all three frameworks exist, against the same simulated model,
 so only framework cost is counted:
 
-| | Criogen | LangGraph | CrewAI |
+| | CriogenAI | LangGraph | CrewAI |
 |---|---|---|---|
 | Framework overhead per agent turn | **0.29 ms** | 1.23 ms | 33.9 ms |
 | 1,000 agent runs at once | **333 ms** | 2.85 s | 49 s |
@@ -42,7 +42,7 @@ scenario and a kit to rerun them.
 ## Quickstart
 
 ```ts
-import { Agent, tool, ToolError } from "criogen";
+import { Agent, tool, ToolError } from "criogenai";
 
 const getOrder = tool({
   name: "get_order",
@@ -60,7 +60,7 @@ const reply = await chat.send("Where is order A-1?");
 console.log(reply.text);
 ```
 
-Keep keys in a `.env` file: `import { loadEnv } from "criogen"; loadEnv();` reads
+Keep keys in a `.env` file: `import { loadEnv } from "criogenai"; loadEnv();` reads
 `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` and `OPENROUTER_API_KEY`. It
 never prints values and never overrides a variable that is already set.
 
@@ -99,7 +99,7 @@ never prints values and never overrides a variable that is already set.
 ## Approval before a tool runs
 
 ```ts
-import { Agent, Storage } from "criogen";
+import { Agent, Storage } from "criogenai";
 
 const agent = new Agent({
   model: "openai:gpt-5-mini",
@@ -122,7 +122,7 @@ reply = await agent.thread("ticket-7", { actor: "user:manager" }).approve();
 
 ```ts
 import { z } from "zod";
-import { tool } from "criogen";
+import { tool } from "criogenai";
 
 const refund = tool({
   name: "issue_refund",
@@ -148,7 +148,7 @@ const reply = await stream.reply(); // saved, like send()
 ## Workflows
 
 ```ts
-import { END, Storage, Workflow, suspend } from "criogen";
+import { END, Storage, Workflow, suspend } from "criogenai";
 
 const app = new Workflow()
   .node("classify", (state) => ({ category: String(state.text).includes("charge") ? "billing" : "other" }))
@@ -168,7 +168,7 @@ const turn = await app.thread("ticket-7").run({ text: "I was charged twice", amo
 ## Models
 
 ```ts
-import { Agent, anthropic, groq, ollama, openaiCompatible } from "criogen";
+import { Agent, anthropic, groq, ollama, openaiCompatible } from "criogenai";
 
 new Agent({ model: "openai:gpt-5-mini" }); // OPENAI_API_KEY
 new Agent({ model: anthropic("claude-sonnet-5-5") }); // ANTHROPIC_API_KEY
@@ -184,7 +184,7 @@ new Agent({ model: "openai:gpt-5-mini", fallbacks: [ollama("llama3.2")], modelRe
 ## Testing without a model
 
 ```ts
-import { Agent, FakeModel, FakeReply } from "criogen";
+import { Agent, FakeModel, FakeReply } from "criogenai";
 
 const testAgent = new Agent({
   model: new FakeModel([FakeReply.toolCall("get_order", { orderId: "A-1" }), "It has shipped."]),
@@ -201,7 +201,7 @@ The same engine, compiled to WebAssembly, behind the same API: agents run in
 a page or a Web Worker.
 
 ```ts
-import { Agent, openai, ready } from "criogen/web";
+import { Agent, openai, ready } from "criogenai/web";
 
 await ready(); // loads the engine once (about 550 KB compressed)
 const agent = new Agent({ model: openai("gpt-5-mini", { apiKey: theUsersOwnKey }), tools: [weather] });
@@ -211,14 +211,14 @@ const result = await agent.run("Picnic weather in Lisbon?");
 Storage is in the tab's memory; databases, encryption at rest, telemetry
 export and web tools need a server (they fail with `unsupported`). A key in
 a page is visible to whoever uses it: in a product, point models at your own
-server or a Criogen gateway. `FunctionModel` plugs in a model written in
+server or a CriogenAI gateway. `FunctionModel` plugs in a model written in
 JavaScript, such as one running in the page.
 [Guide](https://criogenai.com/docs/guides/browser/).
 
 ## Also on PyPI
 
-The same engine and the same features for Python: `pip install criogen`
-([PyPI](https://pypi.org/project/criogen/)).
+The same engine and the same features for Python: `pip install criogenai`
+([PyPI](https://pypi.org/project/criogenai/)).
 
 ## Build from source
 
@@ -226,4 +226,4 @@ Needs Rust 1.88+ and Node 18+: `npm install`, `npm run build:native`, `npm run b
 
 ## Licence
 
-Free to use, also commercially, under the Criogen Free Licence (see `LICENSE`).
+Free to use, also commercially, under the CriogenAI Free Licence (see `LICENSE`).

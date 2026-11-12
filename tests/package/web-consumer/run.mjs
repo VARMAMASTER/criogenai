@@ -1,6 +1,6 @@
 // Bundles app.js against the installed package (esbuild, as an app's bundler
 // would), serves it with the engine file next to the bundle, and runs it in
-// Chromium. Usage: node run.mjs <project dir with node_modules/criogen> <sdk dir>
+// Chromium. Usage: node run.mjs <project dir with node_modules/criogenai> <sdk dir>
 import { createServer } from "node:http";
 import { copyFileSync, readFileSync } from "node:fs";
 import { createRequire } from "node:module";
@@ -21,12 +21,12 @@ await esbuild.build({
   logLevel: "warning",
 });
 // What a bundler without asset handling needs: the engine next to the bundle.
-copyFileSync(join(project, "node_modules", "criogen", "dist-web", "criogen_bg.wasm"), join(project, "criogen_bg.wasm"));
+copyFileSync(join(project, "node_modules", "criogenai", "dist-web", "criogenai_bg.wasm"), join(project, "criogenai_bg.wasm"));
 
 const types = { ".html": "text/html", ".js": "text/javascript", ".wasm": "application/wasm" };
 const server = createServer((req, res) => {
   const name = new URL(req.url, "http://x").pathname.replace(/^\/+/, "") || "index.html";
-  if (!["index.html", "out.js", "criogen_bg.wasm"].includes(name)) return res.writeHead(404).end();
+  if (!["index.html", "out.js", "criogenai_bg.wasm"].includes(name)) return res.writeHead(404).end();
   res.writeHead(200, { "content-type": types[extname(name)] }).end(readFileSync(join(project, name)));
 });
 await new Promise((r) => server.listen(0, "127.0.0.1", r));
