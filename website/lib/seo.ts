@@ -182,7 +182,7 @@ export function jsonLd(): string {
       alternateName: ["Criogen AI", "Criogen"],
       url: `${SITE.url}/`,
       logo: { "@type": "ImageObject", url: `${SITE.url}/icon-512.png`, width: 512, height: 512 },
-      sameAs: ["https://github.com/VARMAMASTER/criogenai", "https://www.npmjs.com/package/criogenai", "https://pypi.org/project/criogenai/"],
+      sameAs: ["https://github.com/VARMAMASTER/criogenai", "https://www.npmjs.com/package/criogenai", "https://pypi.org/project/criogenai/", "https://www.linkedin.com/company/criogenai/"],
     },
   ];
   return ldString({ "@context": "https://schema.org", "@graph": graph });
