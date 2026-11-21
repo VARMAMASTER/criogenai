@@ -43,8 +43,9 @@ of that turn runs.
 Every failure has a stable **error code** (`model_failed`, `tool_failed`,
 `thread_busy`, …; see [Error codes](/docs/reference/errors/)). A failed run
 also carries a snapshot, so **retry** continues from the failed step. Tool
-calls that finished before the failure are saved and not run again: an
-email is not sent twice.
+calls that finished before the failure are saved and not run again. A call
+that was still running when the process died may run again, so give tools
+that send or pay an idempotency key ([troubleshooting](/docs/troubleshooting/)).
 
 With [storage](/docs/guides/storage/), progress is saved after every step
 and every tool call. If the process dies mid-run, the thread shows an

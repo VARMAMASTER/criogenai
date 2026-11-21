@@ -17,6 +17,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     ...PATTERNS.map((p) => ({ url: `${SITE.url}/playground/${p.id}/`, lastModified: built, changeFrequency: "monthly" as const, priority: 0.6 })),
     { url: `${SITE.url}/demo/`, lastModified: built, changeFrequency: "monthly", priority: 0.6 },
     { url: `${SITE.url}/blog/`, lastModified: built, changeFrequency: "weekly", priority: 0.7 },
+    { url: `${SITE.url}/about/`, lastModified: built, changeFrequency: "monthly", priority: 0.6 },
     ...allPosts().map((p) => ({ url: `${SITE.url}/blog/${p.slug}/`, lastModified: new Date(`${p.date}T12:00:00Z`), changeFrequency: "yearly" as const, priority: 0.6 })),
   ];
   const docs = allSlugs()

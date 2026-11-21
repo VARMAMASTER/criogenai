@@ -9,6 +9,25 @@ All crates in this repository share one version number.
 
 ## [Unreleased]
 
+## npm [0.1.8] - 2026-11-21
+
+### Added
+
+- **Linux and macOS engines for `criogenai`.** npm: `criogenai@0.1.8` adds
+  `criogenai-linux-x64`, `-linux-arm64`, `-darwin-arm64` and `-darwin-x64`
+  (engine 0.1.7) next to `criogenai-windows-x64`; the code is the same as
+  0.1.7. PyPI: `criogenai==0.1.7` now has wheels for Linux x64 and ARM64
+  (manylinux 2.28) and macOS on Apple Silicon and Intel. Built and tested on
+  each platform by `sdk-packages.yml`. The npm 0.1.8 package is the 0.1.7
+  source with the new engines; the repository stays at 0.1.7 until the next
+  release, which moves every package to one version again.
+
+### Fixed
+
+- The TypeScript build copies the renamed addon (`libcriogenai_node`) on Linux
+  and macOS; macOS ARM64 packages build on `macos-15` (`macos-14` runners are
+  retired).
+
 ## [0.1.7] - 2026-11-12
 
 ### Changed

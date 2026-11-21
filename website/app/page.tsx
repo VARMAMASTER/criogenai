@@ -179,7 +179,7 @@ export default async function Home() {
           <div className="hero-copy">
             <Reveal y={24}>
               <h1>
-                <span className="hero-eyebrow">The simplest, fastest way to build AI agents · a LangChain alternative</span>{" "}
+                <span className="hero-eyebrow">CriogenAI: the simplest, fastest way to build AI agents · a LangChain alternative</span>{" "}
                 Run AI agents like production software.
               </h1>
             </Reveal>
@@ -208,6 +208,24 @@ export default async function Home() {
         </section>
 
         <ModelMarquee />
+
+        <section className="intro-video" aria-labelledby="intro-video-title">
+          <h2 id="intro-video-title">CriogenAI in 50 seconds</h2>
+          <Reveal>
+            <video
+              className="intro-video-player"
+              controls
+              playsInline
+              preload="none"
+              poster="/video/criogenai-intro-poster.jpg"
+              width={1920}
+              height={1080}
+            >
+              <source src="/video/criogenai-intro.mp4" type="video/mp4" />
+              Your browser cannot play this video. <a href="/video/criogenai-intro.mp4">Download it</a>.
+            </video>
+          </Reveal>
+        </section>
 
         <section className="watch" aria-labelledby="watch-title">
           <h2 id="watch-title">See a run, step by step</h2>

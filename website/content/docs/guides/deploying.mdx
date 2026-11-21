@@ -158,12 +158,12 @@ On serverless:
 - Function time limits apply to the whole turn, model calls and tools
   included. Set `limits` and tool timeouts below your platform's limit.
 
-<Aside type="caution" title="Engine versions on Linux and macOS">
-The latest engine (0.1.6) is published for Windows x64 and the browser. On
-Linux and macOS, `pip` installs 0.1.3 and npm runs the 0.1.3 engine until
-their builds run again. Features marked 0.1.5 or 0.1.6 on the
-[status page](/docs/status/) are not in the 0.1.3 engine: check before you
-deploy to a Linux server.
+<Aside type="note" title="Engines on Linux and macOS">
+`criogenai` 0.1.7 (PyPI) and 0.1.8 (npm) have the same engine on Windows,
+Linux (x64 and ARM64, glibc 2.28 or newer) and macOS. If a server still runs
+the old `criogen` package, it has the 0.1.3 engine, without the features
+marked 0.1.4 or later on the [status page](/docs/status/): switch it to
+`criogenai` before you deploy.
 </Aside>
 
 ## The LLM gateway

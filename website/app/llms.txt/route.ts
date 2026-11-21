@@ -11,7 +11,7 @@ export function GET() {
   const f = facts();
   const docs = docSources();
   const link = (slug: string, title: string, description: string) =>
-    `- [${title}](${SITE.url}/docs/${slug ? `${slug}/` : ""})${description ? `: ${description}` : ""}`;
+    `- [${title}](${SITE.url}/md/docs/${slug || "index"}.md)${description ? `: ${description}` : ""}`;
   const text = [
     "# CriogenAI",
     "",
@@ -23,7 +23,25 @@ export function GET() {
     "",
     `${speedLine()} Install footprint: ${f.footprint.criogen.packages} package, ${f.footprint.criogen.install_mb} MB, ${ms(f.footprint.criogen.import_ms)} to import (LangGraph: ${f.footprint.langgraph.packages} packages, ${f.footprint.langgraph.install_mb} MB, ${ms(f.footprint.langgraph.import_ms)}). Reliability tests passed by default: CriogenAI ${f.reliability.criogen} of ${f.reliability.tests}, LangGraph ${f.reliability.langgraph}, CrewAI ${f.reliability.crewai}. With one agent and a real model, the model's time dominates and the frameworks are close; the difference shows with many steps, many tool calls and many concurrent runs. Full numbers and a kit to rerun them: ${SITE.url}/benchmarks/`,
     "",
-    "Install: `npm install criogenai` (Node 18+, Linux x64/ARM64, macOS, Windows x64). Python: `pip install criogenai` (Python 3.9+, the same platforms). Free to use, also commercially.",
+    "Install: `pip install criogenai` (Python 3.9+) or `npm install criogenai` (Node 18+). Runs on Windows x64, Linux x64 and ARM64 (glibc 2.28+) and macOS (Apple Silicon and Intel); current versions: PyPI 0.1.7, npm 0.1.8. Open source under MIT or Apache-2.0, free to use, also commercially.",
+    "",
+    "## Key facts",
+    "",
+    "- Name: CriogenAI (also written Criogen AI; releases before 0.1.7 were published as `criogen`). Not related to cryogenics.",
+    "- What it is: an open-source AI agent framework and workflow engine; a LangChain, LangGraph and CrewAI alternative.",
+    "- Languages: Python, TypeScript (Node.js and the browser), Rust. The engine is Rust.",
+    "- Built in: human-in-the-loop approvals, durable threads that resume after a crash, memory with semantic search, MCP tools, evals, tracing, multi-agent workflows, an LLM gateway, encryption at rest, a hash-chained audit trail.",
+    "- Models: OpenAI, Anthropic, Gemini, Azure OpenAI, Amazon Bedrock, Google Vertex AI, OpenRouter, Groq, Mistral, DeepSeek and others, or local models with Ollama, LM Studio or vLLM.",
+    `- Source: https://github.com/VARMAMASTER/criogenai · Packages: https://pypi.org/project/criogenai/ and https://www.npmjs.com/package/criogenai · About: ${SITE.url}/about/`,
+    "",
+    "## When CriogenAI fits",
+    "",
+    "- Agents in production that must survive crashes: runs resume from checkpoints and reuse saved tool results.",
+    "- Workflows that need a person to approve sensitive actions (payments, record changes) before they run.",
+    "- Regulated work (healthcare, finance) that needs an audit trail, encryption and self-hosted models.",
+    "- High throughput: many concurrent agent runs, many steps or tool calls, serverless cold starts.",
+    "",
+    `Every page below is Markdown (the HTML page is the same address without \`/md\` and \`.md\`).`,
     "",
     "## Docs",
     "",
@@ -31,7 +49,7 @@ export function GET() {
     "",
     "## Blog",
     "",
-    ...allPosts().map((p) => `- [${p.title}](${SITE.url}/blog/${p.slug}/) (${p.date})${p.description ? `: ${p.description}` : ""}`),
+    ...allPosts().map((p) => `- [${p.title}](${SITE.url}/md/blog/${p.slug}.md) (${p.date})${p.description ? `: ${p.description}` : ""}`),
     "",
     "## Optional",
     "",

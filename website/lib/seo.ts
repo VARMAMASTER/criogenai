@@ -101,12 +101,20 @@ export const OG_IMAGE = {
   type: "image/png",
 };
 
+/** Docs pages and blog posts also exist as Markdown for AI agents (app/md). */
+function markdownAlternate(path: string): { types?: Record<string, string> } {
+  const trimmed = path.replace(/^\/|\/$/g, "");
+  if (trimmed === "docs") return { types: { "text/markdown": "/md/docs/index.md" } };
+  if (trimmed.startsWith("docs/") || (trimmed.startsWith("blog/") && trimmed.length > 5)) return { types: { "text/markdown": `/md/${trimmed}.md` } };
+  return {};
+}
+
 export function pageMeta(options: { title: string; description: string; path: string; absolute?: boolean; type?: "website" | "article" }): Metadata {
   const shown = options.absolute ? options.title : `${options.title} | CriogenAI`;
   return {
     title: options.absolute ? { absolute: options.title } : options.title,
     description: options.description,
-    alternates: { canonical: options.path },
+    alternates: { canonical: options.path, ...markdownAlternate(options.path) },
     openGraph: { type: options.type ?? "website", siteName: "CriogenAI", locale: "en_US", url: options.path, title: shown, description: options.description, images: [OG_IMAGE] },
     twitter: { card: "summary_large_image", title: shown, description: options.description, images: [OG_IMAGE.url] },
   };
@@ -120,6 +128,7 @@ export function jsonLd(): string {
       "@type": "SoftwareApplication",
       "@id": `${SITE.url}/#software`,
       name: "CriogenAI",
+      alternateName: ["Criogen AI", "Criogen"],
       applicationCategory: "DeveloperApplication",
       applicationSubCategory: "AI agent framework",
       operatingSystem: "Linux, macOS, Windows",
@@ -127,7 +136,9 @@ export function jsonLd(): string {
       programmingLanguage: ["Python", "TypeScript", "Rust"],
       url: `${SITE.url}/`,
       image: `${SITE.url}/icon-512.png`,
-      downloadUrl: "https://www.npmjs.com/package/criogen",
+      downloadUrl: "https://pypi.org/project/criogenai/",
+      codeRepository: "https://github.com/VARMAMASTER/criogenai",
+      license: "https://github.com/VARMAMASTER/criogenai/blob/main/LICENSE-MIT",
       installUrl: `${SITE.url}/docs/install/`,
       softwareHelp: `${SITE.url}/docs/`,
       description: `${SITE.description} ${speedLine()}`,
@@ -148,9 +159,10 @@ export function jsonLd(): string {
       "@type": "Organization",
       "@id": `${SITE.url}/#org`,
       name: "CriogenAI",
+      alternateName: ["Criogen AI", "Criogen"],
       url: `${SITE.url}/`,
       logo: { "@type": "ImageObject", url: `${SITE.url}/icon-512.png`, width: 512, height: 512 },
-      sameAs: ["https://www.npmjs.com/package/criogen", "https://pypi.org/project/criogen/"],
+      sameAs: ["https://github.com/VARMAMASTER/criogenai", "https://www.npmjs.com/package/criogenai", "https://pypi.org/project/criogenai/"],
     },
   ];
   // `<` escaped so the JSON cannot close the script tag.

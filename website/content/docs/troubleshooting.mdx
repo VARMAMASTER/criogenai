@@ -16,23 +16,22 @@ python -c "import criogenai; print(criogenai.__version__)"
 npm ls criogenai criogenai-windows-x64
 ```
 
-### Linux or macOS: no engine, or a feature is missing
+### Linux or macOS: an old version, or a feature is missing
 
-The packages were renamed from `criogen` to `criogenai` in 0.1.7, and the new
-name does not yet have engines for every platform:
+The packages were renamed from `criogen` to `criogenai` in 0.1.7. Every
+platform now has the 0.1.7 engine:
 
-| Platform | `criogenai` (Python / Node.js) | Until then: old `criogen` |
+| Platform | `pip install criogenai` | `npm install criogenai` |
 |---|---|---|
-| Windows x64 | 0.1.7 / 0.1.7 | – |
-| Linux x64, Linux ARM64, macOS Apple Silicon | from 16 November | 0.1.3 engine |
-| macOS Intel | from 16 November | Python 0.1.2, Node.js engine 0.1.3 |
-| Browser (`criogenai/web`) | – / 0.1.7 | – |
+| Windows x64 | 0.1.7 | 0.1.8 (engine 0.1.7) |
+| Linux x64, Linux ARM64 | 0.1.7 | 0.1.8 (engine 0.1.7) |
+| macOS Apple Silicon, macOS Intel | 0.1.7 | 0.1.8 (engine 0.1.7) |
+| Browser (`criogenai/web`) | – | 0.1.8 |
 
-On Linux and macOS until then, install `criogen` and `import criogen`; switch
-the install and the imports to `criogenai` once its engines are out. Features
-marked 0.1.4 or later on the [status page](/docs/status/) (MCP, collections,
-evals, the trace viewer, Azure, Bedrock, Vertex AI, the Responses API,
-`FunctionModel`) are not in a 0.1.3 engine; in TypeScript they fail with
+If you still use the old `criogen` package on Linux or macOS, switch the
+install and the imports to `criogenai`. The old package runs the 0.1.3 engine
+(0.1.2 for Python on Intel Macs), where features marked 0.1.4 or later on the
+[status page](/docs/status/) are missing; in TypeScript they fail with
 `unsupported` and say which engine they need.
 
 ### `native_unavailable` (TypeScript) or no wheel found (Python)

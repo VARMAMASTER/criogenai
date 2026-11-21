@@ -1,0 +1,69 @@
+---
+title: "Human-in-the-loop AI agents: pause before risky tools, approve, carry on"
+description: How to make an AI agent stop before sensitive actions, wait for a person to approve, edit or reject the call, and continue, even from another process days later. With code in Python, TypeScript and Rust.
+date: 2026-11-20
+author: The CriogenAI team
+tags: human in the loop, approvals, ai agents, safety
+---
+
+An AI agent that can issue refunds, send emails or change patient records
+should not do so on its own. **Human in the loop** means the agent stops
+before those actions and a person decides. In CriogenAI it takes one line:
+name the tools that need approval.
+
+<Sample name="approvals" />
+
+## What happens
+
+1. The model asks for a tool call, and at least one of the calls is on the
+   `approve` list.
+2. The run stops **before any call of that turn runs**, including the ones
+   that need no approval, and saves the pause with the thread.
+3. Your code gets a reply that says approval is needed, with the waiting
+   calls: the tool, its arguments and a call id.
+4. Later, any process with the same storage (SQLite or Postgres) answers. The decided calls run
+   (or not), the rest of the turn runs, and the agent carries on.
+
+Nothing about the pause lives in memory. The process can exit, and the
+decision can come minutes or days later from a dashboard, a queue worker or
+a webhook.
+
+## Four decisions
+
+| Decision | What happens | What the model sees |
+|---|---|---|
+| **Approve** | The call runs as the model wrote it | The tool's result |
+| **Edit** | The call runs with the reviewer's arguments | The result, and a note that a reviewer changed the call |
+| **Reject** | The call does not run | That it was rejected, with the reason |
+| **Respond** | The call does not run | The reviewer's text, as the tool's result |
+
+To decide each waiting call on its own:
+
+<Sample name="approvals" region="decide" only={["python", "typescript"]} />
+
+## Who decided, on the record
+
+With an audit log attached to the storage, every decision is written to the
+audit trail before the approved calls run, with the reviewer you name on the
+thread. The trail is hash-chained, so a changed, removed or reordered record
+breaks the chain, and it holds no message content: only the decision, the
+tool and the call id. That
+matters in healthcare, finance and any work that is audited.
+
+## Why not just ask in the prompt?
+
+A prompt that says "ask before refunding" is a request to the model, not a
+guarantee. The model can skip it, misread it, or be talked out of it by the
+input it reads. An approval gate in the runtime is enforced by code: the
+tool cannot run until a person answers.
+
+## Start
+
+```sh
+pip install criogenai
+npm install criogenai
+```
+
+Read the [human approval guide](/docs/guides/approvals/) for workflows,
+streaming the continuation and error handling, or start with the
+[quickstart](/docs/quickstart/).

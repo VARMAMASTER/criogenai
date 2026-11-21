@@ -40,15 +40,15 @@ change before 1.0. This page is kept accurate: if something is not marked
 | Tools from MCP servers (stdio, Streamable HTTP; MCP 2026-07-28 and older) | <span class="status-built">built</span> (0.1.5) | <span class="status-built">built</span> (0.1.5; `criogenai/web`: HTTP only) | <span class="status-built">built</span> |
 | Web search (Tavily, Brave) and page reading | <span class="status-built">built</span> | <span class="status-built">built</span> | <span class="status-built">built</span> |
 | In the browser and Web Workers: the engine as WebAssembly (`criogenai/web`) | – | <span class="status-built">built</span> (0.1.4) | – |
-| Models written in your own code (`FunctionModel`; in Rust, the `Model` trait) | – | <span class="status-built">built</span> (0.1.4; on Linux and macOS with the next engine release) | <span class="status-built">built</span> |
+| Models written in your own code (`FunctionModel`; in Rust, the `Model` trait) | – | <span class="status-built">built</span> (0.1.4) | <span class="status-built">built</span> |
 
 **About the new name and platforms:** from 0.1.7 the packages are called
-`criogenai` (until 0.1.6: `criogen`). 0.1.5 to 0.1.7 were built on Windows, so
-Windows and the browser engine (`criogenai/web`) have everything above. The
-Linux and macOS engines for `criogenai` come with the next build, planned for
-16 November; until then those systems use the old `criogen` package with the
-0.1.3 engine (0.1.2 for Python on Intel Macs), where the features marked 0.1.4
-or later are missing and `openai:` still uses Chat Completions.
+`criogenai` (until 0.1.6: `criogen`). Since 21 November, every platform has
+the 0.1.7 engine: Windows x64, Linux x64 and ARM64, macOS (Apple Silicon and
+Intel) and the browser (`criogenai/web`), so everything above works on all of
+them. The old `criogen` package on Linux and macOS has the 0.1.3 engine,
+where the features marked 0.1.4 or later are missing and `openai:` still uses
+Chat Completions.
 
 ## The gateway
 
