@@ -98,7 +98,7 @@ On a thread, a failed run is saved with its state. `retry()` continues it
 **from the failed step**:
 
 - Tool calls that had finished are **not run again**: their results were
-  saved. A refund or an email is never repeated by a retry.
+  saved. A refund or an email whose result was saved is not repeated by a retry.
 - The model call that failed is made again.
 - If the process died mid-run (no error reached your code), the next `send`
   fails with `thread_interrupted`; `retry()` continues that run too.

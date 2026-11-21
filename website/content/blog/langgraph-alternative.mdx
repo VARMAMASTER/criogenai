@@ -1,0 +1,88 @@
+---
+title: "Looking for a LangGraph alternative? CriogenAI compared, honestly"
+seo_title: "LangGraph alternative: CriogenAI compared, honestly"
+description: CriogenAI and LangGraph compared on speed, durability, human approval and footprint: what CriogenAI lacks, and when LangGraph is the better choice.
+date: 2026-11-21
+author: The CriogenAI team
+tags: langgraph alternative, langchain alternative, ai agent framework, comparison
+---
+
+LangGraph is a popular way to build stateful AI agents in Python and
+JavaScript. If you are looking for an alternative, it is usually for one of
+three reasons: framework overhead, the work it takes to make agents durable
+and safe, or wanting one engine for Python and TypeScript. This page compares
+CriogenAI with LangGraph on those points, with measured numbers, and says
+where LangGraph is still the better choice.
+
+## What is a good LangGraph alternative?
+
+If you want what LangGraph does (agents and graphs with saved state, pauses
+for a person, time travel) with less framework overhead, CriogenAI is a close
+fit: an open-source framework whose engine is Rust, used from Python,
+TypeScript or Rust. In our benchmark, an agent turn costs 0.29 ms of framework
+overhead against 1.23 ms for LangGraph, and human approval, crash recovery and
+an audit trail are built in.
+
+## How does CriogenAI compare with LangGraph?
+
+Numbers from our [benchmark](/benchmarks/) (one machine, Python 3.13,
+2026-10-21, the same simulated model in both, so only the framework is
+timed):
+
+| | CriogenAI | LangGraph |
+|---|---|---|
+| Engine | Rust | Python |
+| Framework overhead per agent turn | **0.29 ms** | 1.23 ms |
+| 1,000 agent runs at once (whole batch) | **0.42 s** | 4.95 s |
+| Packages installed | **1** | 42 |
+| Install size (Python) | **17.9 MB** | 42.9 MB |
+| Time to import | **148 ms** | 1.70 s |
+| Reliability tests passed by default | **5 of 5** | 2 of 5 |
+| Languages | Python, TypeScript, Rust | Python, JavaScript |
+| Saved state | SQLite or Postgres, per step and per tool call | Checkpointers (SQLite, Postgres and others) |
+| Human approval of tool calls | `Agent(approve=[...])`, no node to write | `interrupt()` in a node you write |
+| Audit trail | Hash-chained, built in | Not built in |
+
+The [benchmark lab](/benchmarks/) has every scenario, the exact versions and
+a kit to rerun it on your machine.
+
+## What does the code look like?
+
+An agent with a tool and saved conversations, the CriogenAI way. The
+[migration guide](/docs/from-langgraph/) shows the LangGraph version next to
+each piece:
+
+<Sample name="migrate" region="agent" />
+
+## When should you stay on LangGraph?
+
+CriogenAI is younger and smaller. Stay on LangGraph, or keep it for part of
+your system, if any of these matter to you:
+
+- **Dynamic fan-out.** LangGraph's `Send` starts a varying number of
+  branches; in CriogenAI one node runs them itself.
+- **The functional API** (`@entrypoint`, `@task`) and **subgraphs** as a
+  type: CriogenAI uses workflows, and an agent or workflow inside a node.
+- **Editing state directly** (`update_state`): CriogenAI rewinds a thread
+  instead.
+- **A large catalog of integrations** (document loaders, many vector stores)
+  and a much larger community. CriogenAI has its own
+  [collections](/docs/guides/retrieval/) and uses [MCP](/docs/guides/mcp/)
+  for outside tools.
+
+Existing LangGraph checkpoints cannot be read by CriogenAI, so a move starts
+new threads.
+
+## How do you move from LangGraph to CriogenAI?
+
+Install CriogenAI next to LangGraph (nothing conflicts), move the tools
+first, then replace `create_react_agent` with `Agent` and the checkpointer
+with `Storage`. The [migration guide](/docs/from-langgraph/) maps every
+LangGraph concept to its CriogenAI equivalent.
+
+```sh
+pip install criogenai
+npm install criogenai
+```
+
+Or start fresh with the [quickstart](/docs/quickstart/).

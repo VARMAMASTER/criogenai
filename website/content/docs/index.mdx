@@ -1,6 +1,7 @@
 ---
 title: What CriogenAI is
-description: AI agents and workflows on a Rust engine, used from Python, TypeScript or Rust.
+seo_title: "CriogenAI docs: open-source AI agent framework"
+description: CriogenAI is an open-source AI agent framework: a Rust engine for agents and workflows written in Python, TypeScript or Rust.
 ---
 
 
@@ -19,8 +20,8 @@ Agents that do real work, where mistakes cost something:
   email or a prescription, waits in the database (for minutes or days),
   and continues from any process when someone decides.
 - **Nothing is lost when a process dies.** Progress is saved after every
-  step and every tool call. `retry()` continues where the run stopped, and
-  tools that already ran are not run again.
+  step and every tool call. `retry()` continues where the run stopped and
+  reuses the saved tool results.
 - **You can prove what happened.** An audit trail records every run, model
   call, tool call and decision, with who did it, and no message content.
   A hash chain shows if a record was changed or removed.

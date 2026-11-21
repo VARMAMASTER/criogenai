@@ -1,6 +1,6 @@
 ---
 title: Coming from LangGraph or LangChain
-description: How LangGraph and LangChain ideas map to CriogenAI - graphs, state and reducers, checkpointers and threads, interrupts and approvals, stores and memory - with side-by-side code and the differences that matter.
+description: Move from LangGraph or LangChain to CriogenAI: how graphs, state, tools, checkpoints and interrupts map, with side-by-side code.
 ---
 
 If you know LangGraph or LangChain's agents, most of CriogenAI will look
@@ -141,7 +141,10 @@ and an agent can use it directly:
   structured output, memory recall and retries are options of `Agent`. You
   build a graph only for your own steps.
 - **Saved per tool call.** Finished tool calls are saved one by one, so
-  `retry()` after a crash never repeats them.
+  `retry()` after a crash reuses their results. A call that dies after its
+  side effect but before its result is saved runs again, so tools that pay
+  or send should use `ctx.call_id` as an idempotency key
+  ([Runs](/docs/concepts/runs/)).
 - **One run per thread.** Concurrent calls on one thread wait, are rejected,
   or interrupt the running one ([`on_busy`](/docs/guides/storage/#a-thread-that-is-busy)).
 

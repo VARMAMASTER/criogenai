@@ -6,6 +6,7 @@ import "@/styles/tokens.css";
 import "@/styles/glass.css";
 import "@/styles/base.css";
 import NextTopLoader from "nextjs-toploader";
+import { Analytics } from "@vercel/analytics/next";
 import Watermark from "@/components/Watermark";
 import { SITE } from "@/lib/nav";
 import { ICON_VERSION, KEYWORDS, OG_IMAGE } from "@/lib/seo";
@@ -60,6 +61,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <NextTopLoader color="#3ecf8e" height={2} showSpinner={false} shadow="0 0 8px #3ecf8e" crawlSpeed={150} />
         <Watermark />
         {children}
+        <Analytics />
       </body>
     </html>
   );

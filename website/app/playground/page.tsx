@@ -1,28 +1,40 @@
 import Link from "next/link";
 import type { Metadata } from "next";
-import { pageMeta } from "@/lib/seo";
+import { articleJsonLd, pageMeta } from "@/lib/seo";
 import Diagram from "@/components/playground/Diagram";
 import { GROUPS, PATTERNS } from "@/lib/patterns";
 
 export const metadata: Metadata = pageMeta({
-  title: "Agent pattern playground: ReAct, Reflexion, ReWOO, supervisor, swarm and more",
+  title: "Agent pattern playground: ReAct, Reflexion, swarm and more",
+  absolute: true,
   description:
-    "Every common AI agent pattern, runnable in your browser: ReAct, Chain and Tree of Thoughts, Plan-and-Solve, ReWOO, Reflexion, router, supervisor, hierarchical teams, collaboration, debate, swarms, human in the loop, and IBM's five agent types. Watch each one step by step, read the CriogenAI code, or try it with your own key.",
+    "Every common AI agent pattern, runnable in your browser: ReAct, Tree of Thoughts, ReWOO, Reflexion, supervisor, swarm, human in the loop and more.",
   path: "/playground/",
 });
 
 export default function PlaygroundIndex() {
   return (
     <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: articleJsonLd({
+            title: "Agent pattern playground",
+            description: "Every common AI agent pattern, runnable in your browser, with the CriogenAI code that builds it.",
+            path: "/playground/",
+            trail: [{ name: "Playground", path: "/playground/" }],
+          }),
+        }}
+      />
       <header className="sb-hero">
         <p className="lab-eyebrow">Playground</p>
-        <h1>The simplest, fastest way to build AI agents.</h1>
+        <h1>Every AI agent pattern, runnable in your browser.</h1>
         <p className="lab-lede">
           Every common agent pattern, one page each. Watch it run step by step, see the CriogenAI code that builds it, and change the task.
           No sign-up and no key needed. Add your own key if you want a real model to make the decisions; it stays in your browser.
         </p>
         <p className="sb-small">
-          “Fastest” is measured: CriogenAI against LangGraph and CrewAI on the same work, in the <Link href="/benchmarks/">benchmark lab</Link>.
+          Speed is measured: CriogenAI against LangGraph and CrewAI on the same work, in the <Link href="/benchmarks/">benchmark lab</Link>.
         </p>
       </header>
       {GROUPS.map((g) => (

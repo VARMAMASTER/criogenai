@@ -1,0 +1,92 @@
+---
+title: "What is CriogenAI? The open-source AI agent framework, explained"
+description: CriogenAI is an open-source AI agent framework with a Rust engine, used from Python, TypeScript or Rust: what it does, how it compares and how to start.
+date: 2026-11-20
+updated: 2026-11-21
+seo_title: "What is CriogenAI? The open-source AI agent framework"
+author: The CriogenAI team
+tags: criogenai, ai agents, agent framework, faq
+---
+
+Short answers to the questions people ask about CriogenAI.
+
+## What is CriogenAI?
+
+CriogenAI is an **open-source AI agent framework**. You write agents (a
+language model that calls your tools in a loop) and workflows (graphs of
+steps) in Python, TypeScript or Rust, and a Rust engine runs them. It is free
+to use, also commercially, under MIT or Apache-2.0.
+
+The name is sometimes written **Criogen AI**, and versions before 0.1.7 were
+published on npm and PyPI as `criogen`. It has nothing to do with cryogenics.
+
+## What does it do?
+
+- **Agents with tools.** Your functions become tools. Arguments are checked
+  against a schema before your code runs, and the calls of one turn run at
+  the same time.
+- **Workflows.** Graphs with parallel branches, joins, loops and pauses.
+- **Human in the loop.** Sensitive tools wait for a person to approve, edit
+  or reject the call. See [human approval](/docs/guides/approvals/).
+- **Durable threads.** Every step is saved in SQLite or Postgres. A run that
+  crashes resumes from the last saved step, and finished tool calls are not
+  run again.
+- **Memory** with keyword and semantic search, **MCP tools**, **evals**,
+  **tracing**, **retrieval** over your documents, and an **LLM gateway**.
+- **Security and compliance.** Encryption at rest and a hash-chained audit
+  trail, both switched on when you open the storage. The trail records every
+  model call, tool call and decision, without storing content in the log.
+
+## Which models does it work with?
+
+OpenAI, Anthropic, Google Gemini, Azure OpenAI, Amazon Bedrock, Google
+Vertex AI, OpenRouter, Groq, Mistral, DeepSeek and others, or models on your
+own servers through Ollama, LM Studio, or vLLM and any other OpenAI-compatible server. See [models](/docs/guides/models/).
+
+## Is it fast?
+
+Yes. In our [benchmark](/benchmarks/), an agent turn costs 0.29 ms of
+framework overhead, against 1.23 ms for LangGraph and 33.9 ms for CrewAI, and
+1,000 concurrent agent runs finish in 0.42 s, 11.7× faster than LangGraph.
+With one agent and a real model, the model's own time dominates; the
+difference shows with many concurrent runs, many steps and many tool calls.
+More in [the fastest AI agent framework?](/blog/fastest-ai-agent-framework/)
+
+## How is it different from LangChain, LangGraph or CrewAI?
+
+The engine is Rust, not Python, so scheduling, state, validation and
+persistence cost less, and in our Python benchmark the install added one package
+and about 18 MB. Crash
+recovery, human approval, the audit trail and encryption are part of the
+runtime instead of add-ons. And the same engine runs under Python,
+TypeScript and Rust, so an agent behaves the same in every language. Coming
+from LangGraph? See [the migration guide](/docs/from-langgraph/).
+
+## Who is it for?
+
+Teams that put agents in front of real users and real systems: support
+desks, operations, finance and healthcare, where a lost run, a tool that
+runs twice or an unapproved action costs money or trust. It also suits
+anyone who wants a small, fast dependency for agents.
+
+## How do I install it?
+
+```sh
+pip install criogenai
+npm install criogenai
+```
+
+Then follow the [quickstart](/docs/quickstart/). The packages run on Windows
+x64, Linux (x64 and ARM64) and macOS (Apple Silicon and Intel).
+
+## Is it production ready?
+
+CriogenAI is at version 0.1: the engine and the SDKs are tested (over 500
+tests across the Rust crates, plus the Python and TypeScript suites), and
+the API can still change before 1.0. The [status page](/docs/status/) lists
+what is built and what is planned.
+
+## Where is the source code?
+
+On GitHub: [VARMAMASTER/criogenai](https://github.com/VARMAMASTER/criogenai).
+Questions and ideas are welcome as issues.

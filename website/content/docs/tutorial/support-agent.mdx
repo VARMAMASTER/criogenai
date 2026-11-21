@@ -1,6 +1,6 @@
 ---
 title: "Tutorial: build a support agent"
-description: From an empty folder to a running support agent with tools, a staff approval for refunds, a conversation saved in SQLite, memory per customer, streaming and tests.
+description: Build a customer support agent step by step: tools, a conversation that remembers, approval before refunds, and crash recovery.
 ---
 
 In this tutorial you build a small but complete support agent for an online
@@ -189,7 +189,9 @@ every step. Use a new ticket id for a new conversation.
 The same holds after a crash. If the process dies in the middle of a turn, the
 thread keeps the unfinished run; `send` then fails with
 `thread_interrupted`, and `retry()` continues the run where it stopped. Tool
-calls that had finished are not run again, so a refund is never issued twice.
+calls whose results were saved are not run again. A refund that was in
+progress when the process died can run again, so pass `ctx.call_id` to the
+payment service as an idempotency key.
 See [Conversations (threads)](/docs/guides/threads/).
 
 ## 7. Memory per customer

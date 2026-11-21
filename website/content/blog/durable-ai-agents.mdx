@@ -1,0 +1,82 @@
+---
+title: "Durable AI agents: resume after a crash from the last saved step"
+description: How CriogenAI saves every step so a crashed agent run resumes where it stopped, which tool calls run again, and how to make paying tools safe to repeat.
+date: 2026-11-20
+updated: 2026-11-21
+seo_title: "Durable AI agents: resume after a crash from the last step"
+author: The CriogenAI team
+tags: durable agents, reliability, threads, ai agents
+---
+
+Agents do long, multi-step work: read a ticket, look up the order, refund
+it, email the customer. Somewhere in the middle, a process gets killed, a
+deploy restarts the server, or a model call times out. Most frameworks then
+start over, or leave you to work out which steps already happened. If the
+refund already ran, starting over refunds twice.
+
+**A durable agent saves its progress as it goes and resumes where it
+stopped.** In CriogenAI, that is the default for every thread kept in SQLite
+or Postgres storage.
+
+<Sample name="threads" />
+
+## What is saved
+
+Each step of a run is written to storage (SQLite or Postgres) as it
+completes: the messages, the state, and **every tool call and its result**.
+A tool's result is saved the moment the tool returns, before the next step
+starts.
+
+## What happens after a crash
+
+The thread's last checkpoint says the run was in progress. Call `retry()`,
+in the same process or any other process with the same storage, and the run
+continues from the last saved step:
+
+- tool calls that **finished** are not run again; their saved results are
+  used;
+- tool calls that had **not finished** run;
+- the model is asked again only where its answer was not saved.
+
+So a refund whose result was saved is not issued again.
+
+One gap remains, and no framework can close it on its own: if the process
+dies **after** a tool's side effect but **before** its result is saved, that
+call runs again on `retry()`. For tools that pay, send or change records, use
+the call id (`ctx.call_id`) as an idempotency key with the service you call,
+so a repeat does nothing.
+
+<Sample name="threads" region="recover" only={["python", "typescript"]} />
+
+## Failures, timeouts and approvals
+
+- By default, an error raised by a tool goes back to the model as the
+  tool's result, so the model can try something else. A step that does fail
+  (a limit is hit, the run is cancelled, or you choose to fail on tool
+  errors) changes no state, keeps the tool results that were saved, and the
+  failed run is saved. `retry()` continues from the failed step.
+- Model calls retry by themselves on rate limits, overloads, server errors,
+  timeouts and network errors, and can fall back to other models you name.
+- A run waiting for [human approval](/blog/human-in-the-loop-ai-agents/) is
+  saved too, so with SQLite or Postgres the decision can come after a
+  restart.
+
+## Several processes, one thread
+
+Threads take a lease while a run is active, and you choose whether a second
+message waits, is rejected, or interrupts the run. Within one process this
+holds on every storage. With Postgres it holds across processes and
+machines. With SQLite, a second process does not wait: its write is refused
+with a `storage_conflict` error, so use Postgres when several servers serve
+the same threads.
+
+## Start
+
+```sh
+pip install criogenai
+npm install criogenai
+```
+
+The [threads guide](/docs/guides/threads/) covers history, rewind and
+cancellation, and the [storage guide](/docs/guides/storage/) covers SQLite,
+Postgres, retention and encryption.

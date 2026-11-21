@@ -157,6 +157,9 @@ html:has(.site) {
   color: var(--ab-text);
 }
 .bottom-install .copy {
+  /* docs.css hides code-block copy buttons until hover; the footer's always show. */
+  position: static;
+  opacity: 1;
   display: inline-flex;
   align-items: center;
   justify-content: center;

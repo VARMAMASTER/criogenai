@@ -23,6 +23,8 @@ export type MDXContent = (props: { components?: Record<string, ComponentType<any
 export interface DocPage {
   slug: string;
   title: string;
+  /** A fuller title for search results when `title` is a short label (front matter `seo_title`). */
+  seoTitle?: string;
   description: string;
   toc: TocEntry[];
   Content: MDXContent;
@@ -168,5 +170,5 @@ export async function loadDoc(slug: string): Promise<DocPage> {
     remarkPlugins: [remarkGfm],
     rehypePlugins: [rehypeHeadings(toc)],
   } as Parameters<typeof evaluate>[1]);
-  return { slug, title: data.title ?? "", description: data.description ?? "", toc, Content: Content as unknown as MDXContent };
+  return { slug, title: data.title ?? "", ...(data.seo_title ? { seoTitle: data.seo_title } : {}), description: data.description ?? "", toc, Content: Content as unknown as MDXContent };
 }

@@ -1,0 +1,62 @@
+---
+title: "Introducing CriogenAI: an open-source AI agent framework built on Rust"
+description: CriogenAI is an open-source AI agent framework: a Rust engine for agents and workflows in Python, TypeScript or Rust, with approvals and durable threads.
+date: 2026-11-13
+updated: 2026-11-21
+seo_title: "Introducing CriogenAI: open-source agent framework on Rust"
+author: The CriogenAI team
+tags: announcement, open source, ai agents, rust, python, typescript
+---
+
+**CriogenAI** (also written Criogen AI) is an open-source AI agent framework.
+A Rust engine runs your agents and workflows; you write them in Python,
+TypeScript or Rust. It is free to use, also commercially, under MIT or
+Apache-2.0.
+
+```sh
+pip install criogenai
+npm install criogenai
+```
+
+Watch the 50-second introduction on the [home page](/).
+
+## Why another agent framework
+
+Agents in production need more than a prompt loop. They crash halfway
+through a task. They call tools that move money or change records. In
+regulated work, every step has to be accounted for. Most frameworks leave
+those problems to you. CriogenAI puts them in the runtime:
+
+- **Fast.** The engine is Rust. In [our benchmark](/benchmarks/), an agent
+  turn costs 0.29 ms of framework overhead, about 4× less than LangGraph,
+  and 1,000 concurrent agent runs finish in 0.42 s, 11.7× faster.
+- **Reliable.** Every step is saved. Kill the process mid-run, retry, and the
+  run resumes from the last saved step. A tool that already ran is not run
+  again: a charged card is charged once.
+- **Human in the loop.** Mark the sensitive tools. The run stops before
+  them and waits, in the database, until a person approves, edits or
+  rejects the call. See [human approval](/docs/guides/approvals/).
+- **Built in.** Memory with keyword and semantic search, MCP tools, evals,
+  tracing, multi-agent workflows, encryption at rest and a tamper-evident
+  audit trail.
+- **Any model.** OpenAI, Anthropic, Gemini, Azure OpenAI, Amazon Bedrock,
+  Google Vertex AI, OpenRouter and more, or your own servers with Ollama or
+  vLLM.
+
+## One engine, three languages
+
+The Python and TypeScript packages are thin layers over the same Rust
+engine, so an agent behaves the same in every language: the same
+scheduling, the same validation, the same error codes.
+
+<Sample name="quickstart" />
+
+## Where to start
+
+- [Quickstart](/docs/quickstart/): your first agent in a few minutes.
+- [Benchmarks](/benchmarks/): the numbers, the method and a kit to rerun them.
+- [Pattern playground](/playground/): 19 agent patterns running in your browser.
+- [Docs](/docs/): guides for agents, tools, approvals, threads, memory and workflows.
+
+CriogenAI is at version 0.1 and moving fast. The packages are on PyPI and
+npm for Windows, Linux and macOS.

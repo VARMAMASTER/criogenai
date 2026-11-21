@@ -85,6 +85,21 @@
   margin: 0 0 2rem;
 }
 
+/* The intro video: full width of the column, 16:9, rounded like the panels. */
+.landing .intro-video h2 {
+  margin-bottom: 1.4rem;
+}
+.landing .intro-video-player {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  border: 1px solid var(--ab-border, rgba(255, 255, 255, 0.08));
+  background: #071118;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+}
+
 /* Watch it run: each scene with a short caption above it. */
 .landing .watch-item {
   display: grid;
@@ -383,22 +398,25 @@ html[data-lang="rust"] .landing .ab-synced[data-has-rust]:not([data-hydrated]) b
   padding: 0.9rem 1.1rem 1rem;
   border-radius: 12px;
 }
-.install-goal-head {
+.install-goal-figure {
   display: flex;
   flex-wrap: wrap;
-  justify-content: space-between;
   align-items: baseline;
-  gap: 0.2rem 1rem;
-  margin-bottom: 0.55rem;
+  gap: 0.2rem 0.7rem;
+  margin: 0;
 }
-.install-goal-title {
+.install-goal-number {
+  font-size: clamp(2rem, 3.6vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: var(--ab-running-text);
+  font-variant-numeric: tabular-nums;
+}
+.install-goal-unit {
+  font-size: 1.05rem;
   font-weight: 650;
   color: var(--ab-text);
-}
-.install-goal-count {
-  font-size: 0.86rem;
-  color: var(--ab-muted);
-  font-variant-numeric: tabular-nums;
 }
 .install-goal-track {
   height: 10px;

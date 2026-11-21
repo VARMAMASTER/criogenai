@@ -1,0 +1,80 @@
+---
+title: "The fastest AI agent framework? What we measured, and how"
+description: CriogenAI has the lowest framework overhead we measured: 0.29 ms per agent turn, and 1,000 concurrent runs 11.7× faster than LangGraph. Numbers and method.
+date: 2026-11-13
+updated: 2026-11-21
+author: The CriogenAI team
+tags: benchmarks, performance, ai agents, rust
+---
+
+"Fastest AI agent framework" is a claim anyone can make, so here is ours
+with the numbers behind it. **CriogenAI has the lowest framework overhead
+of the AI agent frameworks we measured**, on every speed scenario, and the
+full method and raw results are public so you can rerun them.
+
+## What is the fastest AI agent framework?
+
+Of the frameworks we have measured, CriogenAI, LangGraph and CrewAI in
+Python, CriogenAI is the fastest on every speed scenario: 0.29 ms of
+framework overhead per agent turn against 1.23 ms for LangGraph, and 1,000
+concurrent agent runs in 0.42 s against 4.95 s. We have not measured every
+framework, and with one agent and a real model, the model's time dominates.
+
+## How was it measured?
+
+Measured on one machine (AMD Ryzen 5 4600H, Windows 11, Python 3.13,
+2026-10-21), with the same simulated model in every framework, so only the
+framework's own work is timed:
+
+| What we measured | CriogenAI | LangGraph | CrewAI |
+|---|---|---|---|
+| Framework overhead per agent turn | **0.29 ms** | 1.23 ms | 33.9 ms |
+| 1,000 agent runs at once (whole batch) | **0.42 s** | 4.95 s | 78.2 s |
+| Packages installed | **1** | 42 | 138 |
+| Install size (Python) | **17.9 MB** | 42.9 MB | 742.7 MB |
+| Time to import | **148 ms** | 1.70 s | 9.30 s |
+| Reliability tests passed by default | **5 of 5** | 2 | 4 |
+
+That is about **4× less overhead per turn** than LangGraph and over 100×
+less than CrewAI, and **11.7× faster** on 1,000 concurrent runs. The
+[benchmark lab](/benchmarks/) shows every scenario, the exact versions and
+a kit to run it yourself.
+
+## Why is CriogenAI faster?
+
+The engine is written in Rust. Scheduling, state merging, validation and
+persistence run there, not in the interpreter. Python and TypeScript only
+run your tools and your logic. Tool calls of one turn run at the same time,
+and a step commits as a whole, so the engine does no extra round trips.
+
+## When does framework speed matter?
+
+With one agent and a real model, the model's time dominates: a call takes
+hundreds of milliseconds or seconds, and every framework is close. The
+difference shows where frameworks do real work:
+
+- many agents or users at once (support desks, batch jobs, evaluations);
+- many steps and many tool calls per task;
+- workflows with parallel branches;
+- serverless functions, where import time is paid on every cold start.
+
+There, framework overhead becomes cost and latency, and a Rust engine pays
+off.
+
+## Is a faster framework less safe?
+
+Being fast is not useful if a run is lost on a crash or a tool runs twice.
+CriogenAI saves every step, resumes after a crash from the last saved step
+and reuses the saved tool results, stops for human approval before sensitive tools, and
+keeps an audit trail. These are part of the runtime, not add-ons you
+assemble yourself.
+
+## How do I try it?
+
+```sh
+pip install criogenai
+npm install criogenai
+```
+
+Start with the [quickstart](/docs/quickstart/), or read
+[Introducing CriogenAI](/blog/introducing-criogenai/).
