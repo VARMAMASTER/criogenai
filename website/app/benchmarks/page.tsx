@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Metadata } from "next";
-import { pageMeta, speedLine } from "@/lib/seo";
+import { benchmarkJsonLd, facts, ms, pageMeta } from "@/lib/seo";
 import "@/styles/site.css";
 import "@/styles/docs.css";
 import "@/styles/lab.css";
@@ -13,9 +13,12 @@ import SiteHeader, { SiteFooter } from "@/components/SiteHeader";
 import { loadRecorded } from "@/lib/bench-data";
 import type { Recorded as CompareRecorded } from "@/lib/playground";
 
+const bf = facts();
+
 export const metadata: Metadata = pageMeta({
-  title: "AI agent framework benchmarks: CriogenAI vs LangGraph vs CrewAI",
-  description: `Which AI agent framework is fastest? CriogenAI, LangGraph and CrewAI on the same work with the same simulated model: speed, load, memory, reliability and footprint, from the raw results file. ${speedLine()}`,
+  title: "AI agent framework benchmark: CriogenAI, LangGraph, CrewAI",
+  absolute: true,
+  description: `Which AI agent framework is fastest? Same work, same simulated model: ${ms(bf.turn.criogen)} per agent turn vs ${ms(bf.turn.langgraph)} for LangGraph. Raw data and a kit to rerun it.`,
   path: "/benchmarks/",
 });
 
@@ -68,6 +71,7 @@ export default function BenchmarksPage() {
       <a className="skip" href="#main">
         Skip to content
       </a>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: benchmarkJsonLd() }} />
       <SiteHeader current="benchmarks" />
       <main id="main" className="lab-main">
         <header className="lab-hero">

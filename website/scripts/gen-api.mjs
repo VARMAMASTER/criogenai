@@ -96,6 +96,22 @@ const pageHref = (language, id) => `/docs/reference/api/${language}/${id}/`;
 // ---------- prose: documentation text as MDX ----------
 
 /** Docstrings and JSDoc are Markdown-ish text; MDX also reads `{`, `<`, `import` and indented code. */
+
+/**
+ * A module page's description, sized for search results (about 90 to 160 characters):
+ * as many names as fit, and a note on what the page holds when the list is short.
+ */
+function apiDescription(label, title, names) {
+  const start = `${label} API reference for CriogenAI ${title.toLowerCase()}`;
+  let count = Math.min(names.length, 8);
+  const text = (n) => `${start}: ${names.slice(0, n).join(", ")}${names.length > n ? ", and more" : ""}.`;
+  while (count > 1 && text(count).length > 160) count -= 1;
+  let out = names.length ? text(count) : `${start}.`;
+  if (out.length > 160) out = `${start}.`;
+  if (out.length < 90) out = `${out} Signatures, parameters and examples.`;
+  return out;
+}
+
 function prose(raw, fence) {
   let text = String(raw ?? "").replace(/\r\n/g, "\n").trim();
   if (!text) return "";
@@ -350,7 +366,7 @@ function renderModulePage(language, id, module, data, otherData) {
   const head = [
     "---",
     `title: "${lang.label} API: ${title}"`,
-    `description: "${lang.label} API reference, ${title.toLowerCase()}: ${names.slice(0, 8).join(", ")}${names.length > 8 ? ", and more" : ""}."`,
+    `description: "${apiDescription(lang.label, title, names)}"`,
     "---",
     "",
   ];

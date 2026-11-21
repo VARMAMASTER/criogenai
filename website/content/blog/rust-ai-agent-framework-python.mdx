@@ -1,0 +1,81 @@
+---
+title: "A Rust AI agent framework you use from Python and TypeScript"
+seo_title: "Rust AI agent framework for Python and TypeScript"
+description: CriogenAI's engine is Rust, but you write agents in Python or TypeScript. What runs where, what it costs and saves, and which platforms it supports.
+date: 2026-11-21
+author: The CriogenAI team
+tags: rust, python, typescript, ai agent framework
+---
+
+Rust is fast and predictable, but most agent code is written in Python or
+TypeScript, close to the libraries and models people already use. CriogenAI
+puts the engine in Rust and keeps your code in your language.
+
+## Can you use a Rust AI agent framework from Python?
+
+Yes. CriogenAI's engine is written in Rust and ships as one Python package
+(`pip install criogenai`, Python 3.9+, on Windows, Linux and macOS). You
+write agents, tools and workflows in Python; the Rust engine schedules them,
+checks tool arguments, merges state and saves checkpoints. Your tools run in
+your own interpreter. In our benchmark the framework overhead is 0.29 ms per
+agent turn, against 1.23 ms for LangGraph.
+
+<Sample name="quickstart" />
+
+## What runs in Rust, and what runs in your language?
+
+| Rust engine | Your Python or TypeScript |
+|---|---|
+| The agent loop: model calls, limits, retries, fallback models | Your tools, as plain functions |
+| Checking tool arguments against their schema | Your instructions and your logic |
+| Running the tool calls of one turn at the same time | Your workflow steps |
+| Saving every step and tool result (SQLite or Postgres) | Deciding approvals, in your own UI or queue |
+| Human approval gates, memory, the audit trail | |
+
+In Python, plain functions run on a worker thread and `async` ones on your
+own event loop, so a tool can use any library you already have. The state and
+messages are JSON, so a conversation saved from Python can be continued from
+TypeScript.
+
+## Why put the engine in Rust?
+
+Scheduling, state, validation and saving are the framework's own work, and
+they run on every step of every agent. In Rust they cost less and behave the
+same in every language. In our [benchmark](/benchmarks/) (one machine,
+2026-10-21), that shows as:
+
+- **0.29 ms** of framework overhead per agent turn, against 1.23 ms for
+  LangGraph and 33.9 ms for CrewAI;
+- **0.42 s** for 1,000 agent runs at once, against 4.95 s for LangGraph;
+- **one package** and 17.9 MB to install, and 148 ms to import, which matters
+  on serverless cold starts.
+
+With one agent and a real model, the model's own time dominates. The
+difference shows with many steps, many tool calls and many users at once.
+
+## Does it work from TypeScript too?
+
+Yes. `npm install criogenai` (Node 18+) runs the same engine as a native
+addon, with the same API shapes and error codes. A WebAssembly build,
+`criogenai/web`, runs agents in the browser with in-memory storage; the
+[pattern playground](/playground/) uses it.
+
+## Which platforms are supported?
+
+- **Python** 3.9 and newer, **Node** 18 and newer.
+- **Windows** x64, **Linux** x64 and ARM64 (glibc 2.28 or newer), **macOS**
+  Apple Silicon and Intel.
+- **Rust** directly, from the GitHub repository (the crates are not on
+  crates.io yet).
+
+See [install](/docs/install/) for details.
+
+## Start
+
+```sh
+pip install criogenai
+npm install criogenai
+```
+
+Follow the [quickstart](/docs/quickstart/), or read
+[what CriogenAI is](/blog/what-is-criogenai/).

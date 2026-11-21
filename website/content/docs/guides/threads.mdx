@@ -48,8 +48,9 @@ holds across processes and machines.
 
 **Nothing lost on a crash.** If the process dies mid-run, the thread keeps
 the unfinished run. The next `send` fails with `thread_interrupted` until
-`retry()` continues the run from where it stopped. Tool calls that had
-finished are not run again.
+`retry()` continues the run from where it stopped. Tool calls whose results
+were saved are not run again; one that died before its result was saved runs
+again (see [Runs](/docs/concepts/runs/) for idempotency keys).
 
 **Failures can be continued.** When a call fails (the model was down, a
 limit was reached, the call was cancelled), the failed run is saved.

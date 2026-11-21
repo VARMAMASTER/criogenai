@@ -17,15 +17,15 @@ import SiteHeader, { SiteFooter } from "@/components/SiteHeader";
 import TabsClient from "@/components/TabsClient";
 import { highlight } from "@/lib/highlight";
 import { installs } from "@/lib/installs";
-import { facts, faqJsonLd, jsonLd, ms, pageMeta } from "@/lib/seo";
+import { facts, faqJsonLd, jsonLd, ms, pageMeta, secs } from "@/lib/seo";
 import { LANG_ORDER, LANGS, snippet, type Lang } from "@/lib/snippets";
 
 const f = facts();
 
 export const metadata: Metadata = pageMeta({
-  title: "CriogenAI: the fast AI agent framework and LangChain alternative (Rust engine, Python, TypeScript)",
+  title: "CriogenAI: open-source AI agent framework on a Rust engine",
   absolute: true,
-  description: `AI agents and workflows on a Rust engine, from Python or TypeScript: tools, human approval, durable threads, memory, an audit trail and an LLM gateway. ${f.vsLangGraph} less framework overhead per agent turn than LangGraph, ${f.vsCrewAI} less than CrewAI (benchmark of ${f.date}).`,
+  description: `Build AI agents in Python, TypeScript or Rust on a Rust engine: tools, human approval, durable threads, audit trail. ${f.vsLangGraph} less overhead than LangGraph.`,
   path: "/",
 });
 
@@ -61,8 +61,8 @@ const lifecycle = [
   },
   {
     state: "done",
-    title: "Crash recovery without repeated work",
-    text: "Conversations are saved after every step and every tool call, in SQLite or Postgres. After a crash, retry continues where the run stopped, without running finished tools again.",
+    title: "Crash recovery from the last saved step",
+    text: "Conversations are saved after every step and every tool call, in SQLite or Postgres. After a crash, retry continues where the run stopped and reuses the saved tool results.",
     href: "/docs/guides/threads/",
     link: "Conversations",
   },
@@ -138,7 +138,7 @@ const scenes = [
 const faq = [
   {
     q: "Is CriogenAI the fastest AI agent framework?",
-    a: `It has the lowest framework overhead of the frameworks we measured. On one machine (benchmark of ${f.date}), an agent turn costs ${ms(f.turn.criogen)} in CriogenAI, ${ms(f.turn.langgraph)} in LangGraph and ${ms(f.turn.crewai)} in CrewAI, and 1,000 agent runs at once take ${ms(f.crowd.criogen)} against ${ms(f.crowd.langgraph)} and ${ms(f.crowd.crewai)}. With one agent and a real model, the model's own time dominates and all three are close; the gap matters for many steps, many tools and many users at once. The benchmarks page has every number and the kit to rerun it.`,
+    a: `It has the lowest framework overhead of the frameworks we measured. On one machine (benchmark of ${f.date}), an agent turn costs ${ms(f.turn.criogen)} in CriogenAI, ${ms(f.turn.langgraph)} in LangGraph and ${ms(f.turn.crewai)} in CrewAI, and 1,000 agent runs at once finish in ${secs(f.crowd.criogen)} for the whole batch, against ${secs(f.crowd.langgraph)} and ${secs(f.crowd.crewai)}. With one agent and a real model, the model's own time dominates and all three are close; the gap matters for many steps, many tools and many users at once. The benchmarks page has every number and the kit to rerun it.`,
   },
   {
     q: "Is CriogenAI a LangChain or LangGraph alternative?",
@@ -179,7 +179,7 @@ export default async function Home() {
           <div className="hero-copy">
             <Reveal y={24}>
               <h1>
-                <span className="hero-eyebrow">CriogenAI: the simplest, fastest way to build AI agents · a LangChain alternative</span>{" "}
+                <span className="hero-eyebrow">CriogenAI: an open-source AI agent framework on a Rust engine · a LangChain alternative</span>{" "}
                 Run AI agents like production software.
               </h1>
             </Reveal>

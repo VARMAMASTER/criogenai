@@ -8,9 +8,10 @@ import { SITE } from "@/lib/nav";
 import { pageMeta } from "@/lib/seo";
 
 export const metadata: Metadata = pageMeta({
-  title: "About CriogenAI",
+  title: "About CriogenAI: the open-source AI agent framework",
+  absolute: true,
   description:
-    "CriogenAI is an open-source AI agent framework: a Rust engine for agents and workflows written in Python, TypeScript or Rust. Who builds it, why, and the key facts.",
+    "CriogenAI is an open-source AI agent framework: a Rust engine for agents and workflows in Python, TypeScript or Rust. Who builds it, why, and the key facts.",
   path: "/about/",
 });
 
@@ -55,9 +56,9 @@ export default function About() {
           <div className="prose blog-body">
             <p>
               <strong>CriogenAI</strong> is an open-source AI agent framework. A Rust engine runs agents (a model with tools,
-              in a loop) and workflow graphs, and you write them in Python, TypeScript or Rust. It is built to be the fastest
-              way to run AI agents in production: in <Link href="/benchmarks/">our benchmark</Link>, an agent turn costs
-              0.29 ms of framework overhead, and 1,000 concurrent agent runs finish in a third of a second.
+              in a loop) and workflow graphs, and you write them in Python, TypeScript or Rust. It is not related to cryogenics.
+              It is built to keep framework overhead low: in <Link href="/benchmarks/">our benchmark</Link>, an agent turn costs
+              0.29 ms of framework overhead, and 1,000 concurrent agent runs finish in 0.42 s for the whole batch.
             </p>
 
             <h2>Why we build it</h2>

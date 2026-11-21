@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { pageMeta } from "@/lib/seo";
+import { articleJsonLd, pageMeta } from "@/lib/seo";
 import "@/styles/site.css";
 import "@/styles/docs.css";
 import "@/styles/lab.css";
@@ -14,7 +14,7 @@ import { byGroup, COVERAGE, loadTour, valueText, type TourFeature, type TourFile
 export const metadata: Metadata = pageMeta({
   title: "Demo: every feature, run for real",
   description:
-    "Every CriogenAI feature on the status page, run for real: agents, tools, approvals, threads, memory and workflows, with the code, what it printed and the checks it passed, with a simulated model and with a real one.",
+    "Every CriogenAI feature, run for real: agents, tools, approvals, threads, memory and workflows, with the code, its output and the checks it passed.",
   path: "/demo/",
 });
 
@@ -104,6 +104,17 @@ export default async function DemoPage() {
       <a className="skip" href="#main">
         Skip to content
       </a>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: articleJsonLd({
+            title: "Demo: every feature, run for real",
+            description: "Every CriogenAI feature, run for real, with the code, its output and the checks it passed.",
+            path: "/demo/",
+            trail: [{ name: "Demo", path: "/demo/" }],
+          }),
+        }}
+      />
       <SiteHeader current="demo" />
       <main id="main" className="lab-main">
         <header className="lab-hero">

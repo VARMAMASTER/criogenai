@@ -19,12 +19,12 @@ type Props = { params: Promise<{ slug: string }> };
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const post = await loadPost((await params).slug);
-  const base = pageMeta({ title: post.title, description: post.description, path: `/blog/${post.slug}/`, type: "article" });
+  const base = pageMeta({ title: post.seoTitle ?? post.title, description: post.description, path: `/blog/${post.slug}/`, type: "article" });
   return {
     ...base,
     authors: [{ name: post.author }],
     keywords: post.tags,
-    openGraph: { ...base.openGraph, type: "article", publishedTime: post.date, authors: [post.author], tags: post.tags },
+    openGraph: { ...base.openGraph, type: "article", publishedTime: post.date, modifiedTime: post.updated ?? post.date, authors: [post.author], tags: post.tags },
   };
 }
 
@@ -42,7 +42,8 @@ export default async function PostPage({ params }: Props) {
     headline: post.title,
     description: post.description,
     datePublished: post.date,
-    author: { "@type": "Organization", name: post.author },
+    dateModified: post.updated ?? post.date,
+    author: { "@type": "Organization", name: post.author, url: `${SITE.url}/about/` },
     publisher: { "@id": `${SITE.url}/#org`, "@type": "Organization", name: "CriogenAI", logo: { "@type": "ImageObject", url: `${SITE.url}/icon-512.png` } },
     image: `${SITE.url}${OG_IMAGE.url}`,
     mainEntityOfPage: `${SITE.url}/blog/${post.slug}/`,
@@ -62,6 +63,11 @@ export default async function PostPage({ params }: Props) {
             <p className="blog-meta">
               <span>{post.author}</span>
               <time dateTime={post.date}>{longDate(post.date)}</time>
+              {post.updated && (
+                <span>
+                  Updated <time dateTime={post.updated}>{longDate(post.updated)}</time>
+                </span>
+              )}
               <span>{post.minutes} min read</span>
             </p>
             {post.tags.length > 0 && (

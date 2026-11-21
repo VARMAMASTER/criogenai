@@ -1,7 +1,9 @@
 ---
 title: "What is CriogenAI? The open-source AI agent framework, explained"
-description: CriogenAI is an open-source AI agent framework with a Rust engine, used from Python, TypeScript or Rust. What it does, who it is for, how it compares, and how to start, in plain answers.
+description: CriogenAI is an open-source AI agent framework with a Rust engine, used from Python, TypeScript or Rust: what it does, how it compares and how to start.
 date: 2026-11-20
+updated: 2026-11-21
+seo_title: "What is CriogenAI? The open-source AI agent framework"
 author: The CriogenAI team
 tags: criogenai, ai agents, agent framework, faq
 ---
@@ -44,7 +46,7 @@ own servers through Ollama, LM Studio, or vLLM and any other OpenAI-compatible s
 ## Is it fast?
 
 Yes. In our [benchmark](/benchmarks/), an agent turn costs 0.29 ms of
-framework overhead, against 1.23 ms for LangGraph and 34 ms for CrewAI, and
+framework overhead, against 1.23 ms for LangGraph and 33.9 ms for CrewAI, and
 1,000 concurrent agent runs finish in 0.42 s, 11.7× faster than LangGraph.
 With one agent and a real model, the model's own time dominates; the
 difference shows with many concurrent runs, many steps and many tool calls.

@@ -1,7 +1,9 @@
 ---
 title: "Human-in-the-loop AI agents: pause before risky tools, approve, carry on"
-description: How to make an AI agent stop before sensitive actions, wait for a person to approve, edit or reject the call, and continue, even from another process days later. With code in Python, TypeScript and Rust.
+description: Make an AI agent stop before sensitive tools, wait for a person to approve, edit or reject the call, and carry on later. Code in Python, TypeScript and Rust.
 date: 2026-11-20
+updated: 2026-11-21
+seo_title: "Human-in-the-loop AI agents: approve before tools run"
 author: The CriogenAI team
 tags: human in the loop, approvals, ai agents, safety
 ---
@@ -13,7 +15,7 @@ name the tools that need approval.
 
 <Sample name="approvals" />
 
-## What happens
+## How does an AI agent wait for human approval?
 
 1. The model asks for a tool call, and at least one of the calls is on the
    `approve` list.
@@ -28,7 +30,7 @@ Nothing about the pause lives in memory. The process can exit, and the
 decision can come minutes or days later from a dashboard, a queue worker or
 a webhook.
 
-## Four decisions
+## What can the reviewer decide?
 
 | Decision | What happens | What the model sees |
 |---|---|---|
@@ -41,7 +43,7 @@ To decide each waiting call on its own:
 
 <Sample name="approvals" region="decide" only={["python", "typescript"]} />
 
-## Who decided, on the record
+## How is each decision recorded?
 
 With an audit log attached to the storage, every decision is written to the
 audit trail before the approved calls run, with the reviewer you name on the
@@ -57,7 +59,7 @@ guarantee. The model can skip it, misread it, or be talked out of it by the
 input it reads. An approval gate in the runtime is enforced by code: the
 tool cannot run until a person answers.
 
-## Start
+## How do I add approvals?
 
 ```sh
 pip install criogenai

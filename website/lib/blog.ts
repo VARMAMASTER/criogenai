@@ -26,6 +26,10 @@ export interface PostMeta {
   description: string;
   /** YYYY-MM-DD. */
   date: string;
+  /** YYYY-MM-DD of the last real change, when it differs from `date`. */
+  updated?: string;
+  /** A shorter title for search results (about 60 characters); the page heading keeps `title`. */
+  seoTitle?: string;
   author: string;
   tags: string[];
   /** Minutes, at 220 words a minute. */
@@ -45,6 +49,9 @@ function read(file: string): { meta: PostMeta; body: string; draft: boolean } {
   if (!data.title || !data.date || !/^\d{4}-\d{2}-\d{2}$/.test(data.date)) {
     throw new Error(`content/blog/${file}: a post needs a title and a date (YYYY-MM-DD)`);
   }
+  if (data.updated && !/^\d{4}-\d{2}-\d{2}$/.test(data.updated)) {
+    throw new Error(`content/blog/${file}: updated must be a date (YYYY-MM-DD)`);
+  }
   const words = body.replace(/```[\s\S]*?```/g, " ").split(/\s+/).filter(Boolean).length;
   return {
     meta: {
@@ -52,6 +59,8 @@ function read(file: string): { meta: PostMeta; body: string; draft: boolean } {
       title: data.title,
       description: data.description ?? "",
       date: data.date,
+      ...(data.updated && data.updated !== data.date ? { updated: data.updated } : {}),
+      ...(data.seo_title ? { seoTitle: data.seo_title } : {}),
       author: data.author || "The CriogenAI team",
       tags: (data.tags ?? "")
         .split(",")

@@ -17,7 +17,7 @@ export function rustCrates(repo) {
     const description = /^description\s*=\s*"([^"]*)"/m.exec(toml)?.[1] ?? "";
     return {
       name: `criogenai-${short}`,
-      module: `criogen_${short}`,
+      module: `criogenai_${short}`,
       // Design numbers are for the repository's own notes.
       description: description.replace(/\s*\((?:designs?)\s[^)]*\)/gi, ""),
     };

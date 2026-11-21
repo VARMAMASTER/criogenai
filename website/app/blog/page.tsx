@@ -5,11 +5,13 @@ import "@/styles/docs.css";
 import "@/styles/blog.css";
 import SiteHeader, { SiteFooter } from "@/components/SiteHeader";
 import { allPosts, longDate } from "@/lib/blog";
-import { pageMeta } from "@/lib/seo";
+import { breadcrumbLd, ldString, pageMeta } from "@/lib/seo";
+import { SITE } from "@/lib/nav";
 
 export const metadata: Metadata = {
   ...pageMeta({
-    title: "Blog",
+    title: "CriogenAI blog: AI agents, releases and benchmarks",
+    absolute: true,
     description: "Releases, guides and engineering notes from CriogenAI, the fast AI agent framework on a Rust engine.",
     path: "/blog/",
   }),
@@ -20,6 +22,31 @@ export default function BlogIndex() {
   const posts = allPosts();
   return (
     <div className="site blog">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: ldString({
+            "@context": "https://schema.org",
+            "@graph": [
+              {
+                "@type": "Blog",
+                "@id": `${SITE.url}/blog/#blog`,
+                name: "CriogenAI blog",
+                url: `${SITE.url}/blog/`,
+                publisher: { "@id": `${SITE.url}/#org` },
+                blogPost: allPosts().map((p) => ({
+                  "@type": "BlogPosting",
+                  headline: p.title,
+                  url: `${SITE.url}/blog/${p.slug}/`,
+                  datePublished: p.date,
+                  dateModified: p.updated ?? p.date,
+                })),
+              },
+              breadcrumbLd([{ name: "Blog", path: "/blog/" }]),
+            ],
+          }),
+        }}
+      />
       <SiteHeader current="blog" />
       <main id="main" className="blog-main">
         <header className="blog-hero">
